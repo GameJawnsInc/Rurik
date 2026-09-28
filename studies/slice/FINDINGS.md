@@ -2332,7 +2332,9 @@ redden on confirming evidence" rule, six suites):
 - `adrenjoin.scan` gains a third arm, **hero**: a `0x00CF`/`0x00D0`/`0x00D2` naming an agent
   whose OWN `0x00DA` is adrenal. `test_adrenwire`: the census is 1028 / 37 / 59; **three 207s
   above 25 (26, 29, 42)** — a landed hit and a hit taken summed into one tick on the hero, so the
-  25 ceiling holds per event, not per message; the sub-strike tail doubled (a 2-unit bite per
+  25 ceiling holds per event, not per message; **[REFUTED 2026-09-28, CASTAI-ZF9 (studies/monsterai
+  §18.2): the three are single damage words (36/140, 41/140, 51/122), not summed; every
+  non-25 207 in the corpus is one damage word, 175 of 175.]** the sub-strike tail doubled (a 2-unit bite per
   skale swing at 140 health); the spend skills gain the hero's 348 ×7, 382 ×7, 385 ×5; a 207
   names an agent holding ONE of the connection's bars (the Ranger's had no adrenal skill, every
   207 on that tape was the hero's).

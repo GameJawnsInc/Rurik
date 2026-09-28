@@ -55,6 +55,7 @@ sys.path.insert(0, os.path.join(ROOT, "toolkit"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "authsrv"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "schema"))
 
+import capgaps      # noqa: E402  (the ONE set-aside for a manifest-declared gap)
 import content      # noqa: E402
 import tape         # noqa: E402
 import vaultpath    # noqa: E402
@@ -221,14 +222,57 @@ def whose_agent(msgs):
     return both.pop() if len(both) == 1 else None
 
 
+class ScanRefused(Exception):
+    """A game connection this census will not count, NAMING it: its tape frames short
+    of its last byte. Never caught here -- see `_whole_s2c`."""
+
+
+def _whole_s2c(cap, set_aside):
+    """`tape.channel_files(cap)` minus each connection whose capture's OWN manifest
+    declares its S2C direction gapped -- printed by name and appended to `set_aside`
+    (capgaps.set_aside; None prints and keeps no list). S2C only, because this census
+    reads only the server's half (tape.load_tape): a connection whose c2s alone were
+    gapped would still be read here.
+
+    WHY (2026-09-28, CASTAI-Z1). `bars`, `scan` and `by_connection` each wrapped the
+    load in `except Exception: continue`, which dropped 20260928T103123 :65009 (its
+    s2c lost 38 + 20 bytes at stream offsets 38045 / 38548 and tape.load_tape refuses
+    it BY DESIGN) with nothing said -- and would have dropped any other connection
+    that failed for any other reason the same way. Measured before the change: over
+    the 37 capture directories (106 game connections) :65009 was the ONLY one that
+    except caught, and no connection's decode ended short. Now the declared one is
+    set aside by name and anything else that fails RAISES: tape.TapeError from
+    load_tape, ScanRefused from a short decode (`_messages`)."""
+    gaps = {c: {"s2c": g["s2c"]}
+            for c, g in capgaps.declared_gaps(cap).items() if g.get("s2c")}
+    return [ch for ch in tape.channel_files(cap)
+            if not (gaps and capgaps.set_aside(cap, ch["connection"], gaps, set_aside))]
+
+
+def _messages(cap, conn, codec):
+    """One connection's GAME_SMSG, framed WHOLE -- or ScanRefused naming it. The
+    receipt used to be discarded (`msgs, _receipt = ...`), so a short frame would have
+    been counted as the whole connection."""
+    _info, events = tape.load_tape(cap, conn)
+    msgs, (consumed, total, err) = tape.decode_all(events, codec, "GAME_SMSG", 0)
+    if err is not None or consumed != total:
+        raise ScanRefused(f"{os.path.basename(cap)} {conn}: framed {consumed} of "
+                          f"{total} bytes ({err})")
+    return msgs
+
+
 def adrenal_costs():
     """skill id -> raw adrenaline cost, from our own extracted table."""
     return {int(k): int(r.get("adrenaline_units") or 0)
             for k, r in content.load().rows("skills").items()}
 
 
-def bars():
+def bars(set_aside=None):
     """Every connection's OWN skill bar: (capture, connection, agent, bar).
+
+    `set_aside`, a list, receives each connection skipped because its capture's
+    manifest declares its s2c gapped (`_whole_s2c`); assert it with
+    `capgaps.audit(set_aside, capdirs, tape.refuses)`.
 
     This is a DIRECT READ of the 0x00DA addressed to the observing player --
     the observer resolved by `whose_agent`'s property-41 rule, the bar being
@@ -248,13 +292,9 @@ def bars():
         cap = os.path.join(live, stamp)
         if not os.path.isdir(cap):
             continue
-        for chan in tape.channel_files(cap):
+        for chan in _whole_s2c(cap, set_aside):
             conn = chan["connection"]
-            try:
-                _info, events = tape.load_tape(cap, conn)
-                msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
-            except Exception:                                  # noqa: BLE001
-                continue
+            msgs = _messages(cap, conn, codec)
             me = whose_agent(msgs)
             if me is None:
                 continue
@@ -266,8 +306,12 @@ def bars():
     return out
 
 
-def scan(costs=None):
-    """Walk the live corpus once. Returns (stats, rows, skipped)."""
+def scan(costs=None, set_aside=None):
+    """Walk the live corpus once. Returns (stats, rows, skipped).
+
+    `skipped` is a connection with no unique self agent, as before. `set_aside`, a
+    list, receives each connection its manifest declares s2c-gapped (`_whole_s2c`) --
+    a different thing, kept apart so neither list can hide the other."""
     costs = adrenal_costs() if costs is None else costs
     live = vaultpath.require_dir("captures", "live",
                                  why="the adrenaline census")
@@ -284,13 +328,9 @@ def scan(costs=None):
         if not os.path.isdir(cap):
             continue
         captures += 1
-        for chan in tape.channel_files(cap):
+        for chan in _whole_s2c(cap, set_aside):
             conn = chan["connection"]
-            try:
-                _info, events = tape.load_tape(cap, conn)
-                msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
-            except Exception:                                  # noqa: BLE001
-                continue
+            msgs = _messages(cap, conn, codec)
             me = whose_agent(msgs)
             if me is None:
                 skipped.append({"capture": stamp, "connection": conn})
@@ -417,12 +457,13 @@ def _auth_summaries(cap):
     """appearance dword -> (level, profession, secondary) from the capture's
     AUTH channel (CHARACTER_INFO's summary blobs, s2c), or {} when the capture
     has no auth tape or none decodes. The join key is the appearance dword,
-    which 0x0059 carries on the GAME channel for the same character."""
-    try:
-        import charsummary as cs
-        import summarycensus
-    except Exception:                                          # noqa: BLE001
-        return {}
+    which 0x0059 carries on the GAME channel for the same character.
+
+    The two imports used to sit in `except Exception: return {}` -- a broken
+    import read as "no auth tape" and blanked every summary column. Both are
+    repo modules beside this one; a failure to import them is now loud."""
+    import charsummary as cs
+    import summarycensus
     out = {}
     for name in sorted(os.listdir(cap)):
         if not (name.startswith("auth-") and name.endswith(".jsonl")):
@@ -449,7 +490,7 @@ def _auth_summaries(cap):
     return out
 
 
-def by_connection(costs=None):
+def by_connection(costs=None, set_aside=None):
     """One row per usable GAME connection: who the character is, from the wire.
 
     THE QUESTION THIS ANSWERS (studies/skills 34.5 / 34.11). The corpus split
@@ -475,7 +516,7 @@ def by_connection(costs=None):
     transition could be OBSERVED, and `flips` says whether the corpus holds
     one. A hero's bar (JARIN) is not the observer's and is not read here.
 
-    READ-ONLY, like everything else in this module.
+    READ-ONLY, like everything else in this module. `set_aside` as in `bars`.
     """
     costs = adrenal_costs() if costs is None else costs
     live = vaultpath.require_dir("captures", "live",
@@ -490,13 +531,9 @@ def by_connection(costs=None):
         cap_rows = []
         # the ACCOUNT library, wherever in this capture it was sent
         cap_account = None
-        for chan in tape.channel_files(cap):
+        for chan in _whole_s2c(cap, set_aside):
             conn = chan["connection"]
-            try:
-                _info, events = tape.load_tape(cap, conn)
-                msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
-            except Exception:                                  # noqa: BLE001
-                continue
+            msgs = _messages(cap, conn, codec)
             me = whose_agent(msgs)
             if me is None:
                 continue

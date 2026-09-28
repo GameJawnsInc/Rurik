@@ -287,19 +287,26 @@ class Definition:
         return bool(self.tokens & set(HOSTILE_TOKENS))
 
 
-def read(capture_dirs, codec=None):
+def read(capture_dirs, codec=None, set_aside=None):
     """Decode captures into {definition index: Definition}, plus the per-connection map.
 
     Refuses to pool captures of different origin. `toolkit/origin.py` is three-valued
     and a consumer that mixes them is comparing ArenaNet's behaviour with our own
     server's -- not weaker evidence, DIFFERENT evidence.
+
+    A connection its capture's OWN manifest declares gapped is set aside BY NAME
+    (`tape.whole_channels`, printed; appended to `set_aside` when the caller passes a
+    list to assert with `capgaps.audit`) -- the first is 20260928T103123 :65009,
+    which `load_tape` refuses by design. Every other connection is read and must
+    still frame to its last byte.
     """
     codec = codec or Codec()
     defs = {}
     intervals = {}
     origins = set()
+    set_aside = [] if set_aside is None else set_aside
     for capture_dir in capture_dirs:
-        for row in tape.channel_files(capture_dir):
+        for row in tape.whole_channels(capture_dir, set_aside):
             connection = row["connection"]
             info, events = tape.load_tape(capture_dir, connection)
             origins.add(info.get("origin", "unknown"))

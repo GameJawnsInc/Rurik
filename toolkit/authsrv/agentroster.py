@@ -108,7 +108,7 @@ def create_row(t, values, capture="?", connection="?"):
     }
 
 
-def read_roster(capture_dirs, codec=None):
+def read_roster(capture_dirs, codec=None, set_aside=None):
     """[connection roster] for every game channel in `capture_dirs`.
 
     Each roster is a dict:
@@ -118,11 +118,16 @@ def read_roster(capture_dirs, codec=None):
 
     The whole tape must frame to its final byte, same rule as `npcdefs.read`:
     a partial decode silently drops the tail and every create after the break.
+
+    A connection its capture's OWN manifest declares gapped is set aside BY NAME
+    (`tape.whole_channels`, printed; appended to `set_aside` when the caller passes
+    a list to assert with `capgaps.audit`) -- `load_tape` refuses it by design.
     """
     codec = codec or Codec()
     rosters = []
+    set_aside = [] if set_aside is None else set_aside
     for capture_dir in capture_dirs:
-        for row in tape.channel_files(capture_dir):
+        for row in tape.whole_channels(capture_dir, set_aside):
             connection = row["connection"]
             info, events = tape.load_tape(capture_dir, connection)
             capture = info.get("capture") or os.path.basename(capture_dir)

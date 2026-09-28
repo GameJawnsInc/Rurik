@@ -3012,3 +3012,37 @@ frames (every harness verdict PASS, no assert).
   most skill effects do not stack; the most recent or most powerful takes precedence). The
   table still holds the overlapping episode (retail's new buff id, skills 16.1); B2's "two
   Rusts multiply (x4)" became x2.
+
+## 44. The Zaishen tape -- 2026-09-28: the Necromancer's class id, and what the bows showed (CASTAI-Z1)
+
+The owner's Zaishen Challenge capture `20260928T103123` (build 38888) turned 19 suite files
+red; the reds were read in studies/monsterai §18.2, whose CASTAI-ZF rows carry the evidence.
+Three close or correct this plan:
+
+- **The Necromancer's hex class id is 9 (CASTAI-Z1.P4), closing §43's NOT FOUND.** 22
+  Necromancer hexes (Faintheartedness 135, Life Siphon 109, 127) completed on non-observer
+  bodies, and all 6 clean instances were exactly `[6, T, 1]` + `[6, T, 9]`. **The key is
+  now OBSERVED, closing the question §43.1's "Left" carried:** it is the SKILL's
+  profession, not the caster's. The Degeneration Team's Mesmer casts Incendiary Bonds
+  (an Elementalist hex, through Inspired Hex) and it draws 12, 17 of 17. Shipped as
+  `HEX_EFFECT_CLASS[4] = 9` (`dd6c8ff2`). A profession with no observed id still sends the
+  `1` alone, printed once; test_weapons §37 keeps that path on a Monk hex.
+- **WEAPONS-C10's "2077 = the weapon's arrow" reads more precisely now (CASTAI-ZF15):**
+  2077 is the held weapon's own `617` projectile (else a bow's 143), or the arrow a
+  PREPARATION substitutes. That arrow is the row's `+0x88`, arriving with the row's
+  `+0x84` impact visual. Apply Poison 435 launches 742 → 743, 9 of 9 (agent 6); Kindle
+  Arrows 433 launches 343 → 344.
+- **Attack timing (CASTAI-ZF16).**
+  - `0x0035`'s modifier reaches 1.5 on a hexed body (the Zaishen Archer after
+    Faintheartedness) and on the observer, and a body's bow skill shots follow
+    swing_windup(base × modifier). The "1.0 or 0.67 on 153 of 153" census predates this.
+  - A body's bow ATTACK skill WITH a table activation launches at
+    swing_windup(activation × modifier), not after one weapon windup. 399 / 426 (0.5)
+    launch at 0.1377–0.1674 s (agent 6, 11 shots) and 1197 (0.75) at 0.2681–0.2865 s
+    (20260819T132414 agent 28, 7 shots), 18 of 18 inside the pinned band.
+  - That is the rule `authsrv.attack_skill_clock` already applies to the player, where it is
+    labelled "UPSTREAM, no corpus cycle exercises it yet"; it is now OBSERVED on bodies. Our
+    body path still uses the raw activation (`PLAN.md` §8).
+  - Two modifier-1.0 shots sit outside the 1.10..1.16 band (1.0948 s at :50061 217.821,
+    1.2242 s at :50295 476.727), cause UNVERIFIED; the windup signature holds them as its
+    exact out-of-band set.

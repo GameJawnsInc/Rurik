@@ -148,6 +148,41 @@ REGISTERED AFTER THE LANE'S FIRST RUN, from what that run showed, and locked on 
   L4  the [6] effect ids on the observer beside a condition's 0x0042: Burning 25, Dazed 28,
       Cracked Armor 29.
 
+THE ZAISHEN CAPTURE (2026-09-28, CASTAI-Z1, 20260928T103123 -- after the registration; the
+predictions above are NOT re-worded). Its casts break six registered predictions and one
+corrected reading. Each is scored AS REGISTERED on the corpus as it stood before that stamp
+(the test cuts the census there, where the reading holds exactly as on the day it was
+registered), AS REGISTERED on the whole corpus (FAILED, printed so), and -- where a
+re-statement with no free parameter exists -- RE-STATED on the whole corpus (`RESTATED`):
+  I1 / M1  the Zaishen Mage (agent 9) casts 179 and 185 behind a `0x00A3 [61 GV_CASTTIME,
+           caster, target, 0.67]` word and completes them at +0.651..+0.693 (commit 974f8748's
+           word). I1r / M1r: the completion at the [61] seconds when sent, else the activation,
+           +- COMPLETION_TOL.
+  I2       on :50295 457.840 the caster's 179 completion batch carries one word from the caster
+           onto the target: its own Fire Storm's k = 2 tick (all three foes take the same value;
+           the 197 completed at 456.823 -- aotjoin's mixed instant). I2r: no damage word from the
+           caster onto the target except one riding a tick of the caster's own Fire Storm
+           (completion + k s, k = 1..10, within aotjoin's TICK_TOL).
+  I3 / G2  a hex landing on an observer ALREADY hexed carries no 0x00F1 (the status word does
+           not change): agent 3's 179 onto the observer at 194.673 (field3 0 -- the caster's own
+           Fire Magic), and four G2 applies (44, 179, 31, 36). I3r / G2r: the 58 ahead of the
+           0x0042 on every apply, and an 0x00F1 with the hex bit after it UNLESS the target's
+           last status word before the batch already carried the hex bit.
+  G3       agent 4's 135 lands on the observer twice (:50061 164.735, 187.725) at field3 11 with
+           f32 14.0, where interp(3, 16, 11) = 12.533 -- the first hex in the corpus whose
+           duration is NOT constant across ranks (every earlier G3 row, 179's 3 / 3, could not
+           fail). No re-statement: FAILED, its witness exact; the cause is UNMEASURED.
+  C2c      one skill-applied condition carries field3 0 (Crippled 15 s under a [10, obs, 334]
+           at :50061 219.517), and three conditions this reader calls environmental carry field3
+           == f32 -- a Deep Wound in the batch where the observer's hex 44 ends (203.938) and two
+           Poisons riding an attack's 0x00A7 + [20, obs, 6, 743] (:58544 611.458, 620.553): the
+           classifier sees neither a hex's END nor an attack's landing. No re-statement: FAILED.
+`m_rank_fits` ("the caster's 13 predicts both Burnings") is scored on the WITNESS's hex applies
+-- its own claim's scope (EV-3); the corpus's ranks are printed (`m_ranks_corpus`).
+A connection the capture's OWN manifest declares gapped (`livewire.declared_gaps`) is set
+aside BY NAME, printed, and decoded once to show it still refuses (`set_aside`); `refused`
+counts every OTHER connection that does not frame whole.
+
 Corpus totals are FLOORS (a later capture is confirming evidence); the witness tape's own
 counts (20260817T231139: 30 announces of 179, 27 of 185) are exact, per tape. score() keeps
 the two apart: every exact number (completions, ends, takers, twins, the [6] ids, the order
@@ -189,6 +224,7 @@ OP_SPEED = 0x0027
 OP_EFFECT_APPLY = 0x0042
 OP_EFFECT_REMOVE = 0x0044
 OP_INT = 0x009F
+OP_FLOAT = 0x00A2
 OP_INT_TARGET = 0x00A0
 OP_POINT_EFFECT = 0x00A1
 OP_FLOAT_TARGET = 0x00A3
@@ -203,6 +239,7 @@ PROP_DAMAGE = (16, 17)
 PROP_HEALTH_GAIN = 55
 PROP_FINISHED = 58
 PROP_ANNOUNCE = 60
+PROP_CAST_TIME = 61          # agents.GV_CASTTIME: a modified cast's seconds, ahead of its [60]
 ANNOUNCE_PROPS = (60, 50, 48)
 END_PROPS = (58, 59, 45, 35)
 DEAD_BIT = 0x10
@@ -211,6 +248,8 @@ SNARE_BIT = 0x400
 TYPE_HEX = 4
 
 INCENDIARY, MIND_BURN = 179, 185
+FIRE_STORM = 197            # I2r: a word riding the caster's own Fire Storm tick
+TICK_TOL = 0.05             # s; aotjoin.TICK_TOL, the tick gate
 TEINAIS_PRISON, EMPATHY, LIGHTNING_STRIKE = 1097, 26, 222
 REMOVE_HEX = 301            # the target's own 58 in a hex's end batch (WIKI: Remove Hex)
 BURNING, BLEEDING, DAZED, CRACKED_ARMOR = 480, 478, 485, 2077
@@ -281,7 +320,17 @@ class Conn:
         self.alleg, self.kind = {}, {}
         self.status = collections.defaultdict(list)       # agent -> [(t, word)]
         self.applies, self.removes = [], []
+        self.cast_time = {}                              # (caster, announce t) -> [61] seconds
+        last61 = {}
         for _i, t, op, v in seq:
+            if op == OP_FLOAT_TARGET and len(v) > 4 and v[1] == PROP_CAST_TIME:
+                last61[v[2]] = (t, round(_f32(v[4]), 4))
+            elif op == OP_FLOAT and len(v) > 3 and v[1] == PROP_CAST_TIME:
+                last61[v[2]] = (t, round(_f32(v[3]), 4))
+            if op in (OP_INT_TARGET, OP_INT) and len(v) > 3 and v[1] in ANNOUNCE_PROPS:
+                w = last61.pop(v[2], None)
+                if w is not None and abs(w[0] - t) < 1e-6:     # the same instant, ahead of it
+                    self.cast_time[(v[2], t)] = w[1]
             if op == OP_CREATE and len(v) > 12:
                 self.alleg[int(v[1])] = int(v[12])
                 self.kind[int(v[1])] = int(v[4])
@@ -325,6 +374,20 @@ class Conn:
                 return None, (v[1], round(t - ta, 3))
         return None, ("no end",)
 
+    def on_own_tick(self, caster, t):
+        """Is `t` a tick instant of one of the caster's own Fire Storms -- its completion
+        + k s, k = 1..10, within TICK_TOL (aotjoin's gate)?"""
+        for ta, sk, _tg, _f in self.announces.get(caster, ()):
+            if sk != FIRE_STORM or not (0.0 < t - ta <= 14.0):
+                continue
+            tc, _why = self.completion(caster, ta, 2.0)
+            if tc is None:
+                continue
+            k = round(t - tc)
+            if 1 <= k <= 10 and abs(t - tc - k) <= TICK_TOL:
+                return True
+        return False
+
     def foe(self, a, b):
         if a not in self.alleg or b not in self.alleg:
             return None
@@ -335,6 +398,15 @@ class Conn:
             if r["target"] == target and r["buff"] == buff and r["t"] >= t - 1e-6:
                 return r["t"]
         return None
+
+    def status_before(self, agent, t):
+        """The agent's last 0x00F1 word before the batch at `t`, or None."""
+        last = None
+        for tt, word in self.status.get(agent, ()):
+            if tt >= t - BATCH:
+                break
+            last = word
+        return last
 
     def dead_in(self, agent, batch):
         return any(op == OP_STATUS and len(v) > 2 and v[1] == agent and (int(v[2]) & DEAD_BIT)
@@ -365,6 +437,7 @@ def casts_of(conns, skills, table):
                 out.append({"c": c, "capture": c.stamp, "port": c.port, "observer": c.observer,
                             "caster": caster, "target": target, "skill": sk, "ta": ta,
                             "form": form, "tc": tc, "stop": stop, "act": act,
+                            "ct": c.cast_time.get((caster, ta)),
                             "dt": None if tc is None else round(tc - ta, 3)})
     out.sort(key=lambda r: (r["capture"], r["port"], r["ta"]))
     return out
@@ -431,6 +504,9 @@ def incendiary_rows(conns, table):
         r["tokens"] = completion_tokens(r)
         r["batch"] = [(round(t - tc, 3), _fmt(op, v)) for _i, t, op, v in bb]
         r["words_on_target"] = len(_words_by_foe(c, cst, bb).get(tg, ()))
+        # I2r: a word onto the target that rides the caster's own Fire Storm tick
+        r["words_on_target_tick"] = (r["words_on_target"] if r["words_on_target"]
+                                     and c.on_own_tick(cst, tc) else 0)
         r["fx20"] = [(v[2], v[4]) for _i, _t, op, v in bb
                      if op == OP_INT_TARGET and v[1] == PROP_EFFECT_ON_TARGET and v[3] == cst]
         r["adds"] = [_int(v[3]) for _i, _t, op, v in bb
@@ -455,8 +531,15 @@ def incendiary_rows(conns, table):
             i6 = next((n for n, (op, v) in enumerate(ops)
                        if op == OP_INT and v[1] == PROP_ADD_EFFECT and v[2] == tg), None)
             rt = c.removal(tg, a["buff"], a["t"])
+            prior = c.status_before(tg, a["t"])
             r["hex_apply"] = {"field3": a["field3"], "dur": a["dur"], "buff": a["buff"],
                               "order_58_42_f1": None not in (i58, i42, if1) and i58 < i42 < if1,
+                              # I3r: the 58 ahead of the 0x0042, then an 0x00F1 with the hex
+                              # bit -- unless the target's status already carried it
+                              "order_58_42": None not in (i58, i42) and i58 < i42,
+                              "f1_hex_after": (None not in (i42, if1) and if1 > i42
+                                               and bool(int(ops[if1][1][2]) & HEX_BIT)),
+                              "already_hexed": prior is not None and bool(prior & HEX_BIT),
                               "between_20_and_6": None not in (i20, i42, i6) and i20 < i42 < i6,
                               "removal_at": None if rt is None else round(rt - tc, 3),
                               "residual": None if rt is None else round(rt - a["t"] - a["dur"], 3)}
@@ -619,11 +702,19 @@ def hex_rows(conns, table, types):
                         if op == OP_INT and v[1] == PROP_FINISHED), None)
             if1 = next((n for n, (op, v) in enumerate(ops)
                         if op == OP_STATUS and v[1] == a["target"]), None)
+            prior = c.status_before(a["target"], a["t"])
             applies.append({"capture": c.stamp, "port": c.port, "skill": a["skill"],
                             "target": a["target"], "on_observer": a["target"] == c.observer,
+                            "t": round(a["t"], 3),
                             "field3": a["field3"], "dur": a["dur"], "pred": round(pred, 3),
                             "g3_ok": abs(pred - a["dur"]) < 0.01,
                             "order_58_42_f1": None not in (i58, i42, if1) and i58 < i42 < if1,
+                            # G2r: the 58 ahead of the 0x0042, then an 0x00F1 with the hex
+                            # bit -- unless the target's status already carried it
+                            "order_58_42": None not in (i58, i42) and i58 < i42,
+                            "f1_hex_after": (None not in (i42, if1) and if1 > i42
+                                             and bool(int(ops[if1][1][2]) & HEX_BIT)),
+                            "already_hexed": prior is not None and bool(prior & HEX_BIT),
                             "residual": None if rt is None else round(rt - a["t"] - a["dur"], 3),
                             "stripped": rt is None or c.dead_in(a["target"], c.batch(rt))})
     return casts, applies
@@ -692,13 +783,27 @@ def census(stamps=None, codec=None):
     types = {k: _int(r.get("type_code"), -1) for k, r in table.items()}
     follow = {k for k, t in types.items() if t == TYPE_HEX} | {MIND_BURN}
     conns, refused = [], []
+    set_aside, declared_not_refused = [], []
     captures = 0
     for capdir, _who in livewire.live_captures(root):
         stamp = os.path.basename(capdir)
         if stamps and stamp not in stamps:
             continue
         captures += 1
+        declared = livewire.declared_gaps(capdir)
         for ch in tape.channel_files(capdir):
+            if ch["connection"] in declared:
+                # the capture's OWN manifest declares this connection gapped: set it aside
+                # BY NAME, and decode it once to show it still refuses
+                try:
+                    deepwoundjoin.sequence(capdir, ch["connection"], codec)
+                except (bufflog.BuffLogError, tape.TapeError) as exc:
+                    set_aside.append((stamp, ch["connection"], str(exc)[:100]))
+                    print(f"   SET ASIDE {stamp} {ch['connection']}: its manifest declares it "
+                          f"gapped {declared[ch['connection']]} -- still refused")
+                else:
+                    declared_not_refused.append((stamp, ch["connection"]))
+                continue
             try:
                 seq = deepwoundjoin.sequence(capdir, ch["connection"], codec)
             except (bufflog.BuffLogError, tape.TapeError) as exc:
@@ -715,8 +820,30 @@ def census(stamps=None, codec=None):
                 observer, _press, _why = spellhitjoin.observer_of(seq, c2s)
             conns.append(Conn(stamp, port, seq, observer))
     return {"captures": captures, "connections": len(conns), "refused": refused,
+            "set_aside": set_aside, "declared_not_refused": declared_not_refused,
             "conns": conns, "table": table, "types": types, "stamps": stamps,
             "observer_named": sum(1 for c in conns if c.observer is not None)}
+
+
+def upto(c, stamp):
+    """The census `c` cut to the captures BEFORE `stamp` -- the corpus the predictions were
+    registered on (connections, refusals and set-asides cut with it)."""
+    conns = [cc for cc in c["conns"] if cc.stamp < stamp]
+    return dict(c, conns=conns, connections=len(conns),
+                refused=[r for r in c["refused"] if r[0] < stamp],
+                set_aside=[r for r in c.get("set_aside", ()) if r[0] < stamp],
+                captures=len({cc.stamp for cc in conns}),
+                observer_named=sum(1 for cc in conns if cc.observer is not None))
+
+
+def narrow(c, stamp):
+    """The census `c` cut to ONE capture."""
+    conns = [cc for cc in c["conns"] if cc.stamp == stamp]
+    return dict(c, conns=conns, connections=len(conns),
+                refused=[r for r in c["refused"] if r[0] == stamp],
+                set_aside=[r for r in c.get("set_aside", ()) if r[0] == stamp],
+                captures=len({cc.stamp for cc in conns}),
+                observer_named=sum(1 for cc in conns if cc.observer is not None))
 
 
 def score(c):
@@ -751,13 +878,32 @@ def score(c):
     s["i1"] = (s["i_per_port"] == EXPECT_179_PER_PORT and s["i_by_observer"] == 0
                and set(s["i_forms"]) == {"0x00A0[60]"} and bool(done)
                and all(abs(dt - 1.0) <= COMPLETION_TOL for dt in dts))
+    # I1r (2026-09-28): the completion at the [61] seconds when sent, else the activation
+    s["i_ct_casts"] = [(r["capture"], r["port"], round(r["ta"], 3), r["ct"], r["dt"])
+                       for r in done_c if r.get("ct") is not None]
+    s["i1r_off"] = [(r["capture"], r["port"], round(r["ta"], 3), r.get("ct"), r["dt"]) for r in done_c
+                    if abs(r["dt"] - (r["ct"] if r.get("ct") is not None else 1.0)) > COMPLETION_TOL]
+    s["i1r"] = (s["i_per_port"] == EXPECT_179_PER_PORT and s["i_by_observer"] == 0
+                and set(s["i_forms"]) == {"0x00A0[60]"} and bool(done) and not s["i1r_off"])
     s["i_fx20_348"] = sum(1 for r in done_c if (r["target"], 348) in r["fx20"])
     s["i_words_on_target"] = sum(r["words_on_target"] for r in done_c)
     s["i2"] = bool(done) and s["i_fx20_348"] == len(done_c) and s["i_words_on_target"] == 0
+    # I2r: no word from the caster onto the target but one riding its own Fire Storm tick
+    s["i_words_on_target_tick"] = [(r["capture"], r["port"], round(r["ta"], 3), r["words_on_target"])
+                                   for r in done_c if r["words_on_target_tick"]]
+    s["i2r"] = (bool(done) and s["i_fx20_348"] == len(done_c)
+                and sum(r["words_on_target"] - r["words_on_target_tick"] for r in done_c) == 0)
     hx = [r["hex_apply"] for r in done_c if r["hex_apply"]]
     s["i_hex_applies"] = hx
     s["i3"] = (len(hx) >= 1 and all(h["dur"] == 3.0 and h["order_58_42_f1"] for h in hx)
                and all(any(b & HEX_BIT for b in r["status_hex"]) for r in done_c if r["hex_apply"]))
+    # I3r: the 58 ahead of the 0x0042; an 0x00F1 with the hex bit after it unless the
+    # observer's status already carried the bit (a status word that does not change)
+    s["i_hex_already"] = [(r["capture"], r["port"], round(r["ta"], 3), r["caster"], r["hex_apply"]["field3"])
+                          for r in done_c if r["hex_apply"] and r["hex_apply"]["already_hexed"]
+                          and not r["hex_apply"]["f1_hex_after"]]
+    s["i3r"] = (len(hx) >= 1 and all(h["dur"] == 3.0 and h["order_58_42"]
+                                     and (h["f1_hex_after"] or h["already_hexed"]) for h in hx))
     ends = [r for r in done if r["end"] is not None]
     sched = [r for r in ends if r["scheduled"]]
     early = [r for r in ends if not r["scheduled"]]
@@ -828,6 +974,13 @@ def score(c):
     s["m1"] = (s["m_per_port"] == EXPECT_185_PER_PORT and bool(mdone)
                and all(abs(dt - 1.0) <= COMPLETION_TOL for dt in mdts)
                and set(collections.Counter(r["form"] for r in mb)) == {"0x00A0[60]"})
+    # M1r: the completion at the [61] seconds when sent, else the activation
+    s["m_ct_casts"] = [(r["capture"], r["port"], round(r["ta"], 3), r["ct"], r["dt"])
+                       for r in mdone_c if r.get("ct") is not None]
+    s["m1r_off"] = [(r["capture"], r["port"], round(r["ta"], 3), r.get("ct"), r["dt"]) for r in mdone_c
+                    if abs(r["dt"] - (r["ct"] if r.get("ct") is not None else 1.0)) > COMPLETION_TOL]
+    s["m1r"] = (s["m_per_port"] == EXPECT_185_PER_PORT and bool(mdone) and not s["m1r_off"]
+                and set(collections.Counter(r["form"] for r in mb)) == {"0x00A0[60]"})
     twin = [r for r in mdone if len(r["on_target"]) >= 2]
     single = [r for r in mdone if len(r["on_target"]) == 1]
     none_ = [r for r in mdone_c if not r["on_target"]]      # an invariant: none anywhere
@@ -864,7 +1017,10 @@ def score(c):
     s["m4"] = bool(mb) and s["m_by_observer"] == 0
     s["m4_second_clause"] = None            # UNTESTABLE: no cast onto the observer, no current energy
     # the rank CORROBORATION: 179's hex field3 (the caster's Fire Magic) predicts both Burnings
-    ranks = {h["field3"] for h in hx}
+    # scored on the WITNESS's hex applies -- the claim is its caster's rank (EV-3's scope);
+    # the corpus's ranks are printed (20260928T103123 adds agent 3's 179 at field3 0)
+    ranks = {r["hex_apply"]["field3"] for r in done if r["hex_apply"]}
+    s["m_ranks_corpus"] = sorted({h["field3"] for h in hx})
     s["m_rank_fits"] = (len(ranks) == 1 and all(
         int(math.floor(interp(1, 3, r) + 0.5)) == 3 and int(math.floor(interp(1, 10, r) + 0.5)) == 9
         for r in ranks))
@@ -884,7 +1040,13 @@ def score(c):
                                                  for a in others).items()}
     s["g1"] = len(happlies) >= 1 and s["h_42_elsewhere"] == 0
     s["g2"] = len(happlies) >= 1 and all(a["order_58_42_f1"] for a in happlies)
+    s["g2_already_hexed"] = [(a["capture"], a["port"], a["t"], a["skill"]) for a in happlies
+                             if not a["order_58_42_f1"] and a["already_hexed"]]
+    s["g2r"] = len(happlies) >= 1 and all(a["order_58_42"] and (a["f1_hex_after"] or a["already_hexed"])
+                                          for a in happlies)
     s["g3_misses"] = sum(1 for a in happlies if not a["g3_ok"])
+    s["g3_miss_rows"] = [(a["capture"], a["port"], a["t"], a["skill"], a["field3"], a["dur"], a["pred"])
+                         for a in happlies if not a["g3_ok"]]
     s["g3"] = len(happlies) >= 1 and s["g3_misses"] == 0
     s["h_residuals"] = [(a["skill"], a["residual"]) for a in happlies]
     s["g4"] = len(happlies) >= 1 and all(
@@ -988,6 +1150,12 @@ FAILED_AS_REGISTERED = ("i4", "m2", "c2")
 UNTESTABLE = ("m3",)
 CORRECTED = ("i4c", "m2c", "m3c", "c2c")
 LOCKED_LATER = ("l1", "l2", "l3", "l4")
+# THE ZAISHEN CAPTURE (2026-09-28, docstring): the registered predictions it FAILS, and the
+# re-statement (no free parameter) each one's verdict rests on beside it. G3 and the corrected
+# C2c have none -- they stand FAILED on that tape, their witnesses exact in test_skilldamage.
+FAILED_ON_ZAISHEN = ("i1", "i2", "i3", "m1", "g2", "g3")
+RESTATED = {"i1": "i1r", "i2": "i2r", "i3": "i3r", "m1": "m1r", "g2": "g2r"}
+CORRECTED_FAILED_ON_ZAISHEN = ("c2c",)
 
 
 def verdicts(s):
@@ -998,6 +1166,22 @@ def verdicts(s):
         "registered_hold": all(s[k] for k in REGISTERED if k not in FAILED_AS_REGISTERED + UNTESTABLE),
         "failed_as_registered": all(not s[k] for k in FAILED_AS_REGISTERED),
         "corrected_hold": all(s[k] for k in CORRECTED),
+        "later_hold": all(s[k] for k in LOCKED_LATER),
+    }
+
+
+def restated_verdicts(s):
+    """The whole corpus's verdict since the Zaishen capture: every registered prediction
+    holds as registered or through its re-statement, except the three FAILED at
+    registration (I4 / M2 / C2) and those the Zaishen tape FAILED with none (G3); M3
+    untestable; the corrected readings but C2c hold; the post-hoc facts hold."""
+    skip = FAILED_AS_REGISTERED + UNTESTABLE
+    return {
+        "registered_or_restated_hold": all(s[k] or (k in RESTATED and s[RESTATED[k]])
+                                           for k in REGISTERED if k not in skip and k != "g3"),
+        "restatements_hold": all(s[v] for v in RESTATED.values()),
+        "failed_as_registered": all(not s[k] for k in FAILED_AS_REGISTERED),
+        "corrected_hold": all(s[k] for k in CORRECTED if k not in CORRECTED_FAILED_ON_ZAISHEN),
         "later_hold": all(s[k] for k in LOCKED_LATER),
     }
 
@@ -1055,6 +1239,9 @@ def main():
           f"{s['refused']} refused; the observer named on {s['observer_named']}")
     for r in c["refused"]:
         print(f"   refused {r}")
+    print(f"   set aside by their capture's own manifest (gapped, still refused): "
+          f"{c['set_aside'] or 'none'}; declared but decoding whole: "
+          f"{c['declared_not_refused'] or 'none'}")
     if a.rows:
         print_rows(c)
         print()
@@ -1138,6 +1325,18 @@ def main():
           f"sends none, 2/2 -- and {s['c_observer_no_id_corpus']} corpus-wide); NOTE "
           f"id 29 is shared by Weakness and Cracked Armor -- a class, not a per-condition id (the D6 "
           f"review's R34-8)")
+    print("---- RE-STATED for the Zaishen capture (docstring; no free parameter)")
+    print(f"[{_v(s['i1r'])}] I1r / [{_v(s['m1r'])}] M1r the completion at the [61] seconds when sent: "
+          f"179 {s['i_ct_casts']} off {s['i1r_off']}; 185 {s['m_ct_casts']} off {s['m1r_off']}")
+    print(f"[{_v(s['i2r'])}] I2r a word on the target only on the caster's own Fire Storm tick: "
+          f"{s['i_words_on_target_tick']}")
+    print(f"[{_v(s['i3r'])}] I3r / [{_v(s['g2r'])}] G2r no 0x00F1 when already hexed: 179 "
+          f"{s['i_hex_already']}; every hex {s['g2_already_hexed']}")
+    print(f"[----] G3 misses (no re-statement) {s['g3_miss_rows']}; C2c off (no re-statement) "
+          f"{s['c_cast_applied_off']} / {s['c_environmental_off']}; the 179 hexes' ranks "
+          f"corpus-wide {s['m_ranks_corpus']}")
+    rv = restated_verdicts(s)
+    print(f"hexjoin (whole corpus, re-stated): {rv}")
     ok = all(v.values())
     print(f"hexjoin: {'THE READING HOLDS' if ok else 'THE READING FAILS'} -- registered "
           f"{_v(v['registered_hold'])}, I4/M2/C2 failed as registered {_v(v['failed_as_registered'])}, "

@@ -205,6 +205,11 @@ def build(capture_dirs=None, skipped=None, progress=None):
 
     `skipped` names the tapes WITHOUT a decrypted channel so the stamp can
     carry them; when `capture_dirs` is None both come from `keyed_tapes()`.
+
+    A connection its capture's OWN manifest declares gapped is set aside BY NAME
+    (`tape.whole_channels`, printed) and recorded in the stamp's `set_aside`, so
+    the index says what it does not rest on beside `skipped`; every other
+    connection must still frame to its last byte.
     """
     import unitassembly                  # noqa: E402  (origin gate, lazy)
     import tape                          # noqa: E402  (authsrv)
@@ -216,10 +221,11 @@ def build(capture_dirs=None, skipped=None, progress=None):
     codec = Codec()
     sightings = []
     connections = 0
+    set_aside = []
     for n, cd in enumerate(capture_dirs, 1):
         if progress:
             progress(n, len(capture_dirs), os.path.basename(cd))
-        for row in tape.channel_files(cd):
+        for row in tape.whole_channels(cd, set_aside):
             connection = row["connection"]
             info, events = tape.load_tape(cd, connection)
             capture = info.get("capture") or os.path.basename(cd)
@@ -231,7 +237,9 @@ def build(capture_dirs=None, skipped=None, progress=None):
                     f"definition after the break and nothing would say so.")
             connections += 1
             sightings.extend(collect_connection(msgs, capture, connection).values())
-    return Index(corpus_stamp(capture_dirs, skipped), sightings, connections)
+    stamp = corpus_stamp(capture_dirs, skipped)
+    stamp["set_aside"] = set_aside
+    return Index(stamp, sightings, connections)
 
 
 class Index:

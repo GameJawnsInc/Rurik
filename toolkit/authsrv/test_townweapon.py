@@ -98,7 +98,7 @@ import townweapon as tw                                      # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=73)  # 2026-09-24 (CLEANUP-3's review, round 2: +1, the RV2-3 discriminator -- a direct commit of a batch the gate shortens), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (88 vaulted). 72 / 87 at the first review round: +6 bare / +6 vaulted at the review (the leaf's per-slot pin split in three, the commit-count lock, the TOWN ARMOUR log under Hide in Towns, the strip-off town hammer, the commit count, the both-off town head); +11 / +11 on CLEANUP-3 itself (the leaf's pair, three source locks, the town head out/back, the town hands beside it, the 0x0072 drag, the KNOWN-BAD arm, the field VACUITY, Hide in Towns) = 66 / 81. History: 55 bare / 70 vaulted on the field shield (2026-09-24); 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
+led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=73)  # 2026-09-28 (CASTAI-Z1): unchanged bare; +1 vaulted (89), section 2's gapped-connection audit. 2026-09-24 (CLEANUP-3's review, round 2: +1, the RV2-3 discriminator -- a direct commit of a batch the gate shortens), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (88 vaulted). 72 / 87 at the first review round: +6 bare / +6 vaulted at the review (the leaf's per-slot pin split in three, the commit-count lock, the TOWN ARMOUR log under Hide in Towns, the strip-off town hammer, the commit count, the both-off town head); +11 / +11 on CLEANUP-3 itself (the leaf's pair, three source locks, the town head out/back, the town hands beside it, the 0x0072 drag, the KNOWN-BAD arm, the field VACUITY, Hide in Towns) = 66 / 81. History: 55 bare / 70 vaulted on the field shield (2026-09-24); 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
 
 VIS = authsrv.GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT           # 0x006F
 WORN = authsrv.GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT               # 0x006E
@@ -178,8 +178,16 @@ led.ok(tw.player_weapons_sent(True, town_arm=True) is False and tw.player_weapon
 # ---- §2 retail's wire ------------------------------------------------------------------
 import vaultpath                                             # noqa: E402
 import livewire                                              # noqa: E402
+import capgaps                                               # noqa: E402
 live_root = vaultpath.vault_path("captures", "live")
-conns = list(livewire.live_connections()) if os.path.isdir(live_root) else []
+# 2026-09-28 (CASTAI-Z1): a connection its capture's own manifest declares GAPPED
+# (20260928T103123 :65009) is refused by decode_conn by design; it is set aside BY NAME
+# here (printed) and audited below, so "every connection decoded" holds over every
+# connection NOT declared gapped, unweakened. Its s2c never decoded, so it contributed
+# nothing to the census counters -- only a false "decoded 0" and an empty per-conn row.
+gapped_aside = []
+conns = (list(livewire.live_connections(set_aside=gapped_aside))
+         if os.path.isdir(live_root) else [])
 if not conns:
     led.skip("section 2, retail's wire", f"no live captures under {live_root}")
 if conns:
@@ -296,7 +304,13 @@ if conns:
                     own_addr[(rg, op, bool(own_addressed(t)))] += 1
     o_bodies = sum(n for (r, _o, _a, _b), n in bodies.items() if r == "outpost")
     o_armed = sum(n for (r, _o, a, b), n in bodies.items() if r == "outpost" and (a or b))
-    led.ok(len(conns) >= 90 and decoded == len(conns), f"every live connection decoded ({decoded} of {len(conns)})")
+    led.ok(len(conns) >= 90 and decoded == len(conns),
+           f"every live connection its manifest does not declare gapped decoded ({decoded} of {len(conns)}, "
+           f"{len(gapped_aside)} set aside)")
+    gap_ok, gap_detail = capgaps.audit(gapped_aside, [d for d, _w in livewire.live_captures()],
+                                       livewire.refuses)
+    led.ok(gap_ok, "and the connections set aside are EXACTLY the ones their manifests declare gapped, the "
+           "known set, and decode_conn still REFUSES each", gap_detail)
     led.ok(o_bodies >= 2000 and o_armed == 0 and 1900 <= o_6e_bodies <= o_bodies,
            f"OBSERVED: every outpost 0x006E is empty-handed on BOTH visuals ({o_armed} of {o_bodies} 0x006E "
            f"MESSAGES, {o_6e_bodies} distinct bodies, carry a lead or an off hand)", f"{dict(bodies)}")

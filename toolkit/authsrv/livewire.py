@@ -175,13 +175,39 @@ def decode_conn(capdir, conn_file):
     return conn, merged, ok
 
 
-def live_connections(root=None):
+# `conn_name` and `declared_gaps` live in the leaf `capgaps.py` now (it sits below both
+# this module and `tape`, which cannot import this one). Re-exported HERE, at the site
+# they were cut from, because a reader reaches them by these names: `test_livewire.py`
+# sections 1 and 5 (`livewire.declared_gaps`, `livewire.conn_name`).
+from capgaps import (conn_name, declared_gaps)                # noqa: F401,E402
+import capgaps                                                 # noqa: E402
+
+
+def live_connections(root=None, set_aside=None):
     """Yield (capdir, conn_file) for every game connection in every capture
     whose origin is LIVE. Skips non-live captures LOUDLY via the returned
-    skip list only when asked -- use live_captures() for the census."""
+    skip list only when asked -- use live_captures() for the census.
+
+    `set_aside`, a list, opts in to the ONE set-aside (capgaps.py): a connection
+    its capture's OWN manifest declares gapped is printed by name, appended to
+    the list and not yielded. Nothing else is ever stepped past -- an undeclared
+    connection that will not close still comes out and still reddens its census
+    -- and the caller asserts the list with `capgaps.audit`. Omitted, every
+    connection is yielded, as before."""
     for capdir, _who in live_captures(root):
+        gaps = capgaps.declared_gaps(capdir) if set_aside is not None else {}
         for gf in connections(capdir):
+            if gaps and capgaps.set_aside(capdir, gf, gaps, set_aside):
+                continue
             yield capdir, gf
+
+
+def refuses(capdir, connection):
+    """True when `decode_conn` REFUSES the one named connection ("client->server") of
+    this capture -- `capgaps.audit`'s still-refused callback for a livewire census. A
+    connection with no game file here is not refused, it is absent: False."""
+    files = [g for g in connections(capdir) if conn_name(g) == connection]
+    return len(files) == 1 and not decode_conn(capdir, files[0])[2]
 
 
 def live_captures(root=None):

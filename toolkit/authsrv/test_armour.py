@@ -74,6 +74,33 @@ FIELDS = {2: "file_id", 3: "item_type", 4: "dye_tint", 6: "materials",
 PER_INSTANCE = {5: "dye_colors"}
 
 
+def _corpus_s2c(live, set_aside):
+    """(stamp, `cmsgstream.timed` s2c rows) for every live capture holding a wire log.
+
+    2026-09-28 (CASTAI-Z1, the cms lane). Each corpus walk here wrapped `timed` in
+    `except Exception: continue`, and the one exception it ever caught was the
+    capture directory with no wire.jsonl (20260817T175358: plan_seal.json and
+    wirecapture.log only) -- so that is now the stated rule, and anything else
+    `timed` refuses RAISES. Its one set-aside is a direction the capture's own
+    manifest declares gapped (20260928T103123 :65009 s2c), printed by name and
+    appended to `set_aside`, which the corpus check asserts with `capgaps.audit`."""
+    import cmsgstream
+    for stamp in sorted(os.listdir(live)):
+        if not os.path.isfile(os.path.join(live, stamp, "wire.jsonl")):
+            continue
+        yield stamp, cmsgstream.timed(stamp, "s2c", "game", set_aside=set_aside)
+
+
+def _audit_corpus(live, set_aside):
+    """(ok, detail): the walk set aside EXACTLY capgaps.KNOWN_GAPPED, each one still
+    refused by cmsgstream -- the second half of a corpus census that steps past one."""
+    import capgaps
+    import cmsgstream
+    caps = [os.path.join(live, s) for s in sorted(os.listdir(live))]
+    ok, why = capgaps.audit(set_aside, caps, cmsgstream.refuses)
+    return ok and len(set_aside) == len(capgaps.KNOWN_GAPPED), why
+
+
 def decoded(row):
     out = []
     for w in row.get("modifiers", []):
@@ -222,11 +249,8 @@ def main():
     if live is not None:
         ours = {r.get("model_id"): k for k, r in items.items()}
         seen = collections.defaultdict(list)
-        for stamp in sorted(os.listdir(live)):
-            try:
-                got = cmsgstream.timed(stamp, "s2c", "game")
-            except Exception:
-                continue
+        aside = []
+        for stamp, got in _corpus_s2c(live, aside):
             for _t, _c, op, v in got:
                 if op != 0x161 or not v or not isinstance(v[-1], list):
                     continue
@@ -242,6 +266,12 @@ def main():
                             mods.append((d["identifier"], d["arg"], d["arg2"]))
                 seen[head[10]].append((head, tuple(mods)))
 
+        aside_ok, aside_why = _audit_corpus(live, aside)
+        LEDGER.ok(aside_ok,
+                  "the corpus walk set aside only what a manifest declares gapped",
+                  f"{aside_why}. EXACTLY capgaps.KNOWN_GAPPED, each still refused "
+                  f"by cmsgstream; it used to be `except Exception: continue` "
+                  f"(2026-09-28)")
         covered = [k for k in armour if items[k].get("model_id") in seen]
         LEDGER.ok(len(covered) == len(armour),
                   "retail sent us all five of these exact models",

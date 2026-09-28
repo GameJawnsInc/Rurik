@@ -82,6 +82,27 @@ What this cannot separate: the AI's own wait from the recharge (the minimum boun
 both, which is why it is the minimum that is read); a skill whose activation is 0 (an
 attack skill: the two anchors coincide); an aftercast longer than the recharge.
 
+THE CAST'S OWN TIME (2026-09-28, CASTAI-Z1, the z1-spell lane). The start-to-start reading
+above adds the TABLE's activation, and a body can cast faster or slower than its record:
+retail sends `0x00A3 [61 GV_CASTTIME, caster, target, seconds]` (untargeted `0x00A2 [61,
+caster, seconds]`) IMMEDIATELY ahead of such a cast's [60] (commit 974f8748, OBSERVED 3 of
+3 on 20260917T224104 :62557). On 20260928T103123 the Zaishen Mage (agent 9) casts Fireball
+186 at 1.005 s against the record's 1.5 on most casts, and 186's as-written minimum drops
+to 7.999 = 7 + 1.005 -- so AS WRITTEN 186 leaves the completion-anchored set on the full
+corpus. `gaps_of` records each pair's first-cast [61] seconds ("ct"), and `score` prints a
+RE-STATED reading beside the as-written one (`on_completion_r` / `on_start_r`): the
+start-to-start gap less THAT cast's time (the [61] seconds when sent, else the activation)
+against the recharge, and completion-to-next plus it against the recharge. It has no free
+parameter and is identical to the as-written reading on every pair whose cast carried no
+[61] word. The as-written keys are untouched; the re-statement is never scored in their
+place.
+
+A GAPPED CONNECTION (2026-09-28). A connection the capture's OWN manifest declares gapped
+(`livewire.declared_gaps` -- the sniffer lost bytes) is SET ASIDE BY NAME, printed, and
+still decoded once to show it still refuses (`set_aside`); a declared one that decodes
+whole is listed in `declared_not_refused`. Any other connection that does not frame whole
+stays in `excluded` as "unframed" -- counted, never absorbed.
+
 Standard library only; reads the vault through `vaultpath`; refuses a tape that does not
 frame whole (`deepwoundjoin.sequence`); the tables are read out of the owner's own exes.
 """
@@ -90,6 +111,7 @@ import collections
 import json
 import os
 import statistics
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -104,6 +126,7 @@ if CLIENTSCAN not in sys.path:
 
 import bufflog          # noqa: E402
 import deepwoundjoin    # noqa: E402
+import livewire         # noqa: E402  (declared_gaps: the capture's own manifest)
 import spellhitjoin     # noqa: E402
 import tape             # noqa: E402
 import vaultpath        # noqa: E402
@@ -122,6 +145,22 @@ OP_INT = 0x009F            # [prop, agent, value]
 PROP_ATTACK_SKILL_FINISHED = 46
 PROP_SKILL_FINISHED = 58
 PROP_SKILL_STOPPED = 59
+OP_FLOAT = 0x00A2          # [prop, agent, f32]
+OP_FLOAT_TARGET = 0x00A3   # [prop, agent, target, f32]
+PROP_CAST_TIME = 61        # agents.GV_CASTTIME: a modified cast's seconds, ahead of its [60]
+
+
+def _f32(bits):
+    return struct.unpack("<f", struct.pack("<I", int(bits) & 0xFFFFFFFF))[0]
+
+
+def cast_time_word(op, v):
+    """(caster, seconds) when (op, v) is a [61] cast-time word, else None."""
+    if op == OP_FLOAT_TARGET and len(v) > 4 and v[1] == PROP_CAST_TIME:
+        return v[2], round(_f32(v[4]), 4)
+    if op == OP_FLOAT and len(v) > 3 and v[1] == PROP_CAST_TIME:
+        return v[2], round(_f32(v[3]), 4)
+    return None
 
 
 def gaps_of(seq, player, split=True):
@@ -138,14 +177,22 @@ def gaps_of(seq, player, split=True):
 
     With `split`, the caster key is (agent, incarnation) where the incarnation
     counts the agent's 0x0020 creates so far; a pair never crosses one.
+    Each pair also carries "ct": the [61] cast-time word's seconds sent at the
+    FIRST cast's own instant, ahead of its [60] (None when the cast carried
+    none -- the record's activation is its time).
     Returns (pairs, n_creates_recycled, n_announcements)."""
     incarnation = collections.Counter()
-    last = {}                # (caster_key, skill) -> [t_announce, t_finished | None, stopped]
+    last = {}                # (caster_key, skill) -> [t_announce, t_finished | None, stopped, ct]
     newest = {}              # caster_key -> the (caster_key, skill) it announced last
+    last61 = {}              # caster -> (t, seconds) of its latest [61] word
     pairs = collections.defaultdict(list)
     recycled = 0
     n_ann = 0
     for _i, t, op, v in seq:
+        w61 = cast_time_word(op, v)
+        if w61 is not None:
+            last61[w61[0]] = (t, w61[1])
+            continue
         if op == OP_CREATE and len(v) > 1:
             incarnation[v[1]] += 1
             if incarnation[v[1]] > 1:
@@ -168,6 +215,8 @@ def gaps_of(seq, player, split=True):
         if op != OP_INT_TARGET or len(v) < 5 or v[1] != PROP_SKILL_ACTIVATED:
             continue
         caster, skill = v[2], v[4]
+        w = last61.pop(caster, None)
+        ct = w[1] if w is not None and abs(w[0] - t) < 1e-6 else None
         if caster == player:
             continue
         n_ann += 1
@@ -175,12 +224,12 @@ def gaps_of(seq, player, split=True):
         key = (ck, skill)
         prev = last.get(key)
         if prev is not None:
-            t0, t58, stopped = prev
+            t0, t58, stopped, ct0 = prev
             pairs[(caster, skill)].append({
                 "gap": round(t - t0, 3),
                 "done": (round(t - t58, 3) if t58 is not None else None),
-                "stopped": stopped, "t": round(t0, 3)})
-        last[key] = [t, None, False]
+                "stopped": stopped, "t": round(t0, 3), "ct": ct0})
+        last[key] = [t, None, False, ct]
         newest[ck] = key
     return dict(pairs), recycled, n_ann
 
@@ -243,6 +292,7 @@ def census(codec=None, split=True):
     exe_by_build = _exe_tables()
     rows = []
     excluded = []
+    set_aside, declared_not_refused = [], []
     builds = collections.Counter()
     recycled_total = 0
     n_ann_total = 0
@@ -250,7 +300,20 @@ def census(codec=None, split=True):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
             continue
+        declared = livewire.declared_gaps(cap_dir)
         for ch in tape.channel_files(cap_dir):
+            if ch["connection"] in declared:
+                # the capture's OWN manifest says the sniffer lost bytes here: set it
+                # aside BY NAME -- and decode it once, to show it still refuses
+                try:
+                    deepwoundjoin.sequence(cap_dir, ch["connection"], codec)
+                except (bufflog.BuffLogError, tape.TapeError) as exc:
+                    set_aside.append((stamp, ch["connection"], str(exc)[:60]))
+                    print(f"   SET ASIDE {stamp} {ch['connection']}: its manifest declares it "
+                          f"gapped {declared[ch['connection']]} -- still refused")
+                else:
+                    declared_not_refused.append((stamp, ch["connection"]))
+                continue
             try:
                 seq = deepwoundjoin.sequence(cap_dir, ch["connection"], codec)
                 build = tape.client_version(cap_dir, ch["connection"])["build"]
@@ -280,17 +343,36 @@ def census(codec=None, split=True):
                 continue
             for (caster, skill), ps in gaps.items():
                 act, rec = table.get(skill, (None, None))
+                done_ps = [p for p in ps if p["done"] is not None]
+                # the cast's own time: the [61] seconds when the first cast carried one,
+                # else the table's activation (the re-statement's only input)
+                own = [(p["ct"] if p["ct"] is not None else act) for p in done_ps]
                 rows.append({"capture": stamp, "connection": ch["connection"],
                              "port": ch["connection"].split("->")[0].rsplit(":", 1)[-1],
                              "build": build, "caster": caster, "skill": skill,
                              "pairs": ps,
-                             "gaps": [p["gap"] for p in ps if p["done"] is not None],
-                             "done": [p["done"] for p in ps if p["done"] is not None],
+                             "gaps": [p["gap"] for p in done_ps],
+                             "done": [p["done"] for p in done_ps],
+                             "net": ([round(p["gap"] - o, 3) for p, o in zip(done_ps, own)]
+                                     if act is not None else []),
+                             "done_ct": ([round(p["done"] + o, 3) for p, o in zip(done_ps, own)]
+                                         if act is not None else []),
+                             "ct_pairs": [p["ct"] for p in done_ps if p["ct"] is not None],
                              "uncompleted": [p["gap"] for p in ps if p["done"] is None],
                              "activation": act, "recharge": rec})
     return {"rows": rows, "excluded": excluded, "builds": dict(builds),
             "exe_builds": sorted(exe_by_build), "recycled_creates": recycled_total,
-            "announcements": n_ann_total, "split": split}
+            "announcements": n_ann_total, "split": split,
+            "set_aside": set_aside, "declared_not_refused": declared_not_refused}
+
+
+def upto(c, stamp):
+    """The census `c` cut to the captures BEFORE `stamp` (rows and exclusions) -- the
+    corpus as it stood when a number was pinned. Build and recycling counters are
+    corpus totals and are not cut."""
+    return dict(c, rows=[r for r in c["rows"] if r["capture"] < stamp],
+                excluded=[e for e in c["excluded"] if e[0] < stamp],
+                set_aside=[e for e in c.get("set_aside", ()) if e[0] < stamp])
 
 
 def per_skill(rows):
@@ -299,7 +381,8 @@ def per_skill(rows):
     never completed), "activation", "recharge", "builds", "groups"}} pooled over
     every (connection, caster) group; a skill whose activation or recharge
     differs across the builds present is kept per build as "skill@build"."""
-    g = collections.defaultdict(lambda: {"gaps": [], "done": [], "unc": []})
+    g = collections.defaultdict(lambda: {"gaps": [], "done": [], "unc": [], "net": [],
+                                         "done_ct": [], "ct": []})
     meta = {}
     for r in rows:
         key = r["skill"]
@@ -312,12 +395,19 @@ def per_skill(rows):
         g[key]["gaps"].extend(r["gaps"])
         g[key]["done"].extend(r["done"])
         g[key]["unc"].extend(r["uncompleted"])
+        g[key]["net"].extend(r.get("net", ()))
+        g[key]["done_ct"].extend(r.get("done_ct", ()))
+        g[key]["ct"].extend(r.get("ct_pairs", ()))
     out = {}
     for key, d in g.items():
         act, rec, bs = meta[key]
         gs = d["gaps"]
         out[key] = {"n": len(gs), "min": min(gs) if gs else None,
                     "min_done": min(d["done"]) if d["done"] else None,
+                    # the re-statement's two readings (the cast's own time, not the table's)
+                    "min_net": min(d["net"]) if d["net"] else None,
+                    "min_done_ct": min(d["done_ct"]) if d["done_ct"] else None,
+                    "ct_pairs": len(d["ct"]), "ct_values": sorted(set(d["ct"])),
                     "median": statistics.median(gs) if gs else None,
                     "uncompleted": d["unc"],
                     "activation": act, "recharge": rec, "builds": sorted(bs),
@@ -349,6 +439,17 @@ def score(c):
                 and _near(v["min_done"], v["recharge"] - v["activation"])}
     neither = {k: v for k, v in separable.items()
                if k not in on_completion and k not in on_start}
+    # THE RE-STATEMENT (2026-09-28, docstring "THE CAST'S OWN TIME"): the same two
+    # readings with each pair's own cast time in place of the table's activation --
+    # identical to the as-written reading on every pair that carried no [61] word
+    on_completion_r = {k: v for k, v in separable.items()
+                       if _near(v["min_net"], v["recharge"])
+                       and _near(v["min_done"], v["recharge"])}
+    on_start_r = {k: v for k, v in separable.items()
+                  if _near(v["min"], v["recharge"])
+                  and _near(v["min_done_ct"], v["recharge"])}
+    neither_r = {k: v for k, v in separable.items()
+                 if k not in on_completion_r and k not in on_start_r}
     # A completed pair whose completion-to-next gap is SHORTER than the recharge
     # refutes completion-anchoring outright (the skill re-cast while recharging).
     sub_recharge = {}
@@ -388,6 +489,14 @@ def score(c):
         "discriminating": sorted(set(on_completion) | set(on_start)),
         "p2_completion_majority": (len(on_completion) >= FLOOR_SKILLS
                                    and len(on_completion) > 2 * len(on_start)),
+        "on_completion_r": {k: (v["min_net"], v["min_done"], v["recharge"], v["activation"],
+                                v["n"], v["ct_pairs"]) for k, v in on_completion_r.items()},
+        "on_start_r": {k: (v["min"], v["min_done_ct"], v["recharge"], v["activation"],
+                           v["n"], v["ct_pairs"]) for k, v in on_start_r.items()},
+        "neither_r": {k: (v["min_net"], v["min_done"], v["recharge"], v["activation"],
+                          v["n"], v["ct_pairs"]) for k, v in neither_r.items()},
+        "cast_time_pairs": {k: (v["ct_pairs"], v["ct_values"]) for k, v in ps.items()
+                            if v["ct_pairs"]},
         "sub_recharge": sub_recharge,
         # P3 AS REGISTERED, per arm: the split arm shows NO sub-recharge gap; the
         # pooled arm shows SOME. FALSE on both arms of this corpus (229's two).
@@ -430,6 +539,13 @@ def main():
     print(f"   -> RE-STATED: COMPLETION is the majority anchor of the discriminating skills "
           f"{sc['discriminating']}: {'HOLDS' if sc['p2_completion_majority'] else 'FAILS'} "
           f"({len(sc['on_completion'])} completion vs {len(sc['on_start'])} start)")
+    print(f"   RE-STATED with each cast's own time ([61] seconds when sent, else the "
+          f"activation) as (min net start-to-start, min completion-to-next, recharge, "
+          f"activation, n, pairs with a [61]):")
+    print(f"   COMPLETION-anchored {sc['on_completion_r']}")
+    print(f"   START-anchored {sc['on_start_r']}")
+    print(f"   neither {sc['neither_r']}")
+    print(f"   completed pairs whose first cast carried a [61] word: {sc['cast_time_pairs']}")
     print(f"P3 completion-to-next gaps SHORTER than the recharge: {sc['sub_recharge'] or 'none'}"
           + ("  (split ON: predicted none)" if sc["split"] else "  (split OFF: predicted some)")
           + f" -> P3 AS WRITTEN {'HOLDS' if sc['p3_as_written'] else 'FAILS'} on this arm")
@@ -453,6 +569,9 @@ def main():
         print("excluded connections:")
         for e in c["excluded"]:
             print(f"   {e}")
+    print(f"set aside by their capture's own manifest (gapped, still refused): "
+          f"{c['set_aside'] or 'none'}; declared but decoding whole: "
+          f"{c['declared_not_refused'] or 'none'}")
 
 
 if __name__ == "__main__":

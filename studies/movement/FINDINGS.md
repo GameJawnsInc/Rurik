@@ -6320,3 +6320,28 @@ rather than "dwarfing" a 288 u systematic. Reproducible: `test_truncbound.py` §
 the reproduction, both sweeps, the old-reading control and the leave-one-out figure.
 With the bound patched back to the old reading (bound = spread), its p50 and p90 checks
 go red.
+
+## 2026-09-28 — HARD_JUMP_UNITS's decision record expired, and the constant stays 520 (CASTAI-ZF20)
+
+The owner's Zaishen Challenge capture `20260928T103123` put a **565.29 u / 1.770 s** step
+into the 2 s window. That window is the record behind choosing `HARD_JUMP_UNITS = 520`
+("Impossible steps" above: largest 517.87 u at 20 stamps; **518.69 u** on the corpus as of
+this capture, which test_movesync §16 had quoted as 518.25). The row is the observer's own
+**continuous auto-approach walk** (:58544, 587.058 → 588.827): a declared `0x0027` of
+383.04 u/s × 1.480 s to the server's `0x0028` halt = 567.07 u, no `0x002C` inside, and no
+self-report inside, only an attack order and a keepalive. It was alone above the cloud
+because of the report cadence, not because anything jumped (OBSERVED).
+
+**The ruling (the orchestrator's, 2026-09-28): `HARD_JUMP_UNITS` stays 520.**
+- It gates nothing on the server path. It is `movesync.hard_step`'s distance arm below the
+  0.05 s floor (plus `agtrack_replay`'s copy and `resyncscore`'s `mints_hard`), where retail
+  still peaks at 24.19 u.
+- The 2 s window is frozen as that decision's record, exact as of the pin: 6,194 intervals,
+  518.69 u, 195 within 5 u.
+- The window's claim is now carried by a signature that can go red: every retail interval
+  over 520 u inside 2 s is continuous movement, bounded by its body's declared speed up to
+  the halt, with no `0x002C` and no self-report inside.
+
+**The limit, stated:** over a 1.6 s gap at a declared 383 u/s, 600 u is walkable, so distance
+alone cannot see a jump that stays within a walk's reach. Below the 0.05 s floor, where the
+arm fires, it can.

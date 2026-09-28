@@ -841,6 +841,23 @@ until `--write` runs and the opcode is triaged), and proves acceptance (c): **ze
 retail c2s opcodes are neither named nor `DROPPED_ON_PURPOSE` with a reason**, over
 the file and over the live census.
 
+**Addendum, 2026-09-28 (CASTAI-Z1): the Zaishen Challenge's three c2s.** The owner's capture
+`20260928T103123` brought three opcodes the census had never seen, and `test_c2striage` went
+red until each was triaged. The evidence is CASTAI-ZF3 to ZF5 in studies/monsterai §18.2.
+**All three are dropped on purpose; none is armed.**
+
+| Opcode | Decision | Evidence |
+|---|---|---|
+| `0x009A` | `ZAISHEN_CHALLENGE_LIST_REQUEST`, medium | Header only, n = 4, one per outpost load. Answered by s2c `0x01D7` (the menu: 5 maps + six (id, dword, dword) triples) at 28–40 ms, 4 of 4 |
+| `0x00A6` | `ZAISHEN_CHALLENGE_ENTER`, medium | `[map, team, 0]`, n = 5. Answered by `0x01D9 [2, 1, '']` + `0x01BB`, then `0x01A5` to field 1's map at 3.055–3.075 s (4 of 4 uncancelled). Field 2 is a `0x01D7` triple id and **selects the opponents** (skill 2809 only on the team-52 match). UPSTREAM's `PARTY_ENTER_CHALLENGE` is our `0x00A5`, a different opcode |
+| `0x00A3` | UNNAMED, n = 1 | Header only, 2.469 s after an ENTER. Answered by `0x01D9 [0, 0, '']` (the corpus's only one), and no transfer followed: a cancel (RECONSTRUCTION). Both upstreams name it `PARTY_CANCEL_ENTER_CHALLENGE`; naming it is open (`PLAN.md` §8) |
+
+The census is now 105 connections / 30 captures / 13,888 c2s / 60 opcodes. One connection,
+20260928T103123 :65009, is set aside by its own manifest's gap declaration (CASTAI-ZF1). Its
+192 c2s had been folded in with an unmeasured "none" first reply until `ab37ccc6`. s2c
+`0x01D9` behaves as a travel-state carrier (`[2, 1, '']` after every MAP_TRAVEL and every
+ENTER), and `0x01D7` / `0x01BB` are unnamed SMSG candidates.
+
 ### The hero add — `c2s 0x001E HERO_ADD`, RECONSTRUCTION (DESKWORK-D1 step 4, 2026-09-23; corrected by the fix pass the same day)
 
 **CORRECTED 2026-09-23 (the D1 fix pass), and read this list before the section.**

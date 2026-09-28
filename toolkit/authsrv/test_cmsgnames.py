@@ -52,12 +52,17 @@ second.
 """
 import ast
 import math
+import contextlib
+import io
+import json
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
+import capgaps  # noqa: E402
 import checks  # noqa: E402
 import cmsgstream  # noqa: E402
 import vaultpath  # noqa: E402
@@ -98,14 +103,143 @@ STATUS = 0x00F1                   # GAME_SMSG; bit 0x10 is CHAR_STATUS_DEAD
 # and ran 10, and the floor guard caught it rather than letting a short run
 # print as a pass. 11 since the server-dispatch check was added, 16 since
 # sections 1b and 1c made the auth channel readable.
-LEDGER = checks.Ledger("GAME_CMSG names vs ArenaNet's own client", floor=16)
+# 2026-09-28 (CASTAI-Z1, the cms lane): 20 -- section 0's two bare checks on the
+# gap set-aside (so a BARE run is 2, below the floor, where it used to be 0),
+# section 1's refusal of the short wrong-catalog decode, and section 0b's
+# whole-corpus audit. Set from the green run.
+LEDGER = checks.Ledger("GAME_CMSG names vs ArenaNet's own client", floor=20)
+
+GAPPED_STAMP = "20260928T103123"
+GAPPED_CONN = "10.0.0.210:65009->98.95.137.136:80"
+# OBSERVED 2026-09-28: the c2s half of the one gapped connection, which its manifest
+# declares WHOLE, frames to 192 GAME_CMSG messages. Exact, on that one tape.
+GAPPED_CONN_C2S_MESSAGES = 192
+
+
+def _fake_capture(root, stamp, conns, manifest):
+    """A synthetic capture: `conns` is {port: [(seq, payload), ...]} of S2C segments
+    from 6.7.8.9:80 to 1.2.3.4:<port>, each with a keyed game channel file."""
+    cap = os.path.join(root, stamp)
+    os.makedirs(cap)
+    with open(os.path.join(cap, "wire.jsonl"), "w", encoding="utf-8") as fh:
+        for port, segs in conns.items():
+            for i, (seq, payload) in enumerate(segs):
+                fh.write(json.dumps({"kind": "wire", "dir": "s2c", "src": "6.7.8.9",
+                                     "sport": 80, "dst": "1.2.3.4", "dport": port,
+                                     "seq": seq, "t": 0.1 * (i + 1),
+                                     "payload": payload.hex()}) + "\n")
+    for port in conns:
+        with open(os.path.join(cap, f"game-1.2.3.4_{port}-to-6.7.8.9_80.jsonl"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(json.dumps({"kind": "session_key", "arc4_key": "00" * 20}) + "\n")
+    with open(os.path.join(cap, "manifest.json"), "w", encoding="utf-8") as fh:
+        json.dump({"report": {"connections": manifest}}, fh)
+    return cap
+
+
+def section_gaps_bare():
+    """0. THE GAP SET-ASIDE, on synthetic captures (runs on a bare machine).
+
+    `_streams` used to discard `reassemble`'s hole list and frame straight through.
+    Now: a hole the manifest declares, IN THE DIRECTION READ, is set aside by name;
+    any other hole is loud. Every arm here can go red."""
+    seed = (0x1601).to_bytes(2, "little") + bytes(20)          # SERVER_SEED, then cipher
+    whole = [(1000, seed + bytes(8)), (1030, bytes(10))]          # 40 bytes, no hole
+    holed = [(1000, seed + bytes(8)), (1034, bytes(10))]          # a 4-byte hole at 30
+    out = io.StringIO()
+    with tempfile.TemporaryDirectory() as td:
+        # port 5: s2c holed AND declared; port 7: s2c whole, only its c2s declared
+        cap1 = _fake_capture(td, "20990101T000001", {5: holed, 7: whole}, [
+            {"connection": "1.2.3.4:5->6.7.8.9:80", "gaps": {"s2c": [[30, 4]]}},
+            {"connection": "1.2.3.4:7->6.7.8.9:80", "gaps": {"c2s": [[0, 5]]}}])
+        # port 6: s2c holed, NOT declared
+        cap2 = _fake_capture(td, "20990101T000002", {6: holed}, [
+            {"connection": "1.2.3.4:6->6.7.8.9:80", "gaps": {}}])
+        # port 8: s2c holed, declared with the WRONG hole
+        cap3 = _fake_capture(td, "20990101T000003", {8: holed}, [
+            {"connection": "1.2.3.4:8->6.7.8.9:80", "gaps": {"s2c": [[30, 5]]}}])
+        into = []
+        with contextlib.redirect_stdout(out):
+            got = [c for c, _p, _h, _m in cmsgstream._streams(cap1, "s2c", "game", into)]
+        printed = out.getvalue()
+        loud = {}
+        for name, cap in (("undeclared", cap2), ("mismatch", cap3),
+                          ("known-bad: declaration ignored", cap1)):
+            try:
+                list(cmsgstream._streams(cap, "s2c", "game",
+                                         honour_declared=(cap is not cap1)))
+                loud[name] = None
+            except cmsgstream.StreamRefused as ex:
+                loud[name] = str(ex)
+        ref = (cmsgstream.refuses(cap1, "1.2.3.4:5->6.7.8.9:80"),
+               cmsgstream.refuses(cap1, "1.2.3.4:7->6.7.8.9:80"))
+        new_ok, _why = capgaps.audit(into, [cap1], cmsgstream.refuses)
+    LEDGER.ok(got == ["1.2.3.4:7->6.7.8.9:80"]
+              and into == [{"capture": "20990101T000001",
+                            "connection": "1.2.3.4:5->6.7.8.9:80",
+                            "gaps": {"s2c": [[30, 4]]}}]
+              and "SET ASIDE 20990101T000001 1.2.3.4:5->6.7.8.9:80" in printed
+              and ref == (True, False) and not new_ok,
+              "cmsgstream sets aside ONLY a hole its manifest declares in the direction "
+              "read, prints it by name and records it; a c2s-only declaration leaves the "
+              "s2c read; the set-aside one is still refused; and a declared gap "
+              "KNOWN_GAPPED does not name keeps the audit RED",
+              f"yielded {got}; set aside {into}; refuses (declared, whole) = {ref}; "
+              f"audit of an unnamed gap ok={new_ok}")
+    LEDGER.ok(all(loud.values())
+              and "1.2.3.4:6->6.7.8.9:80" in loud["undeclared"]
+              and "1.2.3.4:8->6.7.8.9:80" in loud["mismatch"]
+              and "1.2.3.4:5->6.7.8.9:80" in loud["known-bad: declaration ignored"],
+              "and every OTHER hole is LOUD, naming its connection: an undeclared one, a "
+              "declaration the reassembly does not reproduce, and (KNOWN-BAD) the "
+              "declared one itself once its declaration is not honoured",
+              "; ".join(f"{k}: {v}" for k, v in loud.items()))
+
+
+def section_gaps_corpus():
+    """0b. The whole live corpus through `timed`, both directions of the game channel:
+    nothing refused, the s2c set-aside audited against the manifests and KNOWN_GAPPED,
+    no c2s set-aside at all, and the gapped connection's whole c2s half still read."""
+    live = str(vaultpath.require_dir("captures", "live"))
+    caps = [os.path.join(live, s) for s in sorted(os.listdir(live))
+            if os.path.isfile(os.path.join(live, s, "wire.jsonl"))]
+    aside = {"s2c": [], "c2s": []}
+    rows, refused = {"s2c": 0, "c2s": 0}, None
+    z_c2s = None
+    try:
+        for cap in caps:
+            stamp = os.path.basename(cap)
+            for d in ("s2c", "c2s"):
+                got = cmsgstream.timed(stamp, d, "game", set_aside=aside[d])
+                rows[d] += len(got)
+                if stamp == GAPPED_STAMP and d == "c2s":
+                    z_c2s = sum(1 for _t, c, _o, _v in got if c == GAPPED_CONN)
+    except cmsgstream.StreamRefused as ex:
+        refused = str(ex)
+    ok, why = capgaps.audit(aside["s2c"], caps, cmsgstream.refuses)
+    bad_ok, _ = capgaps.audit(aside["s2c"], caps, lambda _c, _n: False)
+    c2s_declared = {(os.path.basename(c), n) for c in caps
+                    for n in cmsgstream.declared_in(c, "c2s")}
+    LEDGER.ok(refused is None and ok and not bad_ok
+              and len(aside["s2c"]) == len(capgaps.KNOWN_GAPPED)
+              and aside["c2s"] == [] and c2s_declared == set()
+              and z_c2s == GAPPED_CONN_C2S_MESSAGES,
+              "timed() over every live capture: nothing refused; the s2c set-aside is "
+              "EXACTLY capgaps.KNOWN_GAPPED, still refused (KNOWN-BAD: an audit told it "
+              "decodes goes red); nothing set aside in c2s, where no manifest declares a "
+              "gap; and the gapped connection's whole c2s half is read",
+              f"{len(caps)} captures, {rows['s2c']} s2c / {rows['c2s']} c2s rows; "
+              f"refused: {refused}; {why}; c2s declared {sorted(c2s_declared)}; "
+              f"{GAPPED_STAMP} {GAPPED_CONN} c2s {z_c2s} messages "
+              f"(expected {GAPPED_CONN_C2S_MESSAGES})")
 
 
 def main():
+    section_gaps_bare()
     try:
         vaultpath.require_dir()
     except (Exception, SystemExit) as ex:                                    # pragma: no cover
-        LEDGER.skip("the whole file", f"no vault: {ex}")
+        LEDGER.skip("every vault section (all but section 0)", f"no vault: {ex}")
         return LEDGER.verdict()
 
     try:
@@ -114,6 +248,8 @@ def main():
     except Exception as ex:                                    # pragma: no cover
         LEDGER.skip("the whole file", f"captures unreadable: {ex}")
         return LEDGER.verdict()
+
+    section_gaps_corpus()
 
     def ops(stamp, op, side=None):
         return [(t, v) for t, _c, o, v in (side or c2s)[stamp] if o == op]
@@ -137,8 +273,20 @@ def main():
     # gone on calling 78 correctly-decoded AUTH_CMSG messages evidence of
     # invention. So the mis-decode is now ASKED FOR, and the claim that it
     # invents is ASSERTED rather than narrated.
-    mis = cmsgstream.timed(RANGER, "c2s", channel="auth", catalog="GAME_CMSG")
-    mis_ops = {o for _t, _c, o, _v in mis}
+    # 2026-09-28 (CASTAI-Z1, the cms lane): `timed()` no longer returns a short
+    # decode's prefix -- it raises `StreamRefused` naming the connection -- so the
+    # mis-decode is read where it is still REPORTED, `frame_report`, from the same
+    # one `_streams` path and the same `decode_stream_at` call, i.e. the same
+    # messages `timed` used to return. The 0x0001/0x0005 literals are asserted on
+    # the same stream as before; the refusal is asserted beside them.
+    mis_rows = cmsgstream.frame_report(RANGER, "c2s", "auth", catalog="GAME_CMSG")
+    mis_ops = {o for r in mis_rows for o in r["opcodes"]}
+    mis_n = sum(r["messages"] for r in mis_rows)
+    try:
+        cmsgstream.timed(RANGER, "c2s", channel="auth", catalog="GAME_CMSG")
+        refused = None
+    except cmsgstream.StreamRefused as ex:
+        refused = str(ex)
     real = sum(r["messages"] for r in cmsgstream.frame_report(RANGER, "c2s", "auth"))
     game_ops = {o for _t, _c, o, _v in c2s[RANGER]}
     LEDGER.ok(0x0001 not in game_ops and 0x0005 not in game_ops
@@ -146,9 +294,14 @@ def main():
               "the AUTH channel is not decoded as GAME_CMSG",
               f"0x0001/0x0005 absent from the game channel's {len(game_ops)} opcodes, "
               f"and PRESENT ({sorted(hex(o) for o in mis_ops)}) when the same auth "
-              f"stream is deliberately run through the GAME_CMSG tables -- {len(mis)} "
+              f"stream is deliberately run through the GAME_CMSG tables -- {mis_n} "
               f"messages before the framing dies, on a connection that really holds "
               f"{real}. Decoding the wrong channel invents rather than errors")
+    LEDGER.ok(refused is not None and "framed" in refused and mis_n < real,
+              "and timed() REFUSES that short decode instead of returning its prefix",
+              f"StreamRefused: {refused}. Until 2026-09-28 timed() discarded "
+              f"decode_stream_at's error and handed back the {mis_n} invented messages "
+              f"as if they were the stream")
 
     # ---- 1b. the AUTH channel, which was unreadable until 2026-08-13 ----------
     # Two-sided on purpose. "The auth streams frame cleanly" is satisfied by any

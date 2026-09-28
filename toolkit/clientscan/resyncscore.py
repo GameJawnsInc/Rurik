@@ -498,11 +498,20 @@ def retail_tracks(stamp=None):
     stamps = [stamp] if stamp else sorted(os.listdir(root))
     out = []
     for st in stamps:
-        try:
-            c2s = cmsgstream.timed(st, "c2s", "game")
-            s2c = cmsgstream.timed(st, "s2c", "game")
-        except Exception:
-            continue          # a stamp with no keyed game wire is not a failure
+        # A stamp with no wire log is not a failure -- 20260817T175358 holds only
+        # plan_seal.json and wirecapture.log -- and that is the ONLY thing the
+        # `except Exception: continue` that stood here ever caught (MEASURED
+        # 2026-09-28 over the 37 capture directories). It is now the stated rule,
+        # and anything else `cmsgstream` refuses RAISES, naming the connection: its
+        # one set-aside is a direction the capture's own manifest declares gapped
+        # (20260928T103123 :65009 s2c, printed), which leaves that connection with
+        # no s2c here and puts it among the refused.
+        if not os.path.isfile(os.path.join(root, st, "wire.jsonl")):
+            continue
+        aside = []
+        c2s = cmsgstream.timed(st, "c2s", "game")
+        s2c = cmsgstream.timed(st, "s2c", "game", set_aside=aside)
+        s2c_aside = {r["connection"] for r in aside}
         reps, grants, named = {}, {}, {}
         for t, conn, op, vals in c2s:
             if op not in (movesync.OP_SET_HEADING, movesync.OP_CANCEL_REPORT):
@@ -528,6 +537,12 @@ def retail_tracks(stamp=None):
                 out.append(_null_track(label, R, G,
                                        f"only {len(R)} self-report(s); "
                                        f"{RETAIL_MIN_REPORTS} needed"))
+                continue
+            if conn in s2c_aside:
+                out.append(_null_track(label, R, G,
+                                       "its s2c is SET ASIDE: the capture's own "
+                                       "manifest declares it gapped, so no 0x0037 "
+                                       "can be read -- refused rather than guessed"))
                 continue
             if not named.get(conn):
                 out.append(_null_track(label, R, G,

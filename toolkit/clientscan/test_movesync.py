@@ -182,8 +182,13 @@ import vaultpath  # noqa: E402
 # with a `wall` -- synthetic, bare. Two sec.21 checks that scored the truncated
 # spread as the error score `bound` now and two messages stop calling it one
 # (test_truncbound.py); no count change from those.
+# 2026-09-28 (CASTAI-Z1): 144 -> 146, MEASURED with `RURIK_VAULT` at a missing
+# directory (146, the same 7 declared skips; 202 vaulted). sec.16's continuous-
+# movement predicate runs its CONTROL and KNOWN-BAD arms corpus-free, so both
+# count bare; the relation and shoulder were re-scoped as of the pin and the
+# whole-corpus signature added (vault only).
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=144)
+                       floor=146)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -493,8 +498,10 @@ def main():
           "and it was bracketed on BOTH sides by measured data when it was "
           "chosen",
           f"{movesync.HARD_JUMP_UNITS} sits above retail's largest 2 s step AS "
-          f"MEASURED THEN (517.87 u; the live corpus now reads 518.25 u, and "
-          f"section 16 is what checks it) and below the smallest of the four "
+          f"MEASURED THEN (517.87 u; 518.69 u on the captures before "
+          f"20260928T103123, which section 16 freezes, and past it the 2 s window "
+          f"holds a 565.29 u report-cadence gap that section 16's signature "
+          f"reads as a walk) and below the smallest of the four "
           f"ordinary WALKING rows the wide `dist>=520 & dt<=2.0s` form would "
           f"have swept in (525.3 u at 285.5 u/s, 20260814T090541) -- the "
           f"narrow form escapes that only because it fires below the dt floor, "
@@ -1273,6 +1280,76 @@ def main():
           f"({jumped[2]['speed']:.2f}) -- a jump adds distance and the pair's "
           f"average rises past the flanks; a predicate that excused this would "
           f"excuse the defect the bar exists for")
+    # THE 2 s WINDOW'S SIGNATURE (2026-09-28, CASTAI-Z1; the orchestrator's ruling on
+    # HARD_JUMP_UNITS, which STAYS 520). The window's largest step is no longer the claim
+    # -- a long enough report gap walks past any constant, and on 2026-09-28 one did
+    # (565.29 u, below). The claim is WHAT every row over the bar is: continuous
+    # movement the body could have walked. The predicate, and it has NO free parameter:
+    #   end   = the body's first 0x0028 halt strictly inside (t0, t), else t -- a halted
+    #           body does not move;
+    #   bound = the integral from t0 to end of the body's LATEST DECLARED 0x0027 speed
+    #           base: the one at or before t0, then each later one from its own stamp
+    #           (no declared speed at t0 -> no bound -> refused);
+    # and the row is continuous iff dist <= bound, no 0x002C hard set of the player
+    # spans it (mark_server_sets' row["server_set"]), and no self-report (0x003D /
+    # 0x0047) lies strictly inside it on the RAW c2s stream. That last one is
+    # structural for two consecutive reports of one connection; it is asserted
+    # against the raw stream so a report that `steps` never paired (a malformed or
+    # filtered one) is seen rather than walked over.
+    OP_SPEED_BASE, OP_HALT = 0x0027, 0x0028
+
+    def continuous_bound(r, c2s, s2c, body):
+        """-> (bound, end, reasons); reasons == [] is CONTINUOUS MOVEMENT."""
+        why = []
+        if r.get("server_set") is not None:
+            why.append(f"a 0x002C hard set inside at {r['server_set'][0]:.3f}")
+        reps = [round(t, 3) for t, op in c2s
+                if op in (movesync.OP_SET_HEADING, movesync.OP_CANCEL_REPORT)
+                and r["t0"] < t < r["t"]]
+        if reps:
+            why.append(f"a self-report inside at {reps}")
+        halts = [t for t, op, v in s2c if op == OP_HALT and len(v) > 1 and v[1] == body
+                 and r["t0"] < t < r["t"]]
+        end = halts[0] if halts else r["t"]
+        spd = sorted((t, float(v[2])) for t, op, v in s2c
+                     if op == OP_SPEED_BASE and len(v) > 2 and v[1] == body and t <= end)
+        before = [s for s in spd if s[0] <= r["t0"]]
+        if body is None or not before:
+            why.append(f"no declared 0x0027 speed for body {body} at t0")
+            return None, end, why
+        marks = [(r["t0"], before[-1][1])] + [s for s in spd if s[0] > r["t0"]]
+        bound = sum(v * ((marks[i + 1][0] if i + 1 < len(marks) else end) - t)
+                    for i, (t, v) in enumerate(marks))
+        if r["dist"] > bound:
+            why.append(f"{r['dist']:.2f} u exceeds the {bound:.2f} u it could walk")
+        return bound, end, why
+
+    syn = {"t0": 10.0, "t": 11.8, "dist": 400.0}
+    syn_s2c = [(5.0, OP_SPEED_BASE, [39, 7, 288.0]), (10.5, OP_SPEED_BASE, [39, 7, 383.04]),
+               (11.2, OP_HALT, [40, 7]), (11.3, OP_HALT, [40, 7])]
+    syn_c2s = [(10.4, 0x0026)]
+    b_ok, e_ok, w_ok = continuous_bound(syn, syn_c2s, syn_s2c, 7)
+    check(not w_ok and abs(e_ok - 11.2) < 1e-9
+          and abs(b_ok - (288.0 * 0.5 + 383.04 * 0.7)) < 1e-9,
+          "CONTROL: a 400 u / 1.8 s interval under a declared 288 -> 383.04 boost, halted "
+          "at 11.2, is CONTINUOUS -- bound = 288 x 0.5 + 383.04 x 0.7, integrated to the "
+          "FIRST halt, no slack term",
+          f"bound {b_ok}, end {e_ok}, reasons {w_ok}")
+    bad_arms = {
+        "a jump: the same walk + 100 u": continuous_bound(dict(syn, dist=500.0), syn_c2s,
+                                                          syn_s2c, 7),
+        "a 0x002C inside": continuous_bound(dict(syn, server_set=(10.9, [0.0, 0.0])),
+                                            syn_c2s, syn_s2c, 7),
+        "a self-report inside": continuous_bound(syn, syn_c2s + [(10.6, movesync.OP_SET_HEADING)],
+                                                 syn_s2c, 7),
+        "no declared speed": continuous_bound(syn, syn_c2s,
+                                              [x for x in syn_s2c if x[1] != OP_SPEED_BASE], 7),
+        "another body's speed": continuous_bound(syn, syn_c2s, syn_s2c, 8),
+    }
+    check(all(w for _b, _e, w in bad_arms.values()),
+          "KNOWN-BAD ARMS: the predicate REFUSES a teleport-like jump past the bound, a "
+          "0x002C set, a self-report inside, and a row with no declared speed for ITS body",
+          "; ".join(f"{k}: {w}" for k, (_b, _e, w) in bad_arms.items()))
     # THE CALIBRATION ITSELF, and it is a claim about ArenaNet's client rather
     # than about ours. 520 u is only a bar because retail never clears it, and a
     # constant justified in a comment is justified nowhere. Read from the LIVE
@@ -1290,12 +1367,19 @@ def main():
                     f"the live corpus is not reachable here ({exc})")
     if cmsgstream is not None:
         rows, reports, cut_rows, tracks = [], 0, [], []
+        aside_c2s, aside_s2c, wired = [], [], []
         for st in stamps:
-            try:
-                msgs = cmsgstream.timed(st, "c2s", "game")
-                s2c = cmsgstream.timed(st, "s2c", "game")
-            except Exception:
-                continue          # a stamp with no game wire is not a failure
+            # A stamp with no wire log recorded no game wire (20260817T175358), and it
+            # is the ONLY thing this loop steps past. This was `except Exception:
+            # continue` until 2026-09-28 (CASTAI-Z1), which would also swallow the
+            # StreamRefused cmsgstream now raises for an undeclared hole or a short
+            # decode; a direction its manifest declares gapped is set aside BY NAME
+            # instead, and audited below.
+            if not os.path.isfile(os.path.join(live, st, "wire.jsonl")):
+                continue
+            wired.append(os.path.join(live, st))
+            msgs = cmsgstream.timed(st, "c2s", "game", set_aside=aside_c2s)
+            s2c = cmsgstream.timed(st, "s2c", "game", set_aside=aside_s2c)
             # The server's hard sets of the player flag the interval that
             # spans them (movesync.hard_sets: the JARIN shrine).
             sets = movesync.hard_sets(s2c, movesync.named_players(s2c))
@@ -1323,6 +1407,14 @@ def main():
                     cut_rows.append((st, conn, r))
                 rows.extend(conn_rows)
                 tracks.append((st, conn, conn_rows))
+        import capgaps  # noqa: E402  (authsrv, on sys.path above)
+        gap_ok, gap_why = capgaps.audit(aside_s2c, wired, cmsgstream.refuses)
+        check(gap_ok and aside_c2s == [],
+              "the retail calibration reads every wired live stream whole but the ones "
+              "their manifests declare gapped, which it sets aside BY NAME (s2c) and "
+              "which cmsgstream still refuses; no c2s is set aside",
+              f"{gap_why}; c2s set aside {aside_c2s} -- a stream refused and not declared "
+              f"raises out of the loop instead")
         check(reports > 2000 and len(rows) > 2000,
               f"the live corpus yields {reports} retail self-reports over "
               f"{len(rows)} intervals",
@@ -1452,10 +1544,20 @@ def main():
         # family that produced 517.87, and an equality against the extremum of
         # a growing corpus is a pin on the SIZE OF THE VAULT.
         #
-        # The durable form is the RELATION this check always claimed to be:
-        # 520 measured against the corpus's own largest 2 s step, live. That
-        # can still go red -- and should, because a step past 520 would mean
-        # the constant had lost the property it was chosen for.
+        # The durable form was the RELATION this check always claimed to be: 520
+        # measured against the corpus's own largest 2 s step, live. On 2026-09-28 it
+        # went red, as its own note below predicted it could on "a long enough report
+        # gap": 565.29 u / 1.770 s, the owner's Zaishen capture (the witness at the
+        # end of this section). RE-SCOPED 2026-09-28 (CASTAI-Z1, the orchestrator's
+        # ruling; HARD_JUMP_UNITS STAYS 520): the 2 s window's rationale -- the
+        # DECISION RECORD for choosing 520 -- has expired, and the house pattern for an
+        # expired decision record applies. The relation and the shoulder are pinned AS
+        # OF THE PIN (captures stamped before 20260928T103123), exact, as the frozen
+        # record; the claim over the WHOLE corpus is carried by a SIGNATURE instead of
+        # the extremum -- every row over the bar inside 2 s is continuous movement
+        # (`continuous_bound`, whose CONTROL and KNOWN-BAD arms run first, above); and
+        # the functional check below the 0.05 s floor (top_d against 520, above) is
+        # unchanged, because that arm is the only place the constant decides anything.
         in2 = [r for r in rows if r["dt"] <= 2.0]
         top2 = max(in2, key=lambda r: r["dist"]) if in2 else None
         check(len(in2) > 2000 and top2 is not None,
@@ -1463,47 +1565,157 @@ def main():
               f"asserted BEFORE the extremum: `max(..., default=0)` over an "
               f"empty window returns a number that clears a 520 u bar for free, "
               f"which is this section's own vacuity trap one line further on")
-        check(top2 is not None and top2["dist"] < movesync.HARD_JUMP_UNITS,
-              f"and their largest step is {top2['dist']:.2f} u / "
-              f"{top2['dt']:.3f} s = {top2['speed']:.1f} u/s, still under the "
-              f"{movesync.HARD_JUMP_UNITS:.0f} u bar it was chosen to clear "
-              f"(by {movesync.HARD_JUMP_UNITS - top2['dist']:.2f} u)"
-              if top2 else "no retail interval inside 2.0 s",
-              f"THE CONSTANT AGAINST THE WIRE, re-measured every run rather "
-              f"than quoted from studies/movement/FINDINGS.md. NOTE the "
-              f"headroom is small and NOT physically bounded -- at retail's own "
-              f"top speed a 2.0 s gap reaches {top_v * 2.0:.0f} u -- so this "
-              f"can go red on a long enough report gap. That would NOT be a "
-              f"live defect: the distance arm fires only below the "
-              f"{movesync.HARD_JUMP_MIN_DT} s floor, where the check above "
-              f"measures {top_d:.2f} u against 520. It would mean the DECISION "
-              f"RECORD in section 4 had expired, and section 4 says so")
-        # NOT A LONE SPIKE -- and this check exists to DISAMBIGUATE the one
-        # above, not to fire on its own. Today no lone spike can redden this
-        # without also clearing 520, so read the PAIR of verdicts:
+        PIN16 = "20260928T103123"
+        pin_in2 = [r for st, _c, rr in tracks if st < PIN16 for r in rr if r["dt"] <= 2.0]
+        pin_top = max(pin_in2, key=lambda r: r["dist"]) if pin_in2 else None
+        check(pin_top is not None and len(pin_in2) == 6194
+              and pin_top["dist"] < movesync.HARD_JUMP_UNITS
+              and round(pin_top["dist"], 2) == 518.69,
+              f"THE DECISION RECORD, FROZEN AS OF THE PIN (stamps before {PIN16}): "
+              f"{len(pin_in2)} intervals inside 2.0 s, and their largest step is "
+              f"{pin_top['dist']:.2f} u / {pin_top['dt']:.3f} s = {pin_top['speed']:.1f} "
+              f"u/s, under the {movesync.HARD_JUMP_UNITS:.0f} u bar it was chosen to clear"
+              if pin_top else "no retail interval inside 2.0 s before the pin",
+              f"RE-SCOPED 2026-09-28, not loosened: the relation `top < 520` that ran "
+              f"on the whole corpus is kept, exact, on the captures it held for, with "
+              f"the measured literals (6194 intervals, 518.69 u -- section 4's 517.87 "
+              f"and the 518.25 quoted above were the same record at 14 and 21 stamps). "
+              f"The whole corpus now reads {top2['dist'] if top2 else float('nan'):.2f} u"
+              f"; what every row over the bar IS is the signature two checks on. NOTE "
+              f"the headroom was always small and NOT physically bounded -- at retail's "
+              f"own top speed a 2.0 s gap reaches {top_v * 2.0:.0f} u")
+        # THE PAIR TABLE -- read the relation and the shoulder TOGETHER. The shoulder
+        # exists to DISAMBIGUATE the relation, not to fire on its own:
         #
         #   relation RED + shoulder RED   -> one row stands alone above the
-        #                                    walking cloud. A MOVEMENT FINDING;
-        #                                    it belongs to REALFIX, not here.
+        #                                    walking cloud. TWO readings, and the
+        #                                    signature below tells them apart:
+        #       (a) a MOVEMENT FINDING -- the row is more than the body could have
+        #           walked (a jump, a teleport): the signature is RED on it, and
+        #           it belongs to REALFIX, not here;
+        #       (b) a REPORT-CADENCE gap -- the client kept walking and did not
+        #           report: the row is within its declared 0x0027 speed to the
+        #           halt, with no 0x002C and no self-report inside. The decision
+        #           record expired; no jump happened. OBSERVED 2026-09-28:
+        #           20260928T103123 :58544 t0 587.058, 565.29 u / 1.770 s, a
+        #           silent auto-approach walk at the 383.04 boost -- the client
+        #           does not self-report while it walks itself to an attack
+        #           target, so a row stands alone because of the CADENCE.
         #   relation RED + shoulder GREEN -> the cloud itself drifted up. The
         #                                    decision record in section 4 has
         #                                    expired; no jump happened.
         #
-        # Both were demonstrated on 2026-08-27 by injection: a single
-        # 600 u / 1.6 s row at 375 u/s (deliberately under the speed arm, so
-        # this window is the only thing that can see it) reddens both; 40 rows
-        # at ~524 u / 1.80 s at ordinary walking speed redden only the first.
-        # The equality this replaced pinned WHAT the extremum was and could
-        # never tell those two apart -- which is exactly the question that had
-        # to be answered before touching it.
-        near = [r for r in in2
-                if top2 is not None and r["dist"] >= top2["dist"] - 5.0]
-        check(top2 is not None and len(near) >= 5,
-              f"and it is the tail of a crowded shoulder, not an outlier: "
-              f"{len(near)} interval(s) sit within 5 u of it",
-              f"corpus growth adds neighbours; a discontinuity arrives alone. "
-              f"Read this verdict TOGETHER with the one above -- the pair is "
-              f"what separates a movement regression from an expired constant")
+        # The first two readings were demonstrated on 2026-08-27 by injection: a
+        # single 600 u / 1.6 s row at 375 u/s (deliberately under the speed arm, so
+        # this window is the only thing that can see it) reddened both; 40 rows at
+        # ~524 u / 1.80 s at ordinary walking speed reddened only the first. The
+        # signature adds what the pair could never say: a lone row is judged against
+        # what its OWN body could walk. Its limit, stated: over a 1.6 s gap under a
+        # 383.04 u/s declared boost a 600 u displacement IS walkable (bound 612.9 u),
+        # so a jump that stays inside a walk's reach is invisible to distance alone --
+        # below the dt floor, where the arm actually fires, it is not.
+        pin_near = [r for r in pin_in2
+                    if pin_top is not None and r["dist"] >= pin_top["dist"] - 5.0]
+        check(pin_top is not None and len(pin_near) == 195,
+              f"and AS OF THE PIN it is the tail of a crowded shoulder, not an outlier: "
+              f"{len(pin_near)} interval(s) sit within 5 u of it (frozen with the record)",
+              f"RE-SCOPED 2026-09-28 with the relation, exact (195 measured; the old "
+              f"check's '>= 5' is implied). Read the pair TOGETHER -- and after the pin, "
+              f"read the signature: it is what separates a movement regression (a) from "
+              f"a report-cadence gap (b)")
+        # THE SIGNATURE ITSELF, over the whole corpus. The Zaishen row is its positive
+        # control; the known-bad arms that must redden it ran corpus-free above, and it
+        # is re-planted here on the control's own wire (1 u past its bound).
+        zst = "20260928T103123"
+        zconn = "10.0.0.210:58544->98.95.137.136:80"
+        if zst not in stamps:
+            LEDGER.skip("the 2 s window's continuous-movement signature",
+                        f"capture {zst}, its positive control, not in this corpus (before "
+                        f"it, no row clears the bar -- the frozen record above)")
+        else:
+            over2 = [(st, c, r) for st, c, rr in tracks for r in rr
+                     if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
+            wires, verdicts = {}, []
+            for st, c, r in over2:
+                if st not in wires:
+                    wires[st] = (cmsgstream.timed(st, "c2s", "game"),
+                                 cmsgstream.timed(st, "s2c", "game"))
+                w_c2s = [(t, op) for t, cn, op, _v in wires[st][0] if cn == c]
+                w_s2c = [(t, op, v) for t, cn, op, v in wires[st][1] if cn == c]
+                body = movesync.named_players([(t, c, op, v) for t, op, v in w_s2c]).get(c)
+                verdicts.append((st, c, r, body, w_c2s, w_s2c)
+                                + continuous_bound(r, w_c2s, w_s2c, body))
+            bad = [v for v in verdicts if v[8]]
+            ctrl = [v for v in verdicts
+                    if (v[0], v[1], round(v[2]["t0"], 3)) == (zst, zconn, 587.058)]
+            planted = (continuous_bound(dict(ctrl[0][2], dist=ctrl[0][6] + 1.0),
+                                        *ctrl[0][4:6], ctrl[0][3])
+                       if ctrl and ctrl[0][6] is not None else (None, None, []))
+            check(verdicts and not bad and len(ctrl) == 1 and planted[2],
+                  f"SIGNATURE (whole corpus): every retail interval over "
+                  f"{movesync.HARD_JUMP_UNITS:.0f} u inside 2.0 s is CONTINUOUS MOVEMENT -- "
+                  f"its distance within the body's latest declared 0x0027 speed "
+                  f"integrated to its halt or its end, no 0x002C and no self-report "
+                  f"inside: {len(verdicts) - len(bad)} of {len(verdicts)}, the Zaishen "
+                  f"row among them as the positive control, and that row moved 1 u past "
+                  f"its own bound is refused",
+                  "; ".join(f"{st} {c[-26:]} t0={r['t0']:.3f} {r['dist']:.2f} u / "
+                            f"{r['dt']:.3f} s, body {b}, bound "
+                            f"{'none' if bd is None else f'{bd:.2f}'} u to {e:.3f}, "
+                            f"reasons {w}"
+                            for st, c, r, b, _c2, _s2, bd, e, w in verdicts)
+                  + f"; planted {planted[2]}")
+        # WHAT THE LONE ROW IS (2026-09-28, CASTAI-Z1), measured. The owner's Zaishen
+        # capture, match 4: the observer's last self-report before an attack order's
+        # auto-approach, then silence -- the client does not report while it walks
+        # itself to its target -- until the server's halt; the distance is the boosted
+        # run between the two. It is the signature's positive control, pinned exactly.
+        # The skip is for the capture's ABSENCE and nothing else (a bare or older
+        # vault). With the capture on disk the row is selected by its own start time,
+        # not by the constant, so a scanner change or a re-calibrated HARD_JUMP_UNITS
+        # makes this a FAIL naming what moved -- never a skip printing a false cause.
+        if zst not in stamps:
+            LEDGER.skip("the 2 s window's lone row", f"capture {zst} not in this corpus")
+        else:
+            zrow = [r for st, conn, rr in tracks if (st, conn) == (zst, zconn)
+                    for r in rr if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
+            zat = [r for st, conn, rr in tracks if (st, conn) == (zst, zconn)
+                   for r in rr if round(r["t0"], 3) == 587.058]
+            zr = zat[0] if zat else {"t0": float("nan"), "t": float("nan"),
+                                     "dt": float("nan"), "dist": float("nan"),
+                                     "server_set": None}
+            zc2s = [(t, op) for t, cn, op, _v in cmsgstream.timed(zst, "c2s", "game")
+                    if cn == zconn and zr["t0"] < t < zr["t"]]
+            zs2c = [(t, op, v) for t, cn, op, v in cmsgstream.timed(zst, "s2c", "game")
+                    if cn == zconn]
+            obs = movesync.named_players([(t, zconn, op, v) for t, op, v in zs2c]).get(zconn)
+            halt = [t for t, op, v in zs2c if op == 0x0028 and len(v) > 1 and v[1] == obs
+                    and zr["t0"] < t < zr["t"]]
+            boost = [(t, v[2]) for t, op, v in zs2c if op == 0x0027 and len(v) > 2
+                     and v[1] == obs and t < zr["t0"]]
+            run = (boost[-1][1] * (halt[0] - zr["t0"])) if (boost and halt) else None
+            check(len(zat) == 1 and zrow == zat
+                  and zr["dist"] >= movesync.HARD_JUMP_UNITS
+                  and round(zr["t0"], 3) == 587.058
+                  and round(zr["t"], 3) == 588.827 and round(zr["dist"], 2) == 565.29
+                  and zr.get("server_set") is None
+                  and [op for _t, op in zc2s] == [0x0026, 0x0009]
+                  and len(halt) == 1 and boost and abs(boost[-1][1] - 383.04) < 0.01
+                  and run is not None and 0.0 <= run - zr["dist"] < 5.0,
+                  f"NEW (OBSERVED, {zst} :58544): the lone row is the observer's "
+                  f"{zr['dist']:.2f} u / {zr['dt']:.3f} s from t={zr['t0']:.3f} -- NO "
+                  f"self-report inside it, only an attack order (0x0026) and a 0x0009 "
+                  f"(the keepalive, studies/cmsg/FINDINGS.md section 3) while the client "
+                  f"auto-walks to its target, halted by the server at "
+                  f"{halt[0] if halt else float('nan'):.3f}; no 0x002C set spans it; "
+                  f"and the step is the 383.04 u/s boost (0x0027) run from the report to "
+                  f"the halt ({run if run is not None else float('nan'):.2f} u) -- a "
+                  f"silent approach walk, not a jump",
+                  f"rows at t0=587.058: {len(zat)}; rows over HARD_JUMP_UNITS "
+                  f"({movesync.HARD_JUMP_UNITS}) inside 2 s on the connection: "
+                  f"{[(round(r['t0'], 3), round(r['dist'], 2)) for r in zrow]}; "
+                  f"c2s inside {[(round(t, 3), hex(op)) for t, op in zc2s]}; halt {halt}; "
+                  f"boost {boost[-1:] if boost else None}; observer {obs}")
 
     # ---------------------------------------------------------------------
     print("\n17. the AgTrack fence: movetap's selftest 5-7, in the SUITE")

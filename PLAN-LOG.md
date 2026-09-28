@@ -28,6 +28,51 @@ move back.
 
 ---
 
+### CASTAI-Z1: the Zaishen run scored, and the 19 suite reds its capture caused read, not re-pinned -- 2026-09-28 -- **Z1.P4 / P5 / P6 HELD, P7 FAILED, P1-P3 under their floors; the Necromancer's hex class id is 9 and SHIPPED; every red was a test, not the server**
+
+**The run** (studies/monsterai §18.1): the owner's live capture `20260928T103123` (secondary
+account, build 38888), four matches from the Zaishen Challenge outpost -- three against the
+Degeneration Team (Z1), one against the Obsidian Spike Elementalists (Z3, picked by accident,
+PARTIAL). `studies/monsterai/review/zaishenrun.py --prefix` (`46a6ad34`) scores it; a judge
+reconciled it against three blind replicators working from the raw wire. The verdicts:
+- **HELD:** P4, the Necromancer's class marker `[6, T, 9]`, 6 clean of 22, the key being
+  the SKILL's profession; P5, retail sends `[61]` for the player's own cast (n = 1); P6,
+  three Zaishen definitions are not round robin.
+- **FAILED as registered:** P7, scatter.
+- **NULL, under their floors:** P1-P3.
+- **Z3:** P1 (the coordinated spike) FAILED, P3 and P4 HELD.
+- **The owner's question:** they focus the Healer while it lives, whether the owner holds an
+  axe or a staff.
+
+`HEX_EFFECT_CLASS[4] = 9` shipped (`dd6c8ff2`).
+
+**The reds** (studies/monsterai §18.2, CASTAI-ZF1-ZF20): the vault is shared, so the one
+capture turned 19 of 247 suite files red on `main` too. Six lanes each worked in their own
+worktree and were checked by a contract reviewer: no loosening, no deleted checks, pinned
+literals kept on their scope, a new retail fact recorded rather than absorbed. Five were
+blocked at least once and repaired. Every as-of-the-pin re-scan reproduced the pinned
+literals exactly, so nothing had drifted.
+- **gap** (`8522740d`): `capgaps.py`. A connection its own manifest declares gapped is set
+  aside by name and audited (the first ever: match 2, `:65009`, 58 s2c bytes the sniffer never
+  saw).
+- **c2s** (`f4cf3459`): the three Zaishen c2s triaged. `0x009A` and `0x00A6` are named medium,
+  `0x00A3` is left unnamed; none is armed.
+- **spell** (`ce1ed817`): the `[61]` cast-time word predicts every AI cast completion with no
+  free parameter, 485 of 486.
+- **res** (`b7decd5d`): PvP skill splits resolved by a stated rule; Faintheartedness
+  re-balanced in 38888; every non-25 adrenaline gain is ONE damage word, which refutes
+  JARIN's "summed" reading.
+- **atk** (`269b84b4`): an activated body bow attack launches at swing_windup(activation); a
+  non-hero body's interrupt shape; Deep Wound stacking.
+- **HARD_JUMP_UNITS stays 520 (the orchestrator's ruling):** its 2 s decision record is frozen
+  as of the pin and carried by a continuous-movement signature.
+- **cms** (`fd2a2407`, `b7024c55`): `cmsgstream`, `adrenjoin` and `deepwoundjoin` honour the
+  declared gap and raise on anything else. `cmsgstream.timed` had been truncating `:65009`
+  silently at its first hole.
+
+Server residue, not shipped here: `PLAN.md` §8.1, "The Zaishen tape's server residue". Run Z1
+again for P1-P3's floors; Z2 and H1 are unrun (§8.2).
+
 ### CASTAI: how retail AI casters choose, and the first slice -- an AI body skips a slot whose effect its target already carries -- 2026-09-28 -- **the owner's ruling (`PLAN.md` 7 Q19: narrow, ON); round robin stays the selector; CONFIRMED on our client against its four-revert control (harness `20260928T002332` / `20260928T002623`)**
 
 **The study** (studies/monsterai 17; `studies/monsterai/review/castethogram.py`, `5c9615ec`): every cast on the live corpus, 95 connections, 1,554 casts, 880 by AI bodies -- 709 of them Isle practice bodies on a metronome, so the policy evidence is about seven multi-skill definitions. OBSERVED: `0x009F [60, caster, skill]` is the SELF cast (715; 0 of 373 `0x00A0 [60]` name the caster) -- monsterai 10's "NPC form" was a target difference, superseded; 0 of 170 AI hex / enchantment casts landed on a live same-skill episode (the 19 informative cases are self-enchantments, no informative hex -- so the hex half is the wiki's plus no counterexample); a re-cast follows its `0x0044` by 0.228 s at the fastest, 0 of 95 inside 0.2 s; a hero refreshes its STANCE while live (10 of 17). NOT settled: which ready skill a monster picks (the monsterai 9 row-13 bar unmet by every hostile combat caster; the critic's oldest-ready test 22 of 48 against 19.3 by chance). The wiki (184 Hero-vetted pages, 17 general, through the app's browser): per-skill AI is TIERED -- the Hero-vetted table is the hero / hard-mode tier (CASTAI-W2, contesting heroes 5.6's "one table serves monsters alike"); of 222 statements 101 are hard conditions and 64 "use when ready", correcting 5.6's ~92 / ~90.

@@ -305,6 +305,45 @@ DROPPED_ON_PURPOSE = {
             "owner's own; not quoted here), the blob and the 1 unread: character "
             "creation's name commit, by position and payload. Named the day the "
             "create flow is driven; this server serves fixed characters.",
+# ---- CASTAI-Z1, 2026-09-28: the Zaishen Challenge tape -----------------------
+# vault/captures/live/20260928T103123 (build 38888) carried three c2s no earlier
+# live tape had, all on the Zaishen Challenge outpost's connections between
+# matches (map 281) and all in the 0x0085Bxxx-0x0085Cxxx send-wrapper run that
+# holds HENCHMAN_ADD and MAP_TRAVEL on 38797. Zero loopback arrivals for each
+# (0 of 1,744 gamesrv logs). The evidence for the two names is in their
+# overrides.json rows; what arming any of them needs is the same: an arena to
+# enter -- the 0x01D7 menu (maps 318-322, opponent teams), the 0x01D9/0x01BB
+# hold and the transfer into a served arena map with an AI opponent team. None
+# of that exists here, so each is dropped, not armed.
+    0x009A: "ZAISHEN_CHALLENGE_LIST_REQUEST (named medium, overrides.json) -- "
+            "header only, 4 sends on 4 connections of one capture, each "
+            "answered 28-40 ms later by s2c 0x01D7, the challenge menu (a map "
+            "list and opponent-team triples). This server has no challenge "
+            "menu to send and no arena behind it; answering with an empty or "
+            "invented 0x01D7 would be a layout we have not read. Armed with "
+            "the arena, not before.",
+    0x00A3: "UNNAMED -- header only, n=1 (20260928T103123 conn :50267, "
+            "t=377.611), 2.469 s after a ZAISHEN_CHALLENGE_ENTER [320, 55, 0] "
+            "and before its transfer was due (3.06 s on the other four); "
+            "answered 32 ms later by 0x01D9 [0, 0, ''] -- the only 0x01D9 of "
+            "that value in the live corpus -- and no 0x01A5 transfer followed. "
+            "Reads as cancelling the pending entry (RECONSTRUCTION, n=1). "
+            "Wrapper 0x0085BF20 on 38797 (Array, one caller). UPSTREAM "
+            "corroborates the cancel reading: GWCA Opcodes.h 0x00A1 (at ours "
+            "minus 2) and Py4GW Packet_enums.py 0x00A3 (at ours; no licence, "
+            "so used only to check our reading) name it "
+            "PARTY_CANCEL_ENTER_CHALLENGE. On the PARTY_LEAVE precedent, n=1 "
+            "plus that corroboration would support a medium name; the naming "
+            "decision is left open. Unnamed or named, with no entry to cancel "
+            "here there is nothing to answer.",
+    0x00A6: "ZAISHEN_CHALLENGE_ENTER (named medium, overrides.json) -- [map, "
+            "team, 0], 5 sends on 4 connections of one capture: 0x01D9 [2, 1, "
+            "''] + 0x01BB at 31-38 ms, then 3.06 s later the 0x01A5 transfer to "
+            "field 1's map (4 of 4 uncancelled). This server serves none of "
+            "the arena maps (318-322) and no opponent team; an arm that "
+            "answered the hold without the transfer would strand the party in "
+            "a countdown, and one that transferred would send the client to a "
+            "map with no content row. Armed with the arena, not before.",
 # 0x009F HENCHMAN_ADD came off this allowlist on 2026-09-23 when its arm
 # landed (DESKWORK-D1 step 5): handle_henchman_add answers the party window's
 # Add Henchman click with 0x00B0 + 0x01BF, and the standing henchmen carry

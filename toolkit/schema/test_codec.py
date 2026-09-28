@@ -43,7 +43,10 @@ AUTH_CMSG_MASK = 0x8000
 # captures and declares four skips without them, which puts a vault-less run four
 # below the floor and therefore RED: ArenaNet's own bytes are the only oracle for
 # the round trip, and a run that could not consult them has not checked it.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=29)
+# 2026-09-28 (CASTAI-Z1): 30 -- section 6 gained the gapped-connection audit (the set
+# aside is exactly the manifests' declared set and each one is still refused), counted
+# from the green run. A vault-less run now declares five skips there, not four.
+LEDGER = checks.Ledger("codec vs captured bytes", floor=30)
 check = checks.adopt_named(LEDGER)
 
 
@@ -336,15 +339,22 @@ def main():
         LEDGER.skip("no decoded value carries U+FFFD", "same")
         LEDGER.skip("the failure set and the U+FFFD set are the same set", "same")
         LEDGER.skip("0x004C and 0x0161 specifically", "same")
+        LEDGER.skip("the gapped-connection set-aside", "same")
     else:
         total = conns = 0
         fails = collections.Counter()
         replaced = collections.Counter()
         seen = collections.Counter()
         lendiff = 0
+        # 2026-09-28 (CASTAI-Z1): a connection its capture's OWN manifest declares
+        # gapped is set aside BY NAME (tape.whole_channels, printed) -- load_tape refuses
+        # it by design, a hole dates later bytes wrongly -- and the set-aside is asserted
+        # below: exactly the declared set, exactly capgaps.KNOWN_GAPPED, still refused.
+        # Every other connection is held to the round trip exactly as before.
+        set_aside = []
         for cap in caps:
             d = os.path.join("captures", "live", cap)
-            for row in tape.channel_files(d):
+            for row in tape.whole_channels(d, set_aside):
                 _info, events = tape.load_tape(d, row["connection"])
                 blob = b"".join(b for _t, b in events)
                 msgs, consumed, err = c.decode_stream_at("GAME_SMSG", blob, 0)
@@ -368,6 +378,12 @@ def main():
         nfail, nrep = sum(fails.values()), sum(replaced.values())
         print(f"  {conns} connections, {total} GAME_SMSG, "
               f"{nfail} round-trip failures, {nrep} values carrying U+FFFD")
+        import capgaps  # noqa: E402  -- authsrv, on the path above
+        gap_ok, gap_detail = capgaps.audit(
+            set_aside, [os.path.join(live, cap) for cap in caps], tape.refuses)
+        ok &= check("the connections set aside are EXACTLY the ones their manifests "
+                    "declare gapped, the known set, and load_tape still REFUSES each",
+                    gap_ok, gap_detail)
         ok &= check("every live GAME_SMSG re-encodes byte-identically",
                     total > 0 and nfail == 0,
                     f"{total - nfail}/{total}" + (

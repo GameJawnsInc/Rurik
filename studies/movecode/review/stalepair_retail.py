@@ -44,11 +44,16 @@ def _agent(vals):
     return None
 
 
-def retail_census(root=None, lookahead=LOOKAHEAD):
-    """{conns, bad_conns, total, pairs, split, bare, zero_gap, between, splits, gaps}."""
+def retail_census(root=None, lookahead=LOOKAHEAD, set_aside=None):
+    """{conns, bad_conns, total, pairs, split, bare, zero_gap, between, splits, gaps}.
+
+    `set_aside`, a list, opts in to livewire's one set-aside: a connection its
+    capture's own manifest declares gapped is printed by name, appended there and
+    not counted (the caller audits it with capgaps.audit); every other connection is
+    decoded and a failure still counts in bad_conns."""
     out = {"conns": 0, "bad_conns": 0, "total": 0, "pairs": 0, "split": 0, "bare": 0,
            "zero_gap": 0, "between": collections.Counter(), "splits": [], "gaps": []}
-    for capdir, gf in livewire.live_connections(root):
+    for capdir, gf in livewire.live_connections(root, set_aside=set_aside):
         _conn, merged, ok = livewire.decode_conn(capdir, gf)
         out["conns"] += 1
         if not ok:

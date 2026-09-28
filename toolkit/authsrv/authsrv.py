@@ -15222,13 +15222,15 @@ AREA_HEXES = True
 # wearer (aura_on / aura_off); that the CLASS id is refcounted the same way is
 # RECONSTRUCTION extended from the base -- no same-class overlap is on any
 # tape (the review's EV-11). The class id is 12 for 179 and 1097 (both
-# Elementalist) and 4 for Empathy 26 (Mesmer); what it is keyed on is
-# RECONSTRUCTION -- keyed HERE on the SKILL record's own profession column
-# (available bare, and the class of the hex rather than of whoever casts it;
-# a W/E's Deep Freeze draws an Elementalist hex), which the three witnesses
-# cannot separate from the caster's primary (UNVERIFIED for 1097's tutorial
-# NPC); the attribute is REFUTED as a direct key (179 attribute 10 and 1097
-# attribute 11 both draw 12). A profession
+# Elementalist), 4 for Empathy 26 (Mesmer), and 9 for the Necromancer's
+# Faintheartedness 135, Life Siphon 109 and 127 -- 6 clean instances of 22,
+# every one exactly [1, 9] (CASTAI-Z1.P4, the live Zaishen capture
+# 20260928T103123; studies/monsterai 18). It is keyed HERE on the SKILL record's
+# own profession column, and that key is now OBSERVED rather than chosen: the
+# Degeneration Team's Mesmer casts Incendiary Bonds (179) through Inspired Hex
+# and draws 12, not 4, 17 of 17 -- the class of the hex, not of its caster. The
+# attribute is REFUTED as a direct key (179 attribute 10 and 1097 attribute 11
+# both draw 12). A profession
 # with no observed id sends the `1` alone and says so once (NOT FOUND). A row
 # that names its own `auras` (Empathy's [1, 4]) sends those and nothing
 # synthesised -- never both. --no-hex-effect-words reverts: the status bit
@@ -15238,6 +15240,7 @@ HEX_EFFECT_WORDS = True
 HEX_EFFECT_CLASS = {
     6: 12,      # Elementalist: Incendiary Bonds 179 (28/28), Teinai's Prison 1097 (6/6)
     5: 4,       # Mesmer: Empathy 26 (5/5) -- also its row's own `auras`
+    4: 9,       # Necromancer: 135 / 109 / 127, 6 clean of 22 (CASTAI-Z1.P4, 2026-09-28)
 }
 HEX_EFFECT_BASE = 1             # every hex, 38/39 sent + 1 withheld (already live)
 HEX_TYPE_CODE = 4               # effects.EFFECT_TYPES' hex, areatime.HEX_TYPE
@@ -15356,7 +15359,8 @@ def hex_effect_ids(skill_id):
             _HEX_CLASS_UNWITNESSED.add(skill_id)
             print(f"[skills] hex {skill_id} (profession {prof}): no [6, wearer, class] "
                   f"id is observed for its profession, so the base word goes alone "
-                  f"(NOT FOUND; witnessed: Elementalist 12, Mesmer 4) [studies/weapons 43]",
+                  f"(NOT FOUND; witnessed: Elementalist 12, Mesmer 4, Necromancer 9) "
+                  f"[studies/weapons 43, monsterai 18]",
                   flush=True)
         return (HEX_EFFECT_BASE,)
     return (HEX_EFFECT_BASE, cls)

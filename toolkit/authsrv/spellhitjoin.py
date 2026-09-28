@@ -207,11 +207,18 @@ def player_of(seq, c2s=()):
     return observer_of(seq, c2s)[0]
 
 
-def census(codec=None, unnamed=None):
+def census(codec=None, unnamed=None, set_aside=None, refused=None):
     """Every live capture, every game connection that frames whole. A
     connection whose player `observer_of` cannot name keeps its rows (player
     None) and, when `unnamed` is a list, is appended to it as (capture,
-    connection, why)."""
+    connection, why).
+
+    A connection the capture's OWN manifest declares gapped
+    (`livewire.declared_gaps`, 2026-09-28) is set aside BY NAME, printed, and
+    decoded once to show it still refuses -- appended to `set_aside` (a list)
+    as (capture, connection, why); one declared but decoding whole goes there
+    as (capture, connection, None). Any OTHER connection that does not frame
+    whole is appended to `refused` -- it used to be dropped without a word."""
     codec = codec or bufflog.Codec()
     live = vaultpath.require_dir("captures", "live",
                                  why="spellhitjoin reads live captures")
@@ -220,10 +227,24 @@ def census(codec=None, unnamed=None):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
             continue
+        declared = livewire.declared_gaps(cap_dir)
         for ch in tape.channel_files(cap_dir):
+            if ch["connection"] in declared:
+                why = None
+                try:
+                    deepwoundjoin.sequence(cap_dir, ch["connection"], codec)
+                except (bufflog.BuffLogError, tape.TapeError) as exc:
+                    why = str(exc)[:100]
+                    print(f"   SET ASIDE {stamp} {ch['connection']}: its manifest declares "
+                          f"it gapped {declared[ch['connection']]} -- still refused")
+                if set_aside is not None:
+                    set_aside.append((stamp, ch["connection"], why))
+                continue
             try:
                 seq = deepwoundjoin.sequence(cap_dir, ch["connection"], codec)
-            except (bufflog.BuffLogError, tape.TapeError):
+            except (bufflog.BuffLogError, tape.TapeError) as exc:
+                if refused is not None:
+                    refused.append((stamp, ch["connection"], str(exc)[:100]))
                 continue
             player, _press, why = observer_of(seq, c2s_of(cap_dir, ch["file"]))
             if player is None and unnamed is not None:

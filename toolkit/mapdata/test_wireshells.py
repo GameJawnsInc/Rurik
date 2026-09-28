@@ -42,7 +42,10 @@ import modelcatalog as mc  # noqa: E402
 import vaultpath  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("wire shell index", floor=33)
+# floor 33 -> 35 on 2026-09-28 (CASTAI-Z1, from the green run): section 2's
+# gapped-connection split -- every undeclared channel in the index, and the set
+# aside audited against the manifests.
+LEDGER = checks.Ledger("wire shell index", floor=35)
 check = checks.adopt(LEDGER)
 
 HATCHER_SHELL, HATCHER_BODY, WORM = 116228, 116703, 116366
@@ -171,6 +174,22 @@ def section2():
     check(s["captures"] == len(with_ch) and sorted(idx.stamp["skipped"]) == sorted(without),
           f"the index rests on every keyed tape and NAMES the {s['skipped']} it skipped",
           f"{'built' if fresh else 'loaded'} in {time.time() - t0:.1f} s")
+    # 2026-09-28 (CASTAI-Z1): a connection its capture's own manifest declares GAPPED
+    # (20260928T103123 :65009) is refused by load_tape by design, and crashed the build.
+    # build() now sets it aside BY NAME into the stamp; the old claim is split in two:
+    # every channel NOT declared gapped is in the index, and the set aside is exactly
+    # the manifests' declared set, the known set, and still refused.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
+    import tape                                                  # noqa: E402
+    import capgaps                                               # noqa: E402
+    aside = idx.stamp.get("set_aside", [])
+    check(s["connections"] == idx.stamp["channels"] - len(aside) and s["connections"] > 0,
+          "the index decoded EVERY channel its manifest does not declare gapped, whole",
+          f"{s['connections']} of {idx.stamp['channels']} channel file(s), "
+          f"{len(aside)} set aside")
+    gap_ok, gap_detail = capgaps.audit(aside, with_ch, tape.refuses)
+    check(gap_ok, "and the channels it set aside are EXACTLY the ones their manifests "
+          "declare gapped, the known set, and load_tape still REFUSES each", gap_detail)
     check(s["connections"] >= 73 and s["declared"] >= 1900 and s["shells"] >= 100
           and s["pairs"] >= 200 and s["bodies"] >= 200,
           "floors: >= 73 connections, >= 1,900 declared sightings, >= 100 shells, "

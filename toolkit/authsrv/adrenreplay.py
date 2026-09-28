@@ -237,13 +237,18 @@ class Slots:
         return None if i is None else self.units[i]
 
 
-def load_connections(root=None):
+def load_connections(root=None, set_aside=None):
     """(conns, skipped): every live game connection decoded ONCE, both
     directions, with its observer -- so several rule arms can replay the same
     streams without paying the decode six times. conns is
-    [(stamp, conn, merged, me)]."""
+    [(stamp, conn, merged, me)].
+
+    `set_aside`, a list, opts in to livewire's one set-aside: a connection its
+    capture's own manifest declares gapped is printed by name and appended
+    there, not to `skipped` (the caller audits it with capgaps.audit). Every
+    other refusal still lands in `skipped`."""
     conns, skipped = [], []
-    for capdir, gf in livewire.live_connections(root):
+    for capdir, gf in livewire.live_connections(root, set_aside=set_aside):
         stamp = os.path.basename(capdir)
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         if not ok or not merged:

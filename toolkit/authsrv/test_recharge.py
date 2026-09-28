@@ -21,6 +21,17 @@ activation + recharge`; `--no-npc-recharge-from-completion` is the start-anchore
   re-statement is what the anchor rests on), the split changing the corpus's pair count
   (and nothing else), the build coverage.
 
+THE ZAISHEN CAPTURE (2026-09-28, CASTAI-Z1, 20260928T103123) turned three corpus checks red
+without a line of the server moving: the Zaishen Mage casts Fireball 186 at 1.005 s (a [61]
+cast-time word ahead of the announce, commit 974f8748's mechanism) so 186's as-written
+minimum left the completion-anchored set, and skill 102 brought a second sub-recharge gap.
+Every exact number is now scored on the corpus AS OF THE PIN (captures before that stamp:
+`rechargeprobe.upto`), where it reproduces exactly (227 / 233 pairs, the six, {229}); the
+whole corpus carries the re-statement (each pair against its cast's own time), the
+signature (the split and pooled arms agree on every sub-recharge gap) and the new fact
+with its own exact per-tape witness. The gapped connection of that capture is set aside by
+name from its manifest and asserted still refused.
+
 THE FIX PASS (2026-09-23, D5B-R3 / ENG-2): the first cut's "the split is not a no-op"
 check compared `recycled_creates` across the two arms -- a counter the split does not
 touch -- and stayed green with the split disabled. Replaced by the synthetic sequence
@@ -219,16 +230,63 @@ def section_corpus():
     import rechargeprobe
     c = rechargeprobe.census(split=True)
     sc = rechargeprobe.score(c)
+    # THE PIN (2026-09-28, CASTAI-Z1): every exact number below was pinned on the corpus as
+    # it stood before 20260928T103123 (the Zaishen Challenge). It is scored THERE, exactly as
+    # written; the whole corpus carries the floors, the signatures and the re-statement.
+    PIN = "20260928T103123"
+    scp = rechargeprobe.score(rechargeprobe.upto(c, PIN))
+    ids = lambda keys: {int(str(k).split("@")[0]) for k in keys}   # noqa: E731
     check(sc["p1"] and len(sc["skills_at_floor"]) >= 4,
           f"the floor holds: >= 4 skills with >= 5 completed pairs ({len(sc['skills_at_floor'])})",
           f"{sc['skills_at_floor']}")
+    # R4: the first gapped live connection is set aside BY NAME from its capture's own
+    # manifest, and still refuses; nothing else in the corpus fails to frame
+    GAPPED = [(PIN, "10.0.0.210:65009->98.95.137.136:80")]
+    check([e[:2] for e in c["set_aside"]] == GAPPED and not c["declared_not_refused"]
+          and not c["excluded"],
+          "the one connection the manifests declare gapped (20260928T103123 :65009, CASTAI-Z1's "
+          "match 2) is set aside BY NAME and still refused; no other connection is excluded "
+          "(a new gap or an unframed tape reddens this -- it is seen, never absorbed)",
+          f"set aside {c['set_aside']}, declared but whole {c['declared_not_refused']}, "
+          f"excluded {c['excluded']}")
     six = {185, 186, 179, 286, 222, 230}
-    on_comp = {int(str(k).split("@")[0]) for k in sc["on_completion"]}
+    on_comp = ids(scp["on_completion"])
     check(six <= on_comp,
           "the six spells (185, 186, 179, 286, 222, 230) are COMPLETION-anchored: their "
           "min start-to-start sits at recharge + activation and min completion-to-next at "
-          "the recharge",
-          f"completion-anchored: {sorted(on_comp)}")
+          "the recharge (AS WRITTEN, on the corpus as it stood at the pin -- 227 completed "
+          "pairs split / 233 pooled, the numbers the fix pass pinned)",
+          f"completion-anchored: {sorted(on_comp)}, pairs {scp['pairs']}")
+    # CASTAI-Z1 (20260928T103123): the Zaishen Mage (agent 9) casts Fireball 186 at 1.005 s
+    # (a [61] word ahead of the announce) against the record's 1.5, so AS WRITTEN 186's
+    # start-to-start minimum on the whole corpus is 7.999 = 7 + 1.005 and 186 reads "neither".
+    # The re-statement reads each pair against ITS cast's own time (no free parameter; the
+    # as-written reading wherever no [61] was sent) and the six hold on the whole corpus.
+    on_comp_r = ids(sc["on_completion_r"])
+    new186 = sorted((r["port"], r["caster"], len(r["gaps"]), len(r["ct_pairs"]),
+                     min(r["gaps"]), min(r["net"]))
+                    for r in c["rows"] if r["capture"] == PIN and r["skill"] == 186)
+    # The [61] pair count is exact PER TAPE (12 on 20260928T103123, none at the pin) and
+    # only a FLOOR on the whole corpus: a later tape with more shortened 186s is
+    # confirming evidence and must not redden this (review M1, 2026-09-28).
+    z186_ct = [v for r in c["rows"] if r["capture"] == PIN and r["skill"] == 186
+               for v in r["ct_pairs"]]
+    check(six <= on_comp_r and 186 not in ids(sc["on_completion"])
+          and 186 in ids(sc["neither"])
+          and new186 == [("50061", 9, 9, 8, 8.424, 7.419), ("50295", 9, 6, 4, 7.999, 6.994)]
+          and len(z186_ct) == 12 and set(z186_ct) == {1.005}
+          and sc["cast_time_pairs"].get(186, (0, []))[0] >= 12
+          and scp["cast_time_pairs"].get(186) is None,
+          "RE-STATED on the whole corpus with each cast's own time (the [61] seconds when "
+          "sent, else the activation): the six stay COMPLETION-anchored; AS WRITTEN 186 "
+          "FAILS there (reads 'neither') on 20260928T103123's shortened casts (exact, per "
+          "tape: agent 9's 186 on 50061 9 completed pairs, 8 with [61] 1.005, and on 50295 "
+          "6, 4 with it; the minimum 7.999 at 489.932 carried 1.005 -> 6.994 against 7) -- "
+          "a seventh or eighth skill (277, 2809) joining is confirming evidence, a subset "
+          "cannot redden on it",
+          f"re-stated completion-anchored {sorted(on_comp_r)}; as written "
+          f"{sorted(ids(sc['on_completion']))}; the tape's 186 {new186}; its [61] pairs "
+          f"{len(z186_ct)} {sorted(set(z186_ct))}; corpus [61] pairs {sc['cast_time_pairs']}")
     check(sc["p2_completion_majority"],
           "RE-STATED P2: COMPLETION is the majority anchor of the discriminating skills",
           f"{len(sc['on_completion'])} completion vs {len(sc['on_start'])} start "
@@ -250,23 +308,53 @@ def section_corpus():
     # else -- P3 as written FAILED on both arms: both read 229's two sub-recharge gaps,
     # so the survey's recycled-id explanation of 229 is refuted, and the six's anchor
     # is not an artifact of the split. `gaps_of` ignoring `split` reddens the first.
-    pooled = rechargeprobe.score(rechargeprobe.census(split=False))
+    cpool = rechargeprobe.census(split=False)
+    pooled = rechargeprobe.score(cpool)
+    pooledp = rechargeprobe.score(rechargeprobe.upto(cpool, PIN))
     check(sc["recycled_creates"] > 0 and pooled["pairs"] > sc["pairs"],
           "the split drops the pairs that cross a re-create: fewer completed pairs split "
           "than pooled (the corpus recycles ids; a `gaps_of` that ignores `split` reddens this)",
           f"pairs split {sc['pairs']} vs pooled {pooled['pairs']}, recycled creates "
           f"{sc['recycled_creates']}")
-    check(sc["p3_as_written"] is False
-          and sc["sub_recharge"] == pooled["sub_recharge"] and set(sc["sub_recharge"]) == {229},
+    check(scp["pairs"] == 227 and pooledp["pairs"] == 233,
+          "the corpus AS OF THE PIN reproduces the fix pass's pinned pair counts exactly: 227 "
+          "split vs 233 pooled (the scorer did not drift; the new capture is the whole change)",
+          f"at the pin: split {scp['pairs']} pooled {pooledp['pairs']}; whole corpus: split "
+          f"{sc['pairs']} pooled {pooled['pairs']}")
+    check(scp["p3_as_written"] is False
+          and scp["sub_recharge"] == pooledp["sub_recharge"] and set(scp["sub_recharge"]) == {229}
+          and scp["sub_recharge"][229] == [4.497, 3.251],
           "P3 AS WRITTEN is recorded FAILED: 229's two sub-recharge gaps survive the split "
           "(its half fails) and the pooled arm shows exactly the same two, so the arms do not "
           "DIFFER as P3 required -- 229's are on singly-created bodies, not recycled ids (the "
-          "survey's explanation of 229 refuted)",
-          f"split {sc['sub_recharge']} pooled {pooled['sub_recharge']}")
-    check(six <= {int(str(k).split("@")[0]) for k in pooled["on_completion"]},
+          "survey's explanation of 229 refuted) (on the corpus as it stood at the pin: "
+          "229's gaps exactly 4.497 and 3.251)",
+          f"split {scp['sub_recharge']} pooled {pooledp['sub_recharge']}")
+    # CASTAI-Z1: a second skill with a sub-recharge gap. 102 (recharge 15, activation 2.0),
+    # agent 4 on 20260928T103123 :58544: cast at 591.381, completed, cast again 10.749 s later
+    # -- completion-to-next 8.739. No [61] on either cast, and the pooled arm shows the same
+    # gap (not a recycled id). OBSERVED, n = 1, cause unmeasured: a finding, not fitted.
+    new102 = [(r["port"], r["caster"], [(p["t"], p["gap"], p["done"], p["ct"]) for p in r["pairs"]])
+              for r in c["rows"] if r["capture"] == PIN and r["skill"] == 102
+              and any(d < r["recharge"] - rechargeprobe.TOL for d in r["done"])]
+    # 229's exact list lives at the pin (above); on the whole corpus its pinned gaps are a
+    # SUBSET, never an equality -- a later tape repeating the known divergence is confirming
+    # evidence (review M2, 2026-09-28).
+    check(sc["p3_as_written"] is False and sc["sub_recharge"] == pooled["sub_recharge"]
+          and {4.497, 3.251} <= set(sc["sub_recharge"].get(229, ()))
+          and new102 == [("58544", 4, [(591.381, 10.749, 8.739, None), (602.13, 17.496, 15.507, None)])],
+          "and on the whole corpus the arms still AGREE on every sub-recharge gap (the "
+          "signature: no sub-recharge gap is a recycled id's), 229's two pinned gaps still "
+          "among them; the new one is 102's 8.739 against 15 -- agent 4 on 20260928T103123 "
+          ":58544 at 591.381, no [61] word (exact, per tape) -- a second named divergence, "
+          "OBSERVED n = 1",
+          f"split {sc['sub_recharge']} pooled {pooled['sub_recharge']}; 102 on the tape {new102}")
+    check(six <= ids(pooledp["on_completion"]) and six <= ids(pooled["on_completion_r"]),
           "the six stay completion-anchored with recycled ids pooled too -- their anchor "
-          "is not an artifact of the split",
-          f"pooled completion: {sorted(int(str(k).split('@')[0]) for k in pooled['on_completion'])}")
+          "is not an artifact of the split (as written at the pin; re-stated on the whole "
+          "corpus)",
+          f"pooled completion at the pin: {sorted(ids(pooledp['on_completion']))}; whole "
+          f"corpus re-stated: {sorted(ids(pooled['on_completion_r']))}")
     check(sc["excluded_no_table"] == 0 and len(sc["connections_by_build"]) >= 2,
           "every connection's build has a table in the vault (no connection scored against "
           "the wrong build's numbers), over >= 2 builds",
