@@ -2503,7 +2503,7 @@ photographed.
 
 ---
 
-## 18. CASTAI's live runs — REGISTERED 2026-09-28, not yet run
+## 18. CASTAI's live runs — REGISTERED 2026-09-28; Z1 run and scored the same day, Z3 partial (§18.1, §18.2)
 
 **Identifiers.** `CASTAI-Z<n>` — the Zaishen Challenge runs; `CASTAI-H<n>` — the PvE healer
 run; `.P<n>` — a run's predictions (§17's word).
@@ -2639,6 +2639,131 @@ removal rules a tape witness. Z1.P3 / H1.P1 give the heal target rule one. Z1.P6
 selection-order evidence; with the bar met it can be scored, and without it it is a null. Z1.P4
 names the Necromancer marker, and Z1.P5 the player's cast-time word. Nothing ships from a run
 until its floor is met; below the floor it is reported as a null.
+
+### 18.1 SCORED — CASTAI-Z1, and a partial Z3 (2026-09-28)
+
+**The run.** Live capture `20260928T103123`: the owner, the secondary account, build 38888,
+base mode, plan `castai_z1_degeneration.txt` sealed with its seals in agreement. Four matches
+from the Zaishen Challenge outpost (map 281, three `0x01BF` henchman adds before each):
+
+| Match | Connection | Map | t (s) | Opponents | The owner held |
+|---|---|---|---|---|---|
+| 1 | `:50061` | 320 | 94.8–241.5 | the Degeneration Team | an axe |
+| 2 | `:65009` | 318 | 253.5–368.2 | the Degeneration Team | an axe |
+| 3 | `:50295` | 322 | 415.7–535.5 | the Obsidian Spike Elementalists (picked by accident) | a staff |
+| 4 | `:58544` | 318 | 548.4–636.2 | the Degeneration Team | a staff |
+
+The owner's hand is OBSERVED, read off the wire (`0x006E` lead hand → `0x0161` item type 2
+axe / 26 staff; `0x0035` attack base 1.33 / 1.75). Z1 is scored over matches 1, 2 and 4, and
+Z3 over match 3 alone, so **Z3 is PARTIAL: one match**. The scorer is
+`studies/monsterai/review/zaishenrun.py --prefix` (`46a6ad34`). A judge reconciled it against
+three blind replicators working from the raw wire and asked for five fixes; those fixes moved
+counts but no verdict.
+
+**Match 2 is gapped.** The sniffer dropped 58 bytes of the server stream: 38 at stream
+offset 38045 and 20 at 38548, per the manifest's own report. Every decoder therefore refuses
+the connection, by design. `--prefix` scores the byte-exact stream before the first gap
+(t 253.46–346.83, 2,744 messages, 123 casts) and labels every number from it as prefix. The
+last ~21 s of that match are lost. `livewire.declared_gaps` (`d69bf7a0`) lets a corpus
+reader set the connection aside by name rather than count it as a decoder failure;
+every reader now does (CASTAI-ZF1, §18.2).
+
+| Prediction | Verdict | Numbers (OBSERVED on this capture unless labelled) |
+|---|---|---|
+| **Z1.P1** no re-hex of a live hex on a foe | **NULL** (floor 10) | 70 opponent hex casts at another body. 2 were informative (the hex live on the chosen target while the slot was ready). 0 counterexamples. On a henchman, "live" is a RECONSTRUCTION from observed durations. |
+| **Z1.P2** Remove Hex only on a hexed ally | **NULL** (floor 5) | 4 casts, all 4 on a hexed target, 0 on a clean one. Latency from the hexed bit's rise: 0.19–0.54 s. |
+| **Z1.P3** the Healer heals another ally, the most-hurt | **NULL** (floor 20) | 5 heals on another ally and 12 on itself. 0 on an unhurt ally. The lowest-health ally was chosen 5 of 5 times where ≥ 2 were hurt (health RECONSTRUCTED for the henchmen). 1 Orison, which never healed more than the deficit. |
+| **Z1.P4** the Necromancer's class marker | **HELD** | 22 Necromancer hexes completing on a non-observer, 6 of them clean. Every clean one is exactly `[6, T, 1]` + `[6, T, 9]`. |
+| **Z1.P5** the player's own cast-time word | **HELD, n = 1** | `0x00A3 [61, observer, target, 2.0]` ahead of the observer's skill 153 under Arcane Conundrum (match 4, 622.937). The table's activation is 1.0. The window was chosen post hoc, and that is recorded. |
+| **Z1.P6** the selection test | **HELD** | Three opponent definitions meet §9 row 13's bar: `38888:118` (58 casts), `119` (65) and `121` (41). Each re-fired a slot while another ready slot waited (1, 4 and 5 times), so the order is not round robin. The energy each slot needed is not on the wire. |
+| **Z1.P7** scatter | **FAILED as registered** | 5 Fire Storms by the Mage, 3 of them on ≥ 2 opponents. The early-struck group left inside three damaging ticks in 1 of the 3. With the early group required to hold ≥ 2 bodies: n = 2, below the floor, NULL. A death is never counted as leaving. |
+| **Z3.P1** the spike is coordinated | **FAILED** | 26 Obsidian Flames. Grouped by target within 1.5 s: 17 singles, 3 pairs, 1 triple, so only 3 of the 26 casts were in a group of ≥ 3. |
+| **Z3.P2** Ward Against Melee when melee reaches them | **UNTESTED** | No melee attack start on an Elementalist: nobody on our side held a melee weapon in match 3. Ward Against Melee was cast 0 times. |
+| **Z3.P3** removal only on the afflicted | **HELD** | 14 Mend Ailment (floor 5) and 7 Remove Hex, 0 of either onto a body without the matching status bit. 5 were cast in the self form (`0x009F [60]`). |
+| **Z3.P4** Heal Area together | **HELD** | 21 Heal Areas, with 12 pairs by different casters inside 2 s. The caster's reconstructed health at the announce ranged 0.0 / 0.588 / 1.0 (min / median / max). |
+| **Z3.P5** Earth Attunement never re-cast while live | **NULL** | 4 casts over 4 bodies, 0 re-casts. |
+
+**The owner's question: does holding a staff change whom they target?** Not visibly. Share
+of the Degeneration Team's offensive casts, and of their attack starts, aimed at the Zaishen
+Healer:
+
+| Match | The owner held | Healer: casts | Healer: attack starts | The Healer's seconds dead |
+|---|---|---|---|---|
+| 1 | axe | 37 / 59 (63 %) | 31 / 43 (72 %) | 21.1 |
+| 2 (prefix) | axe | 24 / 53 (45 %) | 14 / 22 (64 %) | 40.0 |
+| 4 | staff | 14 / 38 (37 %) | 7 / 25 (28 %) | 35.0 |
+
+In match 4 the observer drew 60 % of the attack starts, but the Healer was dead for 35 s of
+that match. Counting only the moments when all four of our party were alive, the Healer drew
+37, 16 and 14 of the offensive casts across the three matches. **They focus the Healer while
+it lives, whether the owner holds an axe or a staff.** One staff match can show that
+something changed; it cannot show why. The Obsidian Elementalists (match 3, staff) split
+13 / 26 casts onto the Healer and 8 onto the observer.
+
+**Facts the run delivered beyond the predictions** (OBSERVED; the full list,
+twenty rows, is §18.2):
+- **The Necromancer's hex class id is 9**, and it is keyed on the *skill's* profession.
+  Evidence: the Degeneration Mesmer's Incendiary Bonds (an Elementalist hex, cast through
+  Inspired Hex) draws 12, 17 of 17. Shipped in `dd6c8ff2` as `HEX_EFFECT_CLASS[4] = 9`, which
+  closes the NOT FOUND in weapons PLAN §43.
+- **AI casters get the `[61]` cast-time word too, on every modified cast.** Examples:
+  - The Zaishen Mage: every cast carries 0.67 × the table activation (Fire Storm 2.0 → 1.34,
+    Fireball 1.5 → 1.005, Incendiary Bonds 1.0 → 0.67).
+  - The Degeneration Mesmer: 0.7235 × (2.0 → 1.447, 1.0 → 0.724, 3.0 → 2.171).
+  - A caster under the Mesmer's hexes: slowed to 2.0 × and 2.5 × (the Healer's 1.0 → 2.0 / 2.5;
+    the Archer's 3.0 → 6.0).
+
+  What causes each factor (an attribute, a hex) is RECONSTRUCTION. The seconds are the wire's.
+- CASTAI-C5 gets its first witnesses: three Zaishen definitions do not fire in round-robin
+  order. **These are PvP-simulation AI, their tier unknown, and they stay unpooled**, so round
+  robin remains the selector for our normal-mode monsters.
+
+**What changes.** No verdict here touches shipped code except P4's marker. Z1.P1 stays open
+(2 informative casts of the 10 needed), so §7 Q19's gate keeps its footing and nothing reopens
+it. Z1.P7's failure is evidence against group scatter in this AI population only; MONSTERAI-S3
+was derived for normal-mode monsters and stands as WIKI there. Z1.P1–P3 need a second
+Degeneration session to reach their floors. Z2 and H1 are still registered and unrun.
+
+### 18.2 What the Zaishen tape told the corpus — the suite's 19 reds, read (2026-09-28)
+
+The capture turned 19 of 247 suite files red on every tree, `main` included, because the
+vault is shared. No server code had changed. Six lanes classified every red, each in its
+own worktree and each checked by a contract reviewer. The contract:
+- no tolerance loosened and no check deleted;
+- every pinned literal kept on its original scope;
+- a corpus-wide count re-scoped to (pinned literals exact as of the pin) + (a floor) +
+  (a signature), never re-pinned to the new total;
+- the gapped connection set aside only by its manifest's own declaration;
+- a new retail fact recorded, never absorbed.
+
+Five lanes were blocked at least once and repaired. For every red, a re-scan of the corpus
+as of the pin (stamps before `20260928T103123`) reproduced the pinned literals exactly. So
+the scorers had not drifted: the new capture was the whole story. What it delivered is
+below. Each row is OBSERVED on `20260928T103123` unless labelled, and each has an exact
+per-tape witness in the test named.
+
+| Finding | What the tape showed | Label | Held by |
+|---|---|---|---|
+| **CASTAI-ZF1** | **Match 2 is the corpus's only gapped stream.** Of 297 connection-directions in 36 wired captures, only `:65009` s2c has holes (38 B at stream offset 38045, 20 B at 38548); its c2s is whole (192 messages). Readers had dropped it five different ways: 1. crashes (npcdefs, wireshells, codec); 2. four whole sections silently skipped under a false "no live captures" label (playerbags); 3. a refusal counted as a decode shortfall (stalepair, townweapon, visstatus, c2striage), or as a connection with no `0x00EF` (visstatus); 4. `except Exception` (adrenjoin, deepwoundjoin); 5. a silent truncation at the first hole (`cmsgstream.timed`: its 2,744 rows were genuine plaintext, and the 4,953 bytes after the hole went unread). Now every reader sets it aside by the manifest's declaration, by name, and raises on any undeclared refusal (`capgaps.py`, `KNOWN_GAPPED`). The ARC4 keystream stays in step across a hole, because reassembly zero-fills it, and the rest frames to its end from stream offset 38568. But so do 109 start offsets, so no resync is attempted. | OBSERVED | test_livewire, test_gapreaders, test_cmsgnames §0 / §0b, each reader's own audit |
+| **CASTAI-ZF2** | The opponents are declared with allegiance token `att2` (definitions 118–122, level 20), our party with `att1` + `play`. `npcdefs.hostile()` (`mon1` / `band`) counts none of them. The 2026-09-01 build's pool grew from 294 to 306 declarations; hostile is still 40. | OBSERVED; what `att1` / `att2` mean beyond the token is UNVERIFIED | test_npcdefs §8 |
+| **CASTAI-ZF3** | c2s `0x009A` (header only) asks for the Zaishen Challenge menu. It is sent 4 times, once per outpost load, and s2c `0x01D7` answers each 28–40 ms later: maps [321, 318, 320, 319, 322] and six (id, dword, dword) triples with ids 51 / 52 / 55 / 57 / 50 / 60. Named `ZAISHEN_CHALLENGE_LIST_REQUEST`, medium; dropped on purpose, not armed. | OBSERVED, n = 4 | test_c2striage |
+| **CASTAI-ZF4** | c2s `0x00A6 [map, team, 0]` enters a match. 5 sends, each answered by `0x01D9 [2, 1, '']` + `0x01BB`, then `0x01A5` to the named map 3.055–3.075 s later (4 of 4 uncancelled). Every pick comes from its connection's menu. **Field 2 selects the opponents**: skill 2809 appears on 34 s2c messages of the team-52 match and on 0 of the two team-55 matches. Named `ZAISHEN_CHALLENGE_ENTER`, medium; not armed. UPSTREAM's `PARTY_ENTER_CHALLENGE` is our `0x00A5`, a different opcode. | OBSERVED, n = 5 | test_c2striage |
+| **CASTAI-ZF5** | c2s `0x00A3` (header only), sent once, 2.469 s after an ENTER and before its transfer. `0x01D9 [0, 0, '']` answers it (the corpus's only one), and no transfer follows, so it reads as a cancel. Two upstreams name it `PARTY_CANCEL_ENTER_CHALLENGE` (GWCA at our number minus 2, Py4GW at ours). Left **unnamed** at n = 1 and dropped on purpose. | OBSERVED, n = 1; the cancel reading is RECONSTRUCTION, CORROBORATED by UPSTREAM | test_c2striage |
+| **CASTAI-ZF6** | **The arena plays PvP skill splits.** The observer's bar held 2858 (348's split) and 3443 (Frenzy 346's); the Obsidian Elementalists cast 2809 (Obsidian Flame 219's). A split has flags 0x400000, equip_family 0, and `linked_id` = the PvE row. `vault/content/skills.toml` is 38797's player corpus, so it excludes splits by design. 3443 exists only in 38888's table (3,443 → 3,476 records), and `skilltable.parse_record` read past 38797's end without complaint: that is where test_effects' "prediction" of 1193880282 came from. A split's `0x00D2` spend carries skill_copy 0xFFFFFFFF on all 11 spends here; the 59 spends before the pin carry 0. What 0xFFFFFFFF means is NOT FOUND. | OBSERVED | test_adrenwire §6, test_pools §2d, test_effects §2, test_weaponcensus |
+| **CASTAI-ZF7** | **Faintheartedness (135) was re-balanced in build 38888**: duration 3..16 → 4..18 over ranks 0..15. The wire gives 14.0 s at rank 11 = round(interp(4, 18, 11) = 14.27), where the pinned 38797 table predicts 13. This also explains hexjoin G3's first rank-varying miss (135 at field3 11). The server's content is still the 38797 extraction (`PLAN.md` §8). | CORROBORATED (the client tables, the wire, WIKI *Faintheartedness* rev 2739052) | test_effects §2, test_skilldamage §12c |
+| **CASTAI-ZF8** | **A gear row.** On the outpost the observer's maximum energy went 20 → 30 with pips unchanged at 2; the rate is the f32-first spelling, 0.02200000174. At morale 85 it read 27 = 20 × 0.85 + 10, so the +10 is not scaled by morale. That the +10 is the staff's is RECONSTRUCTION. | OBSERVED; WIKI *Staff* rev 2717550 | test_pools §2b |
+| **CASTAI-ZF9** | **Every adrenaline gain (207) in the corpus other than 25 is ONE damage word** at its own agent in its batch, carrying round(% of current maximum): 175 of 175, none summed. This **refutes** the JARIN reading that the hero's 26 / 29 / 42 were a strike and a hit taken summed (slice FINDINGS, skills §53.3): they are single words of 36/140, 41/140 and 51/122. This tape's five gains over 25 are each one armour-ignoring prop-55 word about 1.5 s after an Obsidian Flame. Its one zero is a +0.0 hit under the observer's Reversal of Fortune. | OBSERVED | test_adrenwire §4b, §12 |
+| **CASTAI-ZF10** | **The `[61]` cast-time word predicts cast completion with no free parameter.** The prediction is the word's seconds when it is sent, else the table activation: 485 of 486 non-observer completions land within 0.05 s, and all 486 within 0.1 s. Factors seen: the Zaishen Mage casts at × 0.67 on every cast (Fire Storm 2.0 → 1.34, the 1.332 s completion that reddened aotjoin P2); the Degeneration Mesmer at × 0.7236; a caster under the Mesmer's hexes at × 2 and × 2.5. The one outlier is agent 3's skill 22 at :50061 156.737: it completes at 0.66 against 0.7236, UNEXPLAINED. Before this tape, 3 casts in the corpus carried a `[61]`; this tape carries 69. aotjoin P2 is FAILED as registered on the whole corpus and re-stated as P2r. | OBSERVED | test_weapons §29, test_recharge §2 |
+| **CASTAI-ZF11** | A Fire Storm tick batch can carry **another projectile's landing**: `[20, T, caster, 344]` + `0x00A7` with no 58, because the 58 rode the cast's completion (:50061 174.724, :50295 502.828). This is what reddened aotjoin P6 as registered (re-stated as P6r). The body the storm "struck after death" was **revived**, not caught in a death/tick race: agent 6 died at 155.672, agent 5's skill 2 raised it at 158.976, and the storm struck it again at 159.723. The re-sent 350 precedes the tick's own caster's words 28 of 28, though in one batch another cause's words lead it (27 of 28). | OBSERVED | test_weapons §29 |
+| **CASTAI-ZF12** | A hex landing on an observer who is **already hexed carries no `0x00F1`** (the status word does not change); the 58 still precedes the `0x0042`. field3 is the **caster's** rank: agent 3's Incendiary Bonds lands at field3 0, 3.0 s. This tape also exposed two blind spots in hexjoin's C2c classifier: a skill-applied Crippled carries field3 0 (15 s), and conditions arriving at a hex's end or an attack's landing are counted as environmental. | OBSERVED | test_skilldamage §12c |
+| **CASTAI-ZF13** | In the arena a target's maximum health (prop 42) reaches the wire late (after the damage word) or never. So F47's death-penalty signature cannot see Zaishen Mind Burn pairs one whole-point value down the ladder (54 points at 480 / 408 / 336). The tape is exempted from spellhitjoin P2 **by stamp**: a future arena tape will redden it, so the case stays visible rather than absorbed. A death-count ladder signature is RECONSTRUCTION and was not shipped. One pair reads 29 points three times and 59 once at a maximum of 480, cause UNVERIFIED. | OBSERVED | test_skilldamage §12 |
+| **CASTAI-ZF14** | Recharge, under the re-statement (start-to-start minus each cast's own `[61]`-or-activation time): 186 stays completion-anchored (min net 6.994 against 7), and 197, 277 and 2809 read completion-anchored too; 229 stays start-like. Skill 102 shows one sub-recharge gap, 8.739 s against 15 with no `[61]` (n = 1): a second named divergence beside 229. | OBSERVED | test_recharge §2 |
+| **CASTAI-ZF15** | **Apply Poison (435, a preparation) swaps in its own arrow**: 742, arriving with impact visual 743, 9 of 9. It is the same shape as Kindle Arrows 433 → 343/344. So WEAPONS-C10's "2077 = the weapon's arrow" should read "the held weapon's own projectile, or the arrow a preparation substitutes". | OBSERVED | test_weaponcensus |
+| **CASTAI-ZF16** | **Attack timing.** A hexed body carries `0x0035` modifier 1.5 (the Zaishen Archer after Faintheartedness; the observer too), and its bow skill shots launch at swing_windup(2.475 × 1.5) = 1.75625 (1.7204–1.7753). A body's bow attack skill **with a table activation launches at swing_windup(activation)**, not after one weapon windup, 18 of 18 inside the pinned band: 399 / 426 (activation 0.5) at 0.1377–0.1674 s (agent 6, 11 shots); 1197 (0.75) at 0.2681–0.2865 s (20260819T132414 agent 28, 7 shots). This is the rule `authsrv.attack_skill_clock` applies to the player, where it is labelled UPSTREAM. Our body path uses the raw activation instead (`PLAN.md` §8). Two modifier-1.0 shots sit outside the band (1.0948 / 1.2242 s), cause UNVERIFIED. | OBSERVED | test_weaponcensus §2 |
+| **CASTAI-ZF17** | **Interrupts.** A non-hero body's interrupt is `[59, body, 0]` then `[35, body, 0]` and nothing else, 8 of 8 (henchmen hit by Distracting Shot 399 × 3 and Savage Shot 426 × 5); `interrupt_body` already sends exactly this. The observer's two new runs differ from the pinned 340 witness: 426 gave no disable E5 and the chain re-took the hold with `[8, 1]`; 399, on a 0-recharge skill, gave no first E5, and its +20 disable E5 came after the chain's `[4]` and `[8, 1]`. Our content carries interrupt rows only for 340 and 230 (`PLAN.md` §8). A knock-down mid-cast is `[59, body, 0]` + `[63, body, 2.0]` with no `[35]` (n = 1); our body branch sends the `[63]` alone (`PLAN.md` §8). interruptjoin P2 is FAILED as written. | OBSERVED | test_interrupt §2 |
+| **CASTAI-ZF18** | **A Deep Wound re-applied while live becomes a second concurrent effect**: a new buff id (19 s), the first not removed, and no prop-42 at the re-apply or at the first effect's expiry. The last close restores the maximum (480). Our `apply_condition` removes and re-applies instead (`PLAN.md` §8, with a loopback run first). Deep Wound's prop 42 dropping to 0.8× on apply is now seen on two tapes. | OBSERVED, n = 1 | test_mechanics §19 |
+| **CASTAI-ZF19** | **Property 55's sign follows allegiance.** Every negative 55 onto another agent crosses `0x0020` tokens, 104 of 104; negatives onto self are sacrifices. Two cross-token positives exist (20260817T231139 543.301); Heal Area healing an adjacent foe is a WIKI candidate, UNVERIFIED. healjoin P1 and P2 are FAILED as written through this tape (1219 / 1304 and 1126 / 1332). | OBSERVED | test_mechanics §20 |
+| **CASTAI-ZF20** | The 2 s movement window's largest step, 565.29 u in 1.770 s, is the observer's **continuous auto-approach walk** (:58544 587.058 → 588.827) under a declared `0x0027` of 383.04 u/s: 567.07 u up to the server's halt, with no `0x002C` and no self-report inside. `HARD_JUMP_UNITS` = 520 gates nothing on the server. It is `movesync.hard_step`'s distance arm below the 0.05 s floor, where retail peaks at 24.19 u. **Ruling: it stays 520.** Its decision record (the 2 s window) is frozen as of the pin: 6,194 intervals, 518.69 u (not the 518.25 quoted in movement FINDINGS), 195 within 5 u. A continuous-movement signature now carries the window. | OBSERVED | test_movesync §16 |
 
 ---
 

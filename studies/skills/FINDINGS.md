@@ -7605,6 +7605,11 @@ in an unambiguous batch of one damage word and one gain, each `round(pct)`: the 
 Lightning Orb on a stripped body (§50), 286 of 480. Nothing was summed — unlike JARIN's
 three hero ticks (26, 29, 42), which are a strike plus a hit taken.
 
+**REFUTED 2026-09-28 (CASTAI-ZF9, studies/monsterai §18.2):** JARIN's three are NOT a strike
+plus a hit taken. They are single damage words of 36/140, 41/140 and 51/122 on
+`20260914T005758`: every non-25 207 in the corpus is ONE damage word carrying round(% of
+current maximum), 175 of 175, none summed (test_adrenwire 4b).
+
 ### 53.4 SKILLS-AD4 — a hit converted to NOTHING still gets its gain, and the gain carries 0 — OBSERVED, 7 of 7
 
 RB's seven fully converted hits (§48.7: heal, strip, then a damage word of `+0.0`) are each
@@ -9821,3 +9826,37 @@ Harness runs with a hostile carrying Beguiling Haze 799 and / or Shell Shock 205
   over the whole 4 s -- ~15 % at +0.8, ~45 % at +2.0, ~65 % at +2.9, ~85 % at +3.6, the completion
   flash at +4.4. Whether RETAIL sends the word for a player's own cast stays UNVERIFIED (its three
   are a body's); that the client honours it for the player is now OBSERVED.
+
+## 63. The Zaishen tape -- 2026-09-28: a re-balanced Faintheartedness, stacking Deep Wound, heals by allegiance, the PvP splits, and the player's own cast-time word (CASTAI-Z1)
+
+The owner's Zaishen Challenge capture `20260928T103123` (build 38888) turned 19 suite files
+red. The evidence for each point is its CASTAI-ZF row in studies/monsterai §18.2; this
+section records what changes HERE.
+
+- **Faintheartedness (135) was re-balanced in 38888: 3..16 → 4..18** (CASTAI-ZF7,
+  CORROBORATED by the client tables, the wire's 14.0 at rank 11, and WIKI rev 2739052).
+  `vault/content/skills.toml` is still the 38797 extraction, so our server gives a 38888
+  client the old curve. Whether content should be regenerated is open (`PLAN.md` §8).
+- **Deep Wound (482) re-applied while live is a SECOND concurrent effect** (CASTAI-ZF18,
+  n = 1): a new buff id, the first effect not removed, and no prop-42 at the re-apply or at
+  the first effect's expiry; the last close restores the maximum. `apply_condition`
+  removes and re-applies instead, and its "retail's re-application shape is UNWITNESSED"
+  is now witnessed (`PLAN.md` §8).
+- **Heals (§42, healjoin): P1 and P2 are FAILED as written** through this tape (1219 / 1304,
+  1126 / 1332). P1's durable form is allegiance: every negative 55 onto another agent
+  crosses `0x0020` tokens, 104 of 104 (CASTAI-ZF19).
+- **The PvP skill splits** (CASTAI-ZF6): the arena bar holds 2858 (348's split) and 3443
+  (Frenzy 346's), and the opponents cast 2809 (Obsidian Flame 219's). All are
+  equip_family 0 with the PvP flag, excluded from the player corpus by the extractor's own
+  rule. A split's `0x00D2` spend carries skill_copy 0xFFFFFFFF (11 of 11); its meaning is
+  NOT FOUND.
+- **§53.3 corrected** (CASTAI-ZF9): every non-25 adrenaline gain is one damage word, and
+  JARIN's three were not summed.
+- **§62's open question is answered, at n = 1: retail sends the cast-time word for the
+  player's OWN cast** (CASTAI-Z1.P5). `0x00A3 [61, observer, target, 2.0]` rode ahead of
+  the observer's skill 153 (table activation 1.0) under Arcane Conundrum on :58544 at
+  622.937. It was the only observer spell cast under a live Arcane Conundrum or Migraine,
+  and the window was chosen post hoc (recorded).
+- **The `[61]` word predicts every AI completion with no free parameter** (CASTAI-ZF10):
+  485 of 486 within 0.05 s. The Zaishen Mage's casts run at × 0.67, the Degeneration
+  Mesmer's at × 0.7236.
