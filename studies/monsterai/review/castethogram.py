@@ -66,6 +66,22 @@ THE CASTER'S CLASS (the order is the rule):
               separate them from AI bodies. They are HUMAN on the map's word and the
               repo's label (skills 56: "the observer's four-player team against
               another"), not on a byte.
+  ZAISHEN     (2026-09-28, CASTAI-Z1; checked BEFORE the PvP rule above it would otherwise
+              meet) on a ZAISHEN ARENA connection -- its map is one of ZAISHEN_MAPS AND
+              the connection creates 0x01BF henchman adds -- a class-tag-2 body carrying an
+              arena token ('att*') that is NOT the observer's: the four level-20 Zaishen
+              opponents. AI (WIKI "Zaishen Challenge" rev 2707130: a PvE challenge mission,
+              4 against 4 AI), but PvP-simulation AI of unknown tier (monsterai 18,
+              CASTAI-W2), so it is its OWN population: never in AI_CLASSES, never pooled
+              with MONSTER or the Isle. The map ids are the three MEASURED on
+              20260928T103123 (tape.client_version of its four match connections: 320,
+              318, 322, 318); no other arena id is guessed, so a fourth arena map reads as
+              the old PvP rule (HUMAN) until a tape measures it.
+              On the same connection the observer's 0x01BF adds are HENCHMAN (AI: the
+              outpost's Zaishen henchmen, WIKI "Zaishen Challenge (outpost)" rev 2724880).
+              EVERY cast on a Zaishen arena connection carries `arena` = "zaishen" and is
+              kept OUT of the pooled AI tables below (the headline stays the old corpus's);
+              `studies/monsterai/review/zaishenrun.py` scores them.
   HERO        0x01C2 add created in this connection (henchjoin.party_of)
   HENCHMAN    0x01BF add created in this connection, on a non-PvP connection
   ALLY_NPC    the observer's allegiance token, no party add in this connection: an
@@ -79,7 +95,8 @@ THE CASTER'S CLASS (the order is the rule):
               the first run, which scored the other four classes only.)
   MONSTER     any other token ('mon1' on every hostile caster in the corpus)
   UNKNOWN     no create seen
-The AI tables are MONSTER, HENCHMAN, HERO, ALLY_NPC and FRIENDLY, each on its own row.
+The AI tables are MONSTER, HENCHMAN, HERO, ALLY_NPC and FRIENDLY, each on its own row,
+over every connection that is NOT a Zaishen arena (`pooled_ai`).
 
 PER CAST (all times on the capture clock): capture, conn, build, map, t, caster, its
 incarnation (0x0020 count -- ids are RECYCLED, rechargeprobe), definition (build-scoped,
@@ -212,6 +229,11 @@ TYPE_NAMES = {3: "Stance", 4: "Hex", 5: "Spell", 6: "Enchant", 7: "Signet", 8: "
 COND_REMOVAL = {275, 276, 277, 278, 311}
 HEX_REMOVAL = {301, 303}
 AI_CLASSES = ("MONSTER", "HENCHMAN", "HERO", "ALLY_NPC", "FRIENDLY")
+# The Zaishen Challenge arena maps -- MEASURED on 20260928T103123 (CASTAI-Z1: the
+# client's own VERSION frame on each match connection, tape.client_version), and only
+# those: 320 (match 1), 318 (matches 2 and 4), 322 (match 3). Not a guess at the set.
+ZAISHEN_MAPS = frozenset({318, 320, 322})
+ARENA_CLASSES = ("ZAISHEN", "HENCHMAN")      # what an arena connection's AI is labelled
 OUT_DIR_PARTS = ("research", "castai-2026-09-27")
 
 
@@ -225,6 +247,25 @@ def fourcc(v):
 
 def med(xs):
     return round(statistics.median(xs), 3) if xs else None
+
+
+def pooled_ai(casts):
+    """The AI casts the pooled tables score: an AI class, and NOT on a Zaishen arena
+    connection (those are their own population -- zaishenrun.py)."""
+    return [r for r in casts if r["class"] in AI_CLASSES and not r.get("arena")]
+
+
+def arena_ai(casts):
+    """The Zaishen arena connections' AI casts (ZAISHEN opponents, HENCHMAN adds)."""
+    return [r for r in casts if r.get("arena") and r["class"] in ARENA_CLASSES]
+
+
+def class_label(r):
+    """The caster class as the ALL-CASTS census prints it: a cast on a Zaishen arena
+    connection carries '@zaishen', so the old corpus's HENCHMAN (henchjoin adds on PvE
+    connections) and the arena's HENCHMAN (the outpost's Zaishen henchmen) never print
+    as one sum (fix 5, 2026-09-28: the first line read HENCHMAN 241 = 46 + 195)."""
+    return r["class"] + ("@zaishen" if r.get("arena") else "")
 
 
 # ------------------------------------------------------------------ the tables
@@ -262,6 +303,9 @@ class Conn:
         obs_c = self.creates.get(observer)
         self.obs_token = obs_c[0][3] if obs_c else None
         self.pvp = bool(self.obs_token and self.obs_token.startswith("att"))
+        # a Zaishen arena: one of the MEASURED maps AND 0x01BF henchman adds (not heroes)
+        self.hench = set(self.party) - self.heroes
+        self.zaishen = self.map_id in ZAISHEN_MAPS and bool(self.hench)
         self.reports = noticeradius.player_reports(merged)
         self._tracks = {}
         self._build_timelines()
@@ -353,6 +397,11 @@ class Conn:
             return "UNKNOWN"
         if self.tag_at(agent, t) == 3 or c[2] == 5:
             return "HUMAN"
+        if self.zaishen:
+            if agent in self.hench:
+                return "HENCHMAN"
+            if c[3].startswith("att") and c[3] != self.obs_token and self.tag_at(agent, t) == 2:
+                return "ZAISHEN"
         if self.pvp and c[3].startswith("att"):
             return "HUMAN"
         if agent in self.heroes:
@@ -457,9 +506,19 @@ class Conn:
 def completion(conn, caster, ta, idx, act):
     """(t_end, prop) of the caster's end word for the announce at (ta, idx), or
     (None, 'superseded'|'no end'). The end belongs to the caster's most recent
-    announce; for act > 0 an end earlier than ta + act/2 is the PREVIOUS cast's."""
+    announce; for act > 0 an end earlier than ta + act/2 is the PREVIOUS cast's.
+
+    The announce that SUPERSEDES this one is the caster's next announce that has an end
+    word of its own -- never an instant 0x009F [48] (a stance / shout: no end word,
+    build_casts). FIXED 2026-09-28 (CASTAI-Z1 judge, fix 1): `nxt` used to be the next
+    announce of ANY form, so a stance fired mid-cast (the Zaishen Necromancer's skill 11)
+    marked the in-flight cast 'superseded' although its 58 followed on time -- on
+    20260928T103123 match 1 159.98 skill 133, match 2 313.19 135 -> observer (its 0x0042
+    at 314.195) and 342.94 109 -> Archer (its [58] at 343.936)."""
     nxt = None
     for a in conn.by_caster.get(caster, ()):
+        if a[5] == PROP_INSTANT:
+            continue
         if (a[0], a[1]) > (ta, idx):
             nxt = (a[0], a[1])
             break
@@ -531,6 +590,7 @@ def build_casts(conn, table, rec_table, stats):
         rec = {
             "capture": conn.stamp, "port": conn.port, "build": conn.build,
             "map": conn.map_id, "t": round(ta, 3), "caster": caster, "inc": inc,
+            "arena": "zaishen" if getattr(conn, "zaishen", False) else None,
             "class": klass, "form": form, "skill": skill, "type": typ,
             "type_name": TYPE_NAMES.get(typ, str(typ)), "target_byte": tbyte,
             "target_byte_kind": effects.TARGET_KINDS.get(tbyte, "unresolved"),
@@ -808,9 +868,9 @@ def death_checks(conn):
 # ------------------------------------------------------------------ scoring
 def score(c):
     casts = c["casts"]
-    ai = [r for r in casts if r["class"] in AI_CLASSES]
-    s = {"n_all": len(casts), "by_class": collections.Counter(r["class"] for r in casts),
-         "n_ai": len(ai)}
+    ai = pooled_ai(casts)
+    s = {"n_all": len(casts), "by_class": collections.Counter(class_label(r) for r in casts),
+         "n_ai": len(ai), "n_arena": sum(1 for r in casts if r.get("arena"))}
     # L1
     l1_9f = [r for r in casts if r["form"] == "9F[60]"]
     s["l1_9f_bytes"] = collections.Counter(r["target_byte"] for r in l1_9f)
@@ -905,7 +965,7 @@ def score(c):
     engaging_defs = {r["def_key"] for r in ai if r["target"] not in (None, r["caster"])}
     for r in casts:
         r["population"] = ("engaging" if r["def_key"] in engaging_defs else "self-only") \
-            if r["class"] in AI_CLASSES else None
+            if r["class"] in AI_CLASSES and not r.get("arena") else None
     eng = [r for r in rc if r["population"] == "engaging"]
     s["p3_engaging"] = {"n": len(eng), "median": med([r["since_ready"] for r in eng]),
                         "median_free": med([r["since_free"] for r in eng]),
@@ -1006,7 +1066,7 @@ def tables(c, s):
     L = []
     P = L.append
     casts = c["casts"]
-    ai = [r for r in casts if r["class"] in AI_CLASSES]
+    ai = pooled_ai(casts)
     P(f"castethogram -- live captures {c['captures']}, connections scored {c['connections']}, "
       f"refused {len(c['refused'])}, non-live directories excluded {len(c['excluded_origin'])}; "
       f"exe tables for builds {c['exe_builds']}")
@@ -1015,11 +1075,19 @@ def tables(c, s):
     for e in c["refused"]:
         P(f"   refused: {e}")
     P("")
-    P(f"ALL CASTS n={s['n_all']} by caster class: {dict(s['by_class'])}")
-    P(f"   (HUMAN + OBSERVER are counted and never scored; AI = {AI_CLASSES}: n={s['n_ai']})")
-    bc = collections.Counter((r["class"], r["form"]) for r in casts)
+    P(f"ALL CASTS n={s['n_all']} ({s['n_all'] - s['n_arena']} off the Zaishen arenas, "
+      f"{s['n_arena']} on them -- '@zaishen') by caster class: {dict(s['by_class'])}")
+    P(f"   (HUMAN + OBSERVER are counted and never scored; AI = {AI_CLASSES} off the Zaishen "
+      f"arenas: n={s['n_ai']})")
+    bc = collections.Counter((class_label(r), r["form"]) for r in casts)
     for k in sorted(bc):
-        P(f"   {k[0]:9s} {k[1]:7s} {bc[k]:5d}")
+        P(f"   {k[0]:17s} {k[1]:7s} {bc[k]:5d}")
+    ar = arena_ai(casts)
+    arc = sorted({(r["capture"], r["port"], r["map"]) for r in casts if r.get("arena")})
+    P(f"ZAISHEN ARENAS (own population, NEVER pooled into the tables below; scored by "
+      f"zaishenrun.py): connections {len(arc)} {arc}; AI casts n={len(ar)} by class "
+      f"{dict(collections.Counter(r['class'] for r in ar))}; on those connections every "
+      f"class {dict(collections.Counter(r['class'] for r in casts if r.get('arena')))}")
     P("")
     P(f"L1 (locked after recon): 0x009F[60] target bytes {dict(s['l1_9f_bytes'])}; 0x00A0[60] "
       f"caster==target {s['l1_a0_self']} -> {'HOLDS' if s['l1'] else 'FAILS'}; a non-observer "
@@ -1177,7 +1245,7 @@ def tables(c, s):
 def rows_text(c):
     out = []
     for r in c["casts"]:
-        if r["class"] not in AI_CLASSES:
+        if r["class"] not in AI_CLASSES or r.get("arena"):
             continue
         out.append(f"{r['capture']}/{r['port']} t={r['t']:9.3f} {r['class']:8s} c{r['caster']:<4} "
                    f"i{r['inc']} def {str(r['def_key']):>11s} {r['form']:7s} sk {r['skill']:4d} "
@@ -1201,7 +1269,7 @@ def main(argv=None):
     except AttributeError:
         pass
     c = census()
-    ai = [r for r in c["casts"] if r["class"] in AI_CLASSES]
+    ai = pooled_ai(c["casts"])
     if not ai:
         print(f"castethogram: REFUSED -- no AI cast observed over {c['connections']} live "
               f"connections ({len(c['casts'])} casts of any class). Nothing to report.")
