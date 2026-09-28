@@ -69,7 +69,7 @@ import pinned  # noqa: E402
 # each time the number was read off the run rather than predicted.
 # 2026-09-17: 38 -> 42, read off the run: section 4's vocabulary split in two,
 # section 10 gained the rune's two checks and 595's positional one.
-LEDGER = checks.Ledger("item modifiers", floor=43)   # 2026-09-19: 42 -> 43, section 15 (the 609 bow-class table)
+LEDGER = checks.Ledger("item modifiers", floor=44)   # 2026-09-19: 42 -> 43, section 15 (the 609 bow-class table); 2026-09-28: 44, section 4's corpus set-aside audit
 
 # 2026-09-17: the upgrade-component batch (20260916T213125, 20260917T090355).
 COMPONENT_TYPE = 8          # 0x0161's item type on all 95 of them -- OBSERVED
@@ -86,6 +86,33 @@ PROFESSION_ATTRIBUTES = list(range(0, 26)) + list(range(29, 45))
 # it. RUN-WEAPONS-1A itself (20260919T103604) adds only the Warrior's own attr 20.
 HEADPIECE_ATTRS = {"20260917T160915": {29, 31},     # RUN-DAGGERS-1, Assassin
                    "20260917T224104": {31}}         # RUN-DAGGERS-2, the same Assassin
+
+
+def _corpus_s2c(live, set_aside):
+    """(stamp, `cmsgstream.timed` s2c rows) for every live capture holding a wire log.
+
+    2026-09-28 (CASTAI-Z1, the cms lane). Each corpus walk here wrapped `timed` in
+    `except Exception: continue`, and the one exception it ever caught was the
+    capture directory with no wire.jsonl (20260817T175358: plan_seal.json and
+    wirecapture.log only) -- so that is now the stated rule, and anything else
+    `timed` refuses RAISES. Its one set-aside is a direction the capture's own
+    manifest declares gapped (20260928T103123 :65009 s2c), printed by name and
+    appended to `set_aside`, which the corpus check asserts with `capgaps.audit`."""
+    import cmsgstream
+    for stamp in sorted(os.listdir(live)):
+        if not os.path.isfile(os.path.join(live, stamp, "wire.jsonl")):
+            continue
+        yield stamp, cmsgstream.timed(stamp, "s2c", "game", set_aside=set_aside)
+
+
+def _audit_corpus(live, set_aside):
+    """(ok, detail): the walk set aside EXACTLY capgaps.KNOWN_GAPPED, each one still
+    refused by cmsgstream -- the second half of a corpus census that steps past one."""
+    import capgaps
+    import cmsgstream
+    caps = [os.path.join(live, s) for s in sorted(os.listdir(live))]
+    ok, why = capgaps.audit(set_aside, caps, cmsgstream.refuses)
+    return ok and len(set_aside) == len(capgaps.KNOWN_GAPPED), why
 
 
 def main():
@@ -167,11 +194,8 @@ def main():
         component_only = set()
         undispatched = []
         caps = 0
-        for stamp in sorted(os.listdir(live)):
-            try:
-                rows = cmsgstream.timed(stamp, "s2c", "game")
-            except Exception:
-                continue
+        aside = []
+        for stamp, rows in _corpus_s2c(live, aside):
             caps += 1
             for _t, _c, op, v in rows:
                 if op != 0x161 or not v or not isinstance(v[-1], list):
@@ -195,6 +219,12 @@ def main():
                   "the corpus really was read",
                   f"{words} modifier words over {caps} captures -- a check "
                   f"that ran on an empty glob is the defect this names")
+        aside_ok, aside_why = _audit_corpus(live, aside)
+        LEDGER.ok(aside_ok,
+                  "and the walk set aside only what a manifest declares gapped",
+                  f"{aside_why}. EXACTLY capgaps.KNOWN_GAPPED, each still refused "
+                  f"by cmsgstream; a new gapped capture reddens this until a "
+                  f"reviewer names it (2026-09-28)")
         LEDGER.ok(not undispatched,
                   "EVERY identifier in the wild is one the client dispatches",
                   f"{ids}/{ids} across {len(distinct)} distinct ids, 0 misses. "
@@ -281,11 +311,7 @@ def main():
         n_attrs = attribtable.EXPECTED_COUNT
         cap = len(attribpoints.locate(attribpoints.Image(exe))["costs"])
         pairs, models, skins = [], {}, {}
-        for stamp in sorted(os.listdir(live)):
-            try:
-                got = cmsgstream.timed(stamp, "s2c", "game")
-            except Exception:
-                continue
+        for stamp, got in _corpus_s2c(live, []):
             for _t, _c, op, v in got:
                 if op != 0x161 or not v or not isinstance(v[-1], list):
                     continue
@@ -413,11 +439,7 @@ def main():
         exceptions = []
         positional = {True: set(), False: set()}   # 595 after 614? -> bit 31
         attrs_by_stamp = {}
-        for stamp in sorted(os.listdir(live)):
-            try:
-                got = cmsgstream.timed(stamp, "s2c", "game")
-            except Exception:
-                continue
+        for stamp, got in _corpus_s2c(live, []):
             for _t, _c, op, v in got:
                 if op != 0x161 or not v or not isinstance(v[-1], list):
                     continue
@@ -673,11 +695,7 @@ def main():
         print("\n14. CORPUS: 617 is a constant of the item's MODEL")
         by_model, by_file = {}, {}
         seen617 = 0
-        for stamp in sorted(os.listdir(live)):
-            try:
-                got = cmsgstream.timed(stamp, "s2c", "game")
-            except Exception:
-                continue
+        for stamp, got in _corpus_s2c(live, []):
             for _t, _c, op, v in got:
                 if op != 0x161 or not v or not isinstance(v[-1], list):
                     continue
