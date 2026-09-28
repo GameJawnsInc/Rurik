@@ -63,7 +63,7 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit
+LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike
 check = checks.adopt(LEDGER)
 
 
@@ -1286,14 +1286,127 @@ if records is not None:
         # (SKILLS-LU) the vault is stale until the merge regenerates it, so the check may
         # be pointed at an explicit emit with RURIK_SKILL_LABELS=<path>; it names which
         # file it read, and the default stays the vault, never a branch's scratch copy.
+        #
+        # WHICH fresh emit (the 38888 regen, 2026-09-28): the one FROM THE EXE AND DAT
+        # THE FILE'S OWN HEADER DECLARES. The pinned emit above (b1) is build 38797 and
+        # stays asserted exactly; the vault's file may be another registered build's
+        # emit (`skilldesc.py --exe X --dat Y --emit-labels`), and comparing that with
+        # b1 is a FAIL the file did not earn. Nothing in the header is trusted: the
+        # build is re-derived from the named exe's bytes (a non-pristine image is a
+        # FAIL by name), the templates digest is recomputed from the named dat, the
+        # build must be one the loaded skills table carries (the emitter's own ENG-7
+        # refusal), and then the whole file must equal the emit byte for byte. When
+        # the header names the pinned exe and DEFAULT_DAT verbatim, that emit IS b1.
+        # MEASURED 2026-09-28: the 38888 pipeline (corpus + analyse + emit) is ~7 s.
         explicit = os.environ.get("RURIK_SKILL_LABELS", "").strip()
         disk = Path(explicit) if explicit else skilldesc.default_labels_path()
         where = "RURIK_SKILL_LABELS" if explicit else "the vault"
+        HEADER_KEYS = ("exe", "build", "dat", "templates_sha256")
+
+        def overlay_header(blob):
+            """exe / build / dat / templates_sha256 as the generated header DECLARES them."""
+            hdr = {}
+            for line in blob.decode("utf-8", "replace").splitlines():
+                if not line.startswith("# "):
+                    break
+                key, sep, val = line[2:].partition(": ")
+                if sep and key in HEADER_KEYS:
+                    hdr[key] = val.split(" ", 1)[0] if key in ("build", "templates_sha256") else val
+            return hdr
+
+        _fresh, _exe_build = {}, {}
+
+        def exe_build(path):
+            if path not in _exe_build:
+                with open(path, "rb") as fh:
+                    _exe_build[path] = skilltable.build_of(fh.read())
+            return _exe_build[path]
+
+        def fresh_emit(hexe, hdat):
+            """(digest, bytes, checker faults) of a fresh emit from this exe + dat,
+            the path `skilldesc.main --exe --dat --emit-labels` takes; cached."""
+            if (hexe, hdat) not in _fresh:
+                if hexe == str(exe) and hdat == str(textrec.DEFAULT_DAT):
+                    _fresh[(hexe, hdat)] = (digest, b1, [])       # the pinned emit, same strings
+                else:
+                    r2, t2, ix2, _e2, _w2 = skilldesc.load_corpus(hexe, hdat)
+                    try:
+                        hand2 = skilldesc.hand_rows()
+                        rep2 = skilldesc.analyse(r2, t2, hand2)
+                        rows2, excl2, plain2 = skilldesc.label_rows(rep2, r2, set(hand2))
+                        bad2 = skilldesc.check_label_rows(rows2, rep2, set(hand2), r2)
+                        d2 = skilldesc.template_digest(t2)
+                        p3 = os.path.join(tmp, "header_emit.toml")
+                        skilldesc.emit_labels(rows2, excl2, skilltable.build_of(ix2.pe.data), hexe, p3,
+                                              plain2, dat=hdat, digest=d2)
+                        _fresh[(hexe, hdat)] = (d2, open(p3, "rb").read(), bad2)
+                    finally:
+                        ix2.close()
+            return _fresh[(hexe, hdat)]
+
+        table_builds = skilldesc.skills_table_builds(_content.load())
+
+        def disk_overlay_faults(blob):
+            """Every reason this file is not a fresh emit of what its header declares,
+            each named; [] when it is."""
+            hdr = overlay_header(blob)
+            missing = [k for k in HEADER_KEYS if k not in hdr]
+            if missing:
+                return [f"HEADER: lacks {missing}"]
+            hexe, hdat = hdr["exe"], hdr["dat"]
+            if not os.path.isfile(hexe) or not os.path.isfile(hdat):
+                return [f"FILES: the header names exe {hexe} / dat {hdat}, not both files"]
+            hb = exe_build(hexe)
+            if hb is None:
+                return [f"NOT PRISTINE: {hexe}'s sha256 matches no registered pristine image "
+                        f"in clientscan/pinned.py -- no honest build stamp exists"]
+            out = []
+            if hdr["build"] != str(hb):
+                out.append(f"BUILD: the header says {hdr['build']}, the exe's bytes say {hb}")
+            if hb not in table_builds:
+                out.append(f"SKILLS TABLE: build {hb} is not the loaded skills table's "
+                           f"{sorted(table_builds)} (the emitter refuses this pair, ENG-7)")
+            d2, fbytes, bad2 = fresh_emit(hexe, hdat)
+            if bad2:
+                out.append(f"CHECKER: the fresh rows fail check_label_rows: {bad2[:3]}")
+            if hdr["templates_sha256"] != d2:
+                out.append(f"DIGEST: the header's templates_sha256 {hdr['templates_sha256'][:16]} is "
+                           f"not {hdat}'s recomputed {d2[:16]}")
+            if blob != fbytes:
+                out.append("BYTES: the file differs from a fresh emit of its own exe + dat")
+            return out
+
         if disk.is_file():
-            check(disk.read_bytes() == b1,
-                  f"the overlay ON DISK ({where}: {disk}) is byte-identical to a fresh emit -- "
+            blob = disk.read_bytes()
+            hdr = overlay_header(blob)
+            faults = disk_overlay_faults(blob)
+            check(faults == [],
+                  f"the overlay ON DISK ({where}: {disk}) is byte-identical to a fresh emit FROM THE "
+                  f"EXE AND DAT ITS OWN HEADER DECLARES (build {hdr.get('build')}: re-derived from "
+                  f"that exe's bytes, templates digest recomputed, the skills table's build) -- "
                   f"regenerated, not hand-edited; a mismatch means `python toolkit/clientscan/"
-                  f"skilldesc.py --emit-labels` is owed (at the merge, into the vault)")
+                  f"skilldesc.py --exe <exe> --dat <dat> --emit-labels` is owed (at the merge, "
+                  f"into the vault)", faults)
+            # KNOWN-BAD ARMS on the header, each named: all read the cache above (no reload)
+            if faults == [] and all(k in hdr for k in HEADER_KEYS):
+                txt = blob.decode("utf-8")
+                other = 38888 if hdr["build"] == "38797" else 38797
+                arm_b = txt.replace(f"# build: {hdr['build']} ", f"# build: {other} ", 1).encode("utf-8")
+                arm_d = txt.replace(hdr["templates_sha256"], "0" * 64, 1).encode("utf-8")
+                fake = os.path.join(tmp, "not_pristine.exe")
+                with open(fake, "wb") as fh:
+                    fh.write(b"MZ" + b"\0" * 1022)
+                arm_x = txt.replace(f"# exe: {hdr['exe']}\n", f"# exe: {fake}\n", 1).encode("utf-8")
+                fb, fd, fx = (disk_overlay_faults(arm_b), disk_overlay_faults(arm_d),
+                              disk_overlay_faults(arm_x))
+                check(any(f.startswith("BUILD:") for f in fb) and not any(f.startswith("BUILD:") for f in fd),
+                      f"KNOWN-BAD ARM: the header's build typed as {other} is the BUILD fault by name "
+                      f"(the stamp is re-derived, never read)", fb)
+                check(any(f.startswith("DIGEST:") for f in fd) and not any(f.startswith("DIGEST:") for f in fb),
+                      "KNOWN-BAD ARM: a zeroed templates_sha256 is the DIGEST fault by name", fd)
+                check(len(fx) == 1 and fx[0].startswith("NOT PRISTINE:"),
+                      "KNOWN-BAD ARM: a header naming a non-pristine image is the NOT PRISTINE fault, "
+                      "and nothing is emitted from it", fx)
         elif explicit:
             # the fix pass (ENG-D4C-9): a mistyped explicit path is a FAIL, not a
             # declared skip -- the skip is for the vault's file being absent only
