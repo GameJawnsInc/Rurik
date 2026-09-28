@@ -60,7 +60,7 @@ import charstore                                             # noqa: E402
 import visstatus as vs                                       # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("display mode (DESKWORK-D1, the owner's answer)", floor=64)  # 2026-09-24 (CLEANUP-3's review, RV-1: the town equip re-cut to the zeroed pair, +1 for its KNOWN-BAD arm), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core); section 2's 10 ride the vault (74 vaulted); 63 / 73 at the 2026-09-23 fix pass
+led = checks.Ledger("display mode (DESKWORK-D1, the owner's answer)", floor=64)  # 2026-09-28 (CASTAI-Z1): unchanged bare; +1 vaulted (75), section 2's gapped-connection audit. 2026-09-24 (CLEANUP-3's review, RV-1: the town equip re-cut to the zeroed pair, +1 for its KNOWN-BAD arm), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core); section 2's 10 ride the vault (74 vaulted); 63 / 73 at the 2026-09-23 fix pass
 
 VIS_S2C, VIS_C2S = 0x00EF, 0x0057
 assert (VIS_S2C, VIS_C2S) == (authsrv.GAME_SMSG_CHAR_VISIBILITY_FLAGS,
@@ -231,8 +231,16 @@ led.ok([(s, i) for s, i in [(6, 7)]] != vs.filter_slot_writes([(6, 7)], 0xFB, Tr
 # ---- §2 retail's wire ------------------------------------------------------------------
 import vaultpath                                             # noqa: E402
 import livewire                                              # noqa: E402
+import capgaps                                               # noqa: E402
 live_root = vaultpath.vault_path("captures", "live")
-conns = list(livewire.live_connections()) if os.path.isdir(live_root) else []
+# 2026-09-28 (CASTAI-Z1): a connection its capture's own manifest declares GAPPED
+# (20260928T103123 :65009) is refused by decode_conn by design; it is set aside BY NAME
+# here (printed) and audited below, so "every connection decoded" holds over every
+# connection NOT declared gapped, unweakened. Its s2c never decoded, so it contributed
+# nothing to the census counters -- only a false "decoded 0" and an empty per-conn row.
+gapped_aside = []
+conns = (list(livewire.live_connections(set_aside=gapped_aside))
+         if os.path.isdir(live_root) else [])
 if not conns:
     led.skip("section 2, retail's wire", f"no live captures under {live_root}")
 if conns:
@@ -321,7 +329,13 @@ if conns:
     led.ok(weapon[(1, "own", False, False)] >= 1 and weapon[(1, "own", False, True)] == 0,
            f"...and a field load with NO bag weapon carries none ({weapon[(1, 'own', False, False)]}): "
            f"the array reflects the bag, not a constant")
-    led.ok(decoded == len(conns), f"every connection decoded ok ({decoded} of {len(conns)})")
+    led.ok(decoded == len(conns),
+           f"every connection its manifest does not declare gapped decoded ok ({decoded} of {len(conns)}, "
+           f"{len(gapped_aside)} set aside)")
+    gap_ok, gap_detail = capgaps.audit(gapped_aside, [d for d, _w in livewire.live_captures()],
+                                       livewire.refuses)
+    led.ok(gap_ok, "and the connections set aside are EXACTLY the ones their manifests declare gapped, the "
+           "known set, and decode_conn still REFUSES each", gap_detail)
     led.ok(o_own + f_own == who_bare[(0, "own", False)] + who_bare[(1, "own", False)],
            "the own-body tallies agree between the head join and the census (one identification)")
 

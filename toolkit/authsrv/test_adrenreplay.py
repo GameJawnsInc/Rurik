@@ -40,7 +40,8 @@ import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-22: 18 checks (the fixture-less section 1
 # alone is 9; the corpus sections add 9). The floor is the bare-machine core,
-# so a machine without the vault still measures the arithmetic.
+# so a machine without the vault still measures the arithmetic. 2026-09-28
+# (CASTAI-Z1): the corpus sections add 10 (19 vaulted) -- the gapped-connection audit.
 LEDGER = checks.Ledger("the adrenaline replay", floor=9)
 check = checks.adopt(LEDGER)
 
@@ -124,7 +125,12 @@ def section_corpus():
         LEDGER.skip("2. retail's presses", str(exc))
         LEDGER.skip("3. our book against the client's rules", str(exc))
         return
-    conns, skipped = ar.load_connections()
+    # 2026-09-28 (CASTAI-Z1): a connection its capture's own manifest declares GAPPED
+    # (20260928T103123 :65009) is refused by decode_conn by design. It is set aside BY
+    # NAME (printed) and audited below; the "skipped are 6112 auth channels" claim
+    # below is unchanged over everything else.
+    aside = []
+    conns, skipped = ar.load_connections(set_aside=aside)
     presses, _ = ar.replay(conns=conns)
     tally, disagree = ar.score(presses)
     pvp = [r for r in presses if r["capture"] == PVP_TAPE and r["answer"]]
@@ -143,6 +149,14 @@ def section_corpus():
     check(not not_auth,
           f"the {len(skipped)} skipped connection(s) are 6112 auth channels",
           f"offenders {not_auth}")
+    import capgaps
+    import livewire
+    gap_ok, gap_detail = capgaps.audit(
+        aside, [d for d, _w in livewire.live_captures()], livewire.refuses)
+    check(gap_ok,
+          f"and the {len(aside)} connection(s) set aside are EXACTLY the ones their "
+          f"manifests declare gapped, the known set, and decode_conn still REFUSES each",
+          gap_detail)
     check(tally.get("accept_DISAGREE", 0) == 0 and tally.get("accept_agree", 0) >= 45,
           f"P2: every accepted adrenal press found its slot full "
           f"({tally.get('accept_agree', 0)} of {tally.get('accept_agree', 0)})",
