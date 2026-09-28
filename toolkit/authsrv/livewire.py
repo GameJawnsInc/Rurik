@@ -175,51 +175,39 @@ def decode_conn(capdir, conn_file):
     return conn, merged, ok
 
 
-def conn_name(conn_file):
-    """'game-10.0.0.210_65009-to-98.95.137.136_80.jsonl' -> '10.0.0.210:65009->98.95.137.136:80'
-    (the manifest's and the version row's spelling), or None for a name of another shape."""
-    base = os.path.basename(conn_file)
-    if not (base.startswith("game-") and base.endswith(".jsonl")) or "-to-" not in base:
-        return None
-    left, right = base[len("game-"):-len(".jsonl")].split("-to-", 1)
-    if "_" not in left or "_" not in right:
-        return None
-    return "%s:%s->%s:%s" % (*left.rsplit("_", 1), *right.rsplit("_", 1))
+# `conn_name` and `declared_gaps` live in the leaf `capgaps.py` now (it sits below both
+# this module and `tape`, which cannot import this one). Re-exported HERE, at the site
+# they were cut from, because a reader reaches them by these names: `test_livewire.py`
+# sections 1 and 5 (`livewire.declared_gaps`, `livewire.conn_name`).
+from capgaps import (conn_name, declared_gaps)                # noqa: F401,E402
+import capgaps                                                 # noqa: E402
 
 
-def declared_gaps(capdir):
-    """{connection: {direction: [[stream offset, bytes missing], ...]}} for every connection
-    the capture's OWN manifest reports as gapped -- livesession's reassembly found TCP bytes
-    the sniffer never saw.
-
-    A gapped direction cannot close its byte accounting, so decode_conn refuses it, BY
-    DESIGN, and that refusal stays: a stream with a hole in it dates messages after the hole
-    with the wrong bytes. What this adds is the WHY, read from the capture's own record
-    rather than inferred from the refusal, so a census can set such a connection aside BY
-    NAME instead of counting a capture fact as a decoder regression. The first one:
-    20260928T103123 :65009 (CASTAI-Z1's match 2), 38 + 20 s2c bytes lost at stream offsets
-    38045 / 38548 (studies/monsterai 18). A connection absent here is NOT certified whole --
-    only the manifest's own report says so, and an old capture may predate the field."""
-    try:
-        with open(os.path.join(capdir, "manifest.json"), encoding="utf-8") as fh:
-            m = json.load(fh)
-    except (OSError, ValueError):
-        return {}
-    out = {}
-    for c in (((m.get("report") or {}).get("connections")) or ()):
-        g = {d: v for d, v in (c.get("gaps") or {}).items() if v}
-        if g and c.get("connection"):
-            out[c["connection"]] = g
-    return out
-
-
-def live_connections(root=None):
+def live_connections(root=None, set_aside=None):
     """Yield (capdir, conn_file) for every game connection in every capture
     whose origin is LIVE. Skips non-live captures LOUDLY via the returned
-    skip list only when asked -- use live_captures() for the census."""
+    skip list only when asked -- use live_captures() for the census.
+
+    `set_aside`, a list, opts in to the ONE set-aside (capgaps.py): a connection
+    its capture's OWN manifest declares gapped is printed by name, appended to
+    the list and not yielded. Nothing else is ever stepped past -- an undeclared
+    connection that will not close still comes out and still reddens its census
+    -- and the caller asserts the list with `capgaps.audit`. Omitted, every
+    connection is yielded, as before."""
     for capdir, _who in live_captures(root):
+        gaps = capgaps.declared_gaps(capdir) if set_aside is not None else {}
         for gf in connections(capdir):
+            if gaps and capgaps.set_aside(capdir, gf, gaps, set_aside):
+                continue
             yield capdir, gf
+
+
+def refuses(capdir, connection):
+    """True when `decode_conn` REFUSES the one named connection ("client->server") of
+    this capture -- `capgaps.audit`'s still-refused callback for a livewire census. A
+    connection with no game file here is not refused, it is absent: False."""
+    files = [g for g in connections(capdir) if conn_name(g) == connection]
+    return len(files) == 1 and not decode_conn(capdir, files[0])[2]
 
 
 def live_captures(root=None):
