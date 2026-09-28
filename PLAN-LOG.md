@@ -82,7 +82,8 @@ observer (12).
 - the tape's witnesses in points (vault).
 
 Ten plants, each red. 24 checks, floor 19 (bare, measured; the first cut declared 21
-from a guess). 33 affected test files green (3,600 checks).
+from a guess). 33 affected test files green (3,600 checks); the full suite on
+`8858bbfd`, 250 green / 0 red of 250, 16,602 checks.
 
 **This closes** two of CASTAI-ZF17 (the interrupters)' open lines: "399's 'deals only
 1...16'" and "426's +13...28". **Still open:**
