@@ -18,6 +18,12 @@ WHAT THIS PINS.
     connection's receipt closes, and two tape anchors hold: the henchman add
     0x009F answers 0x00B0 first 3 of 3 and MAP_TRAVEL 0x00B1 answers 0x01D9
     first on 9 of 10. Vault-gated; a missing vault declares a skip.
+    SINCE 2026-09-28 (CASTAI-Z1) "every connection" means every one its
+    capture's own manifest does not declare gapped: census() sets a declared
+    connection aside BY NAME (livewire.declared_gaps), the set-aside set is
+    pinned EXACTLY (20260928T103123 :65009, match 2) and must still be refused
+    by decode_conn, and a known-bad arm re-runs that capture with the manifest
+    unread and must see the shortfall.
   * §3 THE COMMITTED FILE against the vault: retail_c2s.json holds every
     opcode the live census sees (a new tape with a new opcode reddens this
     until `--write` runs and the opcode is triaged), no count in the file
@@ -35,7 +41,8 @@ WHAT THIS PINS.
 Floor 20 -- the MANDATORY CORE, measured on 2026-09-23 with RURIK_VAULT pointed
 at an empty directory (§1, §3's file half, §4's file half, §5: the checks that
 need no vault and no client). With the vault and the pinned client present the
-same run executes 34; §2, §3's live half, §4's live half and §6 declare skips
+same run executes 34 (36 since 2026-09-28: the declared-gap pin and its
+known-bad arm); §2, §3's live half, §4's live half and §6 declare skips
 without them. The first cut set the floor at 34 and so failed a vault-free run
 by construction (checks.py: the floor is the core, not the fullest run).
 """
@@ -133,9 +140,59 @@ if livewire.live_captures():
            f"{live_meta['c2s_total']} c2s over {live_meta['captures']} of "
            f"{live_meta['live_captures']} live captures")
     led.ok(live_meta["connections_not_ok"] == 0,
-           "every live connection's receipt closes (0 shortfalls)",
+           "every live connection's receipt closes (0 shortfalls) -- every one "
+           "its capture's manifest does not declare gapped (the next check)",
            f"{live_meta['connections_not_ok']} not ok -- a partial decode would "
            f"under-count")
+    # 2026-09-28 (CASTAI-Z1): the first gapped live connection. Its capture's
+    # OWN manifest declares 38 + 20 s2c bytes the sniffer never saw
+    # (livewire.declared_gaps, commit d69bf7a0), decode_conn refuses it by
+    # design, and census() sets it aside BY NAME rather than folding a capture
+    # fact into the shortfall count above. The declared set is pinned EXACTLY,
+    # so a second gapped connection -- declared or not -- reddens a check
+    # instead of being absorbed, and each one must still be REFUSED.
+    gapped = sorted((g["capture"], g["connection"], repr(g["gaps"]), g["refused"])
+                    for g in live_meta["declared_gapped"])
+    for g in live_meta["declared_gapped"]:
+        print(f"  set aside by its manifest: {g['capture']} {g['connection']} "
+              f"gaps {g['gaps']} refused={g['refused']}")
+    # Exact on whichever corpus is present: the witness capture's one row when
+    # it is in the vault, and NOTHING set aside when it is not (every older
+    # capture predates the manifest field or declares no gap).
+    want_gapped = ([("20260928T103123", "10.0.0.210:65009->98.95.137.136:80",
+                     repr({"s2c": [[38045, 38], [38548, 20]]}), True)]
+                   if os.path.isdir(os.path.join(livewire.captures_root(),
+                                                 "20260928T103123")) else [])
+    led.ok(gapped == want_gapped,
+           "the ONE connection set aside is CASTAI-Z1's match 2, by its "
+           "manifest's own declaration (38 + 20 s2c bytes at stream offsets "
+           "38045 / 38548), and decode_conn still REFUSES it",
+           f"{gapped}")
+    if want_gapped:
+        # KNOWN-BAD: the same census over that one capture with the manifest's
+        # declaration NOT read -- the connection must come back as a receipt
+        # shortfall and nothing set aside, so the set-aside above is the
+        # declaration's doing and not the census losing the connection.
+        zcap = os.path.join(livewire.captures_root(), "20260928T103123")
+        _real_lc, _real_dg = livewire.live_connections, livewire.declared_gaps
+        try:
+            livewire.live_connections = lambda root=None: [
+                (zcap, g) for g in livewire.connections(zcap)]
+            _r1, m_decl = c2striage.census()
+            livewire.declared_gaps = lambda capdir: {}
+            _r2, m_blind = c2striage.census()
+        finally:
+            livewire.live_connections, livewire.declared_gaps = _real_lc, _real_dg
+        led.ok(m_decl["connections_not_ok"] == 0 and len(m_decl["declared_gapped"]) == 1
+               and m_blind["connections_not_ok"] == 1 and m_blind["declared_gapped"] == []
+               and m_blind["connections"] == m_decl["connections"] + 1,
+               "KNOWN-BAD: over that capture alone, with its manifest unread the "
+               "same connection is a receipt SHORTFALL and nothing is set aside",
+               f"declared: {m_decl['connections']} folded, "
+               f"{m_decl['connections_not_ok']} not ok, "
+               f"{len(m_decl['declared_gapped'])} aside; blind: "
+               f"{m_blind['connections']} folded, {m_blind['connections_not_ok']} "
+               f"not ok, {len(m_blind['declared_gapped'])} aside")
     hen = live_rows.get(0x009F)
     led.ok(hen is not None and hen["count"] >= 3
            and hen["first_reply"].get(0x00B0, 0) >= 3
