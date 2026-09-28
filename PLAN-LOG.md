@@ -28,6 +28,64 @@ move back.
 
 ---
 
+### CASTAI-ZF17: the Zaishen tape's two interrupters, and the observer's two runs on our sender -- 2026-09-28 -- **rows 399 / 426 (OBSERVED); no E5(0) for a 0-recharge skill; a resuming chain re-takes the hold ahead of the disable; each arm reverts alone; both runs match the tape byte for byte, one named `[4]` set aside**
+
+**What the tape said** (studies/monsterai §18.2, CASTAI-ZF17; `20260928T103123`, the
+Degeneration Ranger, agent 6). On the henchmen the interrupt was `[59, body, 0]` then
+`[35, body, 0]`, 8 of 8, which `interrupt_body` already sent. The observer's two runs
+differed from the pinned 340 witness, and both had the observer's auto-attack chain live
+under the cast:
+- Savage Shot 426 on Healing Signet (:50061 t=197.153): `[8,0] E5(4) [59] E2 [35] [8,1]`.
+  No disable, and the E6 at +3.995 s.
+- Distracting Shot 399 on skill 2, table recharge 0 (:58544 t=621.054): `[8,0] [59] E2 [35]
+  [4,7,4,0] [8,1] E5(20)`. No first E5, and the disable after the chain's `[4]` and `[8,1]`.
+  Its E6 is not on tape, because the connection ends at 636.163.
+
+The 340 witness is the negative control for the hold. Its observer had no chain: the last
+swing was 180 s before, and none came after.
+
+**What shipped** (`5585943b`):
+- **Content.** `content/world.toml` rows `[skill_effect.399]` (`interrupts = "action"`,
+  `interrupt_disable = 20`) and `[skill_effect.426]` (`interrupts = "action"`). Both are
+  `source = "capture"`, carrying the capture, the connection and t. The WIKI page (GWW
+  rev 2698054 / 2733127) is cited for "action" reaching an auto-attack, which the tape
+  does not show.
+- **`INTERRUPT_SKIPS_ZERO_E5`** (`--interrupt-zero-e5` reverts). No full-recharge E5 when
+  the interrupted skill's recharge is 0. With nothing recharging at all (0 and no disable)
+  the entry owes no E6 (`no_e6`). That half is RECONSTRUCTION, DAGGERS-B5's rule, and no
+  tape shows it.
+- **`INTERRUPT_CHAIN_RETAKES_HOLD`** (`--no-interrupt-chain-hold` reverts). A cast
+  interrupted under a chain that resumes sends `[8, player, 1]` after the `[35]`, and the
+  disable E5 after that. "Resumes" is `_player_chain_running(state, released=cast)`:
+  attack_tick's own gate, with the released entry and its un-queued followers set aside. A
+  chain walking in or out of reach gets nothing, since no tape shows one.
+- **The walk gate, weighed.** Our swing holds none (`SWING_HOLDS_WALK_GATE`). A completed
+  cast already leaves the gate set into the resumed chain until its first landing
+  (`ANIMREF_E3_RELEASE` off). So this change puts an interrupted cast in the regime a
+  completed one already runs, and adds no new one.
+
+**Tests.** `test_interrupt` gained `section_zf17`:
+- Each witness is asserted as a literal batch, with its own known-bad arm. Both arms off
+  gives what the server sent before today: `[8,0] E5(0) [59] E2 [35] E5(20)`.
+- The tick after 399 opens the chain's `[4]` with no second `[8,1]`.
+- The RECONSTRUCTION no-E6 case, the no-resume chains, the rows, and a source check that
+  both arms default on.
+
+In §2, our two runs equal the tape's byte for byte. For 621.054 exactly one message is set
+aside, the chain's `[4, 7, 4, 0]`, and it is named and counted. Six plants turned it red: the
+predicate unfixed, E5(0) forced, each default off, `no_e6` dropped, and the disable moved
+ahead of the re-take. 61 checks, floor 28 → 39 (a bare run: 39, 1 declared skip). 26 affected tests green (3,436 checks).
+
+**What stays open.**
+- **The chain's `[4]` position.** On retail it rode the interrupt batch at 621.054 but came
+  126 ms later at 197.153 (read as "due" against "not yet due" on the swing clock, n = 2,
+  RECONSTRUCTION). On ours it is attack_tick's, the next tick.
+- **Not modelled, said in the rows:** Distracting Shot's "deals only 1...16" and the page's
+  Dazed exemption from the disable, and Savage Shot's +13...28 on an interrupted spell.
+- **The hero's bar mirror** in `interrupt_body` still sends E5(0), because no hero witness
+  exists.
+- The knock-down stop word stays in `PLAN.md` §8.1.
+
 ### CASTAI-Z1: the Zaishen run scored, and the 19 suite reds its capture caused read, not re-pinned -- 2026-09-28 -- **Z1.P4 / P5 / P6 HELD, P7 FAILED, P1-P3 under their floors; the Necromancer's hex class id is 9 and SHIPPED; every red was a test, not the server**
 
 **The run** (studies/monsterai §18.1): the owner's live capture `20260928T103123` (secondary
