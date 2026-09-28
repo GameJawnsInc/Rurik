@@ -7893,7 +7893,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Reversal-of-Fortune heals as damage-word declarations); and ≥ 13 of ≥ 47 positive-55 heal
   words at the observer carry it — some, not all, which is open. 16 checks (was 13), floor 10
   (the sender: §1's 10 fixture-less checks). Read-only on the vault),
-  `toolkit/authsrv/test_interrupt.py` (**2026-09-28, CASTAI-Z1: the Zaishen tape turned
+  `toolkit/authsrv/test_interrupt.py` (**2026-09-28, CASTAI-ZF17: the knock-down's stop landed. §1v drives a real `knock_down` on a body mid-cast: `[59, body, 0]` then `[63, body, 2.0]`, nothing else, no `[35]`; `[49]` for an attack skill announced as one and `[59]` under `--npc-skill-instant` (the cast site's form); the `[63]` alone for an instant skill, for a swing in flight (no `[3]`) and under `--no-knock-down-stop` (the known-bad arm); end to end through `land_skill` (a hostile's Hammer Bash on a party body mid-cast: the word, then `[59]` `[63]` back to back). §2 holds §1v's output against the tape's batch at 20260928T103123 :50061 t=168.977, byte for byte. The type predicates are rebound, so §1v needs no vault. 55 checks; floor 28 -> 34 (34 + 1 skip on an empty vault).**
+  **2026-09-28, CASTAI-Z1: the Zaishen tape turned
   2 of 39 red: 12 [35], 8 of them on bodies (399 / 426 interrupting henchmen), and one
   knock-down stop. Both literals are kept as of the pin (stamps before 20260928T103123);
   P2 AS WRITTEN is recorded FAILED and re-stated for the observer's [35]; a whole-corpus

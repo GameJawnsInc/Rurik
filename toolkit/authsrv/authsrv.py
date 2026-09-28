@@ -5245,6 +5245,13 @@ BLIND_MISS_CHANCE = 0.90         # WIKI: "90% chance to miss"
 # "Stance" lists nothing of the kind; the rule is Balanced Stance's).
 KNOCK_DOWN = True             # False (--no-knock-down): prop 63 never goes out, nobody falls.
 KNOCK_DOWN_SECONDS = 2.0      # WIKI, and the corpus's 3 of 3.
+# A BODY KNOCKED DOWN MID-CAST (CASTAI-ZF17, studies/monsterai 18.2; OBSERVED
+# n = 1, 20260928T103123 conn :50061 t=168.977): the Zaishen Healer (agent 8),
+# 0.8 s into skill 288's 2.0 s cast, felled by agent 5's 162 -- retail sent
+# [59, 8, 0] and [63, 8, 2.0] in ONE batch, the stop FIRST, and no [35]: a
+# knock-down is not an interrupt on the wire (interruptjoin's kind
+# 'knockdown'). knock_down sends the cast family's stop ahead of its [63].
+KNOCK_DOWN_STOP = True        # False (--no-knock-down-stop): the cast drops silently, as until 2026-09-28.
 # BLOCK. WIKI (GWW "Block"): a blocked hit deals no damage and yields no
 # adrenaline to either side; the chance comes from skills (a stance, an
 # enchantment), multiplicatively; block chance has no effect on spells. THE
@@ -26086,7 +26093,16 @@ def knock_down(send, state, agent_id, conn_id, why, seconds=None):
     halt's own shape); the down player's pending casts are released with the
     measured cancel burst, an armed swing is dropped, and every tick and the
     movement arms refuse until the clock runs out. Already down: nothing
-    (WIKI: cannot be knocked down again until up). Returns True when it fell."""
+    (WIKI: cannot be knocked down again until up). Returns True when it fell.
+
+    A BODY'S CAST IN FLIGHT is stopped on the wire before the [63]
+    (KNOCK_DOWN_STOP, CASTAI-ZF17): [59, body, 0], [63, body, 2.0], no [35]
+    -- OBSERVED n = 1 (20260928T103123 :50061 t=168.977). The stop reads the
+    cast site's own form (_scatter_cancel's rule, R3-F5): [49] for an attack
+    skill announced as one, RECONSTRUCTION -- no attack skill is knocked down
+    on tape. An instant skill opened with no start (SKILLS-IA) drops with no
+    stop. A swing in flight gets no [3]: no stop rides any [63] but the one
+    [59]. A hero's bar gets nothing (no E2 / E5 mirror; unwitnessed)."""
     if not KNOCK_DOWN:
         return False
     now = time.time()
@@ -26109,6 +26125,18 @@ def knock_down(send, state, agent_id, conn_id, why, seconds=None):
         row["knocked_until"] = now + seconds
         row["swing_lands_at"] = None
         row["swinging"] = False
+        slot = row.get("casting")
+        skills = row.get("skills") or ()
+        if (KNOCK_DOWN_STOP and slot is not None and row.get("cast_lands_at") is not None
+                and slot < len(skills)):
+            sid = skills[slot][0]
+            _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(sid)   # the cast site's own form
+            if not (INSTANT_ANNOUNCE and not _atk and _is_instant_skill(sid)):
+                send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                     [agents.GV_ATTACK_SKILL_STOPPED if _atk else agents.GV_SKILL_STOPPED,
+                      agent_id, 0],
+                     f"{'attack_skill' if _atk else 'skill'}_stopped: agent {agent_id} is "
+                     f"knocked down mid-cast of skill {sid} -- no [35] [CASTAI-ZF17]")
         row["cast_lands_at"] = None
         row["casting"] = None
         if row.get("follow") or row.get("moving"):
@@ -43099,6 +43127,12 @@ def main():
         KNOCK_DOWN = False
         print("[map] --no-knock-down: nobody falls -- no prop 63, no down "
               "state, the pre-H12 arm.", flush=True)
+    if a.no_knock_down_stop:
+        global KNOCK_DOWN_STOP
+        KNOCK_DOWN_STOP = False
+        print("[map] --no-knock-down-stop: a body knocked down mid-cast gets "
+              "the [63] alone, no [59] / [49] ahead of it -- the pre-ZF17 "
+              "arm (retail: [59] then [63], n = 1).", flush=True)
     if a.no_block:
         global BLOCK
         BLOCK = False

@@ -1163,6 +1163,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "Hammer Bash, Heavy Blow, Irresistible Blow's "
                          "punishment and Desperation Blow's own fall are "
                          "plain strikes.")
+    ap.add_argument("--no-knock-down-stop", action="store_true",
+                    help="THE REVERT ARM for CASTAI-ZF17: a body knocked down "
+                         "mid-cast drops its cast with NO stop word and gets "
+                         "the [63] alone -- the server as it was until "
+                         "2026-09-28. Retail (20260928T103123, n = 1) sends "
+                         "[59, body, 0] then [63, body, 2.0] in one batch, no "
+                         "[35]; the default sends the stop ([49] for an "
+                         "attack skill, the cancel family's split).")
     ap.add_argument("--no-block", action="store_true",
                     help="THE REVERT ARM for SLICE-H12's block: a stance's "
                          "block_chance blocks nothing; every attack lands as "
