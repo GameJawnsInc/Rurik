@@ -1315,7 +1315,8 @@ def main():
           "M1, G2, G3, recorded FAILED as registered beside I4 / M2 / C2 -- and the corrected C2c; "
           "every one holds RE-STATED (I1r / M1r the [61] seconds, I2r a word riding the "
           "caster's own Fire Storm tick, I3r / G2r no 0x00F1 onto a target already hexed, and "
-          "since 2026-09-28 G3r the client's rounded scaler on the tape's own build's row -- "
+          "since 2026-09-28 G3r effects.interp's rounded scaler on the tape's own build's row, the "
+          "build MEASURED, the integerization CORROBORATED once, its rule UNDISCRIMINATED -- "
           "until then this read 'every one but G3'), and every other corrected reading and "
           "post-hoc fact holds",
           str((sorted(failed_now), hrv)))
@@ -1395,14 +1396,18 @@ def main():
           "has one of their shapes (a miss of a new shape is a new finding and reddens this)",
           str((hsz["g3_miss_rows"], hsz["c_cast_applied_off"], hsz["c_environmental_off"],
                "whole:", hs["g3_miss_rows"], hs["c_cast_applied_off"], hs["c_environmental_off"])))
-    # G3r (hexjoin docstring, 2026-09-28): f32 == the client's own ROUNDED two-point scaler
+    # G3r (hexjoin docstring, 2026-09-28): f32 == effects.interp's ROUNDED two-point scaler
     # (effects.interp, 0x005A8920) on the tape's OWN build's row. The cause the registration
-    # left UNMEASURED is two halves, and the known-bad arm shows each is needed: on the 38797
+    # left UNMEASURED has two parts of UNEQUAL standing: (a) the BUILD, MEASURED -- on the 38797
     # table (every tape scored on the pin's rows -- what hexjoin read before, when the vault's
     # bulk table was 38797) G3 misses at 12.533 exactly as pinned until today, and G3r misses
     # too, at round(12.533) = 13; on the tape's own 38888 row G3 misses at 14.267 and G3r
     # predicts 14, the wire's 14.0. The endpoints are MEASURED per build (skilltable on each
     # pristine image): 135 is 3..16 on 38797 / 38833 / 38849 and 4..18 on 38888 (CASTAI-ZF7).
+    # (b) INTEGERIZATION, CORROBORATED by one witness (two applies, one rank, one tape): the
+    # wire's 14.0 against 14.267 unrounded says the duration is an INTEGER; the ROUNDING RULE
+    # is UNDISCRIMINATED -- round-half-up, floor and truncation all give 14 -- and G3r's
+    # half-up is effects.interp's stated choice, not something this tape measured.
     hc_pin = hexjoin.with_table(hc, 38797)
     hs_pin = hexjoin.score(hc_pin)
     hsz_pin = hexjoin.score(hexjoin.narrow(hc_pin, ZAISHEN))
@@ -1419,12 +1424,14 @@ def main():
                                            (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 13)]
           and not hs_pin["g3r"] and hs_pin["g3r_miss_rows"] == hsz_pin["g3r_miss_rows"]
           and hs_pin["g3_miss_rows"] == hsz_pin["g3_miss_rows"],
-          "G3r HOLDS on the whole corpus, the registration's and the Zaishen tape (the client's "
+          "G3r HOLDS on the whole corpus, the registration's and the Zaishen tape (effects.interp's "
           "rounded scaler on each tape's OWN build's row: 135 at field3 11 on 38888's 4..18 is "
-          "round(14.267) = 14, the wire's 14.0) -- the cause of G3's miss MEASURED in two "
-          "halves, the 38888 re-balance and the round G3 as registered leaves out; and the "
-          "known-bad arm, every tape on the 38797 table, reproduces the old pin exactly: G3 "
-          "misses at interp(3, 16, 11) = 12.533 and G3r misses too, at 13",
+          "round(14.267) = 14, the wire's 14.0) -- the cause of G3's miss in two parts: the 38888 "
+          "re-balance MEASURED, and the duration's INTEGERIZATION CORROBORATED by one witness "
+          "(two applies, one rank, one tape) with the rounding rule UNDISCRIMINATED (half-up, "
+          "floor and truncation all give 14); and the known-bad arm, every tape on the 38797 "
+          "table, reproduces the old pin exactly: G3 misses at interp(3, 16, 11) = 12.533 and "
+          "G3r misses too, at 13",
           str((faint, hs["g3r_miss_rows"], faint_pin, hsz_pin["g3_miss_rows"],
                hsz_pin["g3r_miss_rows"], hs_pin["g3r_miss_rows"])))
     # The per-build table IS the extractor's: every vault skills row, against the table
