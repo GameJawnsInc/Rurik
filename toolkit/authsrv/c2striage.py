@@ -125,14 +125,35 @@ def census(root=None, window=REPLY_WINDOW):
     the first s2c opcode within `window`, None when nothing followed),
     first_non_tick (the same with 0x001E skipped), reply_dt / non_tick_dt
     (seconds). meta: live_captures (every origin=LIVE directory), captures
-    (those with a game connection), connections, connections_not_ok,
-    c2s_total, window.
+    (those with a game connection), connections (the ones folded in),
+    connections_not_ok, declared_gapped, c2s_total, window.
+
+    A DECLARED-GAPPED connection is set aside BY NAME and not folded in
+    (2026-09-28, CASTAI-Z1): one whose capture's OWN manifest reports TCP bytes
+    the sniffer never saw (`livewire.declared_gaps`). decode_conn refuses such a
+    connection by design, and folding what it returned would count a capture
+    fact as a decoder shortfall -- and, the s2c being the gapped side, give every
+    one of its c2s a 'none' reply that was never measured. Each one set aside is
+    recorded in meta["declared_gapped"] with its gaps and whether decode_conn
+    STILL refuses it, so a caller asserts the set exactly and a future gapped
+    connection is seen, never absorbed. A connection that fails its receipt
+    WITHOUT a declaration is folded and counted in connections_not_ok, as before.
     """
     rows = defaultdict(_new_row)
     meta = {"live_captures": len(livewire.live_captures(root)),
             "captures": set(), "connections": 0, "connections_not_ok": 0,
-            "c2s_total": 0, "window": window}
+            "declared_gapped": [], "c2s_total": 0, "window": window}
+    declared = {}
     for capdir, gf in livewire.live_connections(root):
+        if capdir not in declared:
+            declared[capdir] = livewire.declared_gaps(capdir)
+        name = livewire.conn_name(gf)
+        if name in declared[capdir]:
+            _c, _m, ok_gapped = livewire.decode_conn(capdir, gf)
+            meta["declared_gapped"].append(
+                {"capture": os.path.basename(capdir), "connection": name,
+                 "gaps": declared[capdir][name], "refused": not ok_gapped})
+            continue
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         meta["connections"] += 1
         meta["captures"].add(os.path.basename(capdir))
@@ -261,6 +282,11 @@ def table(rows, meta, handled, named, dropped):
         "captures": meta["captures"],
         "connections": meta["connections"],
         "connections_not_ok": meta["connections_not_ok"],
+        # Set aside by the capture's own manifest (census() docstring); not in
+        # `connections` or any row. .get: a hand-built meta may predate the key.
+        "connections_declared_gapped": [
+            {"capture": g["capture"], "connection": g["connection"],
+             "gaps": g["gaps"]} for g in meta.get("declared_gapped", [])],
         "c2s_total": meta["c2s_total"],
         "opcodes": ops,
     }
@@ -288,6 +314,10 @@ def _fmt(rows, meta, handled, named, dropped, hints=None, only_untriaged=False):
                  f"window {meta['window']} s; {meta['connections_not_ok']} "
                  f"connection(s) decoded with a receipt shortfall (counted, "
                  f"flagged)")
+    for g in meta.get("declared_gapped", []):
+        lines.append(f"  SET ASIDE (its capture's manifest declares it gapped): "
+                     f"{g['capture']} {g['connection']} gaps {g['gaps']}; "
+                     f"decode_conn {'still REFUSES it' if g['refused'] else 'DECODES IT -- the declaration and the decoder disagree'}")
     lines.append(f"  handled arms {len(handled)}, named {len(named)}, dropped "
                  f"on purpose {len(dropped)}")
     lines.append("  " + f"{'opcode':<8}{'status':<11}{'name':<30}{'n':>6}"
