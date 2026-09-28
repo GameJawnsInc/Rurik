@@ -174,18 +174,24 @@ re-statement with no free parameter exists -- RE-STATED on the whole corpus (`RE
            f32 14.0, where interp(3, 16, 11) = 12.533 -- the first hex in the corpus whose
            duration is NOT constant across ranks (every earlier G3 row, 179's 3 / 3, could not
            fail). No re-statement: FAILED, its witness exact; the cause is UNMEASURED.
-           RE-STATED 2026-09-28 (the regenerate-from-38888 arc), the cause now MEASURED, in two
-           parts, neither fitted: (a) the row was the wrong BUILD's -- this reader took every
-           tape's rows from the vault's one bulk table (38797), and the Zaishen tape is build
-           38888 (its VERSION frame), where 135 is 4..18 (CASTAI-ZF7's re-balance; 3..16 on
-           38797 / 38833 / 38849, each read from its pristine image); every tape is now scored
-           on its own build's table (`build_table`); and (b) G3 as registered is UNROUNDED,
-           while the client's own two-point scaler (0x005A8920, `effects.interp`) rounds
-           half-up: interp(4, 18, 11) = 14.267 unrounded, 14 rounded -- the wire's 14.0.
+           RE-STATED 2026-09-28 (the regenerate-from-38888 arc), in two parts of UNEQUAL
+           standing, neither fitted: (a) MEASURED -- the row was the wrong BUILD's: this
+           reader took every tape's rows from the vault's one bulk table (38797), and the
+           Zaishen tape is build 38888 (its VERSION frame), where 135 is 4..18 (CASTAI-ZF7's
+           re-balance; 3..16 on 38797 / 38833 / 38849, each read from its pristine image);
+           every tape is now scored on its own build's table (`build_table`); and (b)
+           INTEGERIZATION, CORROBORATED by ONE witness (two applies, one rank, one tape): G3
+           as registered is UNROUNDED, interp(4, 18, 11) = 14.267, and the wire carries 14.0
+           -- the duration sent is an INTEGER. WHICH integer rule is UNDISCRIMINATED: 14.267
+           goes to 14 under round-half-up, floor and truncation alike, so this tape cannot
+           tell them apart, and `effects.interp`'s half-up (the scaler at 0x005A8920 as that
+           docstring states it, its tie-break never settled) is the rule G3r uses, not a
+           rule this witness measured.
            G3 AS REGISTERED still FAILS on this tape (14.267 != 14.0, printed so).
            G3r: f32 == effects.interp(duration0, duration15, field3) on the tape's own
-           build's row, on every hex apply. Each half is needed: on the 38797 row (the
-           known-bad arm, `with_table`) G3r predicts 13 and FAILS too.
+           build's row, on every hex apply. Each part is needed: on the 38797 row (the
+           known-bad arm, `with_table`) G3r predicts 13 and FAILS too (12 under floor; either
+           way not the wire's 14).
   C2c      one skill-applied condition carries field3 0 (Crippled 15 s under a [10, obs, 334]
            at :50061 219.517), and three conditions this reader calls environmental carry field3
            == f32 -- a Deep Wound in the batch where the observer's hex 44 ends (203.938) and two

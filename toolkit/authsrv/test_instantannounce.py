@@ -78,7 +78,10 @@ from codec import Codec                                        # noqa: E402
 # spell literals, the arms agreeing and the hero's spell. Sections 1-3 and 4's driven
 # half need the vault's skills table, section 5's attack literal the 394 row, section
 # 6 the captures; each declares its skip. 67 checks with the vault.
-LEDGER = checks.Ledger("instant announce", floor=6)
+# 7 bare / 68 with the vault since 2026-09-28 (the content38888 arc's fix lane): +1 in
+# section 4's bare half, B50's recorded 346 apply word == B50_FRENZY_APPLY_RANK[38797],
+# MEASURED from the green bare run (7 checks, 6 declared skips) -- floor 6 -> 7.
+LEDGER = checks.Ledger("instant announce", floor=7)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -600,6 +603,13 @@ def section_flags():
     check(a0.no_instant_announce is False and a0.per_wearer_batch_order is False
           and a1.no_instant_announce is True and a1.per_wearer_batch_order is True,
           "--no-instant-announce and --per-wearer-batch-order parse and default off", "")
+    # B50_FRENZY_APPLY_RANK[38797] made LIVE: on a 38797 row _b50_frenzy_tick returns B50's
+    # recorded tick unchanged, so without this the 38797 key is decorative (a 5 stays green).
+    rec_applies = [v for o, v in B50["player_346"]["tick"] if o == APPLY]
+    check(len(rec_applies) == 1 and rec_applies[0][2] == B50_FRENZY_APPLY_RANK[38797],
+          "B50's recorded player_346 apply carries word 2 == B50_FRENZY_APPLY_RANK[38797] -- "
+          "the 38797 key IS b50da5c8's recorded rank, so the unchanged-B50 branch and the key "
+          "are one expectation", f"{rec_applies} vs {B50_FRENZY_APPLY_RANK.get(38797)}")
     why = _have_rows()
     if why:
         LEDGER.skip("section 4's driven half (14 checks): no skills rows", why)
