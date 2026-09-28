@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 38 with it; from green runs (WEAPONS-W2c: 16 -> 20)
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 46 with it; from green runs (WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures)
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -212,7 +212,7 @@ def section_vault():
         c = None
         print(f"   (corpus unreadable: {exc!r})")
     if not c or not c["shooters"]:
-        LEDGER.skip("section 2", "no live corpus -- 18 checks")
+        LEDGER.skip("section 2", "no live corpus -- 26 checks")
         return
     check({2, 5, 15, 22, 26, 27, 32, 35, 36}.issubset(c["lead"]) and {1, 28}.issubset(c["lead"])
           and {12, 24}.issubset(c["off"]),
@@ -254,10 +254,17 @@ def section_vault():
     check(k_ok >= 50 and k_bad <= 0.05 * (k_ok + k_bad),
           "WEAPONS-C9: 0x00A7's third field is the held weapon's 587 damage type",
           f"{k_ok} match, {k_bad} mismatch")
-    bare = [r for r in sho if r["w617"] is None and r["type"] in (5, 28)]
+    # RE-SCOPED 2026-09-28 (CASTAI-Z1), not loosened: the Zaishen capture's two bow
+    # bodies shoot 742 and 343 under their PREPARATIONS (Apply Poison 435's own +0x88
+    # and Kindle Arrows 433's), which a 90 % share cannot tell from a wrong arrow. The
+    # 90 % stays exact on the captures it was pinned on; `_arrow_signature` below says
+    # what every OTHER arrow is, launch by launch, over the whole corpus.
+    bare = [r for r in sho if r["w617"] is None and r["type"] in (5, 28)
+            and r["capture"] < PIN]
     arrows = [r for r in bare if set(r["field5"]) == {143}]
     check(len(bare) >= 20 and len(arrows) >= 0.9 * len(bare),
-          "and a bow with NO 617 word shoots 143", f"{len(arrows)} of {len(bare)}")
+          f"and a bow with NO 617 word shoots 143 (the captures at the pin, before {PIN})",
+          f"{len(arrows)} of {len(bare)}")
     short = [x for r in sho for x in r["start_to_launch"] if x < 1.0]
     long_ = [x for r in sho for x in r["start_to_launch"] if x >= 1.0]
     check(len(short) >= 400 and abs(wc._p50(short) - 0.775) < 0.005,
@@ -279,10 +286,209 @@ def section_vault():
           "WEAPONS-Q8: players join through 0x006E -- the sword tapes read type 27 at "
           "1.330, and both bow attackers 2.476",
           f"{len(players)} sword players, bows {[round(r['mode'], 3) for r in bows]}")
-    _skill_shot_pins(c)                                      # WEAPONS-W2c / C10
+    d = _launch_detail()
+    _gapped(d)                                               # the corpus's one gapped connection
+    _arrow_signature(d)                                      # CASTAI-Z1: the preparation's arrow
+    _skill_shot_pins(c, d)                                   # WEAPONS-W2c / C10
 
 
-def _skill_shot_pins(c):
+# THE PIN (2026-09-28, CASTAI-Z1). Every literal in section 2 was measured on the captures
+# stamped before the owner's Zaishen Challenge capture; where that capture moved one, the
+# literal is asserted on the captures before it and the claim is carried over the whole
+# corpus by a SIGNATURE (a rule every launch must meet), never by a new corpus total.
+PIN = "20260928T103123"
+ZAISHEN = PIN
+
+
+def _skills():
+    import agents                                               # noqa: PLC0415
+    return agents.WORLD.rows("skills")
+
+
+def _port(gf):
+    """'game-10.0.0.210_50061-to-54.198.7.73_80.jsonl' -> '50061'."""
+    return gf.split("_", 2)[1].split("-")[0]
+
+
+def _prep_type():
+    import effects                                              # noqa: PLC0415
+    return next(k for k, v in effects.EFFECT_TYPES.items() if v == "preparation")
+
+
+def _prep_arrows():
+    """{arrow: {impact visual}} over every PREPARATION row (effects.EFFECT_TYPES) whose
+    +0x88 names a projectile -- the arrow that preparation substitutes, and the +0x84
+    impact visual retail sends as [20, target, shooter, id] at that arrow's arrival
+    (WEAPONS-C10): Kindle Arrows 433 -> 343 / 344, Apply Poison 435 -> 742 / 743."""
+    prep = _prep_type()
+    out = {}
+    for row in _skills().values():
+        if int(row.get("type_code", -1)) == prep and int(row.get("projectile", 2077)) != 2077:
+            out.setdefault(int(row["projectile"]), set()).add(int(row.get("impact_visual", -1)))
+    return out
+
+
+def _announced(s2c):
+    """{agent: [(t, preparation)]} -- the 0x009F [60, agent, P] a body or the player
+    announces a self-cast by, P a preparation. Informative only (the witness below): a
+    preparation cast before the observer saw the shooter's create is not on the wire."""
+    rows, prep = _skills(), _prep_type()
+    out = {}
+    for t, op, v in s2c:
+        if op == wc.PINT and len(v) > 3 and v[1] == 60:
+            row = rows.get(str(v[3]))
+            if row is not None and int(row.get("type_code", -1)) == prep:
+                out.setdefault(v[2], []).append((t, v[3]))
+    return out
+
+
+def _launch_detail():
+    """One more pass over the corpus for what corpus() aggregates away: every WEAPON shot
+    and every SKILL shot with its launch time, the impact visuals at its arrival, the
+    shooter's announced preparations, and the body's latest 0x0035 (base, modifier)."""
+    import livewire                                             # noqa: PLC0415
+    listed = [(os.path.basename(cd), gf) for cd, gf in livewire.live_connections()]
+    out = {"listed": listed, "yielded": [], "empty": [], "weapon": [], "skill": []}
+    for name, gf, s2c in wc.connections():
+        out["yielded"].append((name, gf))
+        if not s2c:
+            out["empty"].append((name, gf))
+            continue
+        items, hands = wc.items_of(s2c), wc.hands_timeline(s2c)
+        starts, skills, launches, _arr, _w = wc._events(s2c)
+        announced = _announced(s2c)
+        visual = {}                                         # shooter -> [(t, impact id)]
+        for t, op, v in s2c:
+            if op == wc.PINT_T and len(v) > 4 and v[1] == 20:
+                visual.setdefault(v[3], []).append((t, v[4]))
+        speed = {}
+        for t, op, v in s2c:
+            if op == wc.SPEED and len(v) > 3:
+                speed.setdefault(v[1], []).append((t, wc._f32(v[2]), wc._f32(v[3])))
+
+        def arrival(agent, t, flight):
+            """the impact visuals at this launch's arrival: shooter's, inside the
+            window corpus() closes a launch by (launch + flight + 0.25 s)"""
+            return {i for tv, i in visual.get(agent, ()) if t <= tv < t + flight + 0.25}
+
+        def held(agent, t):
+            h = wc.held_at(hands, agent, t)
+            lead = h[0] if h else None
+            typ = None if lead is None else wc.held_type(items, lead)
+            w617 = ((wc.word_of(items, lead, wc.PROJECTILE) or (None, None))[1]
+                    if lead is not None else None)
+            return typ, w617
+
+        for agent, shots in launches.items():                 # shooters()' own filter
+            ts, sk = starts.get(agent, ()), skills.get(agent, ())
+            for t, v in shots:
+                before = [s for s in ts if 0.0 <= t - s < wc.SHOT_WINDOW]
+                if not before or any(before[-1] < k <= t for k in sk):
+                    continue
+                typ, w617 = held(agent, t)
+                out["weapon"].append({"capture": name, "conn": gf, "agent": agent, "t": t,
+                                      "projectile": v[5], "type": typ, "w617": w617,
+                                      "impacts": arrival(agent, t, wc._f32(v[4])),
+                                      "announced": announced.get(agent, [])})
+        ss = wc.skill_shots(s2c)                                # rows come in launch order
+        k = 0
+        for t, op, v in s2c:
+            if op != wc.LAUNCH or len(v) < 8 or k >= len(ss):
+                continue
+            r = ss[k]
+            if (r["agent"], r["handle"], r["flight"]) != (v[1], v[6], wc._f32(v[4])):
+                continue
+            k += 1
+            sp = [s for s in speed.get(v[1], ()) if s[0] <= t]
+            out["skill"].append(dict(r, capture=name, conn=gf, t=t,
+                                     impacts=arrival(v[1], t, r["flight"]),
+                                     announced=announced.get(v[1], []),
+                                     speed=(sp[-1][1], sp[-1][2]) if sp else None))
+        if k != len(ss):
+            raise AssertionError(f"{name} {gf}: {k} of {len(ss)} skill shots re-paired to "
+                                 f"their launch -- the join below would score a subset")
+    return out
+
+
+def _gapped(d):
+    """R4: the connections this census reads no s2c from are exactly the ones their
+    capture's own manifest declares gapped -- printed by name, the refusal kept."""
+    import livewire                                             # noqa: PLC0415
+    root = livewire.captures_root()
+    declared = {(cap, gf) for cap, gf in d["yielded"]
+                if livewire.conn_name(gf) in livewire.declared_gaps(os.path.join(root, cap))}
+    for cap, gf in sorted(declared):
+        print(f"   set aside BY ITS MANIFEST: {cap} {livewire.conn_name(gf)} "
+              f"{livewire.declared_gaps(os.path.join(root, cap))[livewire.conn_name(gf)]}")
+    refused = {(cap, gf): livewire.decode_conn(os.path.join(root, cap), gf)[2]
+               for cap, gf in declared}
+    check(sorted(d["listed"]) == sorted(d["yielded"])
+          and set(d["empty"]) == declared
+          and declared == {(ZAISHEN, "game-10.0.0.210_65009-to-98.95.137.136_80.jsonl")}
+          and not any(refused.values()),
+          "every live game connection reaches the census (none dropped by its except), and "
+          "the ones it reads NO s2c from are exactly those their capture's manifest declares "
+          "gapped: CASTAI-Z1's match 2, still refused by decode_conn",
+          f"listed {len(d['listed'])}, yielded {len(d['yielded'])}, empty {d['empty']}, "
+          f"declared {sorted(declared)}, decode ok {refused}")
+
+
+def _substituted(r, prep):
+    """The preparation arrows this launch may carry: those whose row's impact visual
+    rides its arrival -- two fields of ONE table row met on the wire, no timing window."""
+    return {a for a, imps in prep.items() if imps & r["impacts"]}
+
+
+def _arrow_signature(d):
+    """CASTAI-Z1: what a bare bow's arrow is, launch by launch, over the whole corpus."""
+    prep = _prep_arrows()
+    bare = [r for r in d["weapon"] if r["w617"] is None and r["type"] in (5, 28)]
+    bad = [r for r in bare if r["projectile"] != 143
+           and r["projectile"] not in _substituted(r, prep)]
+    subst = [r for r in bare if r["projectile"] != 143]
+    plain = [r for r in bare if r["projectile"] == 143 and _substituted(r, prep)]
+    # floors: the captures at the pin hold 102 such shots, 4 of them substituted
+    check(len(bare) >= 102 and not bad and not plain and len(subst) >= 4
+          and {343: {344}, 742: {743}}.items() <= prep.items(),
+          f"SIGNATURE (whole corpus): a bow with NO 617 word shoots 143, or a PREPARATION's "
+          f"arrow whose arrival carries that same row's impact visual -- every one of "
+          f"{len(bare)} weapon shots; {len(subst)} substituted (343 / 344 Kindle Arrows, "
+          f"742 / 743 Apply Poison), and no 143 arrives with a preparation's visual",
+          "; ".join(f"{r['capture']} {r['conn'][-26:]} agent {r['agent']} t={r['t']:.3f} "
+                    f"shoots {r['projectile']}, arrival visuals {sorted(r['impacts'])}"
+                    for r in (bad + plain)[:6]) or f"preparation arrows {prep}")
+    # The new fact, on its own witness: the Degeneration Ranger's Apply Poison.
+    z = [r for r in d["weapon"] + d["skill"] if r["capture"] == ZAISHEN
+         and r["projectile"] == 742]
+    kinds = sorted((_port(r["conn"]), "skill" if "skill" in r else "weapon",
+                    r.get("skill") or 0) for r in z)
+    row = _skills().get("435") or {}
+    span = float(row.get("activation", 0)) + max(float(row.get("duration0", 0)),
+                                                 float(row.get("duration15", 0)))
+    seen = sorted((_port(r["conn"]), round(r["t"], 3)) for r in z
+                  if any(s == 435 and ta <= r["t"] <= ta + span for ta, s in r["announced"]))
+    unseen = sorted((_port(r["conn"]), round(r["t"], 3)) for r in z
+                    if (_port(r["conn"]), round(r["t"], 3)) not in seen)
+    check(len(z) == 9 and {r["agent"] for r in z} == {6}
+          and all(r["impacts"] == {743} for r in z)
+          and kinds == [("50061", "skill", 426), ("50061", "weapon", 0),
+                        ("50061", "weapon", 0), ("58544", "skill", 393),
+                        ("58544", "skill", 393), ("58544", "skill", 426),
+                        ("58544", "skill", 426), ("58544", "weapon", 0),
+                        ("58544", "weapon", 0)]
+          and int(row.get("projectile", 0)) == 742 and int(row.get("impact_visual", 0)) == 743
+          and int(row.get("type_code", 0)) == _prep_type()
+          and len(seen) == 7 and unseen == [("58544", 593.777), ("58544", 596.407)],
+          f"NEW (OBSERVED, {ZAISHEN}): agent 6's 9 launches of 742 -- 4 weapon shots and 5 "
+          f"skill shots (393 x2, 426 x3) -- each arrive with 743, and 435's table row is a "
+          f"preparation whose +0x88 / +0x84 are 742 / 743: Apply Poison's arrow, the shape "
+          f"Kindle Arrows 433 -> 343 / 344 already had. 7 sit inside a visible [60, 6, 435] "
+          f"(activation + duration); the 2 before :58544's only one follow agent 6's create "
+          f"there at 581.842 -- a cast the observer never saw (RECONSTRUCTION)",
+          f"{kinds}; outside a visible window {unseen}")
+
+
+def _skill_shot_pins(c, d):
     """WEAPONS-W2c / C10: the corpus's skill shots against the skill table."""
     ss = c["skill_shots"]
     bows = [r for r in ss if r["type"] == 5]
@@ -297,28 +503,132 @@ def _skill_shot_pins(c):
           "bow attack skills launch ONE projectile each: Pin Down, Power Shot, Dual Shot and "
           "Determined Shot 680; Poison Arrow and Needling Shot the held bow's own arrow "
           "(143, or 343 under Kindle Arrows)", str({k: sorted(v) for k, v in proj.items()}))
-    import agents                                               # noqa: PLC0415
+    table = _skills()
+    # RE-SCOPED 2026-09-28 (CASTAI-Z1). The literal rule -- 2077 accepts 143 or 343 -- is
+    # a NAME LIST from the tapes it was written on, and the Zaishen capture brought two
+    # arrows it never named: 742 under Apply Poison and a staff's own 617 behind an
+    # instant skill. So the rule as written stays exact on the captures at the pin, and
+    # the SIGNATURE below says what 2077 means on every launch. The blanket `except`
+    # that skipped a skill with no table row is gone: an absent row is a stated rule now.
+    pinned_ss = [r for r in ss if r["capture"] < PIN]
+    absent_pinned = sorted({r["skill"] for r in pinned_ss if str(r["skill"]) not in table})
     agree, disagree = 0, []
-    for r in ss:
-        try:
-            own = int(agents.WORLD.get("skills", str(r["skill"])).get("projectile", -1))
-        except Exception:                                       # noqa: BLE001
+    for r in pinned_ss:
+        if str(r["skill"]) not in table:
             continue
+        own = int(table[str(r["skill"])].get("projectile", -1))
         if own == r["projectile"] or (own == 2077 and r["projectile"] in (143, 343)):
             agree += 1
         else:
             disagree.append((r["skill"], own, r["projectile"]))
-    check(agree >= 140 and not disagree,
+    check(agree >= 140 and not disagree and not absent_pinned,
           f"WEAPONS-C10, two instruments: the skill table's +0x88 names the launched projectile "
-          f"on {agree} skill shots (2077 = the weapon's arrow), disagreeing on none",
-          str(disagree[:5]))
+          f"on {agree} skill shots (2077 = the weapon's arrow), disagreeing on none (the "
+          f"captures at the pin, every skill with a table row)",
+          f"{disagree[:5]}; absent {absent_pinned}")
+    rows, prep = d["skill"], _prep_arrows()
+    absent = [r for r in rows if str(r["skill"]) not in table]
+    agree, disagree = 0, []
+    for r in rows:
+        if str(r["skill"]) not in table:
+            continue
+        own = int(table[str(r["skill"])].get("projectile", -1))
+        if own != 2077:
+            ok = own == r["projectile"]
+        else:                          # the held weapon's own arrow, or a preparation's
+            mine = ({r["w617"]} if r["w617"] is not None
+                    else {143} if r["type"] in (5, 28) else set())
+            ok = r["projectile"] in mine | _substituted(r, prep)
+        if ok:
+            agree += 1
+        else:
+            disagree.append((r["capture"], r["agent"], r["skill"], own, r["projectile"],
+                             r["type"], r["w617"], sorted(r["impacts"])))
+    check(len(rows) == len(ss) and agree >= 151 and not disagree,
+          f"SIGNATURE (whole corpus): +0x88 names the launched projectile on {agree} skill "
+          f"shots, and 2077 names the WEAPON's -- its 617 word, else a bow's 143 -- or a "
+          f"preparation's arrow arriving with that row's impact visual; disagreeing on none",
+          f"{disagree[:5]}")
+    _absent_rows(absent)
     e5 = [r["event_to_launch"] for r in ss if r["player"] and r["type"] == 5]
-    ann = [r["event_to_launch"] for r in bows if not r["player"] and r["skill"] in (392, 394, 396, 402, 404)]
+    ann = [r["event_to_launch"] for r in bows if not r["player"]
+           and r["skill"] in (392, 394, 396, 402, 404) and r["capture"] < PIN]
     check(len(e5) >= 5 and max(e5) < 0.02 and len(ann) >= 40
           and abs(statistics.median(ann) - 1.1375) < 0.01 and min(ann) > 1.10 and max(ann) < 1.16,
           f"a player's bow skill launches IN its E5 batch ({len(e5)} of {len(e5)} within 20 ms); a "
           f"body's one windup after its announcement (median {statistics.median(ann):.4f} of "
-          f"{len(ann)}, swing_windup(2.475) = 1.1375)")
+          f"{len(ann)}, swing_windup(2.475) = 1.1375; the body half on the captures at the pin)")
+    _windup_signature(d)
+
+
+def _absent_rows(absent):
+    """R8: a skill shot whose skill has NO table row. The stated rule: vault/content/
+    skills.toml is skilltable.player_corpus -- equip_family 1, PvP-only excluded -- so an
+    absent id must be one the pinned client's OWN record puts outside that corpus."""
+    ids = sorted({r["skill"] for r in absent})
+    z = sorted((_port(r["conn"]), r["agent"], r["player"], r["skill"]) for r in absent
+               if r["capture"] == ZAISHEN)
+    check(ids == sorted({r["skill"] for r in absent if r["capture"] >= PIN})
+          and z == [("50295", 7, True, 2858)] * 3,
+          f"a skill with no table row appears only after the pin: {ids} -- on {ZAISHEN}, "
+          f"exactly the observer's three launches behind 2858 (a PvP id; the Zaishen "
+          f"Challenge fields PvP skills)",
+          f"{z}")
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    import pinned                                               # noqa: PLC0415
+    import skilltable                                           # noqa: PLC0415
+    try:
+        exe, _why = pinned.find()
+    except SystemExit as exc:
+        LEDGER.skip("why the absent ids are absent", f"no pinned client: {str(exc)[:60]}")
+        return
+    with open(exe, "rb") as fh:
+        data = fh.read()
+    base = skilltable.locate_table(data)[0]
+    recs = {i: skilltable.parse_record(data, base, i) for i in ids}
+    builds = {int(r.provenance.get("build", 0)) for r in _skills().values()}
+    check(ids and skilltable.build_of(data) in builds
+          and all(r["equip_family"] != 1 or r["pvp_only"] for r in recs.values())
+          and not set(ids) & set(skilltable.player_corpus(list(recs.values()))),
+          "and each is absent BY THE EXTRACTOR'S RULE: the pinned client's own record puts it "
+          "outside the player corpus (equip_family != 1 or PvP-only), and the table's rows "
+          "were emitted from that build (among others)",
+          f"{ {i: (r['equip_family'], r['pvp_only']) for i, r in recs.items()} }, table "
+          f"builds {builds}, client {skilltable.build_of(data)}")
+
+
+def _windup_signature(d):
+    """A body's bow skill launches one windup of its CURRENT attack duration after its
+    announcement: swing_windup(base x modifier) of the body's latest 0x0035."""
+    sys.path.insert(0, HERE)
+    import authsrv                                              # noqa: PLC0415
+    rows = [r for r in d["skill"] if not r["player"] and r["type"] == 5
+            and r["skill"] in (392, 394, 396, 402, 404)]
+    res = [(r, r["event_to_launch"] - authsrv.swing_windup(r["speed"][0] * r["speed"][1]))
+           for r in rows if r["speed"] is not None]
+    slowed = [(r, e) for r, e in res if abs(r["speed"][1] - 1.0) > 1e-6]
+    check(len(res) == len(rows) >= 44 and abs(statistics.median(e for _r, e in res)) < 0.01
+          and slowed and all(-0.0375 < e < 0.0225 for _r, e in slowed),
+          f"SIGNATURE (whole corpus): a body's bow skill launches swing_windup(base x modifier) "
+          f"of its latest 0x0035 after the announcement -- median residual "
+          f"{statistics.median(e for _r, e in res) * 1000:+.1f} ms over {len(res)}, and every "
+          f"one of the {len(slowed)} under a modifier inside the pinned band (1.10 .. 1.16 "
+          f"around 1.1375, carried to its own windup)",
+          f"{len(rows)} rows, {len(res)} with a 0x0035; slowed "
+          f"{[(round(r['t'], 3), r['speed'], round(e, 4)) for r, e in slowed]}")
+    z = [(r, e) for r, e in res if r["capture"] == ZAISHEN]
+    zs = sorted((_port(r["conn"]), round(r["t"], 3)) for r, e in z
+                if abs(r["speed"][1] - 1.5) < 1e-6)
+    out = sorted((_port(r["conn"]), round(r["t"], 3), round(r["event_to_launch"], 4))
+                 for r, e in z if abs(r["speed"][1] - 1.0) < 1e-6 and not -0.0375 < e < 0.0225)
+    check(len(z) == 64 and {r["agent"] for r, _e in z} == {10}
+          and len(zs) == 10 and {p for p, _t in zs} == {"50061", "58544"}
+          and out == [("50061", 217.821, 1.0948), ("50295", 476.727, 1.2242)],
+          f"NEW (OBSERVED, {ZAISHEN}): the Zaishen Archer's (agent 10) 64 body bow skill shots "
+          f"-- 10 under a 0x0035 modifier of 1.5 (Dual Shot's two arrows count two) launch at swing_windup(2.475 x 1.5) = 1.75625 "
+          f"(each window opens ~1-4 s after a [60, 4, 10, 135] -- 135 is a Necromancer hex); "
+          f"and exactly 2 at modifier 1.0 fall outside the pinned band, cause UNVERIFIED",
+          f"slowed {zs}; outside {out}")
 
 
 def main():
