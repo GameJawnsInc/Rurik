@@ -2640,8 +2640,10 @@ AoE -- one target, its damage."""
 # The Degeneration Ranger (agent 6) of 20260928T103123 interrupted ten casts with these
 # two bow attacks: eight on the observer's henchmen, each [59, body, 0] [35, body, 0] and
 # nothing else (interrupt_body's shape), and two on the observer (interrupt_player's
-# two ZF17 variants). Both rows carry the interrupt only -- see each row's NOT modelled.
+# two ZF17 variants). Their damage clauses joined the same day (CASTAI-ZF21): 399's
+# "deals only" amount in place of the weapon's, 426's bonus on a spell alone.
 [skill_effect.399]
+scale_means = "Armor-ignoring damage"   # CASTAI-ZF21: the WHOLE strike, 1..16 (Expertise) -- ATTACK_FIXED_DAMAGE
 interrupts = "action"
 interrupt_disable = 20
 [skill_effect.399.provenance]
@@ -2658,10 +2660,18 @@ is the tape's 20, and WIKI agrees (GWW "Distracting Shot" rev 2698054, 2024-07-0
 foe's action but deals only 1...16 damage. If the interrupted action was a skill, that skill is \
 disabled for an additional 20 seconds"); `interrupts = "action"` reaches an auto-attack by that same \
 page -- the tape has casts only. Client 38797: id 399, type_code 14, 5 energy, activation 0.5, \
-recharge 10, bonus slot 20 / 20. NOT modelled, said here: the damage clause ("deals only 1...16"), \
-and the page's note that an easily-interrupted (Dazed) skill is not disabled."""
+recharge 10, bonus slot 20 / 20 (the template prints it as the literal 20). THE DAMAGE (CASTAI-ZF21): \
+`scale_means` is the page's own progression name, "Armor-ignoring damage" 1..16, and the client's \
+template labels %str1% DAMAGE 1..16. OBSERVED, the same 8 on every hit whose target's maximum is known, \
+4 of 4: the observer at :58544 621.054 (0.01667 x 480, its prop 42), agent 8 at :50061 190.686 (x 483) \
+and :58544 597.314 (x 555), and agent 10 at :58544 607.819, a CRITICAL (prop 17, the f32 exactly -8/555). \
+Agent 6's plain shots on the same targets ran 12..18 and 25..42. The one amount through a warrior, a \
+monk and a critical is what "armor-ignoring" and "only" mean. That 8 is rank 7 is RECONSTRUCTION. \
+NOT modelled, said here: the page's note that an easily-interrupted (Dazed) skill is not disabled."""
 
 [skill_effect.426]
+scale_means = "+ Damage"       # CASTAI-ZF21: 13..28 (Marksmanship), added after armour as every "+ Damage" is
+bonus_requires = "spell"       # ...and ONLY on a target activating a spell as it lands (BONUS_REQUIRES_SPELL)
 interrupts = "action"          # no interrupt_disable: the tape's observer run carries no disable E5
 [skill_effect.426.provenance]
 source = "capture"
@@ -2676,8 +2686,13 @@ at :50061 179.651; agent 8 at :50061 205.163 and 216.726, :58544 593.808; agent 
 WIKI (GWW "Savage Shot" rev 2733127, 2026-07-05): "If Savage Shot hits, your target's action is \
 interrupted. If that action was a spell, you strike for +13...28 damage" -- "action", so an \
 auto-attack too (the tape has casts only), and no disable. Client 38797: id 426, type_code 14, 10 \
-energy, activation 0.5, recharge 5, scale 13 -> 28. NOT modelled, said here: the +13...28 on an \
-interrupted spell."""
+energy, activation 0.5, recharge 5, scale 13 -> 28. THE BONUS (CASTAI-ZF21): "+ Damage" 13..28 is \
+the page's progression name and the template's %str1% PLUS_DAMAGE; `bonus_requires = "spell"` is the \
+page's "If that action was a spell" (and its Notes: "even if spell interruption is prevented", so it \
+is judged on the action, not the interrupt). OBSERVED on agent 8, activating spells: 70 at :58544 \
+593.808 (x 555; 393 there, a plain shot, 42) and 58 at :50061 216.726 (x 402; agent 6's non-skill \
+words there 30 and 36). The negative, n = 1: the observer's Healing Signet (a signet) at 197.153 took \
+36 = 2 x 18 -- a plain shot through the signet's -40 (skill_effect.1), with no bonus on top."""
 
 
 # ---- A PLAYER'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 36) -----------

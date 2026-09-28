@@ -2623,6 +2623,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-09-28. By default it gets none: OBSERVED, Distracting Shot "
                          "399 on skill 2 (recharge 0), 20260928T103123 :58544 t=621.054, "
                          "[8,0] [59] E2 [35] ... E5(20) with no first E5.")
+    ap.add_argument("--no-attack-fixed-damage", action="store_true",
+                    help="CASTAI-ZF21 REVERT: an attack skill whose scale is \"Armor-"
+                         "ignoring damage\" (Distracting Shot 399) lands its WEAPON's "
+                         "number, not the row's amount -- every attack skill before "
+                         "2026-09-28. By default it deals exactly the row's amount "
+                         "(no armour, no critical multiplier): OBSERVED, 399 dealt 8 "
+                         "on the observer, a monk henchman twice and a critical, "
+                         "20260928T103123.")
+    ap.add_argument("--no-bonus-requires-spell", action="store_true",
+                    help="CASTAI-ZF21 REVERT: a row's `bonus_requires = \"spell\"` is "
+                         "ignored and its \"+ Damage\" lands on every hit (Savage Shot "
+                         "426 on a signet, an attack, nothing). By default the bonus "
+                         "lands only on a target activating a spell as the strike "
+                         "lands (WIKI; OBSERVED on 20260928T103123's henchman, 2 of 2).")
     ap.add_argument("--no-interrupt-chain-hold", action="store_true",
                     help="CASTAI-ZF17 REVERT: a cast interrupted under an auto-attack "
                          "chain that resumes sends no [8, player, 1] after the [35], and "

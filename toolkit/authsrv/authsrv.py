@@ -3742,7 +3742,46 @@ SCALE_MEANS_DAMAGE = {
     "Cold damage": "standalone",        # Javelin's rows (the wire's own kinds,
     "Earth damage": "standalone",       # section 34); the other two elemental
     "+ Damage": "additive",             # labels join beside them (WIKI, "Damage")
+    # CASTAI-ZF21: Distracting Shot 399's own progression name (GWW rev 2698054).
+    # Not armour-respecting (below); on an ATTACK it replaces the weapon's number
+    # (ATTACK_FIXED_DAMAGE), on anything else it is a skill's own damage as above.
+    "Armor-ignoring damage": "standalone",
 }
+
+# CASTAI-ZF21 (studies/monsterai/FINDINGS.md 18.2, 2026-09-28): THE TWO SHOTS' DAMAGE
+# CLAUSES, read off the Zaishen tape (20260928T103123, the Degeneration Ranger, agent 6).
+# Points are the word's fraction times the victim's maximum: the observer's is on the
+# wire (prop 42), and a body's comes from the integer fit that closes all of its words
+# (agent 8 on :58544: 17 of 17 at 555).
+#
+# ATTACK_FIXED_DAMAGE: an ATTACK skill whose scale is "Armor-ignoring damage" deals
+# EXACTLY that amount, in place of its weapon's roll. There is no armour term, no
+# critical multiplier, no Weakness cut and no several-arrow share. The attack itself
+# stays an attack: it can miss, be blocked or Blinded, it gains adrenaline, it
+# carries its preparation, and a critical still sends property 17. OBSERVED:
+# Distracting Shot 399 dealt 8, 4 of 4 where the maximum is known -- on the observer,
+# a warrior (0.01667 x 480); on agent 8, a monk henchman, twice (x 483, x 555); and on
+# agent 10 as a CRITICAL (prop 17, x 555). Agent 6's plain shots on the same two
+# victims ran 12-18 and 25-42. That is one amount through two armour classes and a
+# critical, where a weapon's number moves with both. WIKI agrees (GWW "Distracting
+# Shot": "deals only 1...16 damage", the variable "Armor-ignoring damage"); the
+# client's own template labels %str1% DAMAGE 1..16. 8 is rank 7 of Expertise, which is
+# RECONSTRUCTION -- no tape states the Ranger's attributes.
+# --no-attack-fixed-damage reverts: the row's amount is dropped on an attack and the
+# weapon's number lands, as for every attack skill before 2026-09-28.
+ATTACK_FIXED_DAMAGE = True
+# BONUS_REQUIRES_SPELL: a row's `bonus_requires = "spell"` lands its "+ Damage" only
+# when the target is ACTIVATING A SPELL as the strike lands -- judged at the hit, an
+# arrow's at its arrival, whether or not the interrupt then succeeds. WIKI (GWW "Savage
+# Shot" rev 2733127: "If that action was a spell, you strike for +13...28 damage";
+# Notes: "Deals additional damage even if spell interruption is prevented"). OBSERVED,
+# the positive: on agent 8, activating a spell, Savage Shot 426 dealt 70 (x 555) and
+# 58 (x 402), while agent 6's non-skill words there were 42 and 30 / 36. The negative
+# is n = 1: on the observer's Healing Signet (a signet) it dealt 36 -- twice the plain
+# 18 through the signet's -40 (skill_effect.1), with no bonus on top.
+# --no-bonus-requires-spell reverts: the bonus lands on every hit, whatever the target
+# is doing.
+BONUS_REQUIRES_SPELL = True
 
 # WHICH OF THOSE LABELS RESPECTS THE TAKER'S ARMOUR. The rule is the DAMAGE
 # TYPE plus its source, never "skill versus swing" (studies/skills 39.2):
@@ -4526,6 +4565,66 @@ def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
                   flush=True)
             bonus *= 2.0
     return bonus, inflicted, kd
+
+
+def attack_fixed_damage(state, attacker_id, attacker, skill_id):
+    """CASTAI-ZF21: the amount an ATTACK skill deals IN PLACE OF its weapon's
+    number -- a row whose scale is armour-ignoring ("Armor-ignoring damage",
+    Distracting Shot 399) -- at the attacker's own rank, or None. `attacker`
+    is the body's row (None for the player). ATTACK_FIXED_DAMAGE's banner has
+    the tape; the caller skips the armour, critical, Weakness and share terms."""
+    if not ATTACK_FIXED_DAMAGE or skill_id is None or not _is_attack_skill(skill_id):
+        return None
+    base = (player_rank_for_skill(skill_id) if attacker_id == PLAYER_AGENT_ID
+            else agent_skill_rank(attacker or {}, skill_id))
+    found = skill_damage(skill_id, weakened_rank(state, attacker_id, base))
+    if found is None or found[1] != "standalone":
+        return None
+    return float(found[0])
+
+
+def activating_spell(state, agent_id):
+    """The SPELL `agent_id` is activating right now, or None: the player's open
+    cast (_open_player_cast, not an instant's tick, not an attack skill), a
+    body's `casting` slot while its landing is armed. The same windows the
+    interrupt reads (interrupt_player / interrupt_body), SKILLS-IA's instant
+    excluded as there."""
+    if agent_id == PLAYER_AGENT_ID:
+        cast = _open_player_cast(state)
+        if cast is None or _instant_cast_open(cast) or cast.get("attack"):
+            return None
+        return cast["skill_id"] if _is_spell_skill(cast["skill_id"]) else None
+    row = state.get("agents", {}).get(agent_id)
+    if row is None or row.get("dead"):
+        return None
+    slot, skills = row.get("casting"), row.get("skills") or ()
+    if slot is None or row.get("cast_lands_at") is None or slot >= len(skills):
+        return None
+    sid = skills[slot][0]
+    if not _is_spell_skill(sid) or (INSTANT_ANNOUNCE and _is_instant_skill(sid)):
+        return None
+    return sid
+
+
+def strike_bonus_at_hit(state, skill_id, target_id, bonus, conn_id, who):
+    """CASTAI-ZF21: an attack skill's "+ Damage" as it LANDS -- zero when the
+    row says `bonus_requires = "spell"` (Savage Shot 426) and the target is not
+    activating one at this instant (BONUS_REQUIRES_SPELL's banner). Judged here
+    and not in attack_skill_terms, because an arrow's terms are read at its
+    release and the clause is about the target's action when it is struck."""
+    if not bonus or not BONUS_REQUIRES_SPELL or skill_id is None:
+        return bonus
+    if skill_effect_row(skill_id).get("bonus_requires") != "spell":
+        return bonus
+    spell = activating_spell(state, target_id)
+    if spell is not None:
+        print(f"[c{conn_id}] {who}'s skill {skill_id} at agent {target_id}, "
+              f"activating spell {spell}: its +{bonus:.0f} stands [CASTAI-ZF21]",
+              flush=True)
+        return bonus
+    print(f"[c{conn_id}] {who}'s skill {skill_id} at agent {target_id}, activating "
+          f"no spell: its +{bonus:.0f} is dropped [CASTAI-ZF21]", flush=True)
+    return 0.0
 
 
 def skill_damage(skill_id, rank):
@@ -13260,10 +13359,15 @@ def casting_armour_penalty(state, now=None):
     penalty "is applied after the armor cap and the effects of Cracked Armor
     and armor penetration". So it is ADDED to the location's capped rating at
     the two sites that read one (land_swing, the NPC cast's spell armour),
-    never folded into the bonus that combatmath caps. The live corpus holds
-    NO Healing Signet cast at all (0 of 19 prop-60 announces name skill 1;
-    heroes retreat to use it), so there is no retail hit to measure the
-    doubling on; 2 ** (40 / 40) = 2 is the wiki's own "double damage" note.
+    never folded into the bonus that combatmath caps. The live corpus held
+    NO Healing Signet cast at all when this was written (0 of 19 prop-60
+    announces named skill 1; heroes retreat to use it); 2 ** (40 / 40) = 2 is
+    the wiki's own "double damage" note. 20260928T103123 has the observer's
+    own, and ONE hit landing inside one: Savage Shot's 36 at 197.153, twice
+    agent 6's largest plain word on the observer (18). That is CONSISTENT with
+    the doubling, but it is not an independent witness, because the same 36
+    is what CASTAI-ZF21 reads as "no bonus on a signet" -- the two readings
+    lean on each other (n = 1).
     Zero with no cast in flight, and for a row that carries no such key.
     `--no-casting-armour` reverts."""
     if not CASTING_ARMOUR:
@@ -20082,6 +20186,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     critical = False
     rank = (weakened_rank(state, PLAYER_AGENT_ID, player_weapon_rank(state))
             if ARMOUR_TERM else None)                      # SKILLS-WK
+    # CASTAI-ZF21: a spell-gated "+ Damage" judged at THIS hit (an arrow's at its
+    # arrival), and an armour-ignoring attack skill's amount in place of the roll.
+    bonus_damage = strike_bonus_at_hit(state, skill_id, target_id, bonus_damage,
+                                       conn_id, "the player")
+    fixed = (attack_fixed_damage(state, PLAYER_AGENT_ID, None, skill_id)
+             if exact is None else None)
     # WEAPONS-Q2: the hornbow's 10 % comes off the rating first (wiki step 3)
     # -- on top of the hit's BASE penetration (studies/weapons 35): an attack
     # skill's own or Strength's 1 % a rank, the larger; a plain swing's is 0.
@@ -20100,6 +20210,19 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     _prep_sl = None                     # ...and its strike level (2026-09-27)
     if exact is not None:
         dealt = float(exact) + bonus_damage
+    elif fixed is not None:
+        # CASTAI-ZF21: Distracting Shot's "deals only" -- the row's amount in
+        # place of the weapon's, no armour exponent, no critical multiplier.
+        # The critical is still ROLLED, because it decides the word's property:
+        # retail's 399 on agent 10 was prop 17 carrying the same 8. A
+        # preparation keeps the weapon's armour term (its own word, below).
+        if rank is not None:
+            critical = random.random() < critical_rate(rank) + (
+                0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
+            if armour is not None:
+                _prep_scale = strike_multiplier(attack_strength(rank), float(armour))
+                _prep_sl = attack_strength(rank)
+        dealt = fixed + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and armour is not None \
             and ARMOUR_TERM and CASTER_LEVEL and caster_weapon(agents.PLAYER_WEAPON):
         # WEAPONS-W4c: a wand or staff scales on the character's LEVEL --
@@ -20136,14 +20259,15 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
     # SLICE-H12: WEAKNESS on the swinger cuts the WEAPON's damage, not the
     # skill's bonus (WIKI) -- the base is everything above but the bonus.
-    if exact is None and swing:
+    # A fixed amount has no weapon number to cut (CASTAI-ZF21, RECONSTRUCTION).
+    if exact is None and fixed is None and swing:
         _wk = weakness_multiplier(state, PLAYER_AGENT_ID)
         if _wk != 1.0:
             dealt = (dealt - bonus_damage) * _wk + bonus_damage
     # WEAPONS-W2d: an arrow of a several-arrow skill deals its share of the
     # WEAPON's number (Dual Shot's 75 %); the skill's bonus, like a
     # preparation's, is not reduced (WIKI "Dual Shot" Notes).
-    if exact is None and swing and damage_mult != 1.0:
+    if exact is None and fixed is None and swing and damage_mult != 1.0:
         dealt = (dealt - bonus_damage) * float(damage_mult) + bonus_damage
     # A PREPARATION RIDES THE SWING, if the weapon fires arrows -- see
     # swing_preparation_bonus for the gate and the named AoE gap. Folded into
@@ -28486,6 +28610,10 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
                  f"agent {agent_id}'s "
                  + ("swing" if skill_id is None else f"skill {skill_id}"))
         return "blocked"
+    # CASTAI-ZF21: the spell-gated bonus at THIS hit; an armour-ignoring skill's
+    # amount replaces the weapon's number below (land_swing's rule).
+    bonus = strike_bonus_at_hit(state, skill_id, tid, bonus, conn_id, f"agent {agent_id}")
+    _fixed = attack_fixed_damage(state, agent_id, agent, skill_id)
     dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
                                         else ENEMY_HIT_FRACTION)
     armour = creature_typed_rating(body_armour_rating(row), row,    # its rating, else
@@ -28503,6 +28631,8 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
         dealt = _ws
     dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
     dealt *= float(mult)                 # WEAPONS-W2f
+    if _fixed is not None:
+        dealt = _fixed                   # CASTAI-ZF21: the row's amount IS the strike
     dealt += float(bonus)
     def _prep_mult(prep_type):
         """The preparation's own term: the arrow's penetration, the rating typed
@@ -33840,6 +33970,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # PHYSICAL, so the pieces' `+20 vs. physical damage` counts; that is a
     # reading, not a measurement, and it is the cheapest thing here for a
     # capture to overturn.
+    # CASTAI-ZF21: the spell-gated bonus at THIS hit, and an armour-ignoring
+    # skill's amount (it replaces the weapon's number below).
+    bonus = strike_bonus_at_hit(state, skill_id, PLAYER_AGENT_ID, bonus, conn_id,
+                                f"agent {agent_id}")
+    _fixed = attack_fixed_damage(state, agent_id, agent, skill_id)
     dealt = player_full_max_health(state) * ENEMY_HIT_FRACTION
     location = None
     armour = None
@@ -33893,6 +34028,12 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # [finished, gain, damage] batch keeps its shape when nothing is open.
     # SLICE-F24: an attack skill's "+ damage", after armour (hit_enemy's
     # order for the player), and its close is the attack trio's 46.
+    if _fixed is not None:
+        # CASTAI-ZF21: the row's amount IS the strike -- the location, armour,
+        # Healing Signet's -40, the weapon, Weakness and the share above all
+        # fed a number this replaces. The taker's own episodes still speak
+        # (taker_damage, below: RECONSTRUCTION, no tape shows one on a 399).
+        dealt = _fixed
     dealt += float(bonus)
     # MANTID: a hex on the swinger punishes the swing ahead of its hit
     # (Empathy on the tape: [42, foe, 25] + [55, foe, hexer, -0.4], then the
@@ -44957,6 +45098,20 @@ def main():
               "0x00E5 [player, skill, copy, 0] and its 0x00E6, as every interrupt before "
               "2026-09-28 (retail: none, Distracting Shot 399 on skill 2, CASTAI-ZF17).",
               flush=True)
+
+    if a.no_attack_fixed_damage:
+        global ATTACK_FIXED_DAMAGE
+        ATTACK_FIXED_DAMAGE = False
+        print("NO ATTACK FIXED DAMAGE: an armour-ignoring attack skill (Distracting Shot "
+              "399) lands its weapon's number, as every attack skill before 2026-09-28 "
+              "(retail: exactly the row's amount, 4 of 4, CASTAI-ZF21).", flush=True)
+
+    if a.no_bonus_requires_spell:
+        global BONUS_REQUIRES_SPELL
+        BONUS_REQUIRES_SPELL = False
+        print("NO BONUS REQUIRES SPELL: Savage Shot 426's +13..28 lands on every hit, "
+              "whatever the target is doing (WIKI and retail: only on a spell, "
+              "CASTAI-ZF21).", flush=True)
 
     if a.no_interrupt_chain_hold:
         global INTERRUPT_CHAIN_RETAKES_HOLD
