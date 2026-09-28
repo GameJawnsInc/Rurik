@@ -7893,19 +7893,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Reversal-of-Fortune heals as damage-word declarations); and ≥ 13 of ≥ 47 positive-55 heal
   words at the observer carry it — some, not all, which is open. 16 checks (was 13), floor 10
   (the sender: §1's 10 fixture-less checks). Read-only on the vault),
-  `toolkit/authsrv/test_interrupt.py` (**2026-09-28, CASTAI-ZF17: the observer's two
-  Zaishen runs on our sender** (`section_zf17`). 426 on Healing Signet under a live chain:
-  `[8,0] E5(4) [59] E2 [35] [8,1]`, and `--no-interrupt-chain-hold` drops the `[8,1]`. 399 on
-  skill 2 (recharge 0) under a live chain: `[8,0] [59] E2 [35] [8,1] E5(20)`.
+  `toolkit/authsrv/test_interrupt.py` (**2026-09-28, CASTAI-ZF17, the interrupters: the
+  observer's two Zaishen runs on our sender** (`section_zf17`). 426 on Healing Signet under
+  a live chain: `[8,0] E5(4) [59] E2 [35] [8,1]`, and `--no-interrupt-chain-hold` drops the
+  `[8,1]`. 399 on skill 2 (recharge 0) under a live chain: `[8,0] [59] E2 [35] [8,1] E5(20)`.
   `--interrupt-zero-e5` puts E5(0) back, and with both arms off the server sends what it
-  sent before 2026-09-28, `[8,0] E5(0) [59] E2 [35] E5(20)`. After it, `attack_tick` opens the chain's `[4]`
-  with no second `[8,1]`. RECONSTRUCTION: 0 recharge with no disable sends no E5 and owes
-  no E6, and the tick drops the entry silently. A chain out of reach or walking in gets no
-  `[8,1]`. Also checked: the 399 / 426 rows, and a source check that both arms default on
-  with their own reverts. §2 compares both runs byte for byte with the tape's. The one
-  message set aside is 621.054's `[4, 7, 4, 0]`, and it is named and counted. Six plants,
-  each red. 61 checks; floor 28 → 39 (a bare run: 39, 1 declared skip).)
-  (**2026-09-28, CASTAI-Z1: the Zaishen tape turned
+  sent before 2026-09-28, `[8,0] E5(0) [59] E2 [35] E5(20)`. After it, `attack_tick` opens
+  the chain's `[4]` with no second `[8,1]`. RECONSTRUCTION: 0 recharge with no disable sends
+  no E5 and owes no E6, and the tick drops the entry silently. A chain out of reach or
+  walking in gets no `[8,1]`. Also checked: the 399 / 426 rows, and a source check that
+  both arms default on with their own reverts. §2 compares both runs byte for byte with the
+  tape's. The one message set aside is 621.054's `[4, 7, 4, 0]`, and it is named and
+  counted. Six plants, each red. 68 checks with the knock-down's below; floor 34 → 45 (an
+  empty-vault run: 45, 1 declared skip).
+  **2026-09-28, CASTAI-ZF17: the knock-down's stop landed. §1v drives a real `knock_down` on a body mid-cast: `[59, body, 0]` then `[63, body, 2.0]`, nothing else, no `[35]`; `[49]` for an attack skill announced as one and `[59]` under `--npc-skill-instant` (the cast site's form); the `[63]` alone for an instant skill, for a swing in flight (no `[3]`) and under `--no-knock-down-stop` (the known-bad arm); end to end through `land_skill` (a hostile's Hammer Bash on a party body mid-cast: the word, then `[59]` `[63]` back to back). §2 holds §1v's output against the tape's batch at 20260928T103123 :50061 t=168.977, byte for byte. The type predicates are rebound, so §1v needs no vault. 55 checks; floor 28 -> 34 (34 + 1 skip on an empty vault).**
+  **2026-09-28, CASTAI-Z1: the Zaishen tape turned
   2 of 39 red: 12 [35], 8 of them on bodies (399 / 426 interrupting henchmen), and one
   knock-down stop. Both literals are kept as of the pin (stamps before 20260928T103123);
   P2 AS WRITTEN is recorded FAILED and re-stated for the observer's [35]; a whole-corpus
