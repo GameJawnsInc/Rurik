@@ -175,6 +175,44 @@ def decode_conn(capdir, conn_file):
     return conn, merged, ok
 
 
+def conn_name(conn_file):
+    """'game-10.0.0.210_65009-to-98.95.137.136_80.jsonl' -> '10.0.0.210:65009->98.95.137.136:80'
+    (the manifest's and the version row's spelling), or None for a name of another shape."""
+    base = os.path.basename(conn_file)
+    if not (base.startswith("game-") and base.endswith(".jsonl")) or "-to-" not in base:
+        return None
+    left, right = base[len("game-"):-len(".jsonl")].split("-to-", 1)
+    if "_" not in left or "_" not in right:
+        return None
+    return "%s:%s->%s:%s" % (*left.rsplit("_", 1), *right.rsplit("_", 1))
+
+
+def declared_gaps(capdir):
+    """{connection: {direction: [[stream offset, bytes missing], ...]}} for every connection
+    the capture's OWN manifest reports as gapped -- livesession's reassembly found TCP bytes
+    the sniffer never saw.
+
+    A gapped direction cannot close its byte accounting, so decode_conn refuses it, BY
+    DESIGN, and that refusal stays: a stream with a hole in it dates messages after the hole
+    with the wrong bytes. What this adds is the WHY, read from the capture's own record
+    rather than inferred from the refusal, so a census can set such a connection aside BY
+    NAME instead of counting a capture fact as a decoder regression. The first one:
+    20260928T103123 :65009 (CASTAI-Z1's match 2), 38 + 20 s2c bytes lost at stream offsets
+    38045 / 38548 (studies/monsterai 18). A connection absent here is NOT certified whole --
+    only the manifest's own report says so, and an old capture may predate the field."""
+    try:
+        with open(os.path.join(capdir, "manifest.json"), encoding="utf-8") as fh:
+            m = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for c in (((m.get("report") or {}).get("connections")) or ()):
+        g = {d: v for d, v in (c.get("gaps") or {}).items() if v}
+        if g and c.get("connection"):
+            out[c["connection"]] = g
+    return out
+
+
 def live_connections(root=None):
     """Yield (capdir, conn_file) for every game connection in every capture
     whose origin is LIVE. Skips non-live captures LOUDLY via the returned
