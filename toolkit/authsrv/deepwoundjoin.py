@@ -38,6 +38,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
 import bufflog      # noqa: E402
+import capgaps      # noqa: E402  (the ONE set-aside for a manifest-declared gap)
 import tape         # noqa: E402
 import vaultpath    # noqa: E402
 
@@ -66,6 +67,26 @@ def sequence(capture_dir, connection, codec):
         raise bufflog.BuffLogError(
             f"{capture_dir} {connection}: framed {consumed}/{total} ({err})")
     return [(i, t, op, list(v)) for i, (t, op, v) in enumerate(msgs)]
+
+
+def whole_s2c(cap_dir, set_aside):
+    """`tape.channel_files(cap_dir)` minus each connection whose capture's OWN manifest
+    declares its S2C direction gapped -- printed by name and appended to `set_aside`
+    (capgaps.set_aside; None prints and keeps no list). S2C only: `sequence` reads only
+    the server's half, so a connection whose c2s alone were gapped is still read.
+
+    WHY (2026-09-28, CASTAI-Z1). The four corpus walks below (`census`,
+    `weakness_attributes`, `weakness_lifts`, `status_census`) each wrapped `sequence`
+    in `except (BuffLogError, TapeError): continue`, which dropped 20260928T103123
+    :65009 (38 + 20 s2c bytes the sniffer never saw; tape.load_tape refuses it BY
+    DESIGN) with nothing said, and would have dropped any other refusal the same way.
+    Measured before the change: over the 37 capture directories (106 game
+    connections) :65009 was the ONLY connection either exception fired on. Now the
+    declared one is set aside by name and any other refusal RAISES out of the walk."""
+    gaps = {c: {"s2c": g["s2c"]}
+            for c, g in capgaps.declared_gaps(cap_dir).items() if g.get("s2c")}
+    return [ch for ch in tape.channel_files(cap_dir)
+            if not (gaps and capgaps.set_aside(cap_dir, ch["connection"], gaps, set_aside))]
 
 
 def join(seq):
@@ -171,8 +192,13 @@ def join(seq):
     return {"applies": applies, "closes": closes, "stray": stray}
 
 
-def census(codec=None):
-    """Every live capture, every game connection holding a 482 apply."""
+def census(codec=None, set_aside=None):
+    """Every live capture, every game connection holding a 482 apply.
+
+    `set_aside`, a list, receives each connection skipped because its manifest
+    declares its s2c gapped (`whole_s2c`); assert it with
+    `capgaps.audit(set_aside, capdirs, tape.refuses)`. The same parameter, meaning
+    the same thing, on `weakness_attributes`, `weakness_lifts` and `status_census`."""
     codec = codec or bufflog.Codec()
     live = vaultpath.require_dir("captures", "live",
                                  why="deepwoundjoin reads live captures")
@@ -181,11 +207,8 @@ def census(codec=None):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
             continue
-        for row in tape.channel_files(cap_dir):
-            try:
-                seq = sequence(cap_dir, row["connection"], codec)
-            except (bufflog.BuffLogError, tape.TapeError):
-                continue
+        for row in whole_s2c(cap_dir, set_aside):
+            seq = sequence(cap_dir, row["connection"], codec)
             if not any(op == OP_APPLY and v[2] == DEEP_WOUND
                        for _i, _t, op, v in seq):
                 continue
@@ -202,7 +225,7 @@ OP_ATTRIBUTE = 0x003B       # [agent, attribute, base, effective]
 WEAKNESS = 486
 
 
-def weakness_attributes(codec=None):
+def weakness_attributes(codec=None, set_aside=None):
     """Every Weakness apply and removal in the corpus, with the 0x003B rows of
     its own batch. SKILLS-WK: retail re-declares the agent's attributes one
     lower at the apply and restores them at the removal. A row: {"capture",
@@ -217,11 +240,8 @@ def weakness_attributes(codec=None):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
             continue
-        for ch in tape.channel_files(cap_dir):
-            try:
-                seq = sequence(cap_dir, ch["connection"], codec)
-            except (bufflog.BuffLogError, tape.TapeError):
-                continue
+        for ch in whole_s2c(cap_dir, set_aside):
+            seq = sequence(cap_dir, ch["connection"], codec)
             buffs = {}
             for i, t, op, v in seq:
                 kind = agent = None
@@ -270,7 +290,7 @@ def score_weakness(rows):
 CONDITIONS = frozenset(range(478, 487)) | {2077}
 
 
-def weakness_lifts(codec=None):
+def weakness_lifts(codec=None, set_aside=None):
     """Every batch in the corpus that REMOVES Weakness and heals the same agent
     -- a cast that lifts the penalty and heals by an attribute in one stroke
     (RUN-SKILLS-WKL, studies/skills 52). A row: {"capture", "connection", "t",
@@ -289,11 +309,8 @@ def weakness_lifts(codec=None):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
             continue
-        for ch in tape.channel_files(cap_dir):
-            try:
-                seq = sequence(cap_dir, ch["connection"], codec)
-            except (bufflog.BuffLogError, tape.TapeError):
-                continue
+        for ch in whole_s2c(cap_dir, set_aside):
+            seq = sequence(cap_dir, ch["connection"], codec)
             buffs, hmax = {}, {}        # buff id -> (agent, skill); agent -> [42]
             for i, t, op, v in seq:
                 if op == 0x009F and v[1] == 42:
@@ -330,7 +347,7 @@ def weakness_lifts(codec=None):
     return out
 
 
-def status_census(codec=None):
+def status_census(codec=None, set_aside=None):
     """Which `0x00F1` bits each effect apply SETS, from retail's own wire.
 
     For every `0x0042` in the live corpus, the first `0x00F1` to the same
@@ -350,11 +367,8 @@ def status_census(codec=None):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
             continue
-        for row in tape.channel_files(cap_dir):
-            try:
-                seq = sequence(cap_dir, row["connection"], codec)
-            except (bufflog.BuffLogError, tape.TapeError):
-                continue
+        for row in whole_s2c(cap_dir, set_aside):
+            seq = sequence(cap_dir, row["connection"], codec)
             status = {}
             for i, t, op, v in seq:
                 if op == 0x00F1:
