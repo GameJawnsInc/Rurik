@@ -103,7 +103,7 @@ import checks  # noqa: E402
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
-# machine executes 72 (55 until 12-13 landed; 90 since CASTAI-Z1, 2026-09-28),
+# machine executes 72 (55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28),
 # and a run with neither the
 # captures nor the pinned image
 # executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
@@ -118,7 +118,7 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 90 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 91 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
 # fixtures, one section quietly ceasing to run would still clear 10. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
@@ -835,6 +835,9 @@ def scan_corpus(live):
         "gain_kinds": collections.defaultdict(collections.Counter),
         "gain_rows": [],         # the non-strike gains, one row each
         "spend_builds": collections.defaultdict(set),
+        # (stamp, skill) -> builds: section 6 scopes the PvP-split rule's
+        # uses PER CAPTURE, so a witness stays on its own tape (R3).
+        "spend_stamp_builds": collections.defaultdict(set),
         "spend_pairs_by_stamp": collections.defaultdict(collections.Counter),
         "cast_builds": collections.defaultdict(set),
         "cast_stamps": collections.defaultdict(set),
@@ -891,6 +894,7 @@ def scan_corpus(live):
                     on_207.add(v[1])
                 elif op == SMSG_ADRENALINE_SPEND:
                     agg["spend_builds"][v[2]].add(build)
+                    agg["spend_stamp_builds"][(stamp, v[2])].add(build)
                     agg["spend_pairs_by_stamp"][stamp][(v[2], v[3])] += 1
                     agg["spend_skills"][v[2]] += 1
                     agg["spend_copies"][v[3]] += 1
@@ -1216,12 +1220,36 @@ def section_spend_join(agg):
                                      used)["adrenaline_units"])
         if not costs[skill]:
             zero_cost.append((skill, n))
-    LEDGER.ok(used == {s: (38888, link) for s, link in PVP_SPENDS_WITNESS.items()},
-              f"the one spend skill content lacks is a PvP split, by the stated "
-              f"rule: {used} as skill -> (build, the player skill it splits off)",
-              f"expected {PVP_SPENDS_WITNESS} on build 38888 (CASTAI-Z1: Zaishen "
-              f"Challenge plays PvP versions). A new id reddens this -- name it, "
-              f"then widen the witness")
+    # The rule's uses PER CAPTURE (CASTAI-Z1 review, R3 / SLICE-F47). The
+    # corpus-wide claim is the SIGNATURE skill_row enforces above -- a spend
+    # skill content lacks resolves ONLY as a pvp_only, equip_family 0 split
+    # whose linked_id is a content row, else MissingRow crashes this unguarded
+    # loop. What is pinned EXACT is the witness, on its own tape; before the
+    # pin the rule must never have been needed. A later tape that spends a
+    # different PvP split is confirming evidence and must not redden this.
+    used_at = {}                # (stamp, skill) -> (build, linked_id)
+    for (st, sk), builds in agg["spend_stamp_builds"].items():
+        one = {}
+        skill_row(world, sk, builds, one)
+        if sk in one:
+            used_at[(st, sk)] = one[sk]
+    z_used = {sk: bl for (st, sk), bl in used_at.items() if st == ZAISHEN_TAPE}
+    pre_used = sorted((st, sk) for (st, sk) in used_at if st < PIN_STAMP)
+    LEDGER.ok(z_used == {s: (38888, link) for s, link in PVP_SPENDS_WITNESS.items()},
+              f"the spend skill content lacks on {ZAISHEN_TAPE} is a PvP split, "
+              f"by the stated rule: {z_used} as skill -> (build, the player "
+              f"skill it splits off)",
+              f"expected {PVP_SPENDS_WITNESS} on build 38888, EXACT on the "
+              f"witness tape (CASTAI-Z1: the Zaishen Challenge plays PvP "
+              f"versions). Past this tape the claim is skill_row's signature, "
+              f"not a list; the rule's uses over the corpus: "
+              f"{sorted(used_at.items())}")
+    LEDGER.ok(not pre_used,
+              f"and before the pin no spend needed the rule: every spend on a "
+              f"capture before {PIN_STAMP} resolves from content",
+              f"rule uses before the pin: {pre_used}. The player corpus held "
+              f"every pre-Zaishen spender, so a rule use there would mean the "
+              f"content table lost a row")
     LEDGER.ok(not zero_cost,
               "and every one of them carries a NONZERO adrenaline cost",
               f"{costs}"
