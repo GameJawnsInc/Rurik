@@ -26,6 +26,7 @@ currently bite, and this file proves it rather than assuming it: no skill the
 server resolves lands on a .5 at any rank 0..15.
 """
 
+import collections
 import math
 import os
 import struct
@@ -37,6 +38,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import effects  # noqa: E402
+import vaultpath  # noqa: E402
 
 # FLOOR 25, counted from a green run on 2026-08-15 rather than guessed -- and
 # the guard caught the guess: this said 26 first and the run reported
@@ -47,7 +49,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -1091,14 +1093,30 @@ def main():
     # P1-P4 in spellhitjoin's own words. A location roll on a set whose
     # pieces differ would put a second bucket on some pair; none has one.
     # FLOORS, not exact values -- the live corpus grows.
-    unnamed = []
+    # The skip is decided on the capture DIRECTORY, never on a failed read: a crash in a
+    # reader is a crash, not a skip (2026-09-28).
     try:
-        rows = spellhitjoin.census(unnamed=unnamed)
-        sc = spellhitjoin.score(rows)
+        vaultpath.require_dir("captures", "live", why="section 12's corpus")
     except (Exception, SystemExit) as exc:                # noqa: BLE001  (require_dir exits)
         LEDGER.skip("12. the corpus (spellhitjoin)",
                     f"no live corpus to read on this machine: {exc!r}")
         return LEDGER.verdict()
+    unnamed, set_aside, refused_conns = [], [], []
+    rows = spellhitjoin.census(unnamed=unnamed, set_aside=set_aside, refused=refused_conns)
+    sc = spellhitjoin.score(rows)
+    # THE ZAISHEN CAPTURE (2026-09-28, CASTAI-Z1): P2 was scored before it on every capture;
+    # it is scored so still on every capture BUT that one, whose multi-valued pairs are
+    # asserted exactly beside it (the new facts; spellhitjoin P2 FAILED there).
+    ZAISHEN = "20260928T103123"
+    sc_rest = spellhitjoin.score([r for r in rows if r["capture"] != ZAISHEN])
+    rows_z = [r for r in rows if r["capture"] == ZAISHEN]
+    GAPPED = [(ZAISHEN, "10.0.0.210:65009->98.95.137.136:80")]
+    check([x[:2] for x in set_aside] == GAPPED and all(x[2] for x in set_aside)
+          and refused_conns == [],
+          "the one connection the manifests declare gapped (20260928T103123 :65009, CASTAI-Z1's "
+          "match 2) is set aside BY NAME and still refused; no other connection fails to frame "
+          "(they used to be dropped without a word -- now a new one reddens this)",
+          f"set aside {set_aside}; refused {refused_conns}")
     hero_tape = {r["player"] for r in rows if r["capture"] == "20260914T005758"
                  and r["connection"].split("->")[0].endswith(":56011")}
     refused = [u for u in unnamed if u[2].startswith("observer rules disagree")]
@@ -1128,17 +1146,60 @@ def main():
     # unmeasured), the hero's 26 AND 51 at 122 (Frenzy, F44/F45).
     PENALTY_SPLIT = {"54 222 29", "54 222 30"}
     split = sc["penalty_split"]
-    check(sc["pairs"] >= 10 and sc["pair_hits"] >= 60
-          and set(sc["multi_valued"]) - set(split) <= PENALTY_SPLIT,
+    split_rest = sc_rest["penalty_split"]
+    check(sc_rest["pairs"] >= 10 and sc_rest["pair_hits"] >= 60
+          and set(sc_rest["multi_valued"]) - set(split_rest) <= PENALTY_SPLIT,
           "P2 every (caster, skill, target) pair with >= 3 hits is ONE value "
           "per target maximum (a death-penalty split passes by SIGNATURE; the "
           "two JARIN pairs that are several values INSIDE one maximum set "
-          "aside by name)",
-          f"{sc['pairs']} pairs over {sc['pair_hits']} hits, skills "
-          f"{sc['skills']}, multi-valued {sc['multi_valued']}, of which split "
-          f"by a penalty {split} -- a 1-in-8 head roll on any armour "
+          "aside by name) -- on every capture but 20260928T103123, whose pairs "
+          "are asserted exactly below",
+          f"{sc_rest['pairs']} pairs over {sc_rest['pair_hits']} hits, skills "
+          f"{sc_rest['skills']}, multi-valued {sc_rest['multi_valued']}, of which split "
+          f"by a penalty {split_rest} -- a 1-in-8 head roll on any armour "
           f"difference leaves one bucket with probability (7/8)^n, 0.03% at "
-          f"n = 60; DoT ticks set aside {sc['ticks_set_aside']}")
+          f"n = 60; DoT ticks set aside {sc_rest['ticks_set_aside']}")
+    # CASTAI-Z1 (20260928T103123): the Zaishen Mage's (agent 9's) Mind Burn onto three
+    # arena foes is several fractions per (connection, caster, skill, target) -- five pairs
+    # over the three undamaged matches. Read in WHOLE POINTS: on :50295 all three are 54
+    # points, the fraction moving 0.1125 / 0.13235 / 0.16071 = 54 of 480 / 408 / 336 -- the
+    # death-penalty ladder -- but the maximum the join holds for each hit lags (the
+    # penalty's prop 42 arrives AFTER the word, or never for 3 and 6), so the SIGNATURE
+    # (one value per maximum held) cannot see it; on :50061 agent 6 takes 27 at 480 and a
+    # fraction whole only at 408 (never on its wire; it died at 155.672 and was raised at
+    # 158.976). ONE pair is a second bucket at one reported maximum: :50061 onto agent 5,
+    # 29 points three times and 59 once (144.972), both at 480 -- P2 FAILED there, cause
+    # UNMEASURED (59 / 29 = 2^(41/40): a location roll on a 40-armour spread, or a
+    # damage-doubling state; agent 5's Frenzy 346 is first announced at 219.979, after it).
+    zpairs = {(k[1].split("->")[0].rsplit(":", 1)[-1], k[2], k[3], k[4]): sorted(set(v))
+              for k, v in spellhitjoin.pairs(rows_z, "cast", 3).items()
+              if k[3] is not None and len(set(v)) > 1}
+    zpts = {}
+    for key in zpairs:
+        pts = collections.Counter()
+        for r in rows_z:
+            if (r["kind"] == "cast" and not r["tick"] and r["maxhp"] is not None
+                    and r["connection"].split("->")[0].endswith(":" + key[0])
+                    and (r["cause"], r["skill"], r["target"]) == key[1:]):
+                p = -r["value"] * r["maxhp"]
+                if abs(p - round(p)) <= spellhitjoin.INTEGER_EPS:
+                    pts[(int(round(p)), r["maxhp"])] += 1
+        zpts[key] = dict(sorted(pts.items()))
+    check(zpairs == {("50061", 9, 185, 5): [-0.12292, -0.07108, -0.06636, -0.06042],
+                     ("50061", 9, 185, 6): [-0.06618, -0.05625],
+                     ("50295", 9, 185, 3): [-0.13235, -0.1125],
+                     ("50295", 9, 185, 5): [-0.16071, -0.13235, -0.1125],
+                     ("50295", 9, 185, 6): [-0.13235, -0.1125]}
+          and zpts[("50061", 9, 185, 5)] == {(29, 437): 2, (59, 480): 2}
+          and zpts[("50295", 9, 185, 5)] == {(54, 336): 2, (54, 480): 2}
+          and not any(k in split for k in ("9 185 3", "9 185 5", "9 185 6")),
+          "P2 on 20260928T103123 (exact, per tape): FIVE multi-valued pairs, all agent 9's Mind "
+          "Burn 185; whole points at the maximum the join holds show 54 at 480 AND at 336 onto "
+          ":50295's agent 5 (the penalty ladder, its 408 hit read one death stale) and 29 at 437 "
+          "AND 59 at 480 onto :50061's agent 5 -- the second bucket at one maximum that FAILS P2; "
+          "the signature recognises none of the five (the arena's maxima reach the wire late or "
+          "never) -- a finding, not absorbed",
+          f"{zpairs}; whole points (points, maximum): {zpts}")
     points = {k: sorted({round(v * m) for m, vals in b.items() for v in vals})
               for k, b in split.items()}
     check(len(split) >= 1 and all(len(p) == 1 for p in points.values()),
@@ -1217,13 +1278,85 @@ def main():
     hc = hexjoin.census()
     hs = hexjoin.score(hc)
     hv = hexjoin.verdicts(hs)
-    check(all(hv.values()) and hs["refused"] == 0 and hs["connections"] >= 96
-          and not hs["i4"] and not hs["m2"] and not hs["c2"] and hs["m3"] is None
-          and hs["i4c"] and hs["m2c"] and hs["m3c"] and hs["c2c"],
+    # THE REGISTRATION'S CORPUS (2026-09-28, CASTAI-Z1): the lane registered on the captures
+    # before 20260928T103123 (the Zaishen Challenge). The reading is scored THERE as
+    # registered; the whole corpus records what the Zaishen tape FAILED, the re-statement
+    # each verdict rests on, and that tape's own exact witness (hexjoin's docstring).
+    hcp = hexjoin.upto(hc, ZAISHEN)
+    hsp = hexjoin.score(hcp)
+    hvp = hexjoin.verdicts(hsp)
+    hsz = hexjoin.score(hexjoin.narrow(hc, ZAISHEN))
+    hrv = hexjoin.restated_verdicts(hs)
+    check(all(hvp.values()) and hsp["refused"] == 0 and hsp["connections"] >= 96
+          and not hsp["i4"] and not hsp["m2"] and not hsp["c2"] and hsp["m3"] is None
+          and hsp["i4c"] and hsp["m2c"] and hsp["m3c"] and hsp["c2c"],
           "hexjoin's reading HOLDS: every prediction as registered but I4 / M2 / C2 (FAILED as "
           "registered, printed so), their corrected readings hold, M3 is untestable (no Mind "
-          "Burn onto the observer) and its M3c holds, the four post-hoc facts hold; 0 refused",
-          str(hv))
+          "Burn onto the observer) and its M3c holds, the four post-hoc facts hold; 0 refused "
+          "(on the corpus it was registered on: the captures before 20260928T103123)",
+          str((hvp, hsp["connections"])))
+    check([x[:2] for x in hc["set_aside"]] == GAPPED and not hc["declared_not_refused"]
+          and hs["refused"] == 0,
+          "and on the whole corpus the one connection the manifests declare gapped "
+          "(20260928T103123 :65009) is set aside BY NAME and still refused, none other refused",
+          str((hc["set_aside"], hc["declared_not_refused"], hc["refused"])))
+    failed_now = {k for k in hexjoin.REGISTERED if hs[k] is False}
+    check(failed_now == set(hexjoin.FAILED_AS_REGISTERED) | set(hexjoin.FAILED_ON_ZAISHEN)
+          and hs["m3"] is None and all(hrv.values())
+          and not hs["c2c"] and all(hs[k] for k in hexjoin.CORRECTED if k != "c2c")
+          and all(hsp[k] for k in hexjoin.FAILED_ON_ZAISHEN),
+          "on the WHOLE corpus the Zaishen tape FAILS six registered predictions -- I1, I2, I3, "
+          "M1, G2, G3, recorded FAILED as registered beside I4 / M2 / C2 -- and the corrected C2c; "
+          "every one but G3 holds RE-STATED (I1r / M1r the [61] seconds, I2r a word riding the "
+          "caster's own Fire Storm tick, I3r / G2r no 0x00F1 onto a target already hexed), and "
+          "every other corrected reading and post-hoc fact holds",
+          str((sorted(failed_now), hrv)))
+    z_i = [x[3:] for x in hsz["i_ct_casts"]]
+    z_m = [x[3:] for x in hsz["m_ct_casts"]]
+    check(hs["i1r"] and hs["m1r"] and hsp["i_ct_casts"] == [] and hsp["m_ct_casts"] == []
+          and len(z_i) == 10 and {c for c, _d in z_i} == {0.67}
+          and (min(d for _c, d in z_i), max(d for _c, d in z_i)) == (0.651, 0.676)
+          and len(z_m) == 7 and {c for c, _d in z_m} == {0.67}
+          and (min(d for _c, d in z_m), max(d for _c, d in z_m)) == (0.661, 0.693)
+          and {x[:2] for x in hsz["i_ct_casts"] + hsz["m_ct_casts"]}
+          == {(ZAISHEN, "50061"), (ZAISHEN, "50295")},
+          "I1 / M1 FAILED on 20260928T103123 (exact, per tape): 10 of agent 9's 179s and 7 of its "
+          "185s carry a [61] of 0.67 and complete at +0.651..+0.676 / +0.661..+0.693 -- the "
+          "re-statement (the [61] seconds when sent, else the activation) holds on every cast; "
+          "the registration's corpus has none",
+          str((hsz["i_ct_casts"], hsz["m_ct_casts"])))
+    check(hsz["i_words_on_target_tick"] == [(ZAISHEN, "50295", 457.84, 1)]
+          and hs["i_words_on_target_tick"] == hsz["i_words_on_target_tick"]
+          and hsz["i_hex_already"] == [(ZAISHEN, "50061", 194.673, 3, 0)]
+          and hsz["g2_already_hexed"] == [(ZAISHEN, "50061", 193.924, 44),
+                                          (ZAISHEN, "50061", 195.674, 179),
+                                          (ZAISHEN, "50061", 201.197, 31),
+                                          (ZAISHEN, "58544", 621.587, 36)]
+          and hsp["g2_already_hexed"] == [] and hsp["i_hex_already"] == []
+          and hsz["h_42_elsewhere"] == 0,
+          "I2 / I3 / G2 FAILED on 20260928T103123 (exact, per tape): the one word from a 179's "
+          "caster onto its target in the completion batch (:50295 457.840) is its own Fire Storm's "
+          "k = 2 tick; a hex landing on the observer ALREADY hexed carries no 0x00F1 -- agent 3's "
+          "179 at 194.673 (field3 0: the caster's own Fire Magic) and four applies of 44 / 179 / "
+          "31 / 36; the 58 still leads the 0x0042 on every one, and every hex 0x0042 is still on "
+          "the observer",
+          str((hsz["i_words_on_target_tick"], hsz["i_hex_already"], hsz["g2_already_hexed"])))
+    check(hsz["g3_miss_rows"] == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, 12.533),
+                                  (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 12.533)]
+          and hs["g3_miss_rows"] == hsz["g3_miss_rows"] and hsp["g3_misses"] == 0
+          and hsz["c_cast_applied_off"] == [("Crippled", 0, 15.0)]
+          and hsz["c_environmental_off"] == [("Deep Wound", 20, 20.0), ("Poison", 13, 13.0),
+                                             ("Poison", 13, 13.0)]
+          and hs["c_cast_applied_off"] == hsz["c_cast_applied_off"]
+          and hs["c_environmental_off"] == hsz["c_environmental_off"],
+          "G3 and C2c FAILED on 20260928T103123 with no re-statement (exact, per tape; nowhere "
+          "else): agent 4's 135 lands on the observer twice at field3 11 with 14.0 s where "
+          "interp(3, 16, 11) is 12.533 -- the corpus's first hex whose duration varies by rank "
+          "(179's 3 / 3 could never fail G3), cause UNMEASURED; a skill-applied Crippled carries "
+          "field3 0 (15 s, under [10, obs, 334]), and a Deep Wound at hex 44's end plus two "
+          "Poisons on an attack's landing carry field3 == f32 where the classifier calls them "
+          "environmental",
+          str((hsz["g3_miss_rows"], hsz["c_cast_applied_off"], hsz["c_environmental_off"])))
     def _exact_179(s):
         return (s["i_per_port"] == hexjoin.EXPECT_179_PER_PORT and s["i_completed"] == 28
                 and s["i_scheduled"] == 20 and s["i_scheduled_with_words"] == 18
@@ -1263,8 +1396,13 @@ def main():
           "ASSUMPTION the taker's armour factor is 1 (CORROBORATED, the armour is off the wire)",
           str({k: hs[k] for k in ("i_per_port", "i_scheduled", "i_removed", "i_target_died",
                                   "i_takers_hist", "i_observer_burning", "i_payoff_tick")}))
+    # "the ONE hex 0x0042 in the corpus is on the observer" was a corpus count: it is scored
+    # on the registration's corpus (1); the whole corpus keeps the SIGNATURE (every hex 0x0042
+    # on the observer, none elsewhere); the Zaishen tape's seven are its exact witness
     check(_exact_185(hs)
-          and hs["h_42_elsewhere"] == 0 and hs["h_42_on_observer"] == 1
+          and hs["h_42_elsewhere"] == 0 and hsp["h_42_on_observer"] == 1
+          and hsz["h_42_on_observer"] == 7 and hs["h_42_on_observer"] >= 1
+          and hs["m_ranks_corpus"] == [0, 13]
           and len(hs["c_dazed"]) >= 1 and len(hs["c_cracked"]) >= 2
           and hs["c_cast_applied"] >= 20 and hs["c_environmental"] >= 30
           and hs["c_observer_no_id_corpus"].get("Crippled", 0) >= 4 and hs["c_observer_no_id_corpus"].get("Deep Wound", 0) >= 4
@@ -1274,7 +1412,9 @@ def main():
           "twins / 3 singles on the target, 4 casts mixing twins and singles, 647.300 the one "
           "target-single adjacent-twin; no twin without a Burning signal, one single (780.235) "
           "with a new one; the observer's Burning (9, 9.0) twice, the caster's 13 predicting both "
-          "3 and 9; the ONE hex 0x0042 in the corpus is on the observer; [6, T, ids] on their "
+          "3 and 9 (its rank read on the witness's own hex: the Zaishen tape adds agent 3's 179 at "
+          "field3 0, its own Fire Magic); the ONE hex 0x0042 of the registration's corpus is on "
+          "the observer (the Zaishen tape: seven more, all on the observer); [6, T, ids] on their "
           "tapes: 179 [1, 12] x28, 1097 [1, 12] x5 + [12] x1, Empathy [1, 4] x5, Lightning Strike "
           "none x14; 6 snares; the order census 24 of 25 ascending, the one exception 640.689 "
           "(the review's M12 / EV-12); Burning's [6] id on the witness tape 25 x3 and TWO observer "
@@ -1290,19 +1430,30 @@ def main():
     _src = [c for c in hc["conns"] if c.stamp == hexjoin.EXPECT_CAPTURE and str(c.port) == "54071"]
     _dup = _copy.copy(_src[0])
     _dup.stamp = "SYNTHETIC-CONFIRMING"
-    hs2 = hexjoin.score(dict(hc, conns=list(hc["conns"]) + [_dup]))
-    hv2 = hexjoin.verdicts(hs2)
-    check(all(hv2.values()) and _exact_179(hs2) and _exact_185(hs2)
-          and hs2["i_completed_corpus"] == hs["i_completed_corpus"] + 18
-          and hs2["m_completed_corpus"] == hs["m_completed_corpus"] + 16
-          and hs2["c_effect_ids"]["Burning"][25] == hs["c_effect_ids"]["Burning"][25] + 3
-          and hs2["l_adds_corpus"]["179 [1, 12]"] == 46,
+    hs2p = hexjoin.score(dict(hcp, conns=list(hcp["conns"]) + [_dup]))
+    hv2p = hexjoin.verdicts(hs2p)
+    check(all(hv2p.values()) and _exact_179(hs2p) and _exact_185(hs2p)
+          and hs2p["i_completed_corpus"] == hsp["i_completed_corpus"] + 18
+          and hs2p["m_completed_corpus"] == hsp["m_completed_corpus"] + 16
+          and hs2p["c_effect_ids"]["Burning"][25] == hsp["c_effect_ids"]["Burning"][25] + 3
+          and hs2p["l_adds_corpus"]["179 [1, 12]"] == 46,
           "the arm: the witness's busiest connection appended again under another stamp leaves "
           "the verdict HOLDING and every exact number above unmoved while the corpus floors grow "
           "(+18 / +16 completions, +3 Burning ids, 179's [1, 12] 28 -> 46) -- the counts are "
           "scored per tape and confirming evidence cannot redden them (the review's EV-3 flipped "
-          "the first port to THE READING FAILS this way)",
-          str((hv2, hs2["i_completed_corpus"], hs2["m_completed_corpus"], hs2["i_takers_hist"])))
+          "the first port to THE READING FAILS this way) (on the registration's corpus)",
+          str((hv2p, hs2p["i_completed_corpus"], hs2p["m_completed_corpus"], hs2p["i_takers_hist"])))
+    hs2 = hexjoin.score(dict(hc, conns=list(hc["conns"]) + [_dup]))
+    hrv2 = hexjoin.restated_verdicts(hs2)
+    check(all(hrv2.values()) and _exact_179(hs2) and _exact_185(hs2)
+          and {k for k in hexjoin.REGISTERED if hs2[k] is False} == failed_now
+          and hs2["i_completed_corpus"] == hs["i_completed_corpus"] + 18
+          and hs2["m_completed_corpus"] == hs["m_completed_corpus"] + 16
+          and hs2["c_effect_ids"]["Burning"][25] == hs["c_effect_ids"]["Burning"][25] + 3
+          and hs2["l_adds_corpus"]["179 [1, 12]"] == hs["l_adds_corpus"]["179 [1, 12]"] + 18,
+          "and on the whole corpus the same copy leaves the re-stated verdict HOLDING, the same "
+          "predictions FAILED and every exact number unmoved, the floors +18 / +16 / +3 / +18",
+          str((hrv2, hs2["i_completed_corpus"], hs2["m_completed_corpus"])))
 
     print("\n13. the corpus: the CONVERTED hit's word (healjoin P6, RUN-SKILLS-RB)")
     # RUN-SKILLS-RB (2026-09-16, 20260916T213125): ten hits taken under
