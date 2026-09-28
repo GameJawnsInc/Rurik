@@ -266,10 +266,16 @@ def section_corpus():
     new186 = sorted((r["port"], r["caster"], len(r["gaps"]), len(r["ct_pairs"]),
                      min(r["gaps"]), min(r["net"]))
                     for r in c["rows"] if r["capture"] == PIN and r["skill"] == 186)
+    # The [61] pair count is exact PER TAPE (12 on 20260928T103123, none at the pin) and
+    # only a FLOOR on the whole corpus: a later tape with more shortened 186s is
+    # confirming evidence and must not redden this (review M1, 2026-09-28).
+    z186_ct = [v for r in c["rows"] if r["capture"] == PIN and r["skill"] == 186
+               for v in r["ct_pairs"]]
     check(six <= on_comp_r and 186 not in ids(sc["on_completion"])
           and 186 in ids(sc["neither"])
           and new186 == [("50061", 9, 9, 8, 8.424, 7.419), ("50295", 9, 6, 4, 7.999, 6.994)]
-          and sc["cast_time_pairs"].get(186) == (12, [1.005])
+          and len(z186_ct) == 12 and set(z186_ct) == {1.005}
+          and sc["cast_time_pairs"].get(186, (0, []))[0] >= 12
           and scp["cast_time_pairs"].get(186) is None,
           "RE-STATED on the whole corpus with each cast's own time (the [61] seconds when "
           "sent, else the activation): the six stay COMPLETION-anchored; AS WRITTEN 186 "
@@ -279,8 +285,8 @@ def section_corpus():
           "a seventh or eighth skill (277, 2809) joining is confirming evidence, a subset "
           "cannot redden on it",
           f"re-stated completion-anchored {sorted(on_comp_r)}; as written "
-          f"{sorted(ids(sc['on_completion']))}; the tape's 186 {new186}; [61] pairs "
-          f"{sc['cast_time_pairs']}")
+          f"{sorted(ids(sc['on_completion']))}; the tape's 186 {new186}; its [61] pairs "
+          f"{len(z186_ct)} {sorted(set(z186_ct))}; corpus [61] pairs {sc['cast_time_pairs']}")
     check(sc["p2_completion_majority"],
           "RE-STATED P2: COMPLETION is the majority anchor of the discriminating skills",
           f"{len(sc['on_completion'])} completion vs {len(sc['on_start'])} start "
@@ -316,11 +322,13 @@ def section_corpus():
           f"at the pin: split {scp['pairs']} pooled {pooledp['pairs']}; whole corpus: split "
           f"{sc['pairs']} pooled {pooled['pairs']}")
     check(scp["p3_as_written"] is False
-          and scp["sub_recharge"] == pooledp["sub_recharge"] and set(scp["sub_recharge"]) == {229},
+          and scp["sub_recharge"] == pooledp["sub_recharge"] and set(scp["sub_recharge"]) == {229}
+          and scp["sub_recharge"][229] == [4.497, 3.251],
           "P3 AS WRITTEN is recorded FAILED: 229's two sub-recharge gaps survive the split "
           "(its half fails) and the pooled arm shows exactly the same two, so the arms do not "
           "DIFFER as P3 required -- 229's are on singly-created bodies, not recycled ids (the "
-          "survey's explanation of 229 refuted) (on the corpus as it stood at the pin)",
+          "survey's explanation of 229 refuted) (on the corpus as it stood at the pin: "
+          "229's gaps exactly 4.497 and 3.251)",
           f"split {scp['sub_recharge']} pooled {pooledp['sub_recharge']}")
     # CASTAI-Z1: a second skill with a sub-recharge gap. 102 (recharge 15, activation 2.0),
     # agent 4 on 20260928T103123 :58544: cast at 591.381, completed, cast again 10.749 s later
@@ -329,13 +337,17 @@ def section_corpus():
     new102 = [(r["port"], r["caster"], [(p["t"], p["gap"], p["done"], p["ct"]) for p in r["pairs"]])
               for r in c["rows"] if r["capture"] == PIN and r["skill"] == 102
               and any(d < r["recharge"] - rechargeprobe.TOL for d in r["done"])]
+    # 229's exact list lives at the pin (above); on the whole corpus its pinned gaps are a
+    # SUBSET, never an equality -- a later tape repeating the known divergence is confirming
+    # evidence (review M2, 2026-09-28).
     check(sc["p3_as_written"] is False and sc["sub_recharge"] == pooled["sub_recharge"]
-          and sc["sub_recharge"].get(229) == [4.497, 3.251]
+          and {4.497, 3.251} <= set(sc["sub_recharge"].get(229, ()))
           and new102 == [("58544", 4, [(591.381, 10.749, 8.739, None), (602.13, 17.496, 15.507, None)])],
           "and on the whole corpus the arms still AGREE on every sub-recharge gap (the "
-          "signature: no sub-recharge gap is a recycled id's), 229's two unmoved (exact); the "
-          "new one is 102's 8.739 against 15 -- agent 4 on 20260928T103123 :58544 at 591.381, "
-          "no [61] word (exact, per tape) -- a second named divergence, OBSERVED n = 1",
+          "signature: no sub-recharge gap is a recycled id's), 229's two pinned gaps still "
+          "among them; the new one is 102's 8.739 against 15 -- agent 4 on 20260928T103123 "
+          ":58544 at 591.381, no [61] word (exact, per tape) -- a second named divergence, "
+          "OBSERVED n = 1",
           f"split {sc['sub_recharge']} pooled {pooled['sub_recharge']}; 102 on the tape {new102}")
     check(six <= ids(pooledp["on_completion"]) and six <= ids(pooled["on_completion_r"]),
           "the six stay completion-anchored with recycled ids pooled too -- their anchor "
