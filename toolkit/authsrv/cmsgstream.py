@@ -73,9 +73,11 @@ import wirecapture  # noqa: E402
 # `mapdata` onto `sys.path` behind them. MEASURED after this line changed: `import
 # cmsgstream` loads none of those four and neither directory is on `sys.path`.
 # `livesession` re-exports the same three, so either spelling works and this one is
-# cheaper. `SplitError` identity is not load-bearing here: both call sites below are
-# wrapped in `except Exception`.
+# cheaper. `SplitError` identity IS load-bearing now (2026-09-28): `_streams` catches
+# exactly that class to name the connection in the `StreamRefused` it raises -- it used
+# to be swallowed by an `except Exception: continue`, and a refusal is never swallowed.
 import wiresplit  # noqa: E402
+import capgaps  # noqa: E402  (the ONE set-aside for a manifest-declared gapped connection)
 from codec import Codec  # noqa: E402
 
 CMSG_MASK = 0x8000
@@ -163,7 +165,28 @@ def catalog_for(channel, want_dir):
             f"known: {sorted(CATALOGS)}")
 
 
-def _streams(cap_dir, want_dir, channel):
+class StreamRefused(Exception):
+    """A keyed stream this reader will not turn into messages, NAMING the connection:
+    a reassembly hole the capture's own manifest does not declare, a declared hole the
+    reassembly does not reproduce, a handshake that will not split, a keyed connection
+    with no session key, or (in `timed`) a decode that stops short of the last byte.
+    Never caught by this module -- the reader it replaced dropped every one of these
+    with a `continue` and returned the rest as if it were the whole capture."""
+
+
+def declared_in(cap_dir, want_dir):
+    """`capgaps.declared_gaps(cap_dir)` restricted to ONE direction:
+    {connection: {want_dir: [[stream offset, bytes missing], ...]}} for every connection
+    whose manifest declares a hole in `want_dir`. The manifest declares gaps PER
+    DIRECTION, and this reader reads one direction at a time, so a connection whose
+    other direction is gapped is still read here (20260928T103123 :65009's c2s is whole
+    and is read; its s2c is set aside)."""
+    return {c: {want_dir: g[want_dir]}
+            for c, g in capgaps.declared_gaps(cap_dir).items() if g.get(want_dir)}
+
+
+def _streams(cap_dir, want_dir, channel, set_aside=None, honour_declared=True,
+             only=None):
     """Yield (conn, plain, handshake, marks) for every keyed stream on `channel`.
 
     ONE preparation path, shared by `timed` and `frame_report`. Two copies of
@@ -174,7 +197,30 @@ def _streams(cap_dir, want_dir, channel):
     `marks` is [(stream offset, wire time)] for the segments that carried
     payload, so a plaintext offset can be dated: ARC4 runs continuously over the
     stream, so plaintext offset P sits at stream offset P + `handshake`.
+
+    HOLES (2026-09-28, CASTAI-Z1). `wirecapture.reassemble` returns the holes it
+    zero-filled, and this reader used to discard them (`stream, _gaps = ...`) and
+    frame straight through: on 20260928T103123 :65009 s2c (38 + 20 bytes the
+    sniffer never saw, at stream offsets 38045 / 38548) the decode stopped AT the
+    first hole and `timed` returned the 2,744 messages before it as if they were
+    the whole connection, with nothing said. Now a direction with a hole is
+      - SET ASIDE, printed by name and appended to `set_aside` (the caller asserts
+        that list with `capgaps.audit`), ONLY when the capture's own manifest
+        declares that direction gapped AND the reassembly finds exactly the
+        declared holes; and
+      - refused LOUDLY (`StreamRefused`, naming the connection) otherwise -- an
+        undeclared hole, or a declared one the reassembly does not reproduce.
+    `honour_declared=False` exists for one purpose, `refuses()` below: it asks
+    whether the reader STILL refuses a declared connection, never a way to read it,
+    and `only` (one "client->server" name) narrows the walk to that connection for it.
+    A split failure or a keyed connection with no key is refused the same way; both
+    were `continue`s. Measured on 2026-09-28 over the 36 live captures that hold a
+    wire log (297 connection-directions, both channels): the only stream with a
+    hole, a residual, a split failure, a missing key or a decode error is :65009
+    s2c, so for every other connection the output is unchanged (303,013 `timed`
+    rows compared before/after, identical).
     """
+    declared = declared_in(cap_dir, want_dir) if honour_declared else {}
     chan = _channels(cap_dir)
     segs = collections.defaultdict(list)
     for line in open(os.path.join(cap_dir, "wire.jsonl"),
@@ -193,7 +239,24 @@ def _streams(cap_dir, want_dir, channel):
     for conn, rows in segs.items():
         if chan.get(conn) != channel:
             continue                      # wrong channel, or not a keyed stream
-        stream, _gaps = wirecapture.reassemble([(q, p) for q, _t, p in rows])
+        if only is not None and conn != only:
+            continue
+        stream, gaps = wirecapture.reassemble([(q, p) for q, _t, p in rows])
+        if conn in declared:
+            want = [tuple(g) for g in declared[conn][want_dir]]
+            if [tuple(g) for g in gaps] != want:
+                raise StreamRefused(
+                    f"{os.path.basename(cap_dir)} {conn} {want_dir}: the manifest declares "
+                    f"holes {want} but the reassembly finds {list(gaps)} -- a declaration "
+                    f"the bytes do not reproduce is not a reason to set anything aside")
+            capgaps.set_aside(cap_dir, conn, declared, set_aside)
+            continue
+        if gaps:
+            raise StreamRefused(
+                f"{os.path.basename(cap_dir)} {conn} {want_dir}: reassembly found holes "
+                f"{list(gaps)} (stream offset, bytes) that the capture's manifest does not "
+                f"declare -- framing does not survive a hole, so everything from the "
+                f"first one on would be lost without a word")
         if not stream:
             continue
         try:
@@ -201,11 +264,15 @@ def _streams(cap_dir, want_dir, channel):
                 _a, cipher = wiresplit.split_c2s(stream)
             else:
                 _seed, cipher = wiresplit.split_s2c(stream)
-        except Exception:
-            continue
+        except wiresplit.SplitError as ex:
+            raise StreamRefused(
+                f"{os.path.basename(cap_dir)} {conn} {want_dir}: the handshake will not "
+                f"split ({ex})") from ex
         key = _key_for(cap_dir, conn)
         if not key:
-            continue
+            raise StreamRefused(
+                f"{os.path.basename(cap_dir)} {conn} {want_dir}: a {channel} channel file "
+                f"with no session_key row -- nothing to decrypt it with")
         plain = wiresplit.decrypt_stream(cipher, key)
         handshake = len(stream) - len(cipher)
         origin = min(q for q, _t, _p in rows)
@@ -224,8 +291,23 @@ def _t_at(marks, off):
     return best
 
 
-def timed(stamp, want_dir="c2s", channel="game", catalog=None):
+def timed(stamp, want_dir="c2s", channel="game", catalog=None, set_aside=None):
     """[(t, conn, opcode, values), ...] on ONE clock, for one channel.
+
+    A WHOLE-STREAM READER (2026-09-28). A connection whose decode stops short of
+    its last byte raises `StreamRefused` naming it -- it used to discard
+    `decode_stream_at`'s error and return the prefix. Measured first, over the 36
+    live captures with a wire log, both directions, both channels: the ONLY
+    stream that ended with an error or a residual was 20260928T103123 :65009 s2c
+    (stopped at plaintext 38023, i.e. stream 38045 -- the first hole), and that
+    one is now set aside by its manifest's declaration before it is decoded; so
+    this raises on nothing in today's corpus and changes no other connection's
+    rows. `frame_report` still
+    REPORTS an error rather than raising -- reporting it is its whole job.
+
+    `set_aside`, a list, receives {capture, connection, gaps} for each direction
+    the manifest declares gapped (printed by name either way) -- pass one and
+    assert it with `capgaps.audit(set_aside, capdirs, cmsgstream.refuses)`.
 
     `channel` is not optional and defaults to the game channel on purpose: an
     auth connection decoded against the GAME_CMSG tables yields plausible
@@ -235,50 +317,77 @@ def timed(stamp, want_dir="c2s", channel="game", catalog=None):
     holds 17 real AUTH_CMSG ones. See the module docstring.
 
     `catalog` OVERRIDES that choice and exists for one caller: the negative
-    control in `test_cmsgnames.py`, which has to reproduce the wrong-catalog
-    decode on purpose. Before the fix that control got its mis-decode for free
-    from the defect; with the defect gone it has to ask, or it would go green
-    for a new reason -- "the auth stream decodes correctly" is not evidence that
-    decoding it wrongly invents. Nothing else should pass this.
+    control in `test_cmsgnames.py`, which runs the auth stream through the GAME
+    tables on purpose. Before 2026-08-13 that control got its mis-decode for
+    free from the defect; since 2026-09-28 a wrong catalog no longer comes back
+    as a short list here at all -- it dies within bytes, so `timed` REFUSES it,
+    and the control asserts that refusal (and reads the invented opcodes off
+    `frame_report`, which still reports what a wrong catalog frames before it
+    dies). Nothing else should pass this.
     """
     ch_name = catalog or catalog_for(channel, want_dir)
     mask = CMSG_MASK if want_dir == "c2s" else 0
     out = []
     for conn, plain, handshake, marks in _streams(
-            capture_dir(stamp), want_dir, channel):
+            capture_dir(stamp), want_dir, channel, set_aside):
         # `decode_stream_at`, never a decode_one loop of our own: codec.py calls
         # it "the one framing loop", and a second one here would be a second
         # chance to disagree about where a message ends.
-        msgs, _consumed, _err = codec().decode_stream_at(ch_name, plain, mask)
+        msgs, consumed, err = codec().decode_stream_at(ch_name, plain, mask)
+        if err is not None or consumed != len(plain):
+            raise StreamRefused(
+                f"{stamp} {conn} {want_dir}: {ch_name} framed {consumed} of "
+                f"{len(plain)} plaintext bytes ({err}) -- a prefix is not the stream")
         for off, op, vals in msgs:
             out.append((_t_at(marks, handshake + off), conn, op, vals))
     out.sort(key=lambda r: r[0])
     return out
 
 
-def frame_report(stamp, want_dir="c2s", channel="game", catalog=None):
+def refuses(capdir, connection, want_dir="s2c", channel="game"):
+    """True when this reader, told NOT to honour the manifest's declaration, still
+    refuses the one named connection in `want_dir` -- `capgaps.audit`'s still-refused
+    callback for a cmsgstream census. A connection this reader does not see (another
+    channel, no segments) is not refused: False. Never a way to read one."""
+    try:
+        for _s in _streams(capdir, want_dir, channel, honour_declared=False,
+                           only=connection):
+            return False
+    except StreamRefused:
+        return True
+    return False
+
+
+def frame_report(stamp, want_dir="c2s", channel="game", catalog=None, set_aside=None):
     """Per-connection framing ARITHMETIC: does this catalog account for the bytes?
 
     One row per keyed connection:
         {conn, catalog, plain, consumed, residual, messages, opcodes, headers, error}
 
     `residual` is the load-bearing field and the reason this is separate from
-    `timed`. `timed` returns whatever it managed to frame and says nothing about
-    what it left on the floor, so a catastrophically wrong catalog and a correct
-    one both come back as "a list of messages" -- which is precisely how the auth
-    channel read as 2 GAME_CMSG messages for two days without anyone noticing.
+    `timed`. Until 2026-09-28 `timed` returned whatever it managed to frame and
+    said nothing about what it left on the floor, so a catastrophically wrong
+    catalog and a correct one both came back as "a list of messages" -- which is
+    precisely how the auth channel read as 2 GAME_CMSG messages for two days
+    without anyone noticing. `timed` now REFUSES a short decode; this still
+    REPORTS one, because measuring the shortfall is what it is for.
     A residual of 0 over a whole decrypted stream is a claim the bytes can
     refute: every message's declared shape has to consume exactly its own bytes,
     all the way to the last one, with nothing left over.
 
     `headers` is the set of RAW header words, before masking, so a caller can
     check the mask against the wire rather than against our own constant.
+
+    A direction the manifest declares gapped is set aside exactly as in `timed`
+    (printed; appended to `set_aside`), and an undeclared hole raises there too:
+    a residual measured across a zero-filled hole would be a number about the
+    sniffer, not about the catalog.
     """
     ch_name = catalog or catalog_for(channel, want_dir)
     mask = CMSG_MASK if want_dir == "c2s" else 0
     rows = []
     for conn, plain, _hs, _marks in _streams(
-            capture_dir(stamp), want_dir, channel):
+            capture_dir(stamp), want_dir, channel, set_aside):
         msgs, consumed, err = codec().decode_stream_at(ch_name, plain, mask)
         rows.append({
             "conn": conn,
