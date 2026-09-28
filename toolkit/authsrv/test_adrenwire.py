@@ -215,6 +215,9 @@ SUB_STRIKE = {2: 8, 3: 9, 4: 29, 5: 2, 6: 5, 7: 1, 8: 3, 11: 4, 12: 1, 13: 1,
 # ceiling reading ("25 is the largest single event") holds per EVENT and
 # not per message; retail sums the tick.
 OVER_STRIKE = {26: 1, 29: 1, 42: 1}
+# REFUTED 2026-09-28 (CASTAI-Z1), the READING above, not the multiset: each of
+# the three rides ONE damage word at the hero -- (units, % of its maximum):
+JARIN_OVER_WORDS = [(26, 25.714), (29, 29.286), (42, 41.803)]
 
 # THE TWO HITS-TAKEN TAPES, 2026-09-16/17, NAMED AND PINNED WHOLE. 4b's four
 # claims were written over a corpus in which the owner mostly HIT things. These
@@ -248,6 +251,64 @@ DAMAGE_TAPES = {
 }
 ZERO_GRANT_TAPE = "20260916T213125"
 ZERO_GRANTS = 7
+
+# CASTAI-Z1 (2026-09-28): THE ZAISHEN TAPE, and why 4b's three shape claims are
+# now scoped to the pin rather than named around it. 20260928T103123 is the
+# Zaishen Challenge -- the owner's level-20 Warrior against four level-20 AI in
+# an arena, fighting AND being hit -- and it moved all three: 43 sub-strike
+# gains, five over 25 ({33: 4, 36: 1}) and one zero. Re-scanned AS OF THE PIN
+# (every stamp before PIN_STAMP, the two DAMAGE_TAPES named out as before),
+# SUB_STRIKE, OVER_STRIKE and "no zero" reproduce to the digit, so the scanner
+# did not drift. What carries the claims past the pin is a SIGNATURE, not a
+# third name: every 207 that is not a 25 is ONE damage word at its own agent in
+# its own batch, carrying round(% of that agent's current maximum) --
+# `_classify_gains`. Over the whole corpus that holds for every one of them
+# (175 today), which also upgrades SUB_STRIKE's "INFERRED" to OBSERVED-joined,
+# and REFUTES the JARIN reading of OVER_STRIKE: 26 / 29 / 42 are not "25 + 1 /
+# + 4 / + 17 summed in one tick" -- each rides ONE damage word of 25.71 % /
+# 29.29 % / 41.80 % of the hero's maximum (36/140, 41/140, 51/122). Nothing
+# in the corpus is summed.
+PIN_STAMP = "20260928T103123"
+ZAISHEN_TAPE = "20260928T103123"
+# The capture-declared gapped connections (livewire.declared_gaps), EXACT: a
+# new one must redden this, never vanish from the corpus.
+DECLARED_GAPPED = [("20260928T103123", "10.0.0.210:65009->98.95.137.136:80")]
+# The tape's 207s, per connection, pinned WHOLE (a tape does not grow). The
+# gapped match-2 connection is set aside above and so is absent here.
+ZAISHEN_207 = {
+    "10.0.0.210:50061->54.198.7.73:80":   # match 1, the Degeneration Team
+        {0: 1, 3: 4, 4: 2, 6: 1, 7: 1, 8: 1, 15: 1, 16: 1, 25: 44},
+    "10.0.0.210:50295->54.198.7.73:80":   # match 3, the Obsidian Spike Elementalists
+        {3: 1, 5: 1, 6: 1, 7: 2, 8: 2, 21: 3, 25: 35, 33: 4, 36: 1},
+    "10.0.0.210:58544->98.95.137.136:80":  # match 4, the Degeneration Team
+        {1: 1, 2: 1, 3: 9, 4: 2, 10: 1, 12: 1, 14: 1, 25: 15},
+}
+# Its five over-25 gains: each ONE armour-ignoring property-55 word, 1.5 s after
+# an Obsidian Flame (2809, the PvP split of 219) cast AT the observer --
+# 33.125 % = 159 / 480 and 36.25 % = 174 / 480. And its zero: a +0.0 hit at
+# t 131.453 on match 1 while the observer's Reversal of Fortune (307, applied
+# t 129.025 for 8.0 s) was up -- RB's mechanism, a second tape.
+ZAISHEN_OVER = [("10.0.0.210:50295->54.198.7.73:80", 47.206, 33),
+                ("10.0.0.210:50295->54.198.7.73:80", 62.207, 33),
+                ("10.0.0.210:50295->54.198.7.73:80", 71.007, 33),
+                ("10.0.0.210:50295->54.198.7.73:80", 85.704, 36),
+                ("10.0.0.210:50295->54.198.7.73:80", 91.706, 33)]
+ZAISHEN_ZERO = [("10.0.0.210:50061->54.198.7.73:80", 131.453, 0)]
+# Its 210s: every one is the PvP split 2858, and every one carries skill_copy
+# 0xFFFFFFFF where all 59 spends before the pin carry 0 -- a value no ordinary
+# spend has shown. What -1 MEANS is NOT FOUND; that it rides the PvP split is
+# OBSERVED at n = 1 skill (11 spends, three connections).
+ZAISHEN_SPEND_PAIRS = {(2858, 0xFFFFFFFF): 11}
+# Its moved maximum: Deep Wound (482) lands at t 109.171 on match 1 and property
+# 42 goes 480 -> 384 IN THE SAME BATCH (x 0.8); the five hits taken under it,
+# as (maximum, points, units). RB's 384 rows before the pin are the same
+# mechanism (482 at t 256.847 and 329.811 on 20260916T213125) -- a second tape.
+ZAISHEN_MOVED = [(384, 12, 3), (384, 14, 4), (384, 16, 4), (384, 25, 7), (384, 59, 15)]
+# The corpus floor for the signature: the non-strike gains it classified on the
+# run that wrote it (all 175 as `damage`). A vacuity guard, not a size pin.
+DAMAGE_RULE_GAINS = 175
+# The spend skill content lacks, on the witness tape: the PvP split of 348.
+PVP_SPENDS_WITNESS = {2858: 348}
 
 # THE BAR GATE, measured 2026-08-21 (12). Split the 58 usable connections on
 # whether the observing player's skillbar ever carried a skill with a non-zero
@@ -571,6 +632,126 @@ def section_cost_column():
 # 4-7: the live corpus. ArenaNet's own wire.
 
 
+def _round_half_up(x):
+    """Section 12's rounding, the only one that fits the armed rows."""
+    return int(math.floor(x + 0.5 + 1e-9))
+
+
+def _classify_gains(agg, stamp, conn, msgs, adrenjoin):
+    """Every 207 on one connection, against the damage words in ITS batch.
+
+    THE SIGNATURE 4b's re-scoped claims rest on (CASTAI-Z1). A batch is an
+    identical timestamp (section 12's join). For each agent a 207 names, the
+    damage words AT THAT AGENT in the batch give a pool of round(% of its
+    current maximum) -- the wire's own fraction, `adrenjoin.is_damage_to`. Each
+    gain is then:
+      strike       25 (and, as a control, whether a 25 % word sat beside it)
+      damage       equal to one pooled word's round(%) -- the damage rule
+      summed       25 + one pooled word's round(%) -- a strike and a hit taken
+                   in one message, JARIN's reading of its three
+      unexplained  anything else, which is what the check refuses
+    """
+    batches = collections.defaultdict(list)
+    for i, (t, op, v) in enumerate(msgs):
+        batches[t].append((op, v))
+    for t, items in batches.items():
+        agents = {int(v[1]) for op, v in items if op == SMSG_ADRENALINE_CHARGE}
+        for a in sorted(agents):
+            gains = [int(v[2]) for op, v in items
+                     if op == SMSG_ADRENALINE_CHARGE and int(v[1]) == a]
+            pcts = [abs(adrenjoin.f32(
+                        v[4] if op == adrenjoin.PROP_FLOAT_TARGET else v[3])) * 100.0
+                    for op, v in items if adrenjoin.is_damage_to(op, v, a)]
+            pool = [_round_half_up(x) for x in pcts]
+            for g in sorted(gains, reverse=True):
+                if g == STRIKE_UNITS:
+                    kind = "strike_beside_25pct" if STRIKE_UNITS in pool else "strike"
+                elif g in pool:
+                    pool.remove(g)
+                    kind = "damage"
+                elif g - STRIKE_UNITS in pool:
+                    pool.remove(g - STRIKE_UNITS)
+                    kind = "summed"
+                else:
+                    kind = "unexplained"
+                agg["gain_kinds"][stamp][kind] += 1
+                if g != STRIKE_UNITS:
+                    agg["gain_rows"].append({"stamp": stamp, "conn": conn,
+                                             "t": round(t, 3), "agent": a,
+                                             "units": g, "kind": kind,
+                                             "pcts": pcts})
+
+
+class MissingRow(KeyError):
+    """A skill no stated rule resolves -- never swallowed by a blanket except."""
+
+
+_CLIENT_TABLES = {}
+
+
+def _client_table(build):
+    """(data, base, count) of `build`'s pristine image, verified by pinned.find."""
+    if build not in _CLIENT_TABLES:
+        import pinned
+        import skilltable
+        exe, _why = pinned.find(build=build)
+        with open(exe, "rb") as fh:
+            data = fh.read()
+        base, count, _score = skilltable.locate_table(data)
+        _CLIENT_TABLES[build] = (data, base, count)
+    return _CLIENT_TABLES[build]
+
+
+def skill_row(world, skill, builds, used=None):
+    """The skill's row, by a STATED RULE (CASTAI-Z1, R8).
+
+    Content's `skills` table is the PLAYER CORPUS of build 38797
+    (`skilltable.player_corpus`: equip_family 1, PvP excluded). A skill it
+    lacks is read from the client table of a build it was captured under, and
+    accepted there ONLY as a PvP-only split of a player skill (pvp_only,
+    equip_family 0, `linked_id` a content row). Anything else raises
+    MissingRow. `used` collects {skill: (build, linked_id)}."""
+    import content
+    try:
+        return world.get("skills", str(skill))
+    except content.ContentError:
+        pass
+    import skilltable
+    for build in sorted(b for b in builds if b is not None):
+        data, base, count = _client_table(build)
+        if not 0 <= skill < count:
+            continue
+        r = skilltable.parse_record(data, base, skill)
+        if (r["pvp_only"] and r["equip_family"] == 0
+                and str(r["linked_id"]) in world.rows("skills")):
+            if used is not None:
+                used[skill] = (build, r["linked_id"])
+            return r
+    raise MissingRow(f"skill {skill} (builds {sorted(builds, key=str)}) is not in "
+                     f"content and is not a PvP split of a player skill")
+
+
+def _capture_build(cap, conn_path):
+    """The client build a connection was captured with, never guessed.
+
+    The file's own version record (origin.build_of) first; files from before
+    38833 shipped carry none, and for those the capture's manifest names the exe
+    it launched under its snapshot stamp (`pinned.known_build`). Else None --
+    and `skill_row` reads no client table for None."""
+    import origin
+    import pinned
+    b, _why = origin.build_of(conn_path)
+    if b is not None:
+        return b
+    try:
+        with open(os.path.join(cap, "manifest.json"), encoding="utf-8") as fh:
+            exe = json.load(fh).get("exe") or ""
+    except (OSError, ValueError):
+        exe = ""
+    known = pinned.known_build(os.path.basename(os.path.dirname(exe))) if exe else None
+    return known.number if known else None
+
+
 def scan_corpus():
     """Every message of the family in the live corpus, per connection.
 
@@ -585,6 +766,8 @@ def scan_corpus():
     §7 requires the pair to be adjacent in the stream AND simultaneous on the
     clock, which is a conjunction a coincidence has to satisfy twice.
     """
+    import adrenjoin
+    import livewire
     import tape
     import vaultpath
     from codec import Codec
@@ -593,10 +776,19 @@ def scan_corpus():
                                  why="the adrenaline wire oracle")
     codec = Codec()
     agg = {
+        "set_aside": [],         # (stamp, connection, still refused)
+        # CASTAI-Z1: every 207, classified against the damage words at ITS
+        # agent in ITS batch (section 4b's signature). stamp -> Counter.
+        "gain_kinds": collections.defaultdict(collections.Counter),
+        "gain_rows": [],         # the non-strike gains, one row each
+        "spend_builds": collections.defaultdict(set),
+        "spend_pairs_by_stamp": collections.defaultdict(collections.Counter),
+        "cast_builds": collections.defaultdict(set),
         "captures": 0, "connections": 0, "messages": 0,
         "census": collections.Counter(),
         "amounts": collections.Counter(),
         "amounts_by_stamp": collections.defaultdict(collections.Counter),
+        "amounts_by_conn": collections.defaultdict(collections.Counter),
         "spend_skills": collections.Counter(),
         "spend_copies": collections.Counter(),
         "self_scope": [],        # (stamp, agents_on_207, agents_on_218)
@@ -611,12 +803,25 @@ def scan_corpus():
         if not os.path.isdir(cap):
             continue
         agg["captures"] += 1
+        declared = livewire.declared_gaps(cap)
         for conn in tape.channel_files(cap):
-            try:
-                _info, events = tape.load_tape(cap, conn["connection"])
-                msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
-            except Exception:                                  # noqa: BLE001
+            # A GAPPED CONNECTION is set aside ONLY because its own capture's
+            # manifest declares it (CASTAI-Z1, livewire.declared_gaps), and it
+            # must STILL be refused. No blanket except: any other connection
+            # that fails to load is a crash, not a quiet `continue`.
+            if conn["connection"] in declared:
+                try:
+                    tape.load_tape(cap, conn["connection"])
+                    refused = False
+                except tape.TapeError:
+                    refused = True
+                agg["set_aside"].append((stamp, conn["connection"], refused))
+                print(f"  (set aside: {stamp} {conn['connection']} -- its manifest "
+                      f"declares gaps {declared[conn['connection']]})")
                 continue
+            _info, events = tape.load_tape(cap, conn["connection"])
+            msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
+            build = _capture_build(cap, conn["path"])
             agg["connections"] += 1
             agg["messages"] += len(msgs)
 
@@ -628,8 +833,11 @@ def scan_corpus():
                 if op == SMSG_ADRENALINE_CHARGE:
                     agg["amounts"][v[2]] += 1
                     agg["amounts_by_stamp"][stamp][v[2]] += 1
+                    agg["amounts_by_conn"][(stamp, conn["connection"])][v[2]] += 1
                     on_207.add(v[1])
                 elif op == SMSG_ADRENALINE_SPEND:
+                    agg["spend_builds"][v[2]].add(build)
+                    agg["spend_pairs_by_stamp"][stamp][(v[2], v[3])] += 1
                     agg["spend_skills"][v[2]] += 1
                     agg["spend_copies"][v[3]] += 1
                     spends.append((i, t, v[1], v[2]))
@@ -640,7 +848,9 @@ def scan_corpus():
                     if op in INT_OPS and v[1] in CAST_PROPS:
                         casts.append((i, t, v[2], v[-1], v[1]))
                         agg["cast_skills"][v[-1]] += 1
+                        agg["cast_builds"][v[-1]].add(build)
 
+            _classify_gains(agg, stamp, conn["connection"], msgs, adrenjoin)
             if on_207:
                 agg["self_scope"].append((stamp, sorted(on_207),
                                           sorted(on_218)))
@@ -668,6 +878,17 @@ def section_census(agg):
               f"corpus that SHRANK is a vault that moved and every count below "
               f"would quietly get easier -- that is what this refuses. Growth "
               f"is the campaign working and must not redden a thing")
+
+    set_aside = agg["set_aside"]
+    LEDGER.ok([(st, c) for st, c, _r in set_aside] == DECLARED_GAPPED
+              and all(r for _st, _c, r in set_aside),
+              f"the connections set aside are EXACTLY the capture-declared gapped "
+              f"ones, and each is still refused by the loader: {set_aside}",
+              f"expected {DECLARED_GAPPED} (livewire.declared_gaps, from the "
+              f"capture's own manifest). Until CASTAI-Z1 this walk dropped any "
+              f"connection that failed to load with a blanket except; now a "
+              f"future gapped connection reddens this rather than vanishing from "
+              f"the corpus, and any OTHER failure is a crash")
 
     for op in (SMSG_ADRENALINE_CHARGE, SMSG_ADRENALINE_CLEAR,
                SMSG_ADRENALINE_SPEND):
@@ -706,9 +927,12 @@ def section_populations(agg):
     # the last check of this section (DAMAGE_TAPES says what each one is).
     everything = agg["amounts"]
     amounts = collections.Counter()
+    at_pin = collections.Counter()      # CASTAI-Z1: the corpus the claims were made over
     for stamp, c in agg["amounts_by_stamp"].items():
         if stamp not in DAMAGE_TAPES:
             amounts.update(c)
+            if stamp < PIN_STAMP:
+                at_pin.update(c)
     # THE COUNT IS A FLOOR AND THE DOMINANCE IS THE CLAIM. Every gain the
     # corpus has added since this was first pinned carried exactly 25, twice
     # over (886 -> 889 here, 631 -> 886 at the previous re-pin), so the
@@ -737,28 +961,35 @@ def section_populations(agg):
               f"wire, which is why a tape made to be hit is named out of it "
               f"rather than allowed to drag a ratio: 20260917T090355 has 26 "
               f"gains and not one 25, because nobody swung)")
-    tail = {a: n for a, n in amounts.items() if a < STRIKE_UNITS}
+    tail = {a: n for a, n in at_pin.items() if a < STRIKE_UNITS}
     LEDGER.ok(tail == SUB_STRIKE,
-              f"and {sum(tail.values())} carry less, as {dict(sorted(tail.items()))}",
-              f"expected {SUB_STRIKE}. INFERRED, and labelled that way on "
+              f"and {sum(tail.values())} carry less, as {dict(sorted(tail.items()))}"
+              f" -- AS OF THE PIN (captures before {PIN_STAMP})",
+              f"expected {SUB_STRIKE}. RE-SCOPED 2026-09-28 (CASTAI-Z1), not "
+              f"re-pinned: the Zaishen tape added 43 sub-strike gains and every "
+              f"one is a joined damage word (the SIGNATURE check below carries "
+              f"the claim past the pin). INFERRED, and labelled that way on "
               f"purpose: GWW's other rule is one unit per 1% of maximum health "
               f"LOST, floored, which produces exactly this kind of small "
               f"ragged tail -- but NOTHING IN THIS CORPUS JOINS THESE TO "
               f"HEALTH TRAFFIC. Until something does, the multiset is the "
               f"measurement and the explanation is not")
 
-    over = {a: n for a, n in amounts.items() if a > STRIKE_UNITS}
+    over = {a: n for a, n in at_pin.items() if a > STRIKE_UNITS}
     LEDGER.ok(over == OVER_STRIKE,
-              f"NO 207 exceeds {STRIKE_UNITS} units, in {sum(amounts.values())} "
-              f"of them, except the hero's three summed ticks {OVER_STRIKE} (JARIN)",
-              f"{over}, outside the hits-taken tapes. The STRIKE rule's own "
+              f"NO 207 exceeds {STRIKE_UNITS} units, in {sum(at_pin.values())} "
+              f"of them, except the hero's three {OVER_STRIKE} (JARIN) -- AS OF "
+              f"THE PIN (captures before {PIN_STAMP})",
+              f"{over}, outside the hits-taken tapes. (JARIN called the three "
+              f"'summed ticks'; the per-gain join REFUTES that -- each is ONE "
+              f"damage word, below.) The STRIKE rule's own "
               f"signature: 25 is the largest single event THAT rule allows, "
               f"and a 50 would mean the server batches strikes. CORRECTED "
               f"2026-09-17: this used to say 25 caps the MESSAGE. It does not "
               f"-- the damage rule has no cap, and one hit for 59.58 % of "
               f"maximum health carries 60 (next check, and 12)")
-    LEDGER.ok(0 not in amounts,
-              "and none carries 0",
+    LEDGER.ok(0 not in at_pin,
+              f"and none carries 0 -- AS OF THE PIN (captures before {PIN_STAMP})",
               "outside the hits-taken tapes. 207 is UNSIGNED throughout -- §9 "
               "reads the add and the clamp -- so it cannot express a loss. "
               "Losses ride 208 and 210. CORRECTED 2026-09-17: this used to add "
@@ -782,7 +1013,67 @@ def section_populations(agg):
               f"single Lightning Orbs, and section 12 joins every one of them "
               f"to the damage word in its own batch. A THIRD tape with a zero "
               f"or an over-25 reddens the two checks above, which is the "
-              f"point: name it, say what it is, and do not widen a constant")
+              f"point: name it, say what it is, and do not widen a constant. "
+              f"(CASTAI-Z1: the third tape came, and was named by SIGNATURE "
+              f"rather than by stamp -- the next three checks)")
+
+    rows = agg["gain_rows"]
+    kinds = collections.Counter(r["kind"] for r in rows)
+    off = [r for r in rows if r["kind"] != "damage"]
+    # THE KNOWN-BAD ARM: GWW's "floored" in place of round. If the join could
+    # only agree, floor would pass too; it must refute some rows.
+    floor_miss = [r for r in rows if r["kind"] == "damage"
+                  and not any(math.floor(x) == r["units"] for x in r["pcts"])]
+    stamps = {r["stamp"] for r in rows}
+    LEDGER.ok(not off and len(rows) >= DAMAGE_RULE_GAINS
+              and set(DAMAGE_TAPES) <= stamps and ZAISHEN_TAPE in stamps
+              and floor_miss,
+              f"THE SIGNATURE: every 207 that is not a {STRIKE_UNITS}, over the "
+              f"whole corpus, is ONE damage word at its own agent in its own "
+              f"batch, carrying round(% of that agent's current maximum): "
+              f"{kinds.get('damage', 0)} of {len(rows)}",
+              f"kinds {dict(kinds)}; off the signature: "
+              f"{[(r['stamp'], r['t'], r['units'], r['kind']) for r in off][:6]}. "
+              f"At least {DAMAGE_RULE_GAINS} (a vacuity floor). This is what "
+              f"carries 4b's three shape claims past the pin, so a new tape of "
+              f"hits taken CONFIRMS rather than reddens -- and it covers both "
+              f"named hits-taken tapes (the positive controls) and the Zaishen "
+              f"tape. KNOWN-BAD ARM: floor(%) in place of round misses "
+              f"{len(floor_miss)} of the same rows, so the join discriminates. "
+              f"OBSERVED, and it retires SUB_STRIKE's 'nothing joins these to "
+              f"health traffic': every one of them now does")
+
+    jarin = sorted((r["units"], round(max(r["pcts"]), 3)) for r in rows
+                   if r["stamp"] == "20260914T005758" and r["units"] > STRIKE_UNITS)
+    LEDGER.ok(jarin == JARIN_OVER_WORDS and kinds.get("summed", 0) == 0,
+              f"JARIN's three over-25 gains are each ONE damage word, not a "
+              f"strike summed with a hit taken: {jarin} as (units, % of max)",
+              f"expected {JARIN_OVER_WORDS}; summed gains anywhere in the corpus: "
+              f"{kinds.get('summed', 0)}. REFUTES the reading OVER_STRIKE's comment "
+              f"gave them ('25 + 1 / + 4 / + 17 ... retail sums the tick'): the "
+              f"hero's damage word is 36/140, 41/140 and 51/122 of its maximum, "
+              f"and round() of that is the whole gain. The damage rule has no "
+              f"cap at {STRIKE_UNITS} (RB2), and this is where it showed first")
+
+    z_conn = {c: dict(n) for (st, c), n in agg["amounts_by_conn"].items()
+              if st == ZAISHEN_TAPE}
+    z_over = [(r["conn"], r["t"], r["units"]) for r in rows
+              if r["stamp"] == ZAISHEN_TAPE and r["units"] > STRIKE_UNITS
+              and r["kind"] == "damage" and len(r["pcts"]) == 1]
+    z_zero = [(r["conn"], r["t"], r["units"]) for r in rows
+              if r["stamp"] == ZAISHEN_TAPE and r["units"] == 0
+              and r["kind"] == "damage" and r["pcts"] == [0.0]]
+    LEDGER.ok(z_conn == ZAISHEN_207 and sorted(z_over) == ZAISHEN_OVER
+              and z_zero == ZAISHEN_ZERO,
+              f"THE ZAISHEN TAPE, pinned whole: {len(z_conn)} connections, five "
+              f"over-25 gains {sorted(u for _c, _t, u in z_over)} and one zero, "
+              f"each ONE damage word",
+              f"{z_conn}. EXACT, per connection (a tape does not grow; the gapped "
+              f"match-2 connection is set aside by its manifest). The 33s and the "
+              f"36 are armour-ignoring property-55 words from an Obsidian Flame "
+              f"(2809) cast at the observer 1.5 s before; the zero is a +0.0 hit "
+              f"under the observer's Reversal of Fortune (307) -- RB's mechanism "
+              f"on a second tape. OBSERVED, CASTAI-Z1")
 
 
 def section_self_scope(agg):
@@ -860,14 +1151,25 @@ def section_spend_join(agg):
               f"counts and that is the campaign working; a SHORTFALL would mean "
               f"the join stopped seeing a spender it used to see")
 
-    zero_cost = []
+    zero_cost, used, costs = [], {}, {}
     for skill, n in agg["spend_skills"].items():
-        units = int(world.get("skills", str(skill))["adrenaline_units"])
-        if not units:
+        # CASTAI-Z1: a spend skill content lacks is resolved by skill_row's
+        # STATED RULE (a PvP-only split of a player skill, read from the
+        # capture's own build), never by a blanket except -- the Zaishen tape
+        # spends on 2858, the PvP split of 348, and content holds 348 only.
+        costs[skill] = int(skill_row(world, skill, agg["spend_builds"][skill],
+                                     used)["adrenaline_units"])
+        if not costs[skill]:
             zero_cost.append((skill, n))
+    LEDGER.ok(used == {s: (38888, link) for s, link in PVP_SPENDS_WITNESS.items()},
+              f"the one spend skill content lacks is a PvP split, by the stated "
+              f"rule: {used} as skill -> (build, the player skill it splits off)",
+              f"expected {PVP_SPENDS_WITNESS} on build 38888 (CASTAI-Z1: Zaishen "
+              f"Challenge plays PvP versions). A new id reddens this -- name it, "
+              f"then widen the witness")
     LEDGER.ok(not zero_cost,
               "and every one of them carries a NONZERO adrenaline cost",
-              f"{ {s: world.get('skills', str(s))['adrenaline_units'] for s in agg['spend_skills']} }"
+              f"{costs}"
               f" as skill -> raw units. Zero-cost spends: {zero_cost}. Two "
               f"independent things had to agree: which skills retail chose to "
               f"send a 210 for, and which skills the client's own table gives "
@@ -876,9 +1178,11 @@ def section_spend_join(agg):
     free, free_skills = 0, set()
     for skill, n in agg["cast_skills"].items():
         try:
-            units = int(world.get("skills", str(skill))["adrenaline_units"])
-        except Exception:                                      # noqa: BLE001
-            continue
+            units = int(skill_row(world, skill, agg["cast_builds"][skill])
+                        ["adrenaline_units"])
+        except MissingRow:
+            continue            # an NPC's own skill: no player bar holds it
+
         if not units:
             free += n
             free_skills.add(skill)
@@ -897,15 +1201,46 @@ def section_spend_join(agg):
     # hundred lines apart, and green only because the corpus had not grown since.
     # The claim is "0 in ALL of them", so the denominator has to be whatever
     # section 4 actually counted.
-    n_spend = agg["census"][SMSG_ADRENALINE_SPEND]
-    LEDGER.ok(dict(agg["spend_copies"]) == {0: n_spend},
-              f"and skill_copy is 0 in all {sum(agg['spend_copies'].values())}",
-              f"{dict(agg['spend_copies'])}. §9 reads the worker matching a "
+    at_pin = collections.Counter()
+    for st, pairs in agg["spend_pairs_by_stamp"].items():
+        if st < PIN_STAMP:
+            for (_sk, copy), n in pairs.items():
+                at_pin[copy] += n
+    n_spend = sum(at_pin.values())
+    LEDGER.ok(dict(at_pin) == {0: n_spend} and n_spend >= CENSUS[SMSG_ADRENALINE_SPEND],
+              f"and skill_copy is 0 in all {n_spend} -- AS OF THE PIN (captures "
+              f"before {PIN_STAMP})",
+              f"{dict(at_pin)}; the whole corpus reads {dict(agg['spend_copies'])} "
+              f"(the next check). §9 reads the worker matching a "
               f"slot on the PAIR (skillId, skillCopy), so the field is real "
               f"and load-bearing -- but ordinary play never exercises it "
               f"(studies/skillcast §3). A sender may emit 0 and a receiver "
               f"must still match on both, which is the asymmetry worth writing "
               f"down")
+
+    # CASTAI-Z1: past the pin the claim is carried by a SIGNATURE -- a spend of a
+    # skill content holds (the player corpus) carries 0; a spend of a PvP split
+    # (skill_row's rule, `used`) carries 0xFFFFFFFF -- with the tape pinned whole.
+    pairs = collections.Counter()
+    for st, c in agg["spend_pairs_by_stamp"].items():
+        pairs.update(c)
+    player = {k: n for k, n in pairs.items() if k[0] not in used}
+    split = {k: n for k, n in pairs.items() if k[0] in used}
+    LEDGER.ok(all(copy == 0 for _sk, copy in player)
+              and all(copy == 0xFFFFFFFF for _sk, copy in split)
+              and dict(agg["spend_pairs_by_stamp"].get(ZAISHEN_TAPE, {}))
+              == ZAISHEN_SPEND_PAIRS,
+              f"NEW: a PvP split's spend carries skill_copy 0xFFFFFFFF -- "
+              f"{ {(sk, hex(c)): n for (sk, c), n in split.items()} } -- while "
+              f"every player-corpus spend still carries 0 "
+              f"({sum(player.values())} of them)",
+              f"{ZAISHEN_TAPE} pinned whole: "
+              f"{ {(sk, hex(c)): n for (sk, c), n in agg['spend_pairs_by_stamp'].get(ZAISHEN_TAPE, {}).items()} }. "
+              f"OBSERVED (CASTAI-Z1), n = one skill: the Zaishen Challenge "
+              f"spends only 2858, so whether -1 marks the PvP split or the arena "
+              f"is not separable here, and what the client does with it is NOT "
+              f"FOUND. Our server emits 0 and runs no PvP versions, so nothing "
+              f"it sends is contradicted")
 
 
 def section_order(agg):
@@ -1445,13 +1780,22 @@ def section_bar_gate(agg):
 
     zero_units = [r for r in armed_dmg if r["units"] == 0]
     zero_dmg = [r for r in armed_dmg if r["pct"] == 0.0]
+    # CASTAI-Z1: the capture SET is scoped to the pin (a second tape, the
+    # Zaishen, now carries one -- `ZAISHEN_ZERO`, section 4b); the relation,
+    # zero-damage rows == zero-unit gains, stays corpus-wide and is the claim.
     LEDGER.ok(len(zero_units) >= ZERO_GRANTS and zero_units == zero_dmg
-              and {r["capture"] for r in zero_units} == {ZERO_GRANT_TAPE}
+              and {r["capture"] for r in zero_units
+                   if r["capture"] < PIN_STAMP} == {ZERO_GRANT_TAPE}
+              and sum(1 for r in zero_units
+                      if r["capture"] < PIN_STAMP) == ZERO_GRANTS
               and all(math.copysign(1.0, r["value"]) > 0 for r in zero_units),
               f"THE ZERO GRANT: {len(zero_units)} armed damage word(s) carry "
               f"+0.0, and each one is answered by a 207 carrying 0",
               f"{len(zero_dmg)} zero-damage rows, {len(zero_units)} zero-unit "
-              f"gains, THE SAME ROWS, all on {ZERO_GRANT_TAPE} -- Reversal of "
+              f"gains, THE SAME ROWS -- as of the pin all {ZERO_GRANTS} on "
+              f"{ZERO_GRANT_TAPE}, and past it "
+              f"{sorted({r['capture'] for r in zero_units if r['capture'] >= PIN_STAMP})}"
+              f" -- Reversal of "
               f"Fortune eating the whole hit (studies/skills 48.7: the "
               f"converted zero is +0.0, 7 of 7). Retail does not skip the gain "
               f"when there is nothing to gain, and since SKILLS-AD4 shipped "
@@ -1535,12 +1879,29 @@ def section_bar_gate(agg):
     of_current = [r for r, _k in moved if _round(r["pct"]) == r["units"]]
     of_base = [r for r, k in moved
                if _round(k / (ARMED_MAX_HEALTH / 100.0)) == r["units"]]
+    # CASTAI-Z1: `not of_base` is the literal claim AS OF THE PIN. Past it, a
+    # row where round(% of current) and round(points / 4.8) coincide cannot
+    # refute either reading (the Zaishen tape's (384, 12, 3): 3.125 % and 2.5
+    # both round to 3), so the claim is carried by the DISCRIMINATING rows --
+    # every one of which must fit the current maximum.
+    disc = [(r, k) for r, k in moved
+            if _round(r["pct"]) != _round(k / (ARMED_MAX_HEALTH / 100.0))]
+    z_moved = sorted((r["max_health"], round(k), r["units"]) for r, k in moved
+                     if r["capture"] == ZAISHEN_TAPE)
     LEDGER.ok(len(moved) >= MOVED_MAX_ROWS and len(of_current) == len(moved)
-              and not of_base,
+              and not [r for r in of_base if r["capture"] < PIN_STAMP]
+              and len(disc) >= MOVED_MAX_ROWS
+              and z_moved == ZAISHEN_MOVED,
               f"THE DENOMINATOR IS THE CURRENT MAXIMUM: {len(of_current)} of "
               f"{len(moved)} rows against a moved maximum fit round(% of it), "
-              f"{len(of_base)} fit round(points / "
-              f"{ARMED_MAX_HEALTH / 100.0})",
+              f"{len([r for r in of_base if r['capture'] < PIN_STAMP])} fit "
+              f"round(points / {ARMED_MAX_HEALTH / 100.0}) as of the pin, and "
+              f"{len(disc)} rows discriminate",
+              f"past the pin {len(of_base)} coincide under both readings; the "
+              f"Zaishen tape's moved rows {z_moved} are under Deep Wound (482, "
+              f"property 42 480 -> 384 in its apply batch, t 109.171) -- the "
+              f"same mechanism as RB's 384 rows before the pin (482 at t 256.847 "
+              f"and 329.811 on 20260916T213125), a second tape. "
               f"{[(r['max_health'], round(k), r['units']) for r, k in moved]} "
               f"as (maximum, points, units). 286 points is 60 units at 480 and "
               f"70 at 408; 101 is 21 at 480 and 30 at 336. CLOSES the limit "
