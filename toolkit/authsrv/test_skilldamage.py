@@ -1325,8 +1325,13 @@ def main():
           "re-statement (the [61] seconds when sent, else the activation) holds on every cast; "
           "the registration's corpus has none",
           str((hsz["i_ct_casts"], hsz["m_ct_casts"])))
+    # Exact on the Zaishen tape, empty at the registration, and on the whole corpus only the
+    # SIGNATURE (I2r holds -- asserted with the restated verdicts above) plus the witness as a
+    # subset: a later tape repeating it is confirming evidence (review M1, 2026-09-28).
     check(hsz["i_words_on_target_tick"] == [(ZAISHEN, "50295", 457.84, 1)]
-          and hs["i_words_on_target_tick"] == hsz["i_words_on_target_tick"]
+          and hsp["i_words_on_target_tick"] == []
+          and set(hsz["i_words_on_target_tick"]) <= set(hs["i_words_on_target_tick"])
+          and hs["i2r"]
           and hsz["i_hex_already"] == [(ZAISHEN, "50061", 194.673, 3, 0)]
           and hsz["g2_already_hexed"] == [(ZAISHEN, "50061", 193.924, 44),
                                           (ZAISHEN, "50061", 195.674, 179),
@@ -1336,27 +1341,43 @@ def main():
           and hsz["h_42_elsewhere"] == 0,
           "I2 / I3 / G2 FAILED on 20260928T103123 (exact, per tape): the one word from a 179's "
           "caster onto its target in the completion batch (:50295 457.840) is its own Fire Storm's "
-          "k = 2 tick; a hex landing on the observer ALREADY hexed carries no 0x00F1 -- agent 3's "
+          "k = 2 tick (none at the registration; on the whole corpus I2r holds and this row is "
+          "among the words); a hex landing on the observer ALREADY hexed carries no 0x00F1 -- agent 3's "
           "179 at 194.673 (field3 0: the caster's own Fire Magic) and four applies of 44 / 179 / "
           "31 / 36; the 58 still leads the 0x0042 on every one, and every hex 0x0042 is still on "
           "the observer",
           str((hsz["i_words_on_target_tick"], hsz["i_hex_already"], hsz["g2_already_hexed"])))
+    # Exact on the Zaishen tape, none at the registration. On the whole corpus the witness is
+    # a SUBSET (a later tape repeating it is confirming evidence -- review item 3, 2026-09-28),
+    # and every miss carries the witness's SIGNATURE -- G3 (skill, field3, f32, predicted) and
+    # C2c (condition, field3, f32) -- so a miss of a NEW shape reddens here and is seen as a
+    # new finding, never absorbed into the recorded failure.
+    g3_sig = {x[3:] for x in hsz["g3_miss_rows"]}
+    ca_sig, ce_sig = set(hsz["c_cast_applied_off"]), set(hsz["c_environmental_off"])
+    _sub = lambda a, b: not (collections.Counter(a) - collections.Counter(b))   # noqa: E731
     check(hsz["g3_miss_rows"] == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, 12.533),
                                   (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 12.533)]
-          and hs["g3_miss_rows"] == hsz["g3_miss_rows"] and hsp["g3_misses"] == 0
+          and hsp["g3_misses"] == 0 and hsp["g3_miss_rows"] == []
           and hsz["c_cast_applied_off"] == [("Crippled", 0, 15.0)]
           and hsz["c_environmental_off"] == [("Deep Wound", 20, 20.0), ("Poison", 13, 13.0),
                                              ("Poison", 13, 13.0)]
-          and hs["c_cast_applied_off"] == hsz["c_cast_applied_off"]
-          and hs["c_environmental_off"] == hsz["c_environmental_off"],
-          "G3 and C2c FAILED on 20260928T103123 with no re-statement (exact, per tape; nowhere "
-          "else): agent 4's 135 lands on the observer twice at field3 11 with 14.0 s where "
-          "interp(3, 16, 11) is 12.533 -- the corpus's first hex whose duration varies by rank "
-          "(179's 3 / 3 could never fail G3), cause UNMEASURED; a skill-applied Crippled carries "
-          "field3 0 (15 s, under [10, obs, 334]), and a Deep Wound at hex 44's end plus two "
-          "Poisons on an attack's landing carry field3 == f32 where the classifier calls them "
-          "environmental",
-          str((hsz["g3_miss_rows"], hsz["c_cast_applied_off"], hsz["c_environmental_off"])))
+          and hsp["c_cast_applied_off"] == [] and hsp["c_environmental_off"] == []
+          and set(hsz["g3_miss_rows"]) <= set(hs["g3_miss_rows"])
+          and _sub(hsz["c_cast_applied_off"], hs["c_cast_applied_off"])
+          and _sub(hsz["c_environmental_off"], hs["c_environmental_off"])
+          and all(x[3:] in g3_sig for x in hs["g3_miss_rows"])
+          and set(hs["c_cast_applied_off"]) <= ca_sig
+          and set(hs["c_environmental_off"]) <= ce_sig,
+          "G3 and C2c FAILED on 20260928T103123 with no re-statement (exact, per tape; none at "
+          "the registration): agent 4's 135 lands on the observer twice at field3 11 with 14.0 s "
+          "where interp(3, 16, 11) is 12.533 -- the corpus's first hex whose duration varies by "
+          "rank (179's 3 / 3 could never fail G3), cause UNMEASURED; a skill-applied Crippled "
+          "carries field3 0 (15 s, under [10, obs, 334]), and a Deep Wound at hex 44's end plus "
+          "two Poisons on an attack's landing carry field3 == f32 where the classifier calls them "
+          "environmental; on the whole corpus these rows are among the misses and every miss "
+          "has one of their shapes (a miss of a new shape is a new finding and reddens this)",
+          str((hsz["g3_miss_rows"], hsz["c_cast_applied_off"], hsz["c_environmental_off"],
+               "whole:", hs["g3_miss_rows"], hs["c_cast_applied_off"], hs["c_environmental_off"])))
     def _exact_179(s):
         return (s["i_per_port"] == hexjoin.EXPECT_179_PER_PORT and s["i_completed"] == 28
                 and s["i_scheduled"] == 20 and s["i_scheduled_with_words"] == 18
@@ -1402,7 +1423,8 @@ def main():
     check(_exact_185(hs)
           and hs["h_42_elsewhere"] == 0 and hsp["h_42_on_observer"] == 1
           and hsz["h_42_on_observer"] == 7 and hs["h_42_on_observer"] >= 1
-          and hs["m_ranks_corpus"] == [0, 13]
+          and hsp["m_ranks_corpus"] == [13] and hsz["m_ranks_corpus"] == [0]
+          and {0, 13} <= set(hs["m_ranks_corpus"])
           and len(hs["c_dazed"]) >= 1 and len(hs["c_cracked"]) >= 2
           and hs["c_cast_applied"] >= 20 and hs["c_environmental"] >= 30
           and hs["c_observer_no_id_corpus"].get("Crippled", 0) >= 4 and hs["c_observer_no_id_corpus"].get("Deep Wound", 0) >= 4
@@ -1412,8 +1434,9 @@ def main():
           "twins / 3 singles on the target, 4 casts mixing twins and singles, 647.300 the one "
           "target-single adjacent-twin; no twin without a Burning signal, one single (780.235) "
           "with a new one; the observer's Burning (9, 9.0) twice, the caster's 13 predicting both "
-          "3 and 9 (its rank read on the witness's own hex: the Zaishen tape adds agent 3's 179 at "
-          "field3 0, its own Fire Magic); the ONE hex 0x0042 of the registration's corpus is on "
+          "3 and 9 (its rank read on the witness's own hex; the registration's corpus held that "
+          "one rank, 13, and the Zaishen tape adds agent 3's 179 at field3 0, its own Fire "
+          "Magic -- ranks 0 and 13 among the whole corpus's); the ONE hex 0x0042 of the registration's corpus is on "
           "the observer (the Zaishen tape: seven more, all on the observer); [6, T, ids] on their "
           "tapes: 179 [1, 12] x28, 1097 [1, 12] x5 + [12] x1, Empathy [1, 4] x5, Lightning Strike "
           "none x14; 6 snares; the order census 24 of 25 ascending, the one exception 640.689 "
@@ -1422,8 +1445,9 @@ def main():
           "and Deep Wound applies carry none either -- an id is not every condition's); corpus FLOORS: Dazed >= 1, Cracked "
           "Armor >= 2, every Burning id 25 (>= 5), id 29 shared by Weakness and Cracked Armor "
           "(a class, not a per-condition id -- the review's R34-8)",
-          str({k: hs[k] for k in ("m_per_port", "m_twin", "m_single", "m_mixed", "l_adds",
-                                  "l_not_ascending", "c_effect_ids", "c_observer_no_id")}))
+          str(dict({k: hs[k] for k in ("m_per_port", "m_twin", "m_single", "m_mixed", "l_adds",
+                                       "l_not_ascending", "c_effect_ids", "c_observer_no_id")},
+                   m_ranks=(hsp["m_ranks_corpus"], hsz["m_ranks_corpus"], hs["m_ranks_corpus"]))))
     # EV-3: a later capture holding the SAME casts again is confirming evidence and must
     # redden nothing -- append a copy of the witness's 54071 connection under a new stamp
     import copy as _copy
