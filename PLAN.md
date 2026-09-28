@@ -2079,11 +2079,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **Area damage beyond Death Blossom.** Of the 73 multi-target Fire Magic instants on
-  `20260817T231139` (daggers F13), 185 and 179 have no row and 197's label row reaches one
-  target; the areas over time ship (§41–§42, below) and the area hexes are unbuilt; B8's adjacent damage is the
-  player's strike only (a body's spell areas ship: weapons §37–§40, skills §59). Cyclone
-  Axe's per-foe attack and scatter are unmeasured.
+* **Area damage beyond Death Blossom** (daggers F13): 185, 179, the areas over time and the area
+  hexes have shipped (PLAN-LOG, D6); B8's adjacent damage is still the player's strike only,
+  and Cyclone Axe's per-foe attack is unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
   lands and whose second misses (is 3 sent?); ~~property 10 on the victim~~ (decoded, skillcast §16.6, and SENT since 2026-09-22: `[10, me, skill]` ahead of a skill's word at the observer, self-scoped 92 of 92; 229 / 230 are Lightning Orb / Javelin); the short gap
   after a skill's hit on SWORDS (9 of 21, an eighth of the interval off) and the three
@@ -2341,6 +2339,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **The account-posture call**: whether a live session may run against an archive
   holding an authored map is the owner's, unmade, and "launch and quit is enough" is
   UNVERIFIED ([studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md)).
+* **CASTAI's four live runs, REGISTERED 2026-09-28** (monsterai §18): three Zaishen Challenge
+  teams with Zaishen henchmen, and a PvE party with a Monk -- re-hexing a foe, removal, heals
+  on another ally, the selection test. Plans in `vault/plans/castai_*.txt`; the owner's to
+  take; `castethogram.py` owes a Zaishen class first.
 * **296 map rows are limited by information, not effort**: one live capture on a
   known-named zone yields one exact `(map id, file id)` pair
   ([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md)).

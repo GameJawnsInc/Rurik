@@ -2503,4 +2503,143 @@ photographed.
 
 ---
 
+## 18. CASTAI's live runs — REGISTERED 2026-09-28, not yet run
+
+**Identifiers.** `CASTAI-Z<n>` — the Zaishen Challenge runs; `CASTAI-H<n>` — the PvE healer
+run; `.P<n>` — a run's predictions (§17's word).
+
+**Why these four.** §17 left five things only a tape can close: which READY skill an AI fires
+(CASTAI-C5), whether it ever re-hexes a live hex on a FOE (the half of CASTAI-C2 with no
+informative case), an AI heal on ANOTHER ally and any removal skill (CASTAI-C6, n = 0 each),
+and which AI tier a creature runs (CASTAI-W2). The owner asked for the Zaishen Challenge
+(2026-09-28) and chose four runs from a list: three Zaishen teams and one PvE party with a healer.
+
+**What the Zaishen Challenge is** (WIKI, *Zaishen Challenge* rev 2707130, *Zaishen Challenge
+(outpost)* rev 2724880): a PvE challenge mission in the Battle Isles built like PvP — a party
+of 4 against 4 level-20 AI Zaishen, annihilation, the foe team and arena chosen at the start;
+heroes not allowed, but the outpost offers four level-20 **Zaishen henchmen** (Fighter, Archer,
+Healer, Mage), which put a second AI team on the tape — ours. Every opponent team has a fixed
+two-profession bar (*Degeneration Team* rev 2647763, *Smiting Monks* rev 2647764, *Obsidian
+Spike Elementalists* rev 2640622; henchmen revs 2709116 / 2675995 / 2675993 / 2675996). **These
+are PvP-simulation AI, their tier unknown** (CASTAI-W2): they are scored as their own population
+and never pooled with normal-mode monsters or the Isle.
+
+**Owed on our side before scoring** (none of it the owner's): `castethogram.py` classes every
+caster on a PvP-token connection HUMAN (§17's caveat), so it needs a Zaishen class (an opponent
+or a 0x01BF henchman on a Battle Isles challenge map is AI); and four new measures — removal
+cast on an afflicted vs a clean target, a heal's target against the party's health order, the
+fired slot against every READY slot (the §9 row-13 test, per definition), and a group's
+co-timed casts (a spike's spread in seconds).
+
+**How each run is launched** (RUNBOOK §"Capturing a live session"; the dry-run and WinDivert
+steps as always; `--mode` is what the account is actually set to):
+
+```
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode <base|reforged> --minutes 30 --plan C:\gd\Rurik\vault\plans\<plan>.txt
+```
+
+`--minutes` is a ceiling; Ctrl-C ends a run early and it still assembles. The plans are
+`castai_z1_degeneration.txt`, `castai_z2_monks.txt`, `castai_z3_obsidian.txt` and
+`castai_h1_healer.txt` in `vault/plans/`, each checked with `marks.py --check-plan`. Each
+names the party and gives F11 a single standing meaning.
+
+### CASTAI-Z1 — the Degeneration Team (party: you, Healer, Mage, Archer)
+
+Their bars: Warrior (Axe Rake, Eviscerate, Executioner's Strike, Frenzy, Healing Signet,
+Sprint, Gale); Ranger (Apply Poison, Crippling Shot, Distracting Shot, Savage Shot, Troll
+Unguent); Necromancer (Shadow Strike, Dark Pact, Life Siphon, Faintheartedness, Offering of
+Blood, Distortion, Mark of Subversion); Mesmer (Conjure Phantasm, Phantom Pain, Arcane
+Conundrum, Migraine, Inspired Hex, Drain Enchantment, Mantra of Resolve). Seven hexes over
+two casters is what makes this run the gate's.
+
+- **Z1.P1 — no re-hex of a live hex on a FOE.** 0 opponent hex casts onto a body carrying a
+  live episode of the same hex. EXACT on the observer (`0x0042` / `0x0044`); a RECONSTRUCTION
+  on the henchmen (table durations). **Floor: 10 informative casts** — the slot ready while
+  the same hex still lived on the target it then chose. Fewer is a null for P1, not a
+  confirmation. One counterexample is enough to put the gate's monster half to the owner
+  again.
+- **Z1.P2 — Remove Hex goes only to a hexed ally**, 0 casts at a clean one; its latency from
+  the hex's `0x0042` / `[6]` is recorded. **Floor: 5 Remove Hex casts.**
+- **Z1.P3 — the Healer heals ANOTHER ally, and the most-hurt one**: every heal lands on a hurt
+  ally; where two or more are hurt, the lowest health fraction is chosen in ≥ 80 % of casts
+  (the hero rule, CASTAI-W6); Orison of Healing only once the ally has lost at least what it
+  heals (WIKI *Orison of Healing* rev 2738568, the hero tier — a miss says the Zaishen tier
+  differs). **Floor: 20 heals on an ally other than the caster.**
+- **Z1.P4 — the Necromancer's class marker**: a Necromancer hex on any non-observer body
+  carries `[6, T, 1]` + `[6, T, X]` with X neither 12 (Elementalist) nor 4 (Mesmer) — the id
+  DESKWORK-D6 left NOT FOUND (weapons 43.2). One clean instance names it.
+- **Z1.P5 — the player's own cast-time word**: a spell of yours cast under Arcane Conundrum or
+  Migraine (F11) is preceded by `0x00A3 [61, you, target, seconds]` if retail sends it for the
+  observer's own cast (D6's residue; today RECONSTRUCTION). Any one F11-marked cast answers
+  it; none is a null.
+- **Z1.P6 — the selection test**: at least one opponent definition meets §9 row 13's bar
+  (30 casts across ≥ 2 skills with overlapping readiness), and its fired slot is NOT
+  round robin's (a slot re-fired while another ready slot waited, at least once).
+- **Z1.P7 — scatter, if it happens**: an opponent group inside the Mage henchman's Fire Storm
+  leaves the circle together (MONSTERAI-S3) within its first 3 damaging ticks (S2 guesses 2).
+  **Floor: 3 Fire Storms landing on ≥ 2 opponents.** Below it, the question stays WIKI.
+
+### CASTAI-Z2 — the Smiting Monks (party: you, Archer, Fighter, Mage)
+
+Their bar, all four the same: Balthazar's Aura, Mend Condition, Reversal of Fortune, Scourge
+Healing, Smite Hex, Zealot's Fire, Drain Enchantment. The henchmen's Poison Arrow, Hamstring
+and burning are what give Mend Condition work.
+
+- **Z2.P1 — Mend Condition only on a monk carrying a condition**, 0 on a clean one.
+  **Floor: 5 casts.** Smite Hex needs a hex on a monk, which only the owner's own bar can
+  supply; with none, Smite Hex is a named null.
+- **Z2.P2 — Reversal of Fortune's threshold**: the hero rule is "below 70 % maximum health"
+  (WIKI rev 2741457). Registered: every cast on an ally at or below 70 %. A cast above it
+  is evidence the Zaishen run a different tier from heroes — the first tape evidence on
+  CASTAI-W2 either way. **Floor: 10 casts.**
+- **Z2.P3 — heals and protection on OTHER monks**, not only on the caster: ≥ 1 in 4 of
+  Reversal of Fortune lands on another monk.
+- **Z2.P4 — no re-application while live**: Balthazar's Aura and Zealot's Fire never re-cast
+  on a monk still carrying them; Scourge Healing never re-cast on a hexed target.
+- **Z2.P5 — Drain Enchantment only at an enchanted target** (the Mage's Aura of Restoration is
+  the usual one), 0 at an unenchanted body.
+- **Z2.P6 — one target at a time** (WIKI, "they generally focus on one target"): the four
+  monks' attack targets agree in ≥ 80 % of 1-s windows; every switch is recorded.
+
+### CASTAI-Z3 — the Obsidian Spike Elementalists (party: you, Healer, Fighter, Archer)
+
+Their bar, all four the same: Heal Area, Mend Ailment, Remove Hex, Earth Attunement, Glyph of
+Energy, Obsidian Flame, Ward Against Melee. Expect short matches: they spike one target.
+
+- **Z3.P1 — the spike is coordinated**: Obsidian Flames on one target arrive in groups of
+  ≥ 3 inside 1.5 s, and the target is recorded against health, armour and distance (the
+  wiki's "weakest and closest", CASTAI-W4, has no numbers).
+- **Z3.P2 — Ward Against Melee when melee reaches them**: cast within 3 s of the Fighter's
+  first attack start on any of them (the hero rule, WIKI rev 2686635).
+- **Z3.P3 — Mend Ailment and Remove Hex only on an afflicted Elementalist.** **Floor: 5 Mend
+  Ailment casts.**
+- **Z3.P4 — Heal Area after "enough damage"**: its trigger health is recorded per cast; the
+  wiki's "they will all use Heal Area" is scored as ≥ 2 casts inside 2 s.
+- **Z3.P5 — Earth Attunement maintained, never re-cast while live** (WIKI rev 2718873, "maintain
+  both in and out of combat"): each re-cast ≥ 0.228 s after the `[6]` removal it follows.
+
+### CASTAI-H1 — PvE with a healer (party: the Ranger, a Monk hero or henchman, others)
+
+Normal-mode monsters (Plains of Jarin's are on tape already: 4438, 4439, 4440) against a
+hero-tier or henchman healer. It is the heal-on-another-ally gap closed with the observer as
+the patient, where health and effects are exact.
+
+- **H1.P1 — every Monk heal lands on a hurt ally**, the most-hurt first in ≥ 80 % of casts
+  where two or more are hurt. **Floor: 20 heals on another ally.**
+- **H1.P2 — Orison of Healing only once the ally has lost at least what it heals** (WIKI rev
+  2738568); on the observer this is exact.
+- **H1.P3 — no enchantment re-cast on an ally still carrying it** (WIKI *Hero behavior* rev
+  2741080), exact on the observer through `0x0042` / `0x0044`.
+- **H1.P4 — out of combat the Monk heals the hurt party and then stops**; nothing is cast at a
+  full-health ally.
+
+**What would change the code.** Z1.P1 failing reopens the gate for monsters (Q19 goes back to
+the owner). Z2.P2 separates the tiers, or fails to. Z1.P2 / Z2.P1 / Z3.P3 give the first
+removal rules a tape witness. Z1.P3 / H1.P1 give the heal target rule one. Z1.P6 is the first
+selection-order evidence; with the bar met it can be scored, and without it it is a null. Z1.P4
+names the Necromancer marker, and Z1.P5 the player's cast-time word. Nothing ships from a run
+until its floor is met; below the floor it is reported as a null.
+
+---
+
 *Written 2026-08-11 from a five-angle fan-out with independent hostile review of every angle, a capture-campaign design and a completeness critic, then a verification pass by the orchestrator over every code-driving claim (§10). Nothing in this document was produced by launching a client or by pointing anything at ArenaNet. Every corpus figure quoted here was reproduced by at least two parties except where n and provenance are stated otherwise, and every claim that did not survive review is in §6 rather than deleted.*
