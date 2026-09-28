@@ -32,7 +32,10 @@ WHAT THIS PINS.
   * §4 THE DECISION: `untriaged()` over the live census is EMPTY on this tree
     (acceptance (c) of the route: zero retail c2s opcodes neither handled,
     named nor dropped on purpose), it agrees with test_dispatch §10's restated
-    predicate, and removing one allowlist row names that row alone.
+    predicate, and removing one allowlist row names that row alone. The
+    Zaishen tape's three new opcodes (0x009A, 0x00A3, 0x00A6) carry their
+    decision (named medium / unnamed, dropped, not armed) and ONE exact
+    per-tape witness of the evidence behind it.
   * §5 REFUSALS: a root with no live capture makes `main()` exit 2 rather than
     print a clean table, and a dispatch chain that cannot be located refuses.
   * §6 STATIC hints: on a machine with the pinned client the send-site census
@@ -41,8 +44,9 @@ WHAT THIS PINS.
 Floor 20 -- the MANDATORY CORE, measured on 2026-09-23 with RURIK_VAULT pointed
 at an empty directory (§1, §3's file half, §4's file half, §5: the checks that
 need no vault and no client). With the vault and the pinned client present the
-same run executes 34 (36 since 2026-09-28: the declared-gap pin and its
-known-bad arm); §2, §3's live half, §4's live half and §6 declare skips
+same run executes 34 (42 since 2026-09-28: the declared-gap pin and its
+known-bad arm, three Zaishen decisions, the Zaishen witness); §2, §3's live
+half, §4's live half, the witness and §6 declare skips
 without them. The first cut set the floor at 34 and so failed a vault-free run
 by construction (checks.py: the floor is the core, not the fullest run).
 """
@@ -299,8 +303,83 @@ if live is not None:
            "red: read it, it is the witness)",
            f"name {named.get(0x0072)}, handled {0x0072 in (handled or {})}, "
            f"dropped {0x0072 in dropped}, live {0x0072 in live[0]}")
+    # CASTAI-Z1 (2026-09-28): the Zaishen Challenge tape brought three c2s no
+    # earlier tape carried. Triaged from its own evidence: two NAMED medium in
+    # overrides.json (the why is there), one UNNAMED at n=1, all three on the
+    # allowlist -- the server has no arena to arm them against (R7).
+    for op, nm in ((0x009A, "ZAISHEN_CHALLENGE_LIST_REQUEST"),
+                   (0x00A6, "ZAISHEN_CHALLENGE_ENTER"), (0x00A3, None)):
+        led.ok((named.get(op, (None, ""))[0] == nm)
+               and (nm is None or named[op][1] == "medium")
+               and op in dropped and op in live[0] and op not in (handled or {}),
+               f"0x{op:04X} is {'named ' + nm + ' (medium)' if nm else 'UNNAMED (n=1)'}, "
+               f"on retail's wire, NOT armed and on the allowlist with its reason "
+               f"(CASTAI-Z1)",
+               f"name {named.get(op)}, dropped {op in dropped}, "
+               f"seen {op in live[0]}, handled {op in (handled or {})}")
 else:
     led.skip("§4 the live half", "no live captures")
+
+
+# The Zaishen triage's evidence, as ONE exact per-tape witness (R5): every send
+# of the three on 20260928T103123 -- (client port, t, opcode, payload, the
+# non-clock s2c within 50 ms as (opcode, summary), the map of the first 0x01A5
+# transfer within 4 s or None). Scoped to that capture, so a later tape can
+# add evidence but never redden it. What it pins: 0x009A is answered by the
+# 0x01D7 menu (maps 321/318/320/319/322) 4 of 4; 0x00A6 [map, team, 0] by
+# 0x01D9 [2, 1] + 0x01BB and a transfer to ITS map 4 of 4 -- except the one
+# followed by 0x00A3, answered 0x01D9 [0, 0] with NO transfer (the control).
+def zaishen_sends(capdir):
+    gaps = livewire.declared_gaps(capdir)
+    out = []
+    for gf in livewire.connections(capdir):
+        if livewire.conn_name(gf) in gaps:
+            continue       # match 2's arena connection: none of the three is sent there
+        _conn, merged, _ok = livewire.decode_conn(capdir, gf)
+        port = int(livewire.conn_name(gf).split("->")[0].rsplit(":", 1)[1])
+        for i, (t, d, op, v) in enumerate(merged):
+            if d != "c2s" or op not in (0x009A, 0x00A3, 0x00A6):
+                continue
+            ans, transfer = [], None
+            for t2, d2, op2, v2 in merged[i + 1:]:
+                if t2 - t > 4.0:
+                    break
+                if d2 != "s2c":
+                    continue
+                if t2 - t <= 0.050 and op2 != c2striage.TICK:
+                    ans.append((op2, tuple(v2[1]) if op2 == 0x01D7
+                                else tuple(v2[1:3])))
+                if op2 == 0x01A5 and transfer is None:
+                    transfer = v2[4]
+            out.append((port, round(t, 3), op, tuple(v[1:]), tuple(ans), transfer))
+    return sorted(out, key=lambda r: r[1])
+
+
+MENU = (0x01D7, (321, 318, 320, 319, 322))
+HOLD = ((0x01D9, (2, 1)), (0x01BB, (3, 1)))
+ZAISHEN_WITNESS = [
+    (51300, 86.55, 0x009A, (), (MENU,), None),
+    (51300, 91.439, 0x00A6, (320, 55, 0), HOLD, 320),
+    (64997, 246.478, 0x009A, (), ((0x000C, ()), MENU), None),
+    (64997, 250.149, 0x00A6, (318, 55, 0), HOLD, 318),
+    (50267, 372.072, 0x009A, (), (MENU,), None),
+    (50267, 375.142, 0x00A6, (320, 55, 0), HOLD, None),
+    (50267, 377.611, 0x00A3, (), ((0x01D9, (0, 0)),), None),
+    (50267, 412.398, 0x00A6, (322, 52, 0), HOLD, 322),
+    (64494, 541.594, 0x009A, (), (MENU,), None),
+    (64494, 545.081, 0x00A6, (318, 55, 0), HOLD, 318),
+]
+zdir = os.path.join(livewire.captures_root(), "20260928T103123")
+if os.path.isdir(zdir):
+    zs = zaishen_sends(zdir)
+    led.ok(zs == ZAISHEN_WITNESS,
+           "WITNESS (20260928T103123, exact): 0x009A -> the 0x01D7 menu 4 of 4; "
+           "0x00A6 [map, team, 0] -> 0x01D9 [2, 1] + 0x01BB and a transfer to "
+           "ITS map 4 of 4; the one 0x00A6 followed by 0x00A3 -> 0x01D9 [0, 0] "
+           "and NO transfer",
+           "\n      " + "\n      ".join(repr(r) for r in zs))
+else:
+    led.skip("the Zaishen witness", "capture 20260928T103123 (CASTAI-Z1) missing")
 # The status vocabulary, and the reverse predicate's known-bad arm.
 led.ok(c2striage.status_of(0x0009, handled or {}, named, dropped) == "handled"
        and c2striage.status_of(0x0008, handled or {}, named, dropped) == "dropped"
