@@ -28,6 +28,41 @@ move back.
 
 ---
 
+### CASTAI-ZF17 (the knock-down half): a body knocked down mid-cast gets the cast family's stop ahead of its [63] -- 2026-09-28 -- **SHIPPED; byte-identical to the tape's one witness; `--no-knock-down-stop` reverts**
+
+**The witness** (studies/monsterai §18.2, CASTAI-ZF17; OBSERVED, n = 1): live capture
+`20260928T103123`, connection `:50061`, t=168.977. Agent 8, the Zaishen Healer, was 0.8 s
+into skill 288, announced at 168.171 with a 2.0 s cast-time word, when agent 5's skill 162
+knocked it down. Retail sent `0x009F [59, 8, 0]` and `0x00A2 [63, 8, 2.0f]` in ONE batch,
+the stop first, and no `[35]`. `interruptjoin.py` classifies it as stop kind `knockdown`,
+the only one in the corpus.
+
+**The fix** (`b13c63cd`): `authsrv.knock_down`'s body branch used to clear `cast_lands_at` and
+`casting` and send only the `[63]`. When a cast is in flight it now sends the stop first:
+`[59, body, 0]` for a spell and `[49, body, 0]` for an attack skill.
+- **Which stop:** the one the cast site announced (`NPC_ATTACK_SKILL_SWINGS and
+  _is_attack_skill`, `_scatter_cancel`'s R3-F5 rule), so under `--npc-skill-instant` an
+  attack skill gets `[59]`.
+- **`[49]` is RECONSTRUCTION:** no attack skill is knocked down on tape.
+- **An instant skill (SKILLS-IA) gets no stop:** it opened with no start on the wire. It is
+  still dropped.
+- **A swing in flight still gets the `[63]` alone:** no `[3]` rides any `[63]` on tape.
+- **Flag:** `KNOCK_DOWN_STOP`; `--no-knock-down-stop` is the revert arm.
+
+**The test:** `test_interrupt` §1v adds 6 checks: the witness shape, the attack form both
+ways, the instant, the swing, the known-bad arm, and one end to end through `land_skill` (a
+hostile's Hammer Bash on a party body mid-cast gives the word, then `[59]` and `[63]` back
+to back). §2 adds 1: §1v's own output against the tape's batch at the victim, byte for byte
+with the agent id substituted. The floor goes 28 -> 34, from a run on an EMPTY vault (34
+passed, 1 declared skip); the vault run has 55 checks. The affected set is green, 33 files
+(the knock-down callers, the serverargs readers, the doc lints).
+
+**Not done, and not claimed:**
+- A HERO knocked down mid-cast gets no bar mirror (no E2 / E5). There is no witness.
+- A body's INSTANT cast is still dropped by the knock-down, while the player's is spared
+  (`_mark_cancelled`). That is older than this change and one tick wide.
+- The other half of ZF17, no interrupt rows for 399 / 426, stays in `PLAN.md` §8.1.
+
 ### CASTAI-Z1: the Zaishen run scored, and the 19 suite reds its capture caused read, not re-pinned -- 2026-09-28 -- **Z1.P4 / P5 / P6 HELD, P7 FAILED, P1-P3 under their floors; the Necromancer's hex class id is 9 and SHIPPED; every red was a test, not the server**
 
 **The run** (studies/monsterai §18.1): the owner's live capture `20260928T103123` (secondary
