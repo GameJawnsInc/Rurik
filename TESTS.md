@@ -14475,4 +14475,63 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   `RURIK_INGAMEBUILD_AUTHSRV` at 6a7ffe04's `authsrv.py` (placed in `toolkit/authsrv/`)
   reddens 9 of 19 with the run's own values -- `[351, ...]`, `[3, 0, ...]`, `[0, 1, 0,
   ...]`, `{}`, rank 12, heal 66 -- while the 10 premises and controls stay green. Needs
-  the vault's skill and attribute tables. No client, no socket. 19 checks, floor 19. ~3 s)
+  the vault's skill and attribute tables. No client, no socket. 19 checks, floor 19. ~3 s),
+  `toolkit/authsrv/test_castgate.py` (**2026-09-27, CASTAI -- the first cast-policy slice,
+  DESKWORK-D8 step 6; owner's ruling PLAN.md sec.7 Q19: round robin stays the selector,
+  and ONE gate ships.** Two changes, each behind its own revert. THE LIVE-EFFECT GATE
+  (`SKIP_LIVE_EFFECT`, `--no-skip-live-effect`): a hostile (enemy_attack_tick) or a party
+  body (ally_cast_tick) HOLDS a slot whose effect the target it LANDS on already carries --
+  a live same-skill hex / enchantment / weapon spell, any caster, or for a condition-only
+  skill that condition -- the way SLICE-B3's heal gate holds (cursor stepped, same-tick
+  re-pick, recharge not charged, a re-picked held slot ends the search); stances,
+  glyphs, preparations, shouts, attacks, heals and damage-with-a-rider are never held
+  (`episodemods.live_effect_class`'s docstring labels every edge). WIKI "Hero behavior"
+  rev 2741080 for heroes, RECONSTRUCTION for normal-mode monsters; OBSERVED 0 of 170 retail
+  AI hex / enchantment casts on a live same-skill episode, stances re-cast while live 10 of
+  17 (castethogram). THE SELF-CAST WIRE FORM (`SELF_CAST_FORM`,
+  `--self-cast-names-target`): a cast landing on its caster (`effects.effect_recipient`)
+  rides 0x009F [prop, caster, skill] and its property 61 0x00A2 -- OBSERVED 417 of 417
+  self-kind [60] casts on 0x009F, 0 of 373 0x00A0 [60] naming the caster. Drives the REAL
+  ticks (effect_tick, enemy_attack_tick, ally_cast_tick) on a fake clock (authsrv.time
+  swapped for a Clock) and records a cast as a slot's recharge moving. §1 the leaf
+  predicate on literal inputs (bare). §2 (a) the Hatcher's bar (ENEMY_SKILL_BAR) over 120 s:
+  never two live 253 on the player, one close between each pair of 253 casts, every slot
+  fires, and after each close the gate's FIRST look at 253 passes and 253 is cast on that
+  tick; (a') a lone-253 caster re-casts on the SAME world tick as each close (gap 0 --
+  effect_tick runs before the AI ticks, so the [60] rides the 0x0044's batch): asserted AS
+  a RECONSTRUCTION faster than retail, whose AI re-casts come >= 0.228 s after a
+  same-skill end (0 of 95 inside 0.2 s), never as agreement; a faithful ~0.23 s hold would
+  redden it on purpose. With the full bar the re-cast waits for round robin's cursor to
+  come round, which is the selector's business, not the gate's. §3 (b) the KNOWN-BAD arm: the first 24 (tick,
+  skill) casts equal 19213513's own, recorded by driving this file's `fight` through a
+  `git archive 19213513` export; the stacked 253s return (max live 3). §4 (c) a hostile's
+  Flail (10) and a hero's Frenzy (346) re-cast while live, each replacing the live one;
+  (d) a hostile's self-enchantment 180 cast once in 59 s (the known-bad arm: 3, stacking),
+  and the hold reads the CASTER, not the player its cast_target names; (e) a hero's
+  Windborne Speed (160) on the hurt player never stacks (known-bad: it does); (f) Blinding
+  Flash (220) held at a Blind player, cast at a Poisoned one; Immolate (191, damage + a
+  Burning rider) cast at a Burning player; 840 (a caster-centred area Poison) cast at a
+  Poisoned player -- the wrapper's `area=` fact, driven; Sever Artery (382, an attack)
+  never held;
+  (g) an all-held two-253 bar casts nothing for 3 s, looks at each slot once a tick,
+  charges no recharge and resumes at the first look after the close. §5 (h) the form: a
+  rowless self cast (bare), the legacy cast form untouched -- its [60] AND its property
+  61, which keeps the site's target (0x00A3) where the default self cast rides 0x00A2
+  (bare); a hurt hostile's
+  Healing Signet, a hostile's 180 (the announce named the PLAYER until now), a hurt hero's
+  Healing Signet, the player's own Healing Signet pressed with a foe selected -- each
+  0x009F [60, caster, skill], the revert restoring today's 0x00A0; a hero's Frenzy [48]
+  on 0x009F; a targeted 253 on 0x00A0 both arms; property 61 on 0x00A2 / 0x00A3. §6 (i)
+  source: both flags in serverargs and flipped in main() (AST); the gate called once
+  from each loop and never from pick_skill; cast_anim_msg and cast_time_word resolve the
+  landing; the gate between the target gate and the reach / resource gates; four
+  cast_anim_msg sites. PROVEN RED by ten hand plants (the report of 2026-09-27): each
+  gate removed, the stance exemption dropped, 0x00A0 for a self cast, the gate reading
+  cast_target, a rider holding a damage skill, a hold that does not step the cursor, the
+  main() flip removed, property 61 ignoring the landing, the gate ignoring its flag; and
+  after the review, three more (the wrapper's area fact dropped, the legacy form's
+  property 61 following the landing, 253's duration drifting to 17 s with the vault
+  present), each red. Needs the vault's skills table for §2-§5's driven halves, which
+  skip ONLY when vaultpath finds no vault `content/skills.toml`; a present vault missing
+  a row, or with 253 not at 18 s, is a FAIL. No client, no socket. 76 checks with the
+  vault, floor 34 (the bare run). ~40 s)

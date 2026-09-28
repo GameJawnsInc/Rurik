@@ -98,7 +98,12 @@ CUTOFF = "20260925T235959"
 SEED = 20260925                              # the attack's damage roll, seeded
 
 FLAGS = ("INSTANT_ANNOUNCE", "PER_WEARER_BATCH_ORDER", "PARTY_WIDE_SHOUTS", "EFFECTS",
-         "MOVE_SPEED_EFFECTS", "EFFECT_LIST_SELF_ONLY", "SKILL_VISUALS")
+         "MOVE_SPEED_EFFECTS", "EFFECT_LIST_SELF_ONLY", "SKILL_VISUALS",
+         # CASTAI (2026-09-27): the self-cast wire form postdates b50da5c8, so the
+         # known-bad arm below reverts it too (--self-cast-names-target): a stance's
+         # [60] under --no-instant-announce lands on its caster and would otherwise
+         # ride 0x009F, not b50da5c8's 0x00A0 naming the target.
+         "SELF_CAST_FORM")
 
 
 def _arm(**kw):
@@ -569,7 +574,7 @@ def section_flags():
         LEDGER.skip("section 4's driven half (14 checks): no skills rows", why)
         return
     # BOTH FLAGS FLIPPED = the server until 2026-09-25, byte for byte.
-    saved = _arm(INSTANT_ANNOUNCE=False, PER_WEARER_BATCH_ORDER=True)
+    saved = _arm(INSTANT_ANNOUNCE=False, PER_WEARER_BATCH_ORDER=True, SELF_CAST_FORM=False)
     try:
         press, tick = _player_cast(CHARGE)
         check(press == B50["player_364"]["press"],

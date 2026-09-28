@@ -5001,6 +5001,14 @@ def section_caster_held_slot():
         seq.append(casts(tick(st)))                   # the run: NOTHING, for 57 s
         land(st)
         ag["skill_ready"][0] = 0.0                    # 253 recharged, by hand
+        # ... and its HEX RAN OUT, by hand: since CASTAI (2026-09-27) a slot whose
+        # hex the player still carries is HELD (SKIP_LIVE_EFFECT, test_castgate),
+        # and 253's 18 s episode from the first tick is still live here. What this
+        # check is about is the reach hold's cursor, so the fixture puts the world
+        # where "253 again once it recharged" means a castable 253.
+        for _ep in st["effects"].on_agent(authsrv.PLAYER_AGENT_ID) if st.get("effects") else ():
+            if _ep["skill"] == SPELL:
+                st["effects"].close(_ep["buff"])
         seq.append(casts(tick(st)))
         LEDGER.ok(seq == [[[60, 10, 1, SPELL]], [[60, 10, 1, ENCH]], [[60, 10, 1, SPELL]]],
                   "THE RUN'S SHAPE (20260924T210744): a Monk 300 u from a standing "
@@ -8199,6 +8207,7 @@ def section_hold_plane():
           "raises it, and the player")
     FLOAT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
     INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT          # CASTAI: the self form
     STATUS = authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
     FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
     PLAYER = authsrv.PLAYER_AGENT_ID
@@ -8956,11 +8965,17 @@ def section_hold_plane():
         sent = []
         authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
                                st, 1)
-        casts = [v for op, v in sent if op == INT_T and v[0] == 60]
-        LEDGER.ok(casts == [[60, 200, 200, 281]],
+        casts = [v for op, v in sent if op in (INT, INT_T) and v[0] == 60]
+        # CASTAI (2026-09-27): a cast landing on its caster rides 0x009F [60, caster,
+        # skill] -- the self-cast wire form (test_castgate); it was 0x00A0 [60, 200,
+        # 200, 281] until then. The target is read off the body: it IS the caster.
+        LEDGER.ok(casts == [[60, 200, 281]]
+                  and st["agents"][200].get("cast_target") == 200,
                   "a hurt party caster with a healthy party casts Orison at "
                   "ITSELF (the client's target byte 3 allows the caster) -- "
-                  "the owner: 'tahlkora doesn't self heal'", f"casts {casts}")
+                  "the owner: 'tahlkora doesn't self heal'; the self cast "
+                  "rides 0x009F", f"casts {casts} target "
+                  f"{st['agents'][200].get('cast_target')}")
         # the slice character over the base fixture
         base = (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
                 agents.PLAYER_ATTRIBUTE_POINTS)

@@ -5305,7 +5305,9 @@ PARTY_WIDE_SHOUTS = True
 # archive's own (25944 for 364, 25911 for 348 -- 67 of 67, `skill_speech`
 # rows); a shout with no row sends no bubble and says so. --no-instant-announce
 # is the server as it was until today: property 60 at the press, [58] at the
-# completion, no bubble.
+# completion, no bubble. (Since CASTAI, 2026-09-27, that property 60 follows the
+# landing -- a self-kind stance's rides 0x009F -- unless --self-cast-names-target
+# is passed too; SELF_CAST_FORM's banner.)
 INSTANT_ANNOUNCE = True
 # ...and the BATCH ORDER of a party-wide shout (56.7's other divergence): retail
 # sends every 0x0042 (each with its own cure and status word), and only then
@@ -22453,11 +22455,61 @@ def cast_anim_msg(prop, caster, target, skill_id):
     rides 0x009F [prop, caster, skill] (531). The form this replaces --
     0x00A0 with target 0 -- appears ZERO times in the corpus: retail
     switches channels rather than sending an empty slot.
+
+    THE TARGET IS WHERE THE CAST LANDS (CASTAI, 2026-09-27): `target` is resolved
+    through cast_announce_target first, so a cast landing on its own caster rides
+    0x009F whatever the site selected (SELF_CAST_FORM's banner below).
     """
-    if CAST_FORM == "legacy" or target:
+    if CAST_FORM == "legacy":
         return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
                 [prop, caster, target or 0, skill_id])
+    target = cast_announce_target(caster, target, skill_id)          # CASTAI: the self form
+    if target:
+        return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                [prop, caster, target, skill_id])
     return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [prop, caster, skill_id])
+
+
+# CASTAI (2026-09-27, owner's ruling PLAN.md sec.7 Q19): THE SELF-CAST WIRE FORM -- a cast
+# that LANDS ON ITS CASTER names no target. OBSERVED (studies/monsterai/review/
+# castethogram.py over the live corpus): 715 self / no-target casts ride 0x009F [60,
+# caster, skill], and 0 of 373 0x00A0 [60] announces name the caster as its own target
+# (castethogram L1); by the skill record's target byte, 417 of 417 self-kind (byte 0)
+# [60] casts ride 0x009F -- the observer's own 26 among them, so the PLAYER's press
+# follows it too -- and 0 ride 0x00A0. This is ANIMREF-R1's "the channel follows the
+# target" rule above, applied to the landing target rather than to whatever the cast
+# site had selected: a hostile's self-kind non-heal skill keeps the player as its
+# `cast_target` (enemy_attack_tick) while its effect lands on the caster, and before
+# this the announce named the player. --self-cast-names-target reverts: the announce
+# names whatever the cast site passed, the bytes before 2026-09-27.
+SELF_CAST_FORM = True
+
+
+def cast_announce_target(caster, target, skill_id):
+    """The target a cast's announce names: the agent it LANDS on, 0 for the caster.
+
+    The landing is `effects.effect_recipient` -- the one resolution apply_effect
+    uses for the episode (the record's byte 0 -> the caster, anything else -> the
+    target the cast site aimed at, else the caster). A skill with no row (a bare
+    machine) lands where the cast site aimed. Either way a landing on the caster
+    itself is 0: retail never names the caster as its own target (L1, 0 of 373).
+    Under --self-cast-names-target the passed target comes back unchanged.
+    The announce is only as right as the landing: a hostile's ally-kind (byte 3)
+    non-heal still lands on, and so names, the player (live_effect_hold's NOT FIXED
+    note; retail monsters self-cast those, 5 of 5).
+    """
+    if not SELF_CAST_FORM:
+        return target
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        row = None
+    try:
+        landing = (effects.effect_recipient(row, caster, target) if row is not None
+                   else target)
+    except (KeyError, TypeError, ValueError):
+        landing = target                  # a row with no readable byte: the site's aim
+    return 0 if (not landing or landing == caster) else landing
 
 
 # THE CAST-TIME WORD (2026-09-27; DESKWORK-D6's client run 20260927T181940). OBSERVED 3 of 3 on
@@ -22489,6 +22541,11 @@ def cast_time_word(send, caster, target, skill_id, activation, who):
         return False
     if activation is None or abs(float(activation) - base) < 1e-6:
         return False
+    # CASTAI: the word follows the announce's channel -- a cast landing on its caster
+    # rides the untargeted 0x00A2, as its [60] rides 0x009F (cast_announce_target);
+    # the legacy cast form keeps the target the site passed, as its [60] does.
+    if CAST_FORM != "legacy":
+        target = cast_announce_target(caster, target, skill_id)
     if target:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_CASTTIME, caster, target, _f32(float(activation))],
@@ -26796,6 +26853,119 @@ def morale_experience(send, state, conn_id, gained):
                        f"{recovered}% back from experience")
 
 
+# CASTAI (2026-09-27; DESKWORK-D8 step 6, studies/deskwork/PLAN.md; owner's ruling PLAN.md
+# sec.7 Q19): THE LIVE-EFFECT GATE -- a WORLD gate on the AI's cast path (the hostile
+# loop in enemy_attack_tick and ally_cast_tick's), not a selector: round robin stays
+# pick_skill's (the declared testing fixture, 2026-08-11), and this asks one question of
+# the slot it returned -- does the target the cast will LAND on already carry what the
+# skill puts there. If so the slot is HELD exactly as SLICE-B3's heal gate holds (ready
+# and uncharged, the cursor stepped past it, a same-tick re-pick; a slot re-picked after
+# being held ends the search, so an all-held bar casts nothing and does not spin).
+#
+# RE-ELIGIBILITY IS A RECONSTRUCTION THAT DEVIATES FROM RETAIL, and is left so under
+# Q19's narrow ruling (no timing rule added). The world tick runs effect_tick BEFORE
+# enemy_attack_tick and ally_cast_tick, so the slot is eligible on the SAME world tick
+# that closes the episode: a caster whose cursor is on the slot re-casts 0 s after the
+# close, its [60] in the same batch as the 0x0044 (test_castgate 2(a'), gap 0 ticks; a
+# hostile's swing in flight can delay it). Retail is never that fast. OBSERVED
+# (castethogram-events.json): 0 of 95 AI casts with a same-skill end before them began
+# within 0.2 s of it, minimum 0.228 s; the Isle friendly 108's 160 on the player, n=79
+# over three builds, has a fastest re-cast of 0.228 / 0.236 / 0.249 s per build and 22 of
+# 79 inside 0.25 s. Holding the slot until the close plus about one retail AI beat
+# (~0.23 s) would be the faithful rule; it is the owner's call, not this slice's.
+#
+# THE EVIDENCE, and what it does not reach. WIKI (GWW "Hero behavior" rev 2741080):
+# heroes know every active effect and do not apply an enchantment, hex, condition or
+# weapon spell to someone already carrying the same one. For heroes and henchmen that is
+# the wiki's own sentence (heroes and henchmen share the AI); for a normal-mode MONSTER it
+# is RECONSTRUCTION -- the wiki's per-skill AI is tiered (CASTAI-W2). OBSERVED (castethogram
+# over the live corpus): 0 of 170 retail AI hex / enchantment casts landed on a live
+# same-skill episode -- the 19 informative cases are all self-enchantments, and no
+# informative HEX case exists; and stances are NOT skipped (the JARIN hero re-cast 346
+# while live 10 of 17). The defect it closes: studies/skills/FINDINGS.md 16.1, our
+# Hatcher's four overlapping Scourge Sacrifices on the player -- every repeat 0x0042 for
+# a live (agent, skill) is discarded by the client. Which skills it asks about, and why,
+# is episodemods.live_effect_class's docstring. --no-skip-live-effect reverts: the cast
+# path as it was, round robin's slot cast whatever the target carries.
+SKIP_LIVE_EFFECT = True
+
+
+def live_effect_hold(state, caster_id, agent, skill_id, cast_target):
+    """(wearer, why) when the live-effect gate holds this slot, else None. Pure read.
+
+    THE LANDING TARGET, not the cast site's: land_skill lands the effect through
+    apply_effect -> `effects.effect_recipient` (the record's byte 0 is the CASTER even
+    while a hostile's `cast_target` stays the player) and a condition on `cast_target`
+    (its `_tid`, the player when none), so the gate asks exactly those two wearers.
+    A skill with no row, an empty effect table, or a magnitude read that refuses
+    holds nothing -- the gate never adds a failure the cast itself would not have.
+
+    DECLARED SCOPE: THE PRIMARY WEARER ONLY. An AREA hex (area_hex, DESKWORK-D6) lands
+    one episode per foe in its circle (apply_effect's hex_wearers), and this asks only
+    about the wearer effect_recipient names. Two consequences, both left as they are
+    under Q19's narrow ruling: (A) a bystander already carrying the hex gets a second,
+    stacked episode when the primary is bare (studies/skills 16.1's stacking survives on
+    the other wearers -- the gate changes nothing there); (B) a primary carrying it holds
+    the slot, so bare bystanders go unhexed where the pre-CASTAI cast reached them.
+    Widening the hold to "any wearer carries it" would make (B) worse; the per-wearer
+    fix belongs in hex_wearers / the apply, not in this slot hold. RECONSTRUCTION.
+
+    NOT FIXED HERE, a landing defect this reads faithfully: an ALLY-kind (byte 3) skill
+    a HOSTILE casts keeps the player as its cast_target, and effect_recipient lands it
+    there -- a foe's Vital Blessing (289) lands on, and is gated and announced at, the
+    player. OBSERVED, retail MONSTER ally-kind casts ride 0x009F (self) 5 of 5. That
+    predates CASTAI (skillread.cast_recipient, the heal's resolution, lands it on the
+    caster; the two disagree for byte 3), and the fix is the landing's, not the gate's.
+    """
+    if not SKIP_LIVE_EFFECT:
+        return None
+    table = state.get("effects")
+    if not table or not table.live:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+        type_code = int(row["type_code"])
+    except Exception:                                          # noqa: BLE001
+        return None
+    tid = cast_target or PLAYER_AGENT_ID                   # land_skill's own `_tid`
+    condition_id = None
+    klass = episodemods.live_effect_class(type_code)
+    if klass is None and type_code not in episodemods.LIVE_EFFECT_NEVER_TYPES:
+        rank = agent_skill_rank(agent, skill_id)
+        try:
+            inflicted = skill_condition(skill_id, rank)
+            if inflicted is None:
+                return None
+            condition_id = inflicted[0]
+            klass = episodemods.live_effect_class(
+                type_code, condition_id=condition_id,
+                damages=skill_damage(skill_id, rank) is not None,
+                heals=skill_heal(skill_id, rank) is not None,
+                area=bool(caster_area_row(skill_id)))
+        except (ValueError, agents.content.ContentError):
+            return None
+    if klass is None:
+        return None
+    try:
+        wearer = (effects.effect_recipient(row, caster_id, tid)
+                  if klass == "same-skill" else tid)
+    except (KeyError, TypeError, ValueError):
+        return None
+    why = episodemods.carries_live_effect(table, wearer, skill_id, klass, condition_id)
+    return (wearer, why) if why else None
+
+
+def live_effect_note(state, conn_id, caster_id, agent, skill_id, held, who, now):
+    """The gate's rate-limited line: once per 5 s per caster, on its own stamp."""
+    if now - agent.get("live_effect_held_at", 0.0) < 5.0:
+        return
+    agent["live_effect_held_at"] = now
+    wearer, why = held
+    print(f"[c{conn_id}] {who} {caster_id} holds skill {skill_id}: "
+          f"{cast_target_label(state, wearer)} already carries {why} [CASTAI]",
+          flush=True)
+
+
 def enemy_attack_tick(send, state, conn_id):
     """Hostile agents swing at the player. The other half of R4a.
 
@@ -27170,6 +27340,21 @@ def enemy_attack_tick(send, state, conn_id):
                             _next = pick_skill(agent, now)
                             slot = None if (_next is None or _next in _held) else _next
                             continue
+            # CASTAI (a WORLD gate, after the landing target is resolved): the
+            # target the cast would LAND on already carries this skill's effect --
+            # HOLD the slot the heal gate's way (SKIP_LIVE_EFFECT's banner; the
+            # predicate is episodemods.live_effect_class). Its own stamp, like the
+            # reach hold's: two holds on one tick are two facts for a run reader.
+            _carry = (live_effect_hold(state, agent_id, agent, _sid, cast_target)
+                      if cast_target is not None else None)
+            if _carry is not None:
+                _held.add(slot)
+                agent["last_slot"] = slot
+                live_effect_note(state, conn_id, agent_id, agent, _sid, _carry,
+                                 "agent", now)
+                _next = pick_skill(agent, now)
+                slot = None if (_next is None or _next in _held) else _next
+                continue
             # EV-1 (a WORLD gate): a CASTER does not lob a skill from beyond
             # ITS OWN reach. A touch skill needs melee and a half-range skill
             # half the cast range (_caster_skill_reach reads the row's
@@ -27558,7 +27743,16 @@ def ally_cast_tick(send, state, conn_id):
                     if _kind == "other_ally" and target == agent_id:
                         target = None
                 if target is not None:
-                    break
+                    # CASTAI (a WORLD gate, the hostile loop's): the landing
+                    # target already carries this skill's effect -- held like
+                    # a slot with nobody to aim at, by the hold just below
+                    # (SKIP_LIVE_EFFECT's banner).
+                    _carry = live_effect_hold(state, agent_id, agent, _sid, target)
+                    if _carry is None:
+                        break
+                    live_effect_note(state, conn_id, agent_id, agent, _sid, _carry,
+                                     "party agent", now)
+                    target = None
                 _held.add(slot)
                 agent["last_slot"] = slot
                 _next = pick_skill(agent, now)
@@ -43203,6 +43397,19 @@ def main():
               "weapon walks to the melee disc by a 0x002A and casts from 92 u "
               "-- every run before DESKWORK-D8 (2026-09-24); retail's caster "
               "casts from where it stands inside its range.", flush=True)
+    if a.no_skip_live_effect:
+        global SKIP_LIVE_EFFECT
+        SKIP_LIVE_EFFECT = False
+        print("[enemy] --no-skip-live-effect: a hostile or a party body casts the slot "
+              "round robin picked even when its target already carries that effect "
+              "-- every run before CASTAI (2026-09-27), the stacked hexes of "
+              "studies/skills 16.1.", flush=True)
+    if a.self_cast_names_target:
+        global SELF_CAST_FORM
+        SELF_CAST_FORM = False
+        print("[map] --self-cast-names-target: a cast landing on its caster "
+              "announces on 0x00A0 naming the site's target again -- the bytes "
+              "before CASTAI (2026-09-27).", flush=True)
     if a.no_scatter:
         global SCATTER
         SCATTER = False
@@ -44543,7 +44750,11 @@ def main():
               "still sends), no speech bubble, a hero's E3 beside its E5, and the "
               "one-tick window before the completion cancellable again -- this "
               "server's bytes until 2026-09-25 (retail: 133 of 133 on [48], "
-              "instantjoin.py) [SKILLS-IA]", flush=True)
+              "instantjoin.py) [SKILLS-IA]" + (
+                  "" if not SELF_CAST_FORM else
+                  " -- EXCEPT that a self-kind stance's property 60 lands on its "
+                  "caster and rides 0x009F (CASTAI); add --self-cast-names-target "
+                  "for b50da5c8's 0x00A0 naming the site's target"), flush=True)
 
     if a.per_wearer_batch_order:
         global PER_WEARER_BATCH_ORDER

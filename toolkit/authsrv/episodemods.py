@@ -536,3 +536,106 @@ def is_cracked(state, agent_id):
 def is_dazed(state, agent_id):
     """Dazed (485) is up on the agent."""
     return has_condition(state, agent_id, DAZED_ID)
+
+
+# ---- CASTAI (2026-09-27; DESKWORK-D8 step 6, owner's ruling PLAN.md sec.7 Q19): THE
+# LIVE-EFFECT GATE'S PREDICATE -- "does the target already carry what this skill would
+# put on it". Pure: it reads the effect table and the facts the caller hands it, and
+# decides nothing about WHICH slot is cast (pick_skill stays the testing fixture; the
+# gate that asks this is authsrv's `live_effect_hold`). Two questions, one per class:
+#
+#   "same-skill"  -- the target holds a LIVE episode of the SAME skill id, any caster
+#   "condition"   -- the target holds a live episode of the condition the skill inflicts
+#
+# The type codes are the client's own column (effects.EFFECT_TYPES; combatmath's
+# SPELL_TYPE_CODES_HSR names 25 Weapon Spell).
+LIVE_EFFECT_SAME_SKILL_TYPES = {4: "hex", 6: "enchantment", 25: "weapon spell"}
+# Never gated, whatever the row carries: 3 Stance, 12 Glyph, 14 Attack, 15 Shout,
+# 16 the third instant type, 19 Preparation.
+LIVE_EFFECT_NEVER_TYPES = {3: "stance", 12: "glyph", 14: "attack", 15: "shout",
+                           16: "instant", 19: "preparation"}
+
+
+def live_effect_class(type_code, condition_id=None, damages=False, heals=False,
+                      area=False):
+    """Which question the live-effect gate asks of a skill: "same-skill", "condition"
+    or None (never held). Every edge, with its label:
+
+      * HEX (4) and ENCHANTMENT (6) -> "same-skill". WIKI (GWW "Hero behavior" rev
+        2741080): heroes know every active effect and will not apply an enchantment
+        or a hex to someone already carrying the same one. For a normal-mode MONSTER
+        this is RECONSTRUCTION -- the wiki's per-skill AI is tiered (heroes / hard
+        mode above the lower normal-mode tiers, CASTAI-W2). OBSERVED consistent: 0 of
+        170 retail AI hex / enchantment casts landed on a live same-skill episode
+        (castethogram); the 19 informative cases are all SELF-enchantments, and NO
+        informative hex case exists. The type decides before anything else, so a hex
+        that also damages (an area hex's on-cast hit) is still "same-skill".
+      * WEAPON SPELL (25) -> "same-skill", the same wiki sentence. The client's type
+        column DOES distinguish it, but the check is VACUOUS today: 25 is not in
+        effects.EFFECT_TYPES and no content row's `opens_episode` names one, so no
+        weapon spell ever holds an episode to be found. Listed so the gate follows
+        the day one does.
+      * STANCE (3) -> None. OBSERVED: the JARIN hero re-cast its stance 346 while the
+        previous one was live in 10 of 17 casts (20260914T005758 conn 56011: the
+        re-cast batch carries 0x0044 [30, 3] then a fresh 0x0042) -- a stance is
+        refreshed, not skipped. GLYPH (12) and PREPARATION (19) -> None: the wiki
+        sentence does not name them, and like a stance each is one-at-a-time on the
+        caster itself (effects.EXCLUSIVE_TYPES), so a re-cast replaces rather than
+        stacks; RECONSTRUCTION by that analogy, no witness either way.
+      * SHOUT (15) and type 16 -> None: instants the wiki sentence does not name (a
+        shout's episode is `opens_episode`'s content door, 364), even one that
+        inflicts a condition. RECONSTRUCTION.
+      * ATTACK (14) -> None, even a condition-only attack (Sever Artery 382): the
+        condition rides a SWING that can miss, and an attack is what the fixture's
+        swing clock paces, not a spell the wiki sentence is about. RECONSTRUCTION.
+      * Any other type whose row INFLICTS A CONDITION and has NO DAMAGE and NO HEAL
+        (Blinding Flash 220, Enfeeble 117, 784's Poison) -> "condition". WIKI (the
+        same hero sentence names conditions); RECONSTRUCTION for a monster, as above.
+      * A DAMAGE skill whose condition is a RIDER (Immolate 191's Burning, 224's
+        Weakness) -> None: the damage is the point, and the wiki sentence is about
+        applying the effect, not about striking. A HEAL -> None. RECONSTRUCTION.
+      * A CASTER-CENTRED AREA condition row (840, `area=True`) -> None: it reaches
+        every foe around the caster, so one target's condition says nothing about
+        the rest. RECONSTRUCTION.
+      * Everything else (a plain spell, a signet with no condition, a resurrection)
+        -> None: it puts nothing on the target this gate could find.
+    """
+    code = int(type_code or 0)
+    if code in LIVE_EFFECT_SAME_SKILL_TYPES:
+        return "same-skill"
+    if code in LIVE_EFFECT_NEVER_TYPES:
+        return None
+    if condition_id is not None and not damages and not heals and not area:
+        return "condition"
+    return None
+
+
+def carries_live_effect(table, wearer_id, skill_id, klass, condition_id=None):
+    """Why `wearer_id` already carries what the skill would put on it, or None.
+
+    LIVE means an episode still IN the table -- opened and not yet closed by its
+    0x0044 -- and not merely inside its stated duration: the client discards every
+    repeat 0x0042 for a live (agent, skill) (studies/skills/FINDINGS.md 16.1), and
+    what it counts as live is what it has been told, which is the table. An episode
+    past its duration but not yet closed therefore still holds the slot until
+    effect_tick closes it. The world tick runs effect_tick before the AI ticks, so the
+    slot is eligible on the SAME tick as the close -- a RECONSTRUCTION that is faster
+    than retail (OBSERVED minimum 0.228 s, 0 of 95 AI re-casts inside 0.2 s of a
+    same-skill end; authsrv's SKIP_LIVE_EFFECT banner).
+    ANY CASTER: the wiki's sentence is about the target carrying the effect, and
+    strongest_per_skill already counts two casters' copies once (Effect stacking).
+    """
+    if not table or klass is None:
+        return None
+    live = table.on_agent(wearer_id)
+    if klass == "same-skill":
+        for ep in live:
+            if ep["skill"] == skill_id:
+                return f"skill {skill_id} (buff {ep['buff']}, live)"
+        return None
+    if klass == "condition" and condition_id is not None:
+        for ep in live:
+            if ep["skill"] == condition_id:
+                name = effects.CONDITION_SKILLS.get(condition_id, str(condition_id))
+                return f"{name} ({condition_id}, buff {ep['buff']}, live)"
+    return None

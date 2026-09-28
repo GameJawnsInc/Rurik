@@ -1447,6 +1447,29 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The standing Hatcher is a Monk with four spells, so "
                          "`--enemy` alone spawns a caster now (--enemy-weapon, "
                          "--no-enemy-skills or this flag give the walk-in).")
+    ap.add_argument("--no-skip-live-effect", action="store_true",
+                    help="CASTAI REVERT (DESKWORK-D8 step 6, owner's ruling PLAN.md "
+                         "sec.7 Q19): a hostile or a party body casts the slot round "
+                         "robin picked even when the target it lands on already "
+                         "carries that skill's hex / enchantment (or, for a "
+                         "condition-only skill, that condition) -- every run before "
+                         "2026-09-27, and the four stacked Scourge Sacrifices of "
+                         "studies/skills/FINDINGS.md 16.1. By default such a slot is "
+                         "HELD the way SLICE-B3's heal gate holds (ready, uncharged, "
+                         "the cursor stepped past it) until the episode closes; "
+                         "stances are never held (the JARIN hero re-cast 346 while "
+                         "live, 10 of 17). WIKI 'Hero behavior' for heroes, "
+                         "RECONSTRUCTION for normal-mode monsters.")
+    ap.add_argument("--self-cast-names-target", action="store_true",
+                    help="CASTAI REVERT: a cast that lands on its own caster "
+                         "announces on 0x00A0 naming whatever the cast site "
+                         "selected (a hostile's self-kind skill named the PLAYER; a "
+                         "self heal named the caster) -- the bytes before "
+                         "2026-09-27. By default it rides 0x009F [prop, caster, "
+                         "skill], and its property 61 rides 0x00A2: OBSERVED, 417 of "
+                         "417 self-kind [60] casts on 0x009F and 0 of 373 0x00A0 "
+                         "[60] naming the caster (castethogram L1). Pair it with "
+                         "--no-instant-announce for b50da5c8's stance bytes.")
     ap.add_argument("--no-scatter", action="store_true",
                     help="MONSTERAI-S REVERT (studies/monsterai 16): a hostile "
                          "struck by the ticks of a foe's area over time (Fire "
@@ -2585,7 +2608,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the lane added (marked since = SKILLS-IA), a hero's E3 "
                          "beside its E5, and the one-tick window before the "
                          "completion cancellable by movement, Esc, a knock-down "
-                         "or an interrupt again -- b50da5c8's bytes exactly. The "
+                         "or an interrupt again -- b50da5c8's bytes exactly ONLY "
+                         "together with --self-cast-names-target (CASTAI, "
+                         "2026-09-27): alone, a self-kind stance's property 60 now "
+                         "lands on its caster and rides 0x009F [60, caster, skill] "
+                         "where b50da5c8 sent 0x00A0 naming the site's target. The "
                          "known-bad arm of DESKWORK-D5's announce item (skills "
                          "56.9, instantjoin.py): retail sends [48, caster, skill] "
                          "at the completion, 133 of 133 across 95 connections, "
