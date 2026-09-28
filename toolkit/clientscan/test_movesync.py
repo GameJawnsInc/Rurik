@@ -1367,12 +1367,19 @@ def main():
                     f"the live corpus is not reachable here ({exc})")
     if cmsgstream is not None:
         rows, reports, cut_rows, tracks = [], 0, [], []
+        aside_c2s, aside_s2c, wired = [], [], []
         for st in stamps:
-            try:
-                msgs = cmsgstream.timed(st, "c2s", "game")
-                s2c = cmsgstream.timed(st, "s2c", "game")
-            except Exception:
-                continue          # a stamp with no game wire is not a failure
+            # A stamp with no wire log recorded no game wire (20260817T175358), and it
+            # is the ONLY thing this loop steps past. This was `except Exception:
+            # continue` until 2026-09-28 (CASTAI-Z1), which would also swallow the
+            # StreamRefused cmsgstream now raises for an undeclared hole or a short
+            # decode; a direction its manifest declares gapped is set aside BY NAME
+            # instead, and audited below.
+            if not os.path.isfile(os.path.join(live, st, "wire.jsonl")):
+                continue
+            wired.append(os.path.join(live, st))
+            msgs = cmsgstream.timed(st, "c2s", "game", set_aside=aside_c2s)
+            s2c = cmsgstream.timed(st, "s2c", "game", set_aside=aside_s2c)
             # The server's hard sets of the player flag the interval that
             # spans them (movesync.hard_sets: the JARIN shrine).
             sets = movesync.hard_sets(s2c, movesync.named_players(s2c))
@@ -1400,6 +1407,14 @@ def main():
                     cut_rows.append((st, conn, r))
                 rows.extend(conn_rows)
                 tracks.append((st, conn, conn_rows))
+        import capgaps  # noqa: E402  (authsrv, on sys.path above)
+        gap_ok, gap_why = capgaps.audit(aside_s2c, wired, cmsgstream.refuses)
+        check(gap_ok and aside_c2s == [],
+              "the retail calibration reads every wired live stream whole but the ones "
+              "their manifests declare gapped, which it sets aside BY NAME (s2c) and "
+              "which cmsgstream still refuses; no c2s is set aside",
+              f"{gap_why}; c2s set aside {aside_c2s} -- a stream refused and not declared "
+              f"raises out of the loop instead")
         check(reports > 2000 and len(rows) > 2000,
               f"the live corpus yields {reports} retail self-reports over "
               f"{len(rows)} intervals",
