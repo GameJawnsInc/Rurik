@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 49 with it; from green runs (WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 49, the windup signature by the table and its two fast-launch witnesses)
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 50 with it; from green runs (WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 50, the windup signature by the table, the activated rule swing_windup(activation) and its two fast-launch witnesses)
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -212,7 +212,7 @@ def section_vault():
         c = None
         print(f"   (corpus unreadable: {exc!r})")
     if not c or not c["shooters"]:
-        LEDGER.skip("section 2", "no live corpus -- 29 checks")
+        LEDGER.skip("section 2", "no live corpus -- 30 checks")
         return
     check({2, 5, 15, 22, 26, 27, 32, 35, 36}.issubset(c["lead"]) and {1, 28}.issubset(c["lead"])
           and {12, 24}.issubset(c["off"]),
@@ -611,7 +611,10 @@ def _windup_signature(d):
     and before the pin 1197 (the same, ~0.28 s). The domain is now the TABLE's own
     signature -- type_code == authsrv.ATTACK_TYPE_CODE and activation == 0 -- the five
     ids are kept as positive controls inside it, and every body bow row outside it is
-    classified by a stated rule below, exact, so a new kind is seen, never absorbed."""
+    classified by a stated rule below: an attack skill WITH an activation launches
+    swing_windup(activation x modifier) (`_activated_signature`, the rule
+    authsrv.attack_skill_clock already applies to the PLAYER), and the non-attack rows
+    are asserted exactly, so a new kind is seen, never absorbed."""
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
     import authsrv                                              # noqa: PLC0415
@@ -657,7 +660,8 @@ def _windup_signature(d):
           f"exactly the two witnessed Zaishen shots {[(p, t) for _c, p, t in witnessed]}",
           f"{len(rows)} rows, {len(res)} with a 0x0035; out of band {outband}; slowed "
           f"{[(round(r['t'], 3), r['speed'], round(e, 4)) for r, e in slowed]}")
-    _classes(rowless, slow_kind, other)
+    _classes(rowless, other)
+    _activated_signature(slow_kind, authsrv)
     z = [(r, e) for r, e in res if r["capture"] == ZAISHEN]
     za = [(r, e) for r, e in z if r["agent"] == 10]
     zs = sorted((_port(r["conn"]), round(r["t"], 3)) for r, e in za
@@ -683,9 +687,10 @@ def _windup_signature(d):
     _fast_launch_witness(slow_kind)
 
 
-# The ATTACK skills with a table activation > 0 that a body has fired a bow skill shot
-# of. NO windup rule is claimed for them (they launch well BEFORE one windup): the set is
-# asserted EXACTLY so a new id is seen and classified, never absorbed (R3/R5, CASTAI-Z1).
+# The ATTACK skills with a table activation > 0 that a body has fired a bow skill shot of
+# through the Zaishen capture: the POSITIVE CONTROLS of `_activated_signature`. The set is
+# not a size pin -- a new id that obeys the rule is confirming evidence (R3) -- but each of
+# these must stay inside the signature's domain.
 ACTIVATED_BOW_ATTACKS = {399, 426, 1197}
 # The one body bow "skill shot" whose skill is NOT an attack skill: 20260817T231139
 # :54071 agent 8, skill 2 (type_code 7, activation 3.0), launched 0.000 s after its
@@ -694,18 +699,39 @@ ACTIVATED_BOW_ATTACKS = {399, 426, 1197}
 NONATTACK_BODY_BOW = [("20260817T231139", "54071", 8, 2)]
 
 
-def _classes(rowless, slow_kind, other):
-    got_slow = {r["skill"] for r, _row in slow_kind}
+def _classes(rowless, other):
     got_other = sorted((r["capture"], _port(r["conn"]), r["agent"], r["skill"])
                        for r, _row in other)
-    check(not rowless and got_slow == ACTIVATED_BOW_ATTACKS and got_other == NONATTACK_BODY_BOW,
-          f"and every body bow skill shot OUTSIDE that signature is classified: none lacks a "
-          f"table row; the attack skills WITH an activation are exactly "
-          f"{sorted(ACTIVATED_BOW_ATTACKS)} (no windup rule claimed -- they launch early, "
-          f"witnessed below); the only non-attack row is {NONATTACK_BODY_BOW}",
-          f"rowless {rowless}; activated {sorted(got_slow)} "
-          f"{sorted({(r['skill'], row.get('activation')) for r, row in slow_kind})}; "
-          f"non-attack {got_other}")
+    check(not rowless and got_other == NONATTACK_BODY_BOW,
+          f"and every body bow skill shot OUTSIDE the attack-skill signatures is classified: "
+          f"none lacks a table row (R8), and the only non-attack row is {NONATTACK_BODY_BOW} "
+          f"-- exact, no rule claimed, so a new one is seen",
+          f"rowless {rowless}; non-attack {got_other}")
+
+
+def _activated_signature(slow_kind, authsrv):
+    """A body's bow ATTACK skill WITH a table activation launches swing_windup(activation
+    x modifier) after its [50] announcement -- the rule authsrv.attack_skill_clock applies
+    to the player's attack skills (ATTACK_ACTIVATION_WINDUP, 'UPSTREAM, no corpus cycle
+    exercises it yet'), OBSERVED here on bodies: 399 / 426 (0.5) at swing_windup(0.5) =
+    0.15, 1197 (0.75) at swing_windup(0.75) = 0.275. Judged in the SAME pinned residual
+    band as the activation-0 signature (-0.0375 .. +0.0225), no new tolerance. The
+    modifier term is UNVERIFIED on bodies: every such row so far is at modifier 1.0."""
+    res = [(r, row, r["event_to_launch"]
+            - authsrv.swing_windup(float(row["activation"]) * r["speed"][1]))
+           for r, row in slow_kind if r["speed"] is not None]
+    ids = {r["skill"] for r, _row in slow_kind}
+    out = sorted((r["capture"], _port(r["conn"]), round(r["t"], 3), r["skill"], round(e, 4))
+                 for r, _row, e in res if not -0.0375 < e < 0.0225)
+    check(len(res) == len(slow_kind) >= 7 and ACTIVATED_BOW_ATTACKS <= ids and not out,
+          f"SIGNATURE (whole corpus): a body's bow ATTACK skill WITH a table activation "
+          f"launches swing_windup(activation x modifier) after its announcement -- the "
+          f"player's attack_skill_clock rule, OBSERVED on bodies: {len(res)} of "
+          f"{len(slow_kind)} inside the pinned band (floor 7, the pin's), median residual "
+          f"{statistics.median(e for _r, _w, e in res) * 1000 if res else float('nan'):+.1f} ms, "
+          f"ids {sorted(ids)} ({sorted(ACTIVATED_BOW_ATTACKS)} the positive controls)",
+          f"out of band {out}; "
+          f"{sorted({(r['skill'], row.get('activation')) for r, row in slow_kind})}")
 
 
 def _fast_launch_witness(slow_kind):
@@ -725,7 +751,7 @@ def _fast_launch_witness(slow_kind):
           and all(0.13 < x < 0.18 for x in e2l),
           f"NEW (OBSERVED, {ZAISHEN}): the Degeneration Ranger's (agent 6) 11 body bow shots "
           f"of 399 x5 and 426 x6 (table activation 0.5) launch 0.13 .. 0.18 s after their "
-          f"[50, 6, target] announcement, ~1 s before swing_windup(2.475) = 1.1375",
+          f"[50, 6, target] announcement -- swing_windup(0.5) = 0.15, not swing_windup(2.475)",
           f"{z}; event->launch {[round(x, 4) for x in e2l]}")
     pre = "20260819T132414"
     p = [(r, row) for r, row in slow_kind if r["capture"] == pre]
