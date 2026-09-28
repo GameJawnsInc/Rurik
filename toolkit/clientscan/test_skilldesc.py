@@ -63,7 +63,20 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults)
+# The templates digest each build's OWN exe + OWN archive produce (`skilldesc.template_digest`
+# over `load_corpus(exe, dat)`), MEASURED 2026-09-28 -- what binds a label overlay's DAT to its
+# exe's build. 38797: the pinned exe + textrec.DEFAULT_DAT (vault/dat_study/Gw.dat, the archive
+# every 38797 emit has used, and the header of the vault's 38797 file); 38888: the 2026-09-01
+# snapshot's exe + the Gw.dat beside it (the regen's emit). A MIXED pair digests otherwise --
+# the 38797 exe over the 38888 archive gives 634399ae... (MEASURED by the c38-fin review: 55
+# rows, 831 dropped, a self-consistent file the exe-only binding accepted) -- and is the PAIR
+# fault. A build with no row here is the PAIR fault too: measure its own pair and add the row.
+TEMPLATES_SHA256_BY_BUILD = {
+    38797: "d7809b2c4466ea6aa93e7143b44ace7e4748544b1308cd68625626d7f4cb61bd",
+    38888: "79cc05468b03e598f5f5d945ed7b635d5dda3eec30209dba51518d10919c81d1",
+}
+
+LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults); 169 since the pair binding (+2: the pinned build's registered templates digest is its own; a MIXED exe/archive pair is the PAIR fault, both vaults)
 check = checks.adopt(LEDGER)
 
 
@@ -1388,6 +1401,13 @@ if records is not None:
             if hdr["templates_sha256"] != d2:
                 out.append(f"DIGEST: the header's templates_sha256 {hdr['templates_sha256'][:16]} is "
                            f"not {hdat}'s recomputed {d2[:16]}")
+            want = TEMPLATES_SHA256_BY_BUILD.get(hb)
+            if want is None:
+                out.append(f"PAIR: no registered templates digest for build {hb} -- measure its "
+                           f"own exe + archive and add the TEMPLATES_SHA256_BY_BUILD row")
+            elif d2 != want:
+                out.append(f"PAIR: {hdat} under build {hb}'s exe digests {d2[:16]}, not build "
+                           f"{hb}'s registered {want[:16]} -- the archive is not that build's")
             if blob != fbytes:
                 out.append("BYTES: the file differs from a fresh emit of its own exe + dat")
             return out
@@ -1453,6 +1473,27 @@ if records is not None:
                       f"KNOWN-BAD ARM: a fresh emit of build {obuild} (its own exe + dat) over the "
                       f"bulk skills table of build {sorted(bulk_builds)} is the SKILLS TABLE fault, "
                       f"alone and by name", ofaults)
+            # THE PAIR, both vaults. The registry row for the pinned build is the pinned
+            # emit's own digest (live: a wrong row reddens here, not only on a swap), and a
+            # MIXED pair -- the pinned 38797 exe over the 38888 snapshot's archive, a
+            # self-consistent file whose header and bytes agree -- is the PAIR fault by name
+            # (on the 38888 vault the SKILLS TABLE fault rides beside it). One extra pipeline.
+            check(digest == TEMPLATES_SHA256_BY_BUILD.get(build),
+                  f"the registered templates digest for the pinned build {build} is its own exe + "
+                  f"archive's recomputed digest", f"{digest[:16]} vs "
+                  f"{(TEMPLATES_SHA256_BY_BUILD.get(build) or 'NO ROW')[:16]}")
+            try:
+                import pinned
+                mdat = os.path.join(os.path.dirname(pinned.find(build=38888)[0]), "Gw.dat")
+                mfaults = (disk_overlay_faults(fresh_emit(str(exe), mdat)[1])
+                           if os.path.isfile(mdat) else [f"no dat at {mdat}"])
+            except SystemExit as e:
+                mfaults = [f"pinned.find(38888) refused: {str(e).splitlines()[0]}"]
+            check(any(f.startswith("PAIR:") for f in mfaults)
+                  and not any(f.startswith(("BYTES:", "DIGEST:", "BUILD:")) for f in mfaults),
+                  "KNOWN-BAD ARM: a MIXED pair (the pinned 38797 exe over the 38888 archive), "
+                  "self-consistent in header and bytes, is the PAIR fault by name -- the archive "
+                  "is bound to the exe's build, not only the exe", mfaults)
         elif explicit:
             # the fix pass (ENG-D4C-9): a mistyped explicit path is a FAIL, not a
             # declared skip -- the skip is for the vault's file being absent only
