@@ -4380,6 +4380,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   steers while moving, and this is the only step that does. `--settle SECONDS` exposes
   `walk_legs`'s pause between steps for the same reason.
 
+  `toolkit/authsrv/test_gapreaders.py` (**2026-09-28, CASTAI-Z1: the corpus readers
+  outside `livewire` honour a capture's declared gap — and nothing else.** The first
+  gapped live connection, 20260928T103123 :65009 (38 + 20 s2c bytes the sniffer never
+  saw), is refused by `tape.load_tape` by design, and three shared readers each had a
+  private way past it: `adrenjoin`'s `except Exception: continue`, `deepwoundjoin`'s
+  `except (BuffLogError, TapeError): continue`, and `cmsgstream` discarding
+  `reassemble`'s hole list and the decoder's error (a silent short decode). Each now
+  sets aside ONLY an s2c direction its manifest declares gapped, prints it by name,
+  appends it to a `set_aside` list for `capgaps.audit`, and lets every other refusal
+  raise. Section 1 (bare, synthetic captures): a declared s2c gap is set aside by all
+  seven walks, a c2s-only declaration leaves the s2c read, an UNDECLARED gap raises out
+  of every walk naming its connection. Section 2 (vault): each walk's set-aside over
+  the corpus is exactly `capgaps.KNOWN_GAPPED`, still refused; KNOWN-BAD: with the
+  declaration withheld the walks raise on :65009 rather than skipping it. `cmsgstream`
+  itself is covered by `test_cmsgnames` §0 / §0b. Floor 4 from the green run; bare 2),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors
