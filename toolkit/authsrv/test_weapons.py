@@ -5566,7 +5566,7 @@ def section_area_hexes():
               and authsrv.hex_cast_damage(136, 12) is None and authsrv.hex_cast_damage(135, 12) is None
               and authsrv.hex_cast_damage(99999, 12) is None
               and authsrv.skill_damage(234, 12) is None
-              and authsrv.hex_effect_ids(234) == (1, 12) and authsrv.hex_effect_ids(136) == (1,)
+              and authsrv.hex_effect_ids(234) == (1, 12) and authsrv.hex_effect_ids(136) == (1, 9)
               and authsrv.hex_effect_ids(99999) == (1,),
               "the predicate: Deep Freeze (312 u), Ice Spikes (156) and Shadow of Fear (156) are "
               "area hexes; Faintheartedness is a byte-5 hex, Fire Storm a spell, Flare one target, "
@@ -5574,7 +5574,22 @@ def section_area_hexes():
               "and area_over_time still refuse a hex (three predicates, none widened); "
               "hex_cast_damage reads the hits_on_cast rows (10 / 70 at rank 0 / 12; Ice Spikes 68) "
               "and nothing else, skill_damage still None for a hex; the [6] ids: (1, 12) for an "
-              "Elementalist hex, the 1 alone for a Necromancer's and for no row", str((raw, got)))
+              "Elementalist hex, (1, 9) for a Necromancer's (CASTAI-Z1.P4, 2026-09-28), the 1 "
+              "alone for no row", str((raw, got)))
+        # A profession with NO observed class id still sends the 1 alone and says so once:
+        # a Monk hex (profession 3; the Hatcher's Scourge Sacrifice is one) -- the path
+        # Shadow of Fear exercised until the Necromancer's 9 was read off the Zaishen tape.
+        import contextlib                                             # noqa: PLC0415
+        tables["skills"]["99998"] = dict(tables["skills"]["136"], profession=3, target=5)
+        _nf = io.StringIO()
+        with contextlib.redirect_stdout(_nf):
+            _monk = authsrv.hex_effect_ids(99998)
+        check(_monk == (1,) and "no [6, wearer, class] id is observed" in _nf.getvalue()
+              and "Necromancer 9" in _nf.getvalue(),
+              "a hex of a profession with no observed class id (a Monk's) draws the 1 ALONE and "
+              "prints the NOT FOUND line once, which now lists Necromancer 9 among the witnessed",
+              f"{_monk} {_nf.getvalue()[-160:]}")
+        del tables["skills"]["99998"]
         # (a') the real table (vault-only): exactly the seven
         if full_skills_table(kept):
             seven = sorted(int(k) for k, r in kept.items() if areatime.area_hex_row(r) is not None)
@@ -5675,24 +5690,25 @@ def section_area_hexes():
         after136 = (removes(sent), status(sent), eps(st), dict(st.get("aura_refs") or {}))
         sent.clear()
         expire(st, send, skill=234)
-        check(adds(sent1) == [(6, FOE, 1), (6, 11, 1)] and status(sent1) == [(FOE, 0x800), (11, 0x800)]
+        check(adds(sent1) == [(6, FOE, 1), (6, FOE, 9), (6, 11, 1), (6, 11, 9)]
+              and status(sent1) == [(FOE, 0x800), (11, 0x800)]
               and not words(sent1) and not impacts(sent1) and not speeds(sent1)
-              and "no [6, wearer, class] id is observed" in buf.getvalue()
+              and "no [6, wearer, class] id is observed" not in buf.getvalue()
               and aif == (1.5, 1.5) and authsrv.attack_interval_factor(st, 12) == 1.0
               and adds(sent2) == [(6, FOE, 12), (6, 11, 12)]
               and status(sent2) == [(FOE, 0xC00), (11, 0xC00)]
               and [v[1:3] for v in words(sent2)] == [[FOE, PLAYER], [11, PLAYER]]
-              and after136 == ([], [], [(FOE, 3, 234), (11, 4, 234)],
+              and after136 == ([(7, FOE, 9), (7, 11, 9)], [], [(FOE, 3, 234), (11, 4, 234)],
                                {(FOE, 1): 1, (FOE, 12): 1, (11, 1): 1, (11, 12): 1})
               and removes(sent) == [(7, FOE, 1), (7, FOE, 12), (7, 11, 1), (7, 11, 12)]
               and status(sent) == [(FOE, 0), (11, 0)] and not eps(st),
-              "Shadow of Fear on the target and the foe beside it: [6, w, 1] ALONE (no class id "
-              "is observed for a Necromancer hex, printed), 0x800, no word, no [20], no speed; "
+              "Shadow of Fear on the target and the foe beside it: [6, w, 1] + [6, w, 9] (the "
+              "Necromancer's class id, CASTAI-Z1.P4), 0x800, no word, no [20], no speed; "
               "each wearer's attack interval x1.5 (the flat 50, Faintheartedness's reader), the "
               "far one x1.0; then Deep Freeze on the same pair sends [6, w, 12] and NO second "
               "[6, w, 1] (held by the live hex: the tape's 651.779), 0xC00; Shadow of Fear's "
-              "expiry sends NO [7] (Deep Freeze still holds both ids) and no status change; Deep "
-              "Freeze's sends both [7]s and 0x00F1 0",
+              "expiry sends [7, w, 9] ONLY (Deep Freeze still holds the 1) and no status "
+              "change; Deep Freeze's sends both its [7]s and 0x00F1 0",
               str((adds(sent1), adds(sent2), after136, removes(sent))))
         # (e) a hostile's Ice Spikes on the player and a hero through the real land_skill
         st = _body_world((100.0, 0.0), skills=[[211, 0.0, 20.0]], skill_ready=[0.0],
