@@ -1375,11 +1375,13 @@ def section_hostile_heal_target():
     LEDGER.ok(vb == "ally"
               and authsrv.skill_heal(289, authsrv.ENEMY_SKILL_RANK) is None
               and st["agents"][10].get("casting") == 0
-              and st["agents"][10].get("cast_target") == authsrv.PLAYER_AGENT_ID,
+              and st["agents"][10].get("cast_target") == 10,
               "Vital Blessing (target ally, NOT a heal) on a healthy squad "
-              "still GOES OUT, aimed as before B3 -- at the player, which "
-              "cast_recipient's `ally` rule resolves to the caster -- the "
-              "gate is on heals, and an enchantment keeps the old rule",
+              "still GOES OUT -- the gate is on heals -- and since CASTAI-R2 "
+              "(2026-09-28) it is aimed at the CASTER, where cast_recipient's "
+              "`ally` rule always resolved it (effect_recipient landed it on the "
+              "player until then; retail's monster ally-kind enchantment is on "
+              "itself 4 of 4; test_castgate section 5 holds the known-bad arm)",
               f"kind {vb}, target {st['agents'][10].get('cast_target')}")
 
     # (4) the hero's default bar is what a monk hero needs, offline.
@@ -4969,7 +4971,11 @@ def section_caster_held_slot():
         return sent
 
     def casts(sent):
-        return [v for op, v, _l in sent if op == INT_T and v[0] in (60, 50)]
+        # the self form too (CASTAI, 2026-09-27): a cast landing on its caster rides
+        # 0x009F [60, caster, skill] -- 289 on the caster since CASTAI-R2
+        return [v for op, v, _l in sent
+                if op in (INT_T, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT)
+                and v[0] in (60, 50)]
 
     def land(st):
         """The cast in flight lands -- its window over, one more tick, through
@@ -5264,13 +5270,13 @@ def section_caster_held_slot():
             seq = [casts(tick(st))]
             land(st)
             seq.append(casts(tick(st)))
-            LEDGER.ok(seq == [[[60, 10, 1, SPELL]], [[60, 10, 1, ENCH]]]
+            LEDGER.ok(seq == [[[60, 10, 1, SPELL]], [[60, 10, ENCH]]]
                       and abs(authsrv._caster_skill_reach(ag, TOUCH)
                               - authsrv.body_reach(ag)) < 1e-9,
                       "on the REAL table (312 `touch_range = true`, the row the "
                       "pass-6 landing re-emitted) with every reader real: the run's "
-                      "bar casts 253 and then 289 -- the stall the run showed does "
-                      "not happen on this tree",
+                      "bar casts 253 and then 289 (on itself, 0x009F, since CASTAI-R2) "
+                      "-- the stall the run showed does not happen on this tree",
                       f"casts per tick {seq}, reach(312) "
                       f"{authsrv._caster_skill_reach(ag, TOUCH)}")
     finally:

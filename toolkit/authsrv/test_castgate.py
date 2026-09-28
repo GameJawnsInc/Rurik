@@ -44,7 +44,9 @@ WHAT IT IS REALLY CHECKING. Two things shipped together, each behind its own rev
      (g) an all-held bar casts nothing, consults each slot once a tick (no spin), and
      resumes when the effect expires.
   5  (h) the self-cast form at every announce site: a hostile self-heal, a hostile
-     self-kind non-heal, a hero self-heal, a hero self-stance's [48], the player's own
+     self-kind non-heal, a hostile ALLY-kind non-heal (CASTAI-R2: Vital Blessing 289 lands
+     on the caster, 0x009F and the caster visual; its known-bad arm, the player), a hero
+     self-heal, a hero self-stance's [48], the player's own
      press with a foe selected; a targeted cast still rides 0x00A0; property 61
      follows the channel; the revert flag restores today's bytes; the legacy cast form
      is untouched; a rowless self cast (bare machine) rides 0x009F.
@@ -78,13 +80,13 @@ import effects                                                 # noqa: E402
 import episodemods                                             # noqa: E402
 import vaultpath                                               # noqa: E402
 
-# Floor from the BARE-MACHINE green run (RURIK_VAULT=C:/nonexistent-vault), 2026-09-27,
-# re-measured after the re-arm beat: 35 -- section 1's predicate (20), section 5's
-# rowless form (5, the legacy property-61 check added) and section 6's source checks
-# (10, the re-arm's default and flag added). 78 with the vault. A driven section skips
-# ONLY when the vault is absent; a present vault missing a row is a FAIL (vault_skills /
+# Floor from the BARE-MACHINE green run (RURIK_VAULT=C:/nonexistent-vault), 2026-09-28,
+# re-measured after CASTAI-R2: 36 -- section 1's predicate (20), section 5's rowless form
+# (5, the legacy property-61 check added) and section 6's source checks (11: the re-arm's
+# default and flag, and CASTAI-R2's flag). 81 with the vault. A driven section skips ONLY
+# when the vault is absent; a present vault missing a row is a FAIL (vault_skills /
 # rows_problem).
-LEDGER = checks.Ledger("cast gate (CASTAI)", floor=35)
+LEDGER = checks.Ledger("cast gate (CASTAI)", floor=36)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -104,7 +106,7 @@ TICK = 0.05
 T0 = 1_000_000.0
 FLAGS = ("SKIP_LIVE_EFFECT", "SELF_CAST_FORM", "CAST_FORM", "ENERGY", "NPC_FOLLOW",
          "CASTER_OPENING", "CONDITION_HEAL_RULE", "EFFECTS", "INSTANT_ANNOUNCE",
-         "LIVE_EFFECT_REARM")
+         "LIVE_EFFECT_REARM", "HOSTILE_ALLY_SKILL_SELF")
 BEAT = 0.25                          # authsrv.LIVE_EFFECT_REARM's default, as a LITERAL
 
 # THE KNOWN-BAD ARM'S LITERAL: the first 24 (tick index, skill) casts of fight(bar=the
@@ -141,7 +143,7 @@ def arm(A=authsrv, clock=None, **flags):
     base = {"SKIP_LIVE_EFFECT": True, "SELF_CAST_FORM": True, "CAST_FORM": "follows-target",
             "ENERGY": False, "NPC_FOLLOW": False, "CASTER_OPENING": True,
             "CONDITION_HEAL_RULE": True, "EFFECTS": True, "INSTANT_ANNOUNCE": True,
-            "LIVE_EFFECT_REARM": BEAT}
+            "LIVE_EFFECT_REARM": BEAT, "HOSTILE_ALLY_SKILL_SELF": True}
     base.update(flags)
     for k, v in base.items():
         setattr(A, k, v)
@@ -256,7 +258,7 @@ def recording_consults(A=authsrv):
 # expiry arithmetic); section 5 does not, so it has its own list and no duration test.
 DRIVEN_ROWS = (SCOURGE, RESTORE, HOLY, VITAL, HEALING_SIGNET, FRENZY, FLAIL_STANCE,
                SELF_ENCHANT, WINDBORNE, BLINDING_FLASH, IMMOLATE, SEVER, AREA_POISON)
-FORM_ROWS = (HEALING_SIGNET, SELF_ENCHANT, FRENZY, SCOURGE)
+FORM_ROWS = (HEALING_SIGNET, SELF_ENCHANT, FRENZY, SCOURGE, VITAL)
 
 
 def vault_skills():
@@ -707,6 +709,35 @@ def section_self_form():
           "a hostile's self-kind NON-heal (180): its cast_target stays the player, its "
           "effect lands on itself, and the announce now follows the LANDING -- 0x009F; "
           "the revert restores 0x00A0 naming the player", f"{a} / {b}")
+    # CASTAI-R2: a hostile's ALLY-kind non-heal (Vital Blessing 289, byte 3) lands on the
+    # CASTER; the known-bad arm is the player (every run before 2026-09-28). OBSERVED
+    # retail: a monster's ally-kind enchantment 4 of 4 on itself. 289 opens NO episode
+    # (its duration slot is a sentinel apply_effect declines, loudly), so what the landing
+    # changes on the wire is the announce and the visual: on the caster it is the caster
+    # form 0x009F [21, caster, id], never a [20] naming the player (send_skill_visual's
+    # rule). 0.75 s is the record's activation, so no property 61 rides along.
+    vb = {}
+    for on in (True, False):
+        with arm(clock=Clock(T0), HOSTILE_ALLY_SKILL_SELF=on):
+            st = world(authsrv)
+            st["agents"][HOSTILE] = body(authsrv, ((VITAL, 0.75, 5.0),),
+                                         agents.ALLEGIANCE_HOSTILE, attack_speed=1e6)
+            rec = fight(authsrv, st, 2.0, ticks=("effect_tick", "enemy_attack_tick"),
+                        watch=(), keep_health=True)
+            vb[on] = (_announces(rec["sends"]),
+                      [(op, v[:2]) for _i, op, v in rec["sends"]
+                       if v and v[0] in (agents.GV_EFFECT_ON_TARGET, 21)],
+                      [v for _i, op, v in rec["sends"] if v and v[0] == 61])
+    check(vb[True][0] == [(INT, [60, HOSTILE, VITAL])]
+          and vb[True][1] == [(INT, [21, HOSTILE])] and not vb[True][2],
+          "a hostile's ally-kind NON-heal (Vital Blessing 289) lands on ITSELF: 0x009F "
+          "[60, 10, 289] and the caster visual 0x009F [21, 10, ...] -- no [20] naming the "
+          "player", f"{vb[True]}")
+    check(vb[False][0] == [(INT_T, [60, HOSTILE, P, VITAL])]
+          and vb[False][1] == [(INT_T, [20, P])],
+          "  KNOWN-BAD, --hostile-ally-skill-at-player: 0x00A0 [60, 10, 1, 289] and the "
+          "visual [20, 1, 10, ...] on the PLAYER (a foe shown blessing its enemy)",
+          f"{vb[False]}")
     a = _start(((HEALING_SIGNET, 2.0, 4.0),), agents.ALLEGIANCE_PLAYER, health=40.0,
                pos=(50.0, 0.0))
     b = _start(((HEALING_SIGNET, 2.0, 4.0),), agents.ALLEGIANCE_PLAYER, health=40.0,
@@ -807,6 +838,11 @@ def section_source():
           "main() flips SELF_CAST_FORM off under --self-cast-names-target")
     check(authsrv.SKIP_LIVE_EFFECT is True and authsrv.SELF_CAST_FORM is True,
           "both default ON at import")
+    check('"--hostile-ally-skill-at-player"' in args
+          and _flips(main_fn, "hostile_ally_skill_at_player", "HOSTILE_ALLY_SKILL_SELF")
+          and authsrv.HOSTILE_ALLY_SKILL_SELF is True,
+          "CASTAI-R2's flag: --hostile-ally-skill-at-player in serverargs, flipped in main(), "
+          "the self landing ON at import")
     main_src = ast.get_source_segment(src, main_fn)
     check('"--live-effect-rearm"' in args
           and "LIVE_EFFECT_REARM = a.live_effect_rearm" in main_src

@@ -26898,6 +26898,22 @@ def morale_experience(send, state, conn_id, gained):
 SKIP_LIVE_EFFECT = True
 LIVE_EFFECT_REARM = 0.25             # --live-effect-rearm SECONDS; 0 = the close's own tick
 
+# CASTAI-R2 (the review's WIRE-3; studies/monsterai/FINDINGS.md 17, CASTAI-C8): A HOSTILE'S
+# ALLY-KIND NON-HEAL LANDS ON ITSELF. The client's target byte 3 is "an ally, the caster
+# legal" (effects.TARGET_KINDS); SLICE-B3 routes a hostile's ally-kind HEAL to whoever is
+# hurt on its own side, but an ally-kind NON-heal kept the player as its cast_target, and
+# effects.effect_recipient lands byte 3 on the aimed target -- so the default Hatcher bar's
+# Vital Blessing (289) blessed the PLAYER, announced 0x00A0 [60, 10, 1, 289] with the
+# visual [20, 1, 10, ...]: a foe shown buffing its enemy. OBSERVED, retail: an Isle
+# monster's ally-kind enchantment (38888:133, skill 290, type 6 byte 3 like 289) rides
+# 0x009F -- on the caster -- 4 of 4, and no MONSTER 0x00A0 [60] with an ally-kind skill
+# exists in the corpus (those come only from FRIENDLY, HUMAN and UNKNOWN casters). So the
+# cast lands on the caster: n = 4, one self-only definition, and whether a monster with
+# allies would bless one of THEM instead is NOT FOUND (RECONSTRUCTION: itself). It predates
+# CASTAI; the new self-cast form reported it faithfully, which is how the review saw it.
+# --hostile-ally-skill-at-player reverts: the player, as every run before 2026-09-28.
+HOSTILE_ALLY_SKILL_SELF = True
+
 
 def live_effect_hold(state, caster_id, agent, skill_id, cast_target, now=None):
     """(wearer, why) when the live-effect gate holds this slot, else None.
@@ -26924,12 +26940,11 @@ def live_effect_hold(state, caster_id, agent, skill_id, cast_target, now=None):
     Widening the hold to "any wearer carries it" would make (B) worse; the per-wearer
     fix belongs in hex_wearers / the apply, not in this slot hold. RECONSTRUCTION.
 
-    NOT FIXED HERE, a landing defect this reads faithfully: an ALLY-kind (byte 3) skill
-    a HOSTILE casts keeps the player as its cast_target, and effect_recipient lands it
-    there -- a foe's Vital Blessing (289) lands on, and is gated and announced at, the
-    player. OBSERVED, retail MONSTER ally-kind casts ride 0x009F (self) 5 of 5. That
-    predates CASTAI (skillread.cast_recipient, the heal's resolution, lands it on the
-    caster; the two disagree for byte 3), and the fix is the landing's, not the gate's.
+    AN ALLY-KIND NON-HEAL is asked about its CASTER: the hostile target gate aims a
+    byte-3 non-heal at the caster (HOSTILE_ALLY_SKILL_SELF, CASTAI-R2), so the landing
+    this reads is the caster's. Under --hostile-ally-skill-at-player the cast_target
+    stays the player and effect_recipient lands byte 3 there, which this then reads
+    faithfully -- the pre-2026-09-28 defect, a foe's Vital Blessing (289) on the player.
     """
     if not SKIP_LIVE_EFFECT:
         return None
@@ -27358,6 +27373,12 @@ def enemy_attack_tick(send, state, conn_id):
                                           f"skill {_sid}: target other ally, and it "
                                           f"has none", flush=True)
                                 break
+                        elif _kind == "ally" and HOSTILE_ALLY_SKILL_SELF:
+                            # CASTAI-R2: a byte-3 NON-heal lands on the CASTER
+                            # (HOSTILE_ALLY_SKILL_SELF's banner) -- so the gate below
+                            # asks the caster, the reach is nil and the announce rides
+                            # 0x009F (the bout was already opened by the engage above)
+                            cast_target = agent_id
                     else:
                         cast_target = hostile_heal_target(state, agent_id, _kind)
                         if cast_target is None:
@@ -43445,6 +43466,13 @@ def main():
               f"gate held is free again {LIVE_EFFECT_REARM:g} s after the episode closes "
               f"(default 0.25, one retail AI beat; 0 = the close's own tick, the slice as "
               f"first shipped).", flush=True)
+    if a.hostile_ally_skill_at_player:
+        global HOSTILE_ALLY_SKILL_SELF
+        HOSTILE_ALLY_SKILL_SELF = False
+        print("[enemy] --hostile-ally-skill-at-player: a hostile's ally-kind non-heal (the "
+              "Hatcher's Vital Blessing 289) lands on the PLAYER its cast names -- every run "
+              "before 2026-09-28; retail's monster lands it on itself (CASTAI-C8).",
+              flush=True)
     if a.self_cast_names_target:
         global SELF_CAST_FORM
         SELF_CAST_FORM = False

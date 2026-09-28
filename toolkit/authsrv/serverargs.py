@@ -1453,6 +1453,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "AI re-casts inside 0.2 s of a same-skill end, minimum 0.228 s). "
                          "0 re-casts on the close's own tick, the [60] in the 0x0044's "
                          "batch (the slice as first shipped).")
+    ap.add_argument("--hostile-ally-skill-at-player", action="store_true",
+                    help="CASTAI-R2 REVERT: a hostile's ALLY-kind (target byte 3) non-heal "
+                         "-- the Hatcher's Vital Blessing 289 -- keeps the player as its "
+                         "target and lands on the PLAYER (0x00A0 [60, foe, player, skill]), "
+                         "every run before 2026-09-28. By default it lands on the caster "
+                         "and rides 0x009F: OBSERVED, a retail monster's ally-kind "
+                         "enchantment 4 of 4 on itself (studies/monsterai 17, CASTAI-C8).")
     ap.add_argument("--no-skip-live-effect", action="store_true",
                     help="CASTAI REVERT (DESKWORK-D8 step 6, owner's ruling PLAN.md "
                          "sec.7 Q19): a hostile or a party body casts the slot round "
