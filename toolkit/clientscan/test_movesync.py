@@ -1504,6 +1504,48 @@ def main():
               f"corpus growth adds neighbours; a discontinuity arrives alone. "
               f"Read this verdict TOGETHER with the one above -- the pair is "
               f"what separates a movement regression from an expired constant")
+        # WHAT THE LONE ROW IS (2026-09-28, CASTAI-Z1), measured, and the two verdicts
+        # above are LEFT AS THEY ARE: the pair reads "relation RED + shoulder RED", and
+        # this says which row, and that it is neither a jump nor a teleport. The owner's
+        # Zaishen capture, match 4: the observer's last self-report before an attack
+        # order's auto-approach, then silence -- the client does not report while it
+        # walks itself to its target -- until the server's halt; the distance is the
+        # boosted run between the two. A decision about the constant is the owner's
+        # (escalated); this check only pins the witness so the evidence is in the suite.
+        zst = "20260928T103123"
+        zconn = "10.0.0.210:58544->98.95.137.136:80"
+        zrow = [r for st, conn, rr in tracks if (st, conn) == (zst, zconn)
+                for r in rr if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
+        if not zrow:
+            LEDGER.skip("the 2 s window's lone row", f"capture {zst} not in this corpus")
+        else:
+            zr = zrow[0]
+            zc2s = [(t, op) for t, cn, op, _v in cmsgstream.timed(zst, "c2s", "game")
+                    if cn == zconn and zr["t0"] < t < zr["t"]]
+            zs2c = [(t, op, v) for t, cn, op, v in cmsgstream.timed(zst, "s2c", "game")
+                    if cn == zconn]
+            obs = movesync.named_players([(t, zconn, op, v) for t, op, v in zs2c]).get(zconn)
+            halt = [t for t, op, v in zs2c if op == 0x0028 and len(v) > 1 and v[1] == obs
+                    and zr["t0"] < t < zr["t"]]
+            boost = [(t, v[2]) for t, op, v in zs2c if op == 0x0027 and len(v) > 2
+                     and v[1] == obs and t < zr["t0"]]
+            run = (boost[-1][1] * (halt[0] - zr["t0"])) if (boost and halt) else None
+            check(len(zrow) == 1 and round(zr["t0"], 3) == 587.058
+                  and round(zr["t"], 3) == 588.827 and round(zr["dist"], 2) == 565.29
+                  and zr.get("server_set") is None
+                  and [op for _t, op in zc2s] == [0x0026, 0x0009]
+                  and len(halt) == 1 and boost and abs(boost[-1][1] - 383.04) < 0.01
+                  and run is not None and 0.0 <= run - zr["dist"] < 5.0,
+                  f"NEW (OBSERVED, {zst} :58544): the lone row is the observer's "
+                  f"{zr['dist']:.2f} u / {zr['dt']:.3f} s from t={zr['t0']:.3f} -- NO "
+                  f"self-report inside it, only an attack order (0x0026) while the client "
+                  f"auto-walks to its target, halted by the server at "
+                  f"{halt[0] if halt else float('nan'):.3f}; no 0x002C set spans it; "
+                  f"and the step is the 383.04 u/s boost (0x0027) run from the report to "
+                  f"the halt ({run if run is not None else float('nan'):.2f} u) -- a "
+                  f"silent approach walk, not a jump",
+                  f"c2s inside {[(round(t, 3), hex(op)) for t, op in zc2s]}; halt {halt}; "
+                  f"boost {boost[-1:] if boost else None}; observer {obs}")
 
     # ---------------------------------------------------------------------
     print("\n17. the AgTrack fence: movetap's selftest 5-7, in the SUITE")
