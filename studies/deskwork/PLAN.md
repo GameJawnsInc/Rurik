@@ -866,7 +866,10 @@ enemy PLAN §12.4-12.5 (`ENEMY_MELEE_RANGE = 150` still "Ours"; `content/ai.toml
 6. **Cast policy, first slice**: re-ask the owner (heroes §5.6); ship only "skip a slot
    whose effect the target already carries" behind a flag (skills §16.1's Hatcher defect;
    `enemy_attack_tick` ~21441 is the waster); the full `usage` engine waits on D4 and the
-   answer.
+   answer. **LANDED 2026-09-28 as CASTAI** (studies/monsterai §17; asked and ruled,
+   `PLAN.md` §7 Q19: narrow, ON): the gate, its one-beat re-arm, the self-cast form, and a
+   hostile's ally-kind non-heal on itself; step 2(c)'s cast half is
+   `studies/monsterai/review/castethogram.py`.
 7. **Gadgets on retail maps**: census the gadget creates with their 0x0111/0x010E pairs
    per (map, build), deduplicated across visibility re-creates (606 and 664 messages in
    28 captures); `msghandler` on both to name the fields; an emitter to vault/content

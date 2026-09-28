@@ -1925,7 +1925,17 @@ a line to add to a round-robin selector.
 FOUND**. Re-sending the apply does nothing (measured, both id choices).
 `0x0044`-then-`0x0042` would certainly work and there is no evidence retail does
 it. The question only becomes live when something in this server needs to extend
-a running effect, and nothing does yet.
+a running effect, and nothing does yet. **(2026-09-27, studies/monsterai §17
+CASTAI-C4: retail DOES it, for a stance — the JARIN hero's Frenzy re-cast while live
+10 of 17, each re-cast batch `0x0044 [30, 3]` then a fresh `0x0042`; OBSERVED, n = 1
+hero.)**
+
+**CLOSED 2026-09-28 — the gate this section declined to add is now the owner's ruling
+(`PLAN.md` §7 Q19) and ships as a WORLD gate beside the selector, not inside it**
+(studies/monsterai §17): a hostile or a party body holds a slot whose effect the target it
+lands on already carries, `--no-skip-live-effect` the revert, round robin untouched.
+The Hatcher's four stacked Scourge Sacrifices are now one at a time
+(`test_castgate.py` §2, and the known-bad arm reproduces the stacking).
 
 **NOT ANSWERED by this run, and named so it is not read as answered:**
 

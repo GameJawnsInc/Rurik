@@ -549,6 +549,20 @@ scaling. Designing the policy table before the skill table exists is designing h
 skill table blind. So: build the substrate, let the row shape settle, then hang policy
 on it. Owner's call, 2026-08-20, and the reason this section stops here.
 
+**2026-09-27, two corrections from [studies/monsterai §17](../monsterai/FINDINGS.md)
+(CASTAI).** (1) **"One engine plus one skill-keyed table serves heroes, henchmen and
+monsters alike" is CONTESTED** (CASTAI-W2): per-skill AI is TIERED — heroes and hard mode
+use the best tier, normal-mode foes lower tiers by chapter (a 2012 developer talk post,
+rev 2476886, attribution UNVERIFIED; *Feedback:Game updates/20190205* rev 2658855;
+Belly Smash the worked case) — so the Hero-vetted table is the hero tier. (2) **The
+"~92 implementable / ~90 qualitative" split is corrected** (CASTAI-W10, hand-read):
+of 222 statements, 101 name a hard condition, 64 say "use when ready / as basic
+damage" (which a keyword classifier reads as qualitative), 11 are soft preferences,
+37 need state we do not keep, 9 are purely qualitative; two pages lack a Hero Usage
+section, not one. The substrate this section waited for now exists, and the owner took
+the narrow first slice (`PLAN.md` §7 Q19): the no-re-apply rule of *Hero behavior* rev
+2741080, as a gate.
+
 ---
 
 ## 6. The player-facing layer (WIKI)

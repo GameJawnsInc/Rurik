@@ -387,7 +387,9 @@ Three properties of that finding matter more than the finding:
 
 1. **The caster carries the `nonc` allegiance token.** Corpus-wide, no `nonc` agent ever appears as an attacker, as a target, or in any damage event — **0 in 21,543 messages.** For a study about monster AI, the one NPC cast in the corpus was performed by an agent class that never fights.
 2. **The NPC's activation rides `0x009F` (int, no target); all four player activations ride `0x00A0` (int, with target).** Same value id, different message shape by actor. For anyone writing an NPC casting path, that is the most actionable byte in the finding.
-3. **Nothing can be said about order, cadence or recharge.** No NPC casts twice. There is no second event to sequence against. **(Superseded 2026-09-23, DESKWORK-D5 step 4: over the 36-capture corpus other agents cast the same skill many times, and `rechargeprobe.py` reads the cadence -- six spells re-cast at recharge + activation from the start, i.e. the recharge runs from the cast's COMPLETION. This paragraph was written over a two-capture corpus; it holds for that corpus and not the current one. Selection ORDER is still a capture-campaign question, §7.6; only the recharge ANCHOR is answered.)**
+3. **Nothing can be said about order, cadence or recharge.** *(Item 2's actor reading
+   is SUPERSEDED by §17 CASTAI-C1: the channel follows the target, and 0x009F is the self
+   cast.)* No NPC casts twice. There is no second event to sequence against. **(Superseded 2026-09-23, DESKWORK-D5 step 4: over the 36-capture corpus other agents cast the same skill many times, and `rechargeprobe.py` reads the cadence -- six spells re-cast at recharge + activation from the start, i.e. the recharge runs from the cast's COMPLETION. This paragraph was written over a two-capture corpus; it holds for that corpus and not the current one. Selection ORDER is still a capture-campaign question, §7.6; only the recharge ANCHOR is answered.)**
 
 `GV_ADD_EFFECT` and `GV_REMOVE_EFFECT` (ids 6, 7) do not occur anywhere. A correlation scan for NPC-applied conditions on the player returns zero, but it is **uninformative**: every one of the 17 player-kind status events in the whole corpus carries the same value, `0x100`. The dependent variable is a constant, so the scan could not have found anything.
 
@@ -1231,7 +1233,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 10 | Absolute monster max health | **1–3 sessions**, if the character carries life-stealing skills. | Two skills of different published steal agreeing on 3 types GWW publishes. Would move HP off `PLAN.md` §1.7's server-only list. |
 | 11 | What are `band` and `anim`? | **One session**, the `narrate` step. | The operator saying in chat what they were looking at. |
 | 12 | Does a hostile ever switch targets? | **Needs a pet or escort NPC** — a solo character has one body. | Not searched in the existing corpus either; one connection with three simultaneous hostiles could support the analysis. |
-| 13 | Skill-selection policy | **5–10 sessions**, and the yield is not guaranteed. | 30 casts per type across sessions on different individuals. Report the shortfall rather than a histogram over n=6. |
+| 13 | Skill-selection policy **(2026-09-27, §17: the bar is unmet by every hostile combat caster on the 95-connection corpus — the best is 22 casts; the one rule shipped is the live-effect skip, `PLAN.md` §7 Q19)** | **5–10 sessions**, and the yield is not guaranteed. | 30 casts per type across sessions on different individuals. Report the shortfall rather than a histogram over n=6. |
 | 14 | Scatter | **Needs a character with an area damage-over-time skill.** | GWW's four rules are specific enough to falsify: group-synchronised, cancels current actions, runs from epicenter, ceases actions until safe. |
 | 15 | Respawn, group pulls, boss identification, morale, target-switch | **Unknown** — none of these events occurs in the corpus, and none is guaranteed to occur in a campaign session either. | Longer dwell in one area after a kill (respawn); a denser pull (group aggro); a boss encounter (the unexplained 4-bit that separates `mon1` flags 8 and 13). |
 | 16 | AI as a mechanism | **Cannot be settled.** | Nothing. It is not shipped and it is not transmitted. |
@@ -1263,6 +1265,11 @@ same message with a different actor.
 
 Our server already sends the `0x009F` form, so it is right — but it was right without
 this being written down anywhere, which is the same as being right by luck.
+
+**SUPERSEDED 2026-09-27 (§17, CASTAI-C1): the split is by TARGET, not by actor.** Over the
+95-connection corpus `0x009F [60, caster, skill]` carries 715 casts from every class, the
+observer's own included, and it is the SELF / no-target cast; 0 of 373 `0x00A0 [60]` name
+the caster as its own target. The one NPC cast above was a cast that names nobody.
 
 **And a method note that belongs here rather than in a commit message.** The first
 version of the windup re-measurement scored **zero paired swings** and, had it not been
@@ -2294,6 +2301,205 @@ retail's normal-mode foes break at the second tick; that stays the owner's feel 
 4. **Guard-mode heroes** — folded into 1.
 5. **Re-engagement pathing** — retail may path AROUND an active area on the way back in;
    here the hold refuses a destination inside one and nothing routes around it.
+
+---
+
+## 17. CASTAI — how retail AI casters choose, and the first slice (2026-09-27)
+
+**Identifiers.** `CASTAI-C<n>` — facts read off the live corpus by the census below;
+`CASTAI-W<n>` — facts from the wiki (GWW) and its developer posts; `CASTAI-R<n>` — the
+review's findings on the slice that shipped. The word is this section's (the arc's name),
+registered here per [studies/idents/CONVENTION.md](../idents/CONVENTION.md); it is not
+`MONSTERAI-` because the code already cites `CASTAI-W2` and a rename would split one arc
+across two words.
+
+**Why now.** `pick_skill` (`toolkit/authsrv/authsrv.py`) is round robin, a declared testing
+fixture (owner's ruling 2026-08-11, §8.4), and it re-casts a hex its target already carries
+([skills §16.1](../skills/FINDINGS.md): four overlapping Scourge Sacrifices on the player,
+every repeat `0x0042` discarded by the client). The owner deferred a usage policy on
+2026-08-20 until the effect substrate existed ([heroes §5.6](../heroes/FINDINGS.md)); it
+now does (conditions 10 of 10, hexes, enchantments, episodes, health). So the question was
+asked of the tape first, and of the wiki second.
+
+**The instrument.** [review/castethogram.py](review/castethogram.py) (DESKWORK-D8 step 2(c)):
+every cast on the live captures, the caster classed (MONSTER, HERO, HENCHMAN, ALLY_NPC,
+FRIENDLY, HUMAN, OBSERVER), its landing target, whether that target already carried a live
+episode of the same skill, health (a reconstruction, checked: it reads ≤ 0.10 at 85 of 99
+deaths), gaps from ready (recharge from each build's own exe). Read-only, live only, exit 2
+on nothing observed; the decoders are the repo's own. **95 connections, 1,554 casts, 880 by
+AI bodies** — but **709 of the 880 are on map 280** (the Isle of the Nameless), most of them
+practice bodies healing themselves on a metronome, so the policy evidence is about **seven
+multi-skill definitions** (38888:129, 4523, 3488, 3489, 3117, 4440, 140). Human casts
+(421, one Random Arenas tape) are counted and never scored; the wire does not separate
+them from AI bodies — the map does (maps 309–312), and no scored AI cast is on those maps.
+
+### CASTAI-C1 — `0x009F [60, caster, skill]` is the SELF cast, not an NPC's oddity
+
+OBSERVED: 715 casts ride it, every class including the observer (57); their skills carry
+target byte 0, 1 or 3, never 4 or 5; and **0 of 373 `0x00A0 [60]` announces name the
+caster as its own target**. 417 of 417 self-kind (byte 0) `[60]` casts ride `0x009F`, the
+observer's own 26 included. §10's table ("NPC ×1, `0x009F [60, agent, skill]`, no target
+slot") and §3 item 2 read that one cast as an actor difference; it was a TARGET
+difference, which is ANIMREF-R1's "the channel follows the target" rule (`cast_anim_msg`)
+applied to a cast whose target is its caster. **Superseded here.**
+
+### CASTAI-C2 — no AI hex or enchantment landed on a live episode of the same skill
+
+OBSERVED, and weaker than it reads. Registered first (P1): **0 of 170** AI hex /
+enchantment casts landed on a live same-skill episode (one duration-15-only "possible").
+But the 170 are 106 casts of one buff (38x:108's Windborne Speed 160 on the player), 43
+self-enchantments and **20 hexes, none informative**: both hexing definitions' recharge
+outlasts the hex (4440's 222, a 3 s hex on a 5 s recharge in the client table, fired
+0.635 s after ready; 3117's 1097, at most 8 s on a 15 s recharge), so neither could ever
+find its own hex live. The
+**19 informative casts** (the slot ready while the previous episode certainly lived) are
+all self-enchantments by 38888:129 (15) and 38888:3117 (4), dated by skill-table durations
+at unknown rank: 129 re-cast 164/180 at 60.0–62.1 s and 225 at 63.8–65.0 s after the
+previous one, just past the 60 s maximum duration, passing over 4–10 other casts meanwhile.
+So "retail AI never re-hexes a foe" rests on the wiki (CASTAI-W3) plus **no
+counterexample**, not on a positive retail observation.
+
+### CASTAI-C3 — the re-cast after an expiry comes one AI beat later, never sooner
+
+OBSERVED: the Isle friendly 108 re-casts 160 on the player **0.228 / 0.236 / 0.249 s**
+(fastest, per build) after the `0x0044` that closes the previous one (n = 79, three
+builds); over the corpus, **0 of 95** AI casts with a same-skill end before them began
+within 0.2 s of it. Retail AI casts sit on a ~0.25 s grid (Isle intervals 11.50, 12.75,
+22.75 s; engaging type-5 spells follow the previous cast's end by a median 0.255–0.265 s)
+— RECONSTRUCTION, the critic's reading.
+
+### CASTAI-C4 — a stance is refreshed while it is live
+
+OBSERVED, n = 1 hero, one session: the JARIN hero (38888:4523) re-cast Frenzy (346,
+8.0 s) while the previous one was live in **10 of 17** casts; the re-cast batch carries
+`0x0044 [30, 3]` then a fresh `0x0042 [30, 346, 0, 3, 8.0f]` (20260914T005758 :56011,
+t = 175.5–437.2). No c2s command precedes them. The wiki's no-re-apply list (CASTAI-W3)
+does not name stances, so this is consistent with it.
+
+### CASTAI-C5 — which ready skill fires is NOT settled
+
+Nobody can say yet. §9 row 13's bar — 30 casts per creature type across two or more
+skills with overlapping readiness, on different individuals — is met by **no** hostile
+combat caster (the best, 38888:129's 229, has 22 casts over two sessions and two bodies;
+the nine pairs the census first reported "at the bar" are single-skill Isle bodies,
+which cannot discriminate a selector). The critic's test (prediction first: the
+oldest-ready slot fires ≥ 60 %) scored **22 of 48 against 19.3 by chance** — no signal
+either way. 129's nukes fire in varying orders (220-229-230, 229-220-230, 229-230-220)
+and repeat 229 back to back, so it is not a fixed cycle. Round robin stays, as the owner
+ruled.
+
+### CASTAI-C6 — what the Isle cannot tell us
+
+A heal "threshold" is not identifiable there: the 313 casters fire every **11.500 s**
+(interquartile 11.498–11.503, n = 82), no damage in the prior 10 s in 167 of 167, so the
+reconstructed health at the cast is the interval times the degeneration — a timer and a
+threshold predict the same 0.686. Healing Signet's intervals are bimodal (12.75 or 22.75
+s), unexplained. **Every AI heal on tape is a self-heal**: a heal on another ally is
+n = 0, and so is any condition- or hex-removal skill (P4 untestable).
+
+### CASTAI-C7 — four casts came before their table recharge had elapsed
+
+OBSERVED, unexamined: 38833:138 skill 1217 at −42.0 s, 38833:3489 skill 1197 at −3.0 s,
+38888:129 skill 229 at −0.50 and −1.75 s. 129 is the best hostile caster on tape. Whether
+monsters obey the player's recharge table is open, and a policy leaning on exe recharge
+for bodies should settle it first.
+
+### CASTAI-C8 — a monster's ally-kind enchantment lands on itself
+
+OBSERVED, n = 4, one definition (38888:133, an Isle self-only body): skill 290, an
+enchantment with target byte 3 like the Hatcher's Vital Blessing (289), rides `0x009F`
+4 of 4 — on the caster. No MONSTER `0x00A0 [60]` with an ally-kind skill exists on tape;
+those announces come only from FRIENDLY, HUMAN and UNKNOWN casters.
+
+### The wiki (GWW, fetched 2026-09-27 through the app's browser; revision ids per claim)
+
+All 184 members of `Category:Hero-vetted skills` (183 skill pages, each with its infobox
+skill id), and 17 general pages. Saved to the vault
+(`research/castai-2026-09-27/wiki-*.json`); nothing of it is in git.
+
+- **CASTAI-W1** — each skill carries its own small usefulness check, and a character picks
+  by the result: per-skill utility, not a priority list and not round robin. WIKI, a 2012
+  talk-page post signed by an ArenaNet developer (*Talk:Hero behavior/Unexpected behavior*
+  rev 2476886); the attribution is UNVERIFIED and the post predates the 2019 and 2026 AI
+  updates.
+- **CASTAI-W2** — per-skill AI is **tiered**: heroes and hard-mode characters use the best
+  tier, normal-mode characters decreasing tiers by chapter (the same post; *Feedback:Game
+  updates/20190205* rev 2658855 agrees for monsters; Belly Smash is the one worked
+  example). **This CONTESTS [heroes §5.6](../heroes/FINDINGS.md)'s "one engine plus one
+  skill-keyed table serves heroes, henchmen and monsters alike"**: the Hero-vetted table is
+  the hero / hard-mode tier.
+- **CASTAI-W3** — heroes know every active effect and will not apply an enchantment, hex,
+  condition or weapon spell to someone already carrying the same one (*Hero behavior* rev
+  2741080), with per-skill instances; the 2008-08-07 hero / hard-mode notes (*Game
+  updates/20080807* rev 2638576) add "no longer re-apply" lines — so older tiers, and
+  plausibly normal-mode monsters, DID re-apply (RECONSTRUCTION, UNVERIFIED on tape).
+- **CASTAI-W4** — monster target choice: the weakest foe (health, armour) and the closest,
+  overriding each other only at extremes; no numbers anywhere (*Foe* rev 2674584, last
+  edited 2021-08-29; *Aggro* rev 2655578).
+- **CASTAI-W5 / W6** — hero targets (locked, called, the player's) and heal rules (the
+  lowest-health ally first; per-skill thresholds 80 / 70 / 50 / 25 %); **no heal threshold
+  for a FOE healer is published: NOT FOUND**.
+- **CASTAI-W10** — the 222 per-skill statements (hand-read, RECONSTRUCTION): **101 name a
+  hard condition** the server can check, **64 say "use when ready / as basic damage"**, 11
+  are soft preferences, 37 need state we do not keep (18 of them spirits), **9 are purely
+  qualitative**. Heroes §5.6's "~92 implementable / ~90 qualitative" (a keyword classifier)
+  almost certainly counted the 64 as qualitative; two pages lack a Hero Usage section, not
+  one. Only 5 of the 19 skill ids on our committed bars have a hero-vetted row.
+
+### The ruling, and what shipped
+
+**`PLAN.md` §7 Q19, ruled 2026-09-27**: the narrow slice, ON by default — DESKWORK-D8 step
+6 as written. Round robin stays the selector; one WORLD gate ships (`SKIP_LIVE_EFFECT`,
+`--no-skip-live-effect`): a hostile or a party body HOLDS a slot whose effect the target it
+LANDS on already carries — a live same-skill hex / enchantment / weapon spell, any caster,
+or for a condition-only skill that condition — the way SLICE-B3's heal gate holds.
+Stances, glyphs, preparations, shouts, attacks, heals and damage with a condition rider are
+never held (`episodemods.live_effect_class`). A held slot is free again **0.25 s after the
+first look that finds its episode gone** (`LIVE_EFFECT_REARM`, `--live-effect-rearm`),
+so the re-cast trails the `0x0044` by at least CASTAI-C3's beat and never less. And the
+self-cast form (`SELF_CAST_FORM`, `--self-cast-names-target`): a cast landing on its caster
+announces `0x009F [60, caster, skill]` (CASTAI-C1), at all four announce sites. WIKI for
+heroes and henchmen, RECONSTRUCTION for normal-mode monsters (CASTAI-W2), consistent with
+CASTAI-C2. `toolkit/authsrv/test_castgate.py`.
+
+**The review** (three lenses — wire, behaviour, test honesty; 20 mutants, 16 red and 4
+equivalent; `1d4040fe`):
+- **CASTAI-R1** — the slice as first built re-cast on the close's own tick, its `[60]` in
+  the `0x0044`'s batch, faster than any retail AI re-cast (CASTAI-C3). Fixed by the re-arm
+  beat.
+- **CASTAI-R2** — a hostile's ally-kind non-heal (Vital Blessing 289, on the default bar)
+  landed on the PLAYER, so a foe was shown blessing the player; it predates CASTAI, and
+  the new announce reported it faithfully. Fixed separately (CASTAI-C8).
+- **CASTAI-R3** — the gate asks only an area hex's PRIMARY wearer: a bystander already
+  carrying the hex still gets a second episode, and a primary carrying it holds the whole
+  cast. Declared at `live_effect_hold`, not fixed.
+- **CASTAI-R4** — the self-cast form changes the PLAYER's own press too (a self skill
+  pressed with a foe selected now rides `0x009F`), as the observer's own 26 casts on tape
+  do.
+
+**The client runs** (loopback, agent-driven on the owner's go-ahead, 2026-09-28; the
+questions registered before each launch). `20260928T002332`, the defaults, the Hatcher's
+bar: the server held 253 while the player carried it ("already carries", 8 holds) and
+re-cast it **5.23 / 2.21 / 2.15 s** after each `0x0044` — never two live, never inside the
+beat (the cursor, not the beat, set those gaps); one hex icon on the player's effect monitor
+in every frame read; 289 announced `0x009F [60, 10, 289]` with its visual on the Hatcher
+(13 of 13 "self-cast recipient"); the client ran the whole 75 s. `20260928T002623`, all four
+reverts: 253 stacked (buffs 2 and 3 applied while buff 1 lived — the server's own
+"OVERLAPPING — the client will discard it"), 289 on `0x00A0 [60, 10, 1, 289]` with visual
+511 on the PLAYER. The gate's client-visible difference is small by construction — the
+client discards a repeat `0x0042` — so the evidence is our server's own wire, read from
+the captures; the 0.5 s visual is shorter than the 2 s frame interval and was not
+photographed.
+
+### Open, ranked
+
+1. **Selection order among ready slots** (CASTAI-C5) — needs §9 row 13's bar on a
+   multi-skill hostile, which is a capture campaign.
+2. **Which tier our monsters are** (CASTAI-W2) — the Hero-vetted table is the hero tier;
+   the normal-mode tiers are unpublished and only the tape can show them.
+3. **An AI heal on another ally, a removal skill** — n = 0 each on tape.
+4. **Monsters and the recharge table** (CASTAI-C7).
+5. **Area hexes' other wearers** (CASTAI-R3).
 
 ---
 
