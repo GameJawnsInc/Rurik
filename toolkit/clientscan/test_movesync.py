@@ -1514,12 +1514,20 @@ def main():
         # (escalated); this check only pins the witness so the evidence is in the suite.
         zst = "20260928T103123"
         zconn = "10.0.0.210:58544->98.95.137.136:80"
-        zrow = [r for st, conn, rr in tracks if (st, conn) == (zst, zconn)
-                for r in rr if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
-        if not zrow:
+        # The skip is for the capture's ABSENCE and nothing else (a bare or older
+        # vault). With the capture on disk the row is selected by its own start time,
+        # not by the constant, so a scanner change or a re-calibrated HARD_JUMP_UNITS
+        # makes this a FAIL naming what moved -- never a skip printing a false cause.
+        if zst not in stamps:
             LEDGER.skip("the 2 s window's lone row", f"capture {zst} not in this corpus")
         else:
-            zr = zrow[0]
+            zrow = [r for st, conn, rr in tracks if (st, conn) == (zst, zconn)
+                    for r in rr if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
+            zat = [r for st, conn, rr in tracks if (st, conn) == (zst, zconn)
+                   for r in rr if round(r["t0"], 3) == 587.058]
+            zr = zat[0] if zat else {"t0": float("nan"), "t": float("nan"),
+                                     "dt": float("nan"), "dist": float("nan"),
+                                     "server_set": None}
             zc2s = [(t, op) for t, cn, op, _v in cmsgstream.timed(zst, "c2s", "game")
                     if cn == zconn and zr["t0"] < t < zr["t"]]
             zs2c = [(t, op, v) for t, cn, op, v in cmsgstream.timed(zst, "s2c", "game")
@@ -1530,7 +1538,9 @@ def main():
             boost = [(t, v[2]) for t, op, v in zs2c if op == 0x0027 and len(v) > 2
                      and v[1] == obs and t < zr["t0"]]
             run = (boost[-1][1] * (halt[0] - zr["t0"])) if (boost and halt) else None
-            check(len(zrow) == 1 and round(zr["t0"], 3) == 587.058
+            check(len(zat) == 1 and zrow == zat
+                  and zr["dist"] >= movesync.HARD_JUMP_UNITS
+                  and round(zr["t0"], 3) == 587.058
                   and round(zr["t"], 3) == 588.827 and round(zr["dist"], 2) == 565.29
                   and zr.get("server_set") is None
                   and [op for _t, op in zc2s] == [0x0026, 0x0009]
@@ -1544,6 +1554,9 @@ def main():
                   f"and the step is the 383.04 u/s boost (0x0027) run from the report to "
                   f"the halt ({run if run is not None else float('nan'):.2f} u) -- a "
                   f"silent approach walk, not a jump",
+                  f"rows at t0=587.058: {len(zat)}; rows over HARD_JUMP_UNITS "
+                  f"({movesync.HARD_JUMP_UNITS}) inside 2 s on the connection: "
+                  f"{[(round(r['t0'], 3), round(r['dist'], 2)) for r in zrow]}; "
                   f"c2s inside {[(round(t, 3), hex(op)) for t, op in zc2s]}; halt {halt}; "
                   f"boost {boost[-1:] if boost else None}; observer {obs}")
 

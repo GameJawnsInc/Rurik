@@ -574,7 +574,9 @@ def _absent_rows(absent):
           f"exactly the observer's three launches behind 2858 (a PvP id; the Zaishen "
           f"Challenge fields PvP skills)",
           f"{z}")
-    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    cscan = os.path.join(os.path.dirname(HERE), "clientscan")
+    if cscan not in sys.path:
+        sys.path.insert(0, cscan)
     import pinned                                               # noqa: PLC0415
     import skilltable                                           # noqa: PLC0415
     try:
@@ -600,21 +602,33 @@ def _absent_rows(absent):
 def _windup_signature(d):
     """A body's bow skill launches one windup of its CURRENT attack duration after its
     announcement: swing_windup(base x modifier) of the body's latest 0x0035."""
-    sys.path.insert(0, HERE)
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
     import authsrv                                              # noqa: PLC0415
     rows = [r for r in d["skill"] if not r["player"] and r["type"] == 5
             and r["skill"] in (392, 394, 396, 402, 404)]
     res = [(r, r["event_to_launch"] - authsrv.swing_windup(r["speed"][0] * r["speed"][1]))
            for r in rows if r["speed"] is not None]
     slowed = [(r, e) for r, e in res if abs(r["speed"][1] - 1.0) > 1e-6]
+    # THE PINNED BAND ON EVERY ROW (1.10 .. 1.16 around 1.1375 is a residual of
+    # -0.0375 .. +0.0225, each row against its OWN swing_windup(base x modifier)),
+    # modifier 1.0 included. The only rows outside it are the two witnessed Zaishen
+    # shots (finding: cause UNVERIFIED), held as positive controls and asserted as
+    # EXACTLY the out-of-band set -- so a third, on any capture, reddens this check
+    # and gets classified rather than being averaged into the median.
+    outband = sorted((r["capture"], _port(r["conn"]), round(r["t"], 3))
+                     for r, e in res if not -0.0375 < e < 0.0225)
+    witnessed = [(ZAISHEN, "50061", 217.821), (ZAISHEN, "50295", 476.727)]
     check(len(res) == len(rows) >= 44 and abs(statistics.median(e for _r, e in res)) < 0.01
-          and slowed and all(-0.0375 < e < 0.0225 for _r, e in slowed),
+          and slowed and all(-0.0375 < e < 0.0225 for _r, e in slowed)
+          and outband == witnessed,
           f"SIGNATURE (whole corpus): a body's bow skill launches swing_windup(base x modifier) "
           f"of its latest 0x0035 after the announcement -- median residual "
-          f"{statistics.median(e for _r, e in res) * 1000:+.1f} ms over {len(res)}, and every "
-          f"one of the {len(slowed)} under a modifier inside the pinned band (1.10 .. 1.16 "
-          f"around 1.1375, carried to its own windup)",
-          f"{len(rows)} rows, {len(res)} with a 0x0035; slowed "
+          f"{statistics.median(e for _r, e in res) * 1000:+.1f} ms over {len(res)}; EVERY row "
+          f"inside the pinned band (1.10 .. 1.16 around 1.1375, carried to its own windup), "
+          f"the {len(slowed)} under a modifier among them, except exactly the two witnessed "
+          f"Zaishen shots {[(p, t) for _c, p, t in witnessed]}",
+          f"{len(rows)} rows, {len(res)} with a 0x0035; out of band {outband}; slowed "
           f"{[(round(r['t'], 3), r['speed'], round(e, 4)) for r, e in slowed]}")
     z = [(r, e) for r, e in res if r["capture"] == ZAISHEN]
     zs = sorted((_port(r["conn"]), round(r["t"], 3)) for r, e in z
