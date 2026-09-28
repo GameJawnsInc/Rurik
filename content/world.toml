@@ -2967,8 +2967,8 @@ disabled for 1...10 second[s]."; `aoe = adjacent`. Client (38797): id 204, type_
 only), scale 1 / 10 (skilldesc: DISABLE_DURATION, the Overcast clause -- no consumer), bonus 10 / \
 70 (skilldesc: COLD_DAMAGE) -- BOTH bit-clear with differing endpoints. THE DAMAGE IS CONTESTED: \
 the client's bonus slot says 10..70 and the wiki's progression says 10..85 (the same line Deep \
-Freeze's page carries); the row shipped the CLIENT's number (10 / 70 until 2026-09-28), and a \
-tooltip read in a run settles it. Read by hex_cast_damage (the explicit `damage0/15`, interpolated \
+Freeze's page carries); the row shipped the CLIENT's number (10 / 70 until 2026-09-28); the tooltip read in a run \
+that was to settle it for 38797 is moot since the 38888 regen above. Read by hex_cast_damage (the explicit `damage0/15`, interpolated \
 by the client's formula; rank 12: 58 on 38797's endpoints, 70 on 38888's) as the on-cast burst over every foe within 156 u of the target, like Deep Freeze's. \
 The x2 is read by episodemods.signet_activation_factor for a SIGNET (type_code 7, OBSERVED 4/4) \
 at the player's press and a body's cast start; the recharge anchor takes the scaled value; \

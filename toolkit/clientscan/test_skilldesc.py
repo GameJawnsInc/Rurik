@@ -63,7 +63,7 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike
+LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults)
 check = checks.adopt(LEDGER)
 
 
@@ -1294,8 +1294,9 @@ if records is not None:
         # b1 is a FAIL the file did not earn. Nothing in the header is trusted: the
         # build is re-derived from the named exe's bytes (a non-pristine image is a
         # FAIL by name), the templates digest is recomputed from the named dat, the
-        # build must be one the loaded skills table carries (the emitter's own ENG-7
-        # refusal), and then the whole file must equal the emit byte for byte. When
+        # build must be the BULK skills table's one build (repo + vault, overrides/
+        # excluded -- stricter than the emitter's ENG-7, which counts the overrides'
+        # stamps too; see bulk_builds below), and then the whole file must equal the emit byte for byte. When
         # the header names the pinned exe and DEFAULT_DAT verbatim, that emit IS b1.
         # MEASURED 2026-09-28: the 38888 pipeline (corpus + analyse + emit) is ~7 s.
         explicit = os.environ.get("RURIK_SKILL_LABELS", "").strip()
@@ -1344,7 +1345,17 @@ if records is not None:
                         ix2.close()
             return _fresh[(hexe, hdat)]
 
-        table_builds = skilldesc.skills_table_builds(_content.load())
+        # The SKILLS TABLE clause is keyed on the BULK table's build -- the rows the repo
+        # and the vault's content/ load, with no overrides/ and no RURIK_CONTENT_EXTRA
+        # merged over them -- never on every build stamp that is loaded. MEASURED
+        # 2026-09-28: the full load on the 38797 vault carries {38797, 38888}, because
+        # content/overrides/skills_38888.toml stamps 14 rows 38888 (SLICE-H17b), so
+        # "the header's build is one of the loaded builds" could not refuse a 38888
+        # overlay on a 38797 bulk table -- the half-swapped state this regen can
+        # leave. The bulk load reads {38797} (1333 rows) there and {38888} (1334) on
+        # the post-swap vault. Not exactly one build is itself a FAIL by name.
+        bulk_builds = skilldesc.skills_table_builds(_content.load(
+            overrides_dir=os.path.join(tmp, "no_overrides"), extra_dirs=[]))
 
         def disk_overlay_faults(blob):
             """Every reason this file is not a fresh emit of what its header declares,
@@ -1363,9 +1374,14 @@ if records is not None:
             out = []
             if hdr["build"] != str(hb):
                 out.append(f"BUILD: the header says {hdr['build']}, the exe's bytes say {hb}")
-            if hb not in table_builds:
-                out.append(f"SKILLS TABLE: build {hb} is not the loaded skills table's "
-                           f"{sorted(table_builds)} (the emitter refuses this pair, ENG-7)")
+            if len(bulk_builds) != 1:
+                out.append(f"SKILLS TABLE: the bulk skills table (repo + vault, no overrides) "
+                           f"carries builds {sorted(bulk_builds)}, not exactly one -- no build to "
+                           f"pair the overlay with")
+            elif hb not in bulk_builds:
+                out.append(f"SKILLS TABLE: build {hb} is not the bulk skills table's "
+                           f"{sorted(bulk_builds)} (repo + vault, overrides/ excluded; the "
+                           f"consumers read a label row's numbers from THAT table)")
             d2, fbytes, bad2 = fresh_emit(hexe, hdat)
             if bad2:
                 out.append(f"CHECKER: the fresh rows fail check_label_rows: {bad2[:3]}")
@@ -1383,7 +1399,8 @@ if records is not None:
             check(faults == [],
                   f"the overlay ON DISK ({where}: {disk}) is byte-identical to a fresh emit FROM THE "
                   f"EXE AND DAT ITS OWN HEADER DECLARES (build {hdr.get('build')}: re-derived from "
-                  f"that exe's bytes, templates digest recomputed, the skills table's build) -- "
+                  f"that exe's bytes, templates digest recomputed, the BULK skills table's one "
+                  f"build) -- "
                   f"regenerated, not hand-edited; a mismatch means `python toolkit/clientscan/"
                   f"skilldesc.py --exe <exe> --dat <dat> --emit-labels` is owed (at the merge, "
                   f"into the vault)", faults)
@@ -1407,6 +1424,35 @@ if records is not None:
                 check(len(fx) == 1 and fx[0].startswith("NOT PRISTINE:"),
                       "KNOWN-BAD ARM: a header naming a non-pristine image is the NOT PRISTINE fault, "
                       "and nothing is emitted from it", fx)
+            # KNOWN-BAD ARM, BOTH vaults: a genuine fresh emit of the OTHER registered build
+            # of this regen (its own exe + dat, header and bytes self-consistent) over this
+            # bulk table is the SKILLS TABLE fault and nothing else -- the clause live in
+            # both directions (38888 labels on the 38797 table; 38797 labels on the 38888
+            # table). On the 38797 vault this costs one 38888 pipeline (MEASURED ~7 s); on
+            # the 38888 vault the other build's emit is the pinned emit b1, free.
+            pair = (38797, 38888)
+            obuild = next(iter(set(pair) - bulk_builds)) if len(bulk_builds & set(pair)) == 1 \
+                and len(bulk_builds) == 1 else None
+            if obuild is None:
+                check(False, f"KNOWN-BAD ARM (other build): the bulk skills table's builds "
+                             f"{sorted(bulk_builds)} are not exactly one of {pair} -- no other "
+                             f"build to emit")
+            else:
+                try:
+                    if obuild == build:
+                        oexe, odat = str(exe), str(textrec.DEFAULT_DAT)
+                    else:
+                        import pinned
+                        oexe = pinned.find(build=obuild)[0]
+                        odat = os.path.join(os.path.dirname(oexe), "Gw.dat")
+                    ofaults = (disk_overlay_faults(fresh_emit(oexe, odat)[1])
+                               if os.path.isfile(odat) else [f"no dat at {odat}"])
+                except SystemExit as e:
+                    ofaults = [f"pinned.find({obuild}) refused: {str(e).splitlines()[0]}"]
+                check(len(ofaults) == 1 and ofaults[0].startswith("SKILLS TABLE:"),
+                      f"KNOWN-BAD ARM: a fresh emit of build {obuild} (its own exe + dat) over the "
+                      f"bulk skills table of build {sorted(bulk_builds)} is the SKILLS TABLE fault, "
+                      f"alone and by name", ofaults)
         elif explicit:
             # the fix pass (ENG-D4C-9): a mistyped explicit path is a FAIL, not a
             # declared skip -- the skip is for the vault's file being absent only

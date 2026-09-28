@@ -2875,8 +2875,10 @@ try:
           and got == [(v, "standalone") for v in want],
           f"hex_cast_damage at rank 0 / 12 / 15 on the record's build {rust_record_build}: "
           f"{' / '.join(map(str, want)) if want else 'NO EXPECTATION'} (38797: 10 / 58 / 70, "
-          f"38888: 10 / 70 / 85 -- the middle interpolated here, exact) -- 38888's client row, "
-          f"CORROBORATED by the wiki's 10..85", f"{got}")
+          f"38888: 10 / 70 / 85 -- the middle interpolated here, exact) -- "
+          + ({38888: "38888's client row, CORROBORATED by the wiki's 10..85",
+              38797: "38797's client row, CONTESTED by the wiki's 10..85"}.get(
+              rust_record_build, "NO EXPECTATION")), f"{got}")
     check(authsrv.area_hex(RUST) == 156.0,
           "and it is an area hex at the record's 156 u (adjacent), so the burst rides B1's arms")
     for k in ("damage0", "damage15"):
