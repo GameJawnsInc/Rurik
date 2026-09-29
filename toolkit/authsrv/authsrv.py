@@ -15511,7 +15511,10 @@ AREA_HEXES = True
 # Elementalist), 4 for Empathy 26 (Mesmer), and 9 for the Necromancer's
 # Faintheartedness 135, Life Siphon 109 and 127 -- 6 clean instances of 22,
 # every one exactly [1, 9] (CASTAI-Z1.P4, the live Zaishen capture
-# 20260928T103123; studies/monsterai 18). It is keyed HERE on the SKILL record's
+# 20260928T103123; studies/monsterai 18), and 19 for the Monk's Scourge Healing
+# 251 -- 14 of 14 completions exactly [1, 19], on the observer, the Fighter and
+# the Mage alike (CASTAI-Z2, the live Zaishen capture 20260929T100038; studies/
+# monsterai 18.4). It is keyed HERE on the SKILL record's
 # own profession column, and that key is now OBSERVED rather than chosen: the
 # Degeneration Team's Mesmer casts Incendiary Bonds (179) through Inspired Hex
 # and draws 12, not 4, 17 of 17 -- the class of the hex, not of its caster. The
@@ -15527,6 +15530,7 @@ HEX_EFFECT_CLASS = {
     6: 12,      # Elementalist: Incendiary Bonds 179 (28/28), Teinai's Prison 1097 (6/6)
     5: 4,       # Mesmer: Empathy 26 (5/5) -- also its row's own `auras`
     4: 9,       # Necromancer: 135 / 109 / 127, 6 clean of 22 (CASTAI-Z1.P4, 2026-09-28)
+    3: 19,      # Monk: Scourge Healing 251, 14/14 [1, 19] (CASTAI-Z2, 2026-09-29)
 }
 HEX_EFFECT_BASE = 1             # every hex, 38/39 sent + 1 withheld (already live)
 HEX_TYPE_CODE = 4               # effects.EFFECT_TYPES' hex, areatime.HEX_TYPE
@@ -15645,7 +15649,7 @@ def hex_effect_ids(skill_id):
             _HEX_CLASS_UNWITNESSED.add(skill_id)
             print(f"[skills] hex {skill_id} (profession {prof}): no [6, wearer, class] "
                   f"id is observed for its profession, so the base word goes alone "
-                  f"(NOT FOUND; witnessed: Elementalist 12, Mesmer 4, Necromancer 9) "
+                  f"(NOT FOUND; witnessed: Elementalist 12, Mesmer 4, Necromancer 9, Monk 19) "
                   f"[studies/weapons 43, monsterai 18]",
                   flush=True)
         return (HEX_EFFECT_BASE,)
