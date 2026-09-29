@@ -73,9 +73,10 @@ THE CASTER'S CLASS (the order is the rule):
               opponents. AI (WIKI "Zaishen Challenge" rev 2707130: a PvE challenge mission,
               4 against 4 AI), but PvP-simulation AI of unknown tier (monsterai 18,
               CASTAI-W2), so it is its OWN population: never in AI_CLASSES, never pooled
-              with MONSTER or the Isle. The map ids are the three MEASURED on
+              with MONSTER or the Isle. The map ids are the five MEASURED on
               20260928T103123 (tape.client_version of its four match connections: 320,
-              318, 322, 318); no other arena id is guessed, so a fourth arena map reads as
+              318, 322, 318) and on 20260929T100038 (its five: 318, 321, 322, 319, 321);
+              no other arena id is guessed, so an arena map not on either tape reads as
               the old PvP rule (HUMAN) until a tape measures it.
               On the same connection the observer's 0x01BF adds are HENCHMAN (AI: the
               outpost's Zaishen henchmen, WIKI "Zaishen Challenge (outpost)" rev 2724880).
@@ -229,10 +230,15 @@ TYPE_NAMES = {3: "Stance", 4: "Hex", 5: "Spell", 6: "Enchant", 7: "Signet", 8: "
 COND_REMOVAL = {275, 276, 277, 278, 311}
 HEX_REMOVAL = {301, 303}
 AI_CLASSES = ("MONSTER", "HENCHMAN", "HERO", "ALLY_NPC", "FRIENDLY")
-# The Zaishen Challenge arena maps -- MEASURED on 20260928T103123 (CASTAI-Z1: the
-# client's own VERSION frame on each match connection, tape.client_version), and only
-# those: 320 (match 1), 318 (matches 2 and 4), 322 (match 3). Not a guess at the set.
-ZAISHEN_MAPS = frozenset({318, 320, 322})
+# The Zaishen Challenge arena maps -- MEASURED (the client's own VERSION frame on each
+# match connection, tape.client_version), and only those: on 20260928T103123 (CASTAI-Z1)
+# 320 (match 1), 318 (matches 2 and 4), 322 (match 3); on 20260929T100038 (CASTAI-Z2)
+# 318 (match 1, :57580), 321 (matches 2 and 5, :62925 / :64557), 322 (match 3, :51090)
+# and 319 (match 4, :51199). Five ids over two tapes, each read off a match connection.
+# The outpost's own 0x01D7 menu lists [321, 318, 320, 319, 322] (CASTAI-ZF3) -- the same
+# five -- but the menu is not the source of this set: an id joins it when a match
+# connection's VERSION frame carries it, and none has been taken from the menu.
+ZAISHEN_MAPS = frozenset({318, 319, 320, 321, 322})
 ARENA_CLASSES = ("ZAISHEN", "HENCHMAN")      # what an arena connection's AI is labelled
 OUT_DIR_PARTS = ("research", "castai-2026-09-27")
 

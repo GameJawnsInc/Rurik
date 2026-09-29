@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-r"""CASTAI-Z1 / Z3 scored off the live Zaishen Challenge capture (monsterai FINDINGS 18).
+r"""CASTAI-Z1 / Z2 / Z3 scored off the live Zaishen Challenge captures (monsterai FINDINGS 18).
 
-    python studies/monsterai/review/zaishenrun.py                  # match 2 refused (gapped)
+    python studies/monsterai/review/zaishenrun.py                  # Z1 tape; match 2 refused (gapped)
     python studies/monsterai/review/zaishenrun.py --prefix         # match 2's prefix scored too
     python studies/monsterai/review/zaishenrun.py --prefix --rows  # plus one line per cast
     python studies/monsterai/review/zaishenrun.py --capture 20260928T103123
+    python studies/monsterai/review/zaishenrun.py --capture 20260929T100038 --rows   # Z2 tape
 
 WHAT THIS SCORES. One capture (default 20260928T103123, the owner's run of 2026-09-28 on
-the secondary account, build 38888, plan castai_z1_degeneration.txt): every game
-connection whose map is a Zaishen arena (castethogram.ZAISHEN_MAPS, MEASURED on this
-tape) and which creates 0x01BF henchman adds. Matches are numbered by start time. The
+the secondary account, build 38888, plan castai_z1_degeneration.txt; the Z2 tape is
+20260929T100038, the same account and build, plan castai_z2_monks.txt): every game
+connection whose map is a Zaishen arena (castethogram.ZAISHEN_MAPS, MEASURED on these
+tapes) and which creates 0x01BF henchman adds. Matches are numbered by start time. The
 opponent TEAM is read off the wire, not the plan: the professions in the 0x0056
 definitions of the four ZAISHEN bodies -- {Warrior, Ranger, Necromancer, Mesmer} is the
 Degeneration Team (Z1), four Elementalists the Obsidian Spike Elementalists (Z3; match 3
-was picked BY ACCIDENT, the owner's words, so Z3 here is ONE match: PARTIAL). Party
-names come from the 0x01BF profession byte: 3 Healer, 6 Mage, 2 Archer, 1 Fighter
-(WIKI, the henchman pages revs 2675993 / 2675996 / 2675995 / 2709116).
+was picked BY ACCIDENT, the owner's words, so Z3 here is ONE match: PARTIAL), four Monks
+the Smiting Monks (Z2). Party names come from the 0x01BF profession byte: 3 Healer,
+6 Mage, 2 Archer, 1 Fighter (WIKI, the henchman pages revs 2675993 / 2675996 / 2675995 /
+2709116). A section whose team has no match on the capture says so and prints no
+verdict lines (a "[NULL] n=0" over no match would read as a measurement).
 
 THE GAPPED CONNECTION (`--prefix`, opt-in). Match 2's s2c has two capture gaps (the
 sniffer dropped 38 bytes at stream offset 38045 and 20 at 38548), so
@@ -42,7 +46,12 @@ revisions at ARCANE_CONUNDRUM below) and matching the table row's cost / activat
 recharge: 36 Arcane Conundrum, 53 Migraine, 31 Conjure Phantasm, 44 Phantom Pain,
 179 Incendiary Bonds, 313 Healing Touch, 280 Heal Area, 169 Earth Attunement,
 176 Ward Against Melee, 2809 Obsidian Flame (PvP). The first draft of this docstring
-named the Z3 ids by elimination; the wiki's ids agree with every one.
+named the Z3 ids by elimination; the wiki's ids agree with every one. The Z2 ids (the
+Monks' bar, the Mage's Aura of Restoration, the Archer's Poison Arrow, the Fighter's
+Hamstring) were read off GWW's infobox on 2026-09-29 and are named ONLY after
+`corroborate_ids` has matched each one's energy / activation / recharge against the
+served build's own exe row at run time (WIKI_TRIPLES below; a mismatch withholds the
+name and prints the id by number). Every other id on the Z2 tape is printed by number.
 
 THE PREDICTIONS are FINDINGS 18's, registered 2026-09-28 before the run; the operational
 choices this reader makes where the registration is silent are marked SCORER'S RULE and
@@ -111,6 +120,117 @@ were written before the reader first ran over the capture.
          after the [7].
   OWNER  opponent offensive casts (a hex, or any foe-target spell / attack skill) and
          attack starts (0x00A0 [4]) by TARGET, per match, with the observer's weapon.
+         On a match without a Healer every party body's share is printed instead.
+
+CASTAI-Z2 -- THE SMITING MONKS (20260929T100038; registered in FINDINGS 18 on 2026-09-28,
+before the run). Scored over EVERY match whose four ZAISHEN bodies are Monks (MONKS).
+The operational rules below are SCORER'S RULES: written 2026-09-29 after an INSTRUMENT
+probe over the tape (scratch z2s-probe / z2s-probe2: what the wire carries, never a
+verdict) and BEFORE this section first ran. Anything changed after a Z2 verdict was seen
+is marked POST-HOC at its site with the verdict it replaced.
+
+THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
+  * HEALTH. No 0x00A2 [34] setter on any body of any match: every body is anchored
+    'create-full' -- created at full health when the match instance loads -- and
+    integrated from there (16 / 17 / 55 deltas, the 44 regen rate; Conn.health_at). A
+    revive is a +1.0 delta at the dead-bit clear (Resurrection Signet's 100 %), so a
+    revived body is re-anchored at 1.0 by the wire itself. The L2 check (the
+    reconstruction <= 0.10 just after the killing batch) is printed over the MONK
+    bodies' deaths -- the instrument the P2 threshold rests on -- and over the party's.
+    A match END marks every surviving party body dead at ONE instant with health > 0
+    (the defeat mark; RECONSTRUCTION); those are printed and not counted.
+  * THE CONDITION BIT 0x02 (effects.STATUS_CONDITION) rides the monks' 0x00F1 words: it
+    rises in the batch of the Fighter's Hamstring [46]. The 275 target's state is read
+    off it; the observer is never a 275 target (the byte says other ALLY).
+  * THE ENCHANTED BIT 0x80 (effects.STATUS_ENCHANTED) and the class visual pair
+    [6, T, 13] + [6, T, 18] (a monk) / [6, T, 13] + [6, T, 11] (the Mage) rise together
+    at the FIRST live enchantment on a body and fall together ([7]) when the LAST one
+    ends -- every 0x80 transition on this tape coincides with a [6, T, 13] / [7, T, 13],
+    except a body's FIRST 0x00F1 word: the status word is sent on change only, and a
+    body created already enchanted carries its live [6] ids in its create batch and no
+    0x80 word until its status next changes (Z-Monk#5, match 2: [6, 13] + [6, 18] at its
+    create 215.62, first word 263.71). So the VISUAL is the primary instrument and the
+    bit a control, None (no word yet) meaning unknown, never clean. 13 is SHARED: 271,
+    272, 307, 180 and 184 completions all carry it when the body had no live 13 before,
+    so it is a CLASS marker (bounds every enchantment episode on T from above), never a
+    skill's own. No Monk enchantment has a skill-specific [6].
+  * ATTACKS. 0x00A0 [4] (attack started) is sent per SWING: a monk's [4] at T, then
+    [1] (GV_MELEE_ATTACK_FINISHED) or [3] (GV_ATTACK_STOPPED) ~0.5 s later, then the
+    next [4]; a monk STOPS ([3]) to cast and resumes with a new [4]. No monk sends a
+    [50] attack skill (none on the bar).
+  * NO cast-time word: 0 of the Monks' 349 cast announces carries a 0x00A3 / 0x00A2
+    [61] (the henchman Mage's and Fighter's casts do, at 0.67 x, as on the Z1 tape).
+  * The team: the c2s 0x00A6 [map, team, 0] ENTER (CASTAI-ZF4) carries team 57 on every
+    outpost connection of this tape, and every match is four 38888:124 Monks.
+
+  Z2.P1  every 275 (Mend Condition) by a Monk body -> the target's condition bit at the
+         announce (Conn.status_at), OR rising inside the announce's own batch (t <= ta +
+         BATCH: a word's order inside one batch is not a time order; counted as carrying
+         and printed apart as 'same batch'). Counterexample: the bit clear through
+         ta + BATCH -> FAILED; none, with n >= 5 -> HELD; n < 5 -> NULL. 275's exe target
+         byte is 4 (other ally, effects.OTHER_ALLY_TARGET): a Monk CANNOT Mend itself; a
+         9F self form or an A0 naming the caster is printed as an anomaly and counted as
+         a counterexample of the table, not of P1.
+         Z2.P1b (a companion line, not a registered id -- the registration expected NO hex
+         on a monk and called Smite Hex a named null): the Mage's Incendiary Bonds (179,
+         an Elementalist hex) DOES hex the monks (their 0x800 bit rises), so 302 (Smite
+         Hex) is scored by the same rule against the hexed bit, the 9F self form included
+         (target byte 3, the caster is legal), floor 5 (SCORER'S RULE: Mend Condition's).
+  Z2.P2  every 307 (Reversal of Fortune) by a Monk, both forms (the 9F form's target is
+         the caster, L1): the target's reconstructed health JUST BEFORE the announce
+         (Conn.health_at -- the same h_target column Z1.P3 and Z3.P4 read). At-or-below
+         = round(h, 3) <= 0.700. One cast above the line -> FAILED (the registration says
+         "every"); none, with n >= 10 -> HELD; n < 10 -> NULL. A second column prints the
+         MINIMUM reconstruction inside the 1 s before the announce (the AI decides on a
+         tick; a lead, never the verdict). A target dead at the announce, or with no
+         reconstruction, is listed and not counted. The 9F form's caster-health reading
+         is the same instrument.
+  Z2.P3  the share of Z2.P2's casts whose target is NOT the caster: >= 0.25 -> HELD,
+         else FAILED; under P2's floor of 10 -> NULL (SCORER'S RULE: the same casts, so
+         the same floor).
+  Z2.P4  272 (Balthazar's Aura) and 271 (Zealot's Fire) re-cast onto a body still carrying
+         them -- RECONSTRUCTION: the previous COMPLETED cast of the same skill on T by any
+         Monk, live for the exe's duration (272: 8 s, 271: 60 s; duration0 = duration15
+         for both, so 'certain'), cut by T's death / re-create and by the class marker's
+         [7, T, 13] (the last enchantment on T ended: an upper bound). Nothing on our
+         side removes an enchantment (the party's bars carry no removal; the observer's
+         casts are 1 / 2 / 153 / 364 / 2858 / 3443, none a removal). A counterexample is
+         an announce of S at T while such an episode of S on T is live -> FAILED; none
+         -> HELD, with the number of casts that HAD a live previous episode to overlap
+         at all ('informative') printed: 272 recharges in 20 s and lives 8, 271 in 30 s
+         and lives 60, so only a 271 re-cast, or a 272 onto ANOTHER monk, can overlap.
+         251 (Scourge Healing): an announce at T with T's hexed bit 0x800 set at the
+         announce (the Monks' only hex is 251, so on our bodies hexed = 251 live,
+         RECONSTRUCTION), or on the observer a live 0x0042 [obs, 251] (EXACT) -> FAILED;
+         none -> HELD; no 251 -> NULL. A second 251 announced at T while another Monk's
+         251 on T is IN FLIGHT (announced, not yet completed) is printed apart and does
+         not refute: T carried nothing yet.
+  Z2.P5  every 68 (Drain Enchantment) by a Monk -> was the target enchanted at the
+         announce? Observer: a live 0x0042 of an exe type-6 skill (EXACT). Henchman: the
+         class visual [6, T, 13] live (Conn.live6) -- the PRIMARY instrument, OBSERVED
+         rising with the Mage's 180 / 184 completions and falling with a 68's -- with the
+         0x80 bit and a RECONSTRUCTION (the type-6 self-casts completed on T and still
+         inside the exe's duration0, minus one per 68 completed on T since the oldest of
+         them) printed beside it as controls; a visual / bit disagreement marks the row
+         CONTESTED. Unenchanted = no live 13 (henchman) / no live type-6 0x0042
+         (observer). One 68 at an unenchanted target -> FAILED; none, n >= 1 -> HELD.
+         Every cast prints the seconds since the last [7, T, 13] and the other Monks'
+         68s at the same T inside the 2 s before (a burst that stripped the target
+         before this announce): the AI's decision may predate the strip -- a lead the
+         reader can weigh, never the verdict.
+  Z2.P6  per MONKS match, 1-s windows over the match span (the state read at each
+         window's start instant), kept while >= 2 Monks are alive (the dead bit). A
+         Monk's CURRENT TARGET at t is the target of its latest 0x00A0 [4] at or before t,
+         held until its next [4]; it ENDS at the target's death, the Monk's own death /
+         re-create, or 30 s without a [4] (castethogram.ATTACK_WINDOW). A [3] attack
+         stopped does NOT end it (a Monk stops to cast and resumes on the same body). A
+         window AGREES when every Monk holding a current target holds the same one; the
+         HEADLINE denominator is windows with >= 2 alive AND >= 2 holders (one holder is
+         vacuous); the counts over 1-holder and 0-holder windows are printed beside it.
+         >= 80 % -> HELD, else FAILED; no window with >= 2 holders -> NULL. Every SWITCH
+         -- a [4] naming a different target from the Monk's still-current one -- is
+         listed (t, monk, from, to); a [4] after the current target ended (death /
+         expiry) is a fresh pick and is counted apart.
 
 CHANGES AFTER THE JUDGE (2026-09-28: a judge reconciled this scorer against three blind
 replicators over 20260928T103123 and listed five fixes; each is applied here and dated
@@ -170,6 +290,7 @@ HENCH_NAME = {3: "Healer", 6: "Mage", 2: "Archer", 1: "Fighter"}
 PROF = {1: "Warrior", 2: "Ranger", 3: "Monk", 4: "Necromancer", 5: "Mesmer", 6: "Elementalist"}
 DEGENERATION = (1, 2, 4, 5)
 OBSIDIAN = (6, 6, 6, 6)
+MONKS = (3, 3, 3, 3)
 WEAPON_TYPE = {2: "axe", 5: "bow", 12: "focus", 15: "hammer", 22: "wand", 24: "shield",
                26: "staff", 27: "sword", 32: "daggers", 35: "scythe", 36: "spear", 0: "empty"}
 MELEE_TYPES = {2, 15, 27, 32, 35}          # axe, hammer, sword, daggers, scythe
@@ -189,6 +310,42 @@ SKILL_NAME = {36: "Arcane Conundrum", 53: "Migraine", 31: "Conjure Phantasm", 44
               197: "Fire Storm", 277: "Mend Ailment", 281: "Orison of Healing",
               282: "Word of Healing", 286: "Heal Other", 288: "Healing Breeze", 301: "Remove Hex"}
 OBSIDIAN_FLAME, HEAL_AREA, EARTH_ATTUNEMENT, WARD_AGAINST_MELEE = 2809, 280, 169, 176
+# CASTAI-Z2 -- WIKI (GWW infobox `id`, read 2026-09-29 through the app's browser, the
+# revision in brackets), each NAMED ONLY AFTER `corroborate_ids` matches the id's
+# energy / activation / recharge against the served build's exe row at run time (the
+# triple the wiki page states, WIKI_TRIPLES): Balthazar's Aura 272 [2741459] (15 / 1.0 /
+# 20), Mend Condition 275 [2683544] (5 / 0.75 / 2; target 'other allies'), Reversal of
+# Fortune 307 [2741457] (5 / 0.25 / 2; already CORROBORATED in effects.py), Scourge
+# Healing 251 [2683533] (10 / 2.0 / 5), Smite Hex 302 [2683750] (5 / 1.0 / 12), Zealot's
+# Fire 271 [2695805] (10 / 0.25 / 30; self), Drain Enchantment 68 [2683731] (5 / 2.0 /
+# 20; target foe); the Zaishen Mage's Aura of Restoration 180 [2732814] (5 / 0.25 / 20;
+# self -- the PvE version, the page's own bug note); the Archer's Poison Arrow 404
+# [2678681] (5 / 0 / 1); the Fighter's Hamstring 320 [2731374] (5 / 0 / 10). The team
+# page is Smiting Monks [2647764]; Resurrection Signet 2 is effects.py's. Every other id
+# on the Z2 tape (the Mage's 184 / 185 / 186, the Archer's 394 / 396 / 402 / 433 / 446,
+# the Fighter's 1 / 322 / 327 / 383, the observer's 153 / 2858 / 3443) prints by number
+# unless the repo already names it (364 "Charge!", effects.py; 197 Fire Storm;
+# 179 Incendiary Bonds and 185 Mind Burn, hexjoin; 186 Fireball, aotjoin).
+BALTHAZARS_AURA, MEND_CONDITION, REVERSAL_OF_FORTUNE, SCOURGE_HEALING = 272, 275, 307, 251
+SMITE_HEX, ZEALOTS_FIRE, DRAIN_ENCHANTMENT, RESURRECTION_SIGNET = 302, 271, 68, 2
+AURA_OF_RESTORATION, POISON_ARROW, HAMSTRING = 180, 404, 320
+WIKI_TRIPLES = {                 # id: (energy, activation s, recharge s) as the wiki page states
+    272: (15, 1.0, 20), 275: (5, 0.75, 2), 307: (5, 0.25, 2), 251: (10, 2.0, 5),
+    302: (5, 1.0, 12), 271: (10, 0.25, 30), 68: (5, 2.0, 20), 180: (5, 0.25, 20),
+    404: (5, 0.0, 1), 320: (5, 0.0, 10),
+}
+Z2_NAMES = {272: "Balthazar's Aura", 275: "Mend Condition", 307: "Reversal of Fortune",
+            251: "Scourge Healing", 302: "Smite Hex", 271: "Zealot's Fire",
+            68: "Drain Enchantment", 180: "Aura of Restoration", 404: "Poison Arrow",
+            320: "Hamstring"}
+MONK_BAR = {272, 275, 307, 251, 302, 271, 68, 2}      # the WIKI bar + Resurrection Signet
+ENCHANTED_BIT = 0x80             # effects.STATUS_ENCHANTED; on the Z2 tape it rises / falls
+                                 # with the class visual 13 (the docstring's instruments)
+ENCH_CLASS_VISUAL = 13           # [6, T, 13]: the shared 'enchanted' class marker, MEASURED
+                                 # on 20260929T100038 (271 / 272 / 307 / 180 / 184 add it on a
+                                 # clean body; a 68's completion removes it)
+ATTACK_HOLD = ce.ATTACK_WINDOW   # 30 s: a [4] older than this no longer names a current target
+ENCH_DURATION = {272: 8.0, 271: 60.0}   # exe 38888 duration0 = duration15 (checked at run time)
 HEX_REMOVERS = {REMOVE_HEX}
 # The Healer's heal skills, as cast on this tape: 281 / 282 / 286 / 288 (names
 # CORROBORATED in the repo) and 313 (Healing Touch, WIKI id above). Its 301 / 2 / 314
@@ -197,7 +354,11 @@ HEAL_SKILLS = {281, 282, 286, 288, 313}
 HEX_BIT, COND_BIT, DEAD_BIT = 0x800, 0x02, 0x10
 OTHER_ALLY_BYTE = 4            # effects.TARGET_KINDS[4] 'other_ally': never the caster
 PROP_CAST_TIME = 61
-FLOORS = {"Z1.P1": 10, "Z1.P2": 5, "Z1.P3": 20, "Z1.P7": 3, "Z3.P3": 5}
+FLOORS = {"Z1.P1": 10, "Z1.P2": 5, "Z1.P3": 20, "Z1.P7": 3, "Z3.P3": 5,
+          "Z2.P1": 5, "Z2.P1b": 5, "Z2.P2": 10, "Z2.P3": 10}
+ROF_LINE = 0.70                  # Z2.P2: "at or below 70 %" (WIKI rev 2741457, the hero rule)
+P3_SHARE, P6_SHARE = 0.25, 0.80
+WINDOW_S, LEAD_S, BURST_S = 1.0, 1.0, 2.0
 BATCH = 0.05
 OBSIDIAN_WINDOW, HEALAREA_WINDOW, WARD_WINDOW = 1.5, 2.0, 3.0
 ATTUNE_MIN_GAP = 0.228
@@ -288,7 +449,8 @@ class Match:
             self.opp_prof[a] = info[1] if info else None
         profs = tuple(sorted(p for p in self.opp_prof.values() if p is not None))
         self.team = ("DEGENERATION" if profs == DEGENERATION else
-                     "OBSIDIAN" if profs == OBSIDIAN else f"UNKNOWN{profs}")
+                     "OBSIDIAN" if profs == OBSIDIAN else
+                     "MONKS" if profs == MONKS else f"UNKNOWN{profs}")
         self.tag = f"match {n}" + (" (prefix)" if cut else "")
 
     def name(self, agent):
@@ -1099,6 +1261,581 @@ def score_z3(m3):
     return res
 
 
+# ------------------------------------------------------------------ Z2
+def corroborate_ids(build):
+    """(named {id: name}, mismatches [(id, wiki triple, exe triple)]): a Z2 id is named
+    only when the exe of `build` carries the wiki page's energy / activation / recharge
+    (WIKI_TRIPLES). A check the exe can fail: a mismatch prints the id by number."""
+    ex = exe_skill_rows(build) or {}
+    named, bad = {}, []
+    for sid, (e, a, r) in sorted(WIKI_TRIPLES.items()):
+        row = ex.get(sid)
+        got = None if row is None else (int(row["energy"]), float(row["activation"]),
+                                        float(row["recharge"]))
+        if got is not None and got[0] == e and abs(got[1] - a) < 1e-6 and abs(got[2] - r) < 1e-6:
+            named[sid] = Z2_NAMES[sid]
+        else:
+            bad.append((sid, (e, a, r), got))
+    durs = {}
+    for sid, d in ENCH_DURATION.items():
+        row = ex.get(sid)
+        durs[sid] = (None if row is None else
+                     (float(row["duration0"]), float(row["duration15"])), d)
+    return named, bad, durs
+
+
+def z2n(sid, named):
+    return f"{sid} {named[sid]}" if sid in named else f"{sid}"
+
+
+def monk_rows(z2, skill):
+    for m in z2:
+        for r in m.rows:
+            if r["class"] == "ZAISHEN" and r["skill"] == skill:
+                yield m, r
+
+
+def bit_state(m, agent, bit, ta):
+    """(carrying, how): the status bit at the announce (words strictly before), or a
+    word carrying it inside the announce's own batch (ta .. ta + BATCH)."""
+    st = m.conn.status_at(agent, ta)
+    if st is not None and st & bit:
+        return True, "at the announce"
+    for (t, w) in m.conn.status.get(agent, ()):
+        if ta - 1e-9 <= t <= ta + BATCH and (w & bit):
+            return True, "same batch"
+    return False, ("clear" if st is not None else "clear (no status word yet)")
+
+
+def bit_context(m, agent, bit, ta):
+    """(seconds since the bit last CLEARED before ta, seconds until it next RISES after
+    ta) -- printed on every P1 / P1b clean-target row after the first run, as context
+    (a decision made on a state that had just ended, or a cast that preceded the
+    condition); the verdict does not read it."""
+    prev_w, last_clear, next_rise = 0, None, None
+    for (t, w) in m.conn.status.get(agent, ()):
+        if t < ta - 1e-9:
+            if (prev_w & bit) and not (w & bit):
+                last_clear = t
+        elif next_rise is None and (w & bit) and not (prev_w & bit):
+            next_rise = t
+        prev_w = w
+    return (None if last_clear is None else round(ta - last_clear, 3),
+            None if next_rise is None else round(next_rise - ta, 3))
+
+
+def score_z2_p1(z2, named):
+    out = {}
+    for pid, skill, bit, bname in (("Z2.P1", MEND_CONDITION, COND_BIT, "condition bit 0x02"),
+                                   ("Z2.P1b", SMITE_HEX, HEX_BIT, "hexed bit 0x800")):
+        rows, per, anomalies = [], collections.Counter(), []
+        for m, r in monk_rows(z2, skill):
+            T, ta = r["target"], r["t"]
+            per[m.tag] += 1
+            carrying, how = bit_state(m, T, bit, ta)
+            if skill == MEND_CONDITION and (r["form"] == "9F[60]" or T == r["caster"]):
+                anomalies.append((m.tag, round(ta, 2), m.name(r["caster"]), r["form"]))
+            rows.append((m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T),
+                         carrying, how, r["end_prop"],
+                         None if carrying else bit_context(m, T, bit, ta)))
+        n = len(rows)
+        clean = [x for x in rows if not x[5]]
+        same_batch = sum(1 for x in rows if x[6] == "same batch")
+        v = "NULL" if n < FLOORS[pid] else ("FAILED" if clean else "HELD")
+        # POST-HOC (after the first run printed [FAILED] 2 of 92 for P1 and 2 of 29 for
+        # P1b): the registered rule counts a bit RISING inside the announce's batch as
+        # carrying but not a bit that CLEARED inside it -- and both P1 counterexamples
+        # carry a clear word < 1 ms before the announce (the same batch: the condition
+        # ended in the tick the Monk announced in). The symmetric reading -- the bit set
+        # at any instant inside ta +/- BATCH -- was NOT pre-registered; its verdict is
+        # printed as a lead beside the registered one, which stands.
+        sym_clean = [x for x in clean if x[8] is None or x[8][0] is None or x[8][0] > BATCH]
+        v_sym = "NULL" if n < FLOORS[pid] else ("FAILED" if sym_clean else "HELD")
+        forms = collections.Counter(x[3] for x in rows)
+        extra = ""
+        if skill == SMITE_HEX:
+            rises = {m.tag: sum(len(m.bit_rises(a, HEX_BIT)) for a in m.opp) for m in z2}
+            extra = (f"; hexed-bit rises on the Monks per match {rises} (the Mage's 179, an "
+                     f"Elementalist hex -- the registration expected none)")
+        text = (f"{z2n(skill, named)} by a Monk n={n} {dict(per)} (floor {FLOORS[pid]}); forms "
+                f"{dict(forms)}; onto a target carrying the {bname} {n - len(clean)} (of which "
+                f"'same batch' {same_batch}), onto a clean one {len(clean)}; self-target "
+                f"anomalies (table byte 4 says other ally) {len(anomalies)}{extra}")
+        wf = (f"with >= {FLOORS[pid]} casts, any one at a target whose {bname} was clear through "
+              f"the announce's batch -> FAILED")
+        out[pid] = (v, text, wf, {"rows": rows, "clean": clean, "anomalies": anomalies,
+                                  "sym": (v_sym, len(sym_clean), len(clean) - len(sym_clean))})
+    return out
+
+
+def score_z2_p2(z2, named):
+    rows, per, skipped = [], collections.Counter(), []
+    for m, r in monk_rows(z2, REVERSAL_OF_FORTUNE):
+        T, ta = r["target"], r["t"]
+        if m.dead_at(T, ta):
+            skipped.append((m.tag, round(ta, 2), m.name(r["caster"]), m.name(T),
+                            "target dead at the announce"))
+            continue
+        h, how = m.conn.health_at(T, ta)
+        if h is None:
+            skipped.append((m.tag, round(ta, 2), m.name(r["caster"]), m.name(T),
+                            f"no reconstruction: {how}"))
+            continue
+        # the minimum inside the LEAD_S before the announce: the reading just after every
+        # health event in the window, and at the window's start (a lead, not the verdict)
+        pts = [ta - LEAD_S] + [te + 1e-6 for (te, k, v) in m.conn.health_ev.get(T, ())
+                               if ta - LEAD_S < te < ta]
+        vals = [m.conn.health_at(T, x)[0] for x in pts]
+        lead = min([h] + [x for x in vals if x is not None])
+        per[m.tag] += 1
+        rows.append((m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T),
+                     round(h, 3), round(lead, 3), how, r["end_prop"]))
+    n = len(rows)
+    above = [x for x in rows if x[5] > ROF_LINE + 1e-9]
+    near = [x for x in rows if ROF_LINE < x[5] <= ROF_LINE + 0.05]
+    hs = [x[5] for x in rows]
+    v = "NULL" if n < FLOORS["Z2.P2"] else ("FAILED" if above else "HELD")
+    forms = collections.Counter(x[3] for x in rows)
+    text = (f"{z2n(REVERSAL_OF_FORTUNE, named)} by a Monk n={n} {dict(per)} (floor "
+            f"{FLOORS['Z2.P2']}); forms {dict(forms)}; target health (RECONSTRUCTION, just "
+            f"before the announce) at or below {ROF_LINE:.2f}: {n - len(above)}, above: "
+            f"{len(above)} (of which inside (0.70, 0.75]: {len(near)}); min/median/max "
+            f"{min(hs) if hs else None}/{med(hs)}/{max(hs) if hs else None}; skipped "
+            f"{len(skipped)}; with the minimum over the 1 s before the announce instead "
+            f"(a lead): above {sum(1 for x in rows if x[6] > ROF_LINE + 1e-9)}")
+    wf = (f"with >= {FLOORS['Z2.P2']} casts, any one whose target's reconstructed health "
+          f"just before the announce was above {ROF_LINE:.2f} -> FAILED (the registration "
+          f"says every cast)")
+    return v, text, wf, {"rows": rows, "above": above, "skipped": skipped}
+
+
+def score_z2_p3(p2rows, named):
+    n = len(p2rows)
+    other = [x for x in p2rows if x[4] != x[2]]
+    share_ = None if not n else round(len(other) / n, 3)
+    v = "NULL" if n < FLOORS["Z2.P3"] else ("HELD" if share_ >= P3_SHARE else "FAILED")
+    by_target = collections.Counter("self" if x[4] == x[2] else "another Monk" for x in p2rows)
+    text = (f"{z2n(REVERSAL_OF_FORTUNE, named)} casts n={n} (P2's floor {FLOORS['Z2.P3']}); "
+            f"on another Monk {len(other)} ({share_}), on itself {n - len(other)}; "
+            f"{dict(by_target)}")
+    wf = f"with >= {FLOORS['Z2.P3']} casts, fewer than {P3_SHARE:.0%} on another Monk -> FAILED"
+    return v, text, wf, other
+
+
+def ench_episodes(m, T, skill):
+    """[(start, end, how, caster)]: RECONSTRUCTION -- every completed ZAISHEN cast of
+    `skill` on T, live for ENCH_DURATION, cut by T's death / re-create and by the class
+    marker's [7, T, 13] (the last enchantment on T ended)."""
+    conn = m.conn
+    dur = ENCH_DURATION[skill]
+    deaths = m.bit_rises(T, DEAD_BIT)
+    creates = list(conn.create_t.get(T, []))
+    marker_ends = [t for (t, sgn, eid) in conn.effects6.get(T, ())
+                   if sgn < 0 and eid == ENCH_CLASS_VISUAL]
+    out = []
+    for r in m.rows:
+        if r["class"] != "ZAISHEN" or r["skill"] != skill or r["target"] != T or not completed(r):
+            continue
+        te = r["end_t"]
+        c1 = [x for x in deaths + creates if x > te]
+        c2 = [x for x in marker_ends if x > te + BATCH]
+        cut1 = min(c1) if c1 else float("inf")
+        cut2 = min(c2) if c2 else float("inf")
+        end = min(te + dur, cut1, cut2)
+        how = ("natural" if end == te + dur else
+               ("death / re-create" if end == cut1 else "[7, T, 13]"))
+        out.append((te, end, how, r["caster"]))
+    return out
+
+
+def score_z2_p4(z2, named):
+    res = {}
+    for skill in (BALTHAZARS_AURA, ZEALOTS_FIRE):
+        rows, cx, inf = [], [], []
+        per = collections.Counter()
+        forms = collections.Counter()
+        for m, r in monk_rows(z2, skill):
+            T, ta = r["target"], r["t"]
+            per[m.tag] += 1
+            forms[r["form"]] += 1
+            eps = ench_episodes(m, T, skill)
+            live = [e for e in eps if e[0] < ta - 1e-6 and e[1] > ta]
+            would = [e for e in eps if e[0] < ta - 1e-6 and e[0] + ENCH_DURATION[skill] > ta]
+            st = m.conn.status_at(T, ta)
+            bit = None if st is None else bool(st & ENCHANTED_BIT)
+            row = (m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T),
+                   [(round(a, 2), round(b, 2), h, m.name(c)) for a, b, h, c in live],
+                   [(round(a, 2), round(b, 2), h, m.name(c)) for a, b, h, c in would],
+                   bit)
+            rows.append(row)
+            if would:
+                inf.append(row)
+            if live:
+                cx.append(row)
+        n = len(rows)
+        v = "NULL" if n == 0 else ("FAILED" if cx else "HELD")
+        res[skill] = (v, rows, cx, inf, per, forms)
+    # 251
+    rows, cx, flight = [], [], []
+    per = collections.Counter()
+    for m, r in monk_rows(z2, SCOURGE_HEALING):
+        T, ta = r["target"], r["t"]
+        per[m.tag] += 1
+        st = m.conn.status_at(T, ta)
+        hexed_bit = bool(st is not None and st & HEX_BIT)
+        obs_live = []
+        if T == m.obs:
+            obs_live = [(s, a) for (s, a) in ce.applies_live(m.conn, T, ta) if s == SCOURGE_HEALING]
+        hexed = bool(obs_live) if T == m.obs else hexed_bit
+        others_ = [x for _m, x in monk_rows([m], SCOURGE_HEALING)
+                   if x["target"] == T and x["caster"] != r["caster"] and x["t"] < ta
+                   and ((x["end_t"] is not None and x["end_t"] > ta - 1e-9)
+                        or (x["end_t"] is None and ta - x["t"] <= float(x["activation"] or 2.0) + 0.5))]
+        row = (m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T), hexed,
+               "observer 0x0042 (EXACT)" if T == m.obs else "hexed bit (RECONSTRUCTION: 251 is the Monks' only hex)",
+               hexed_bit, [(round(x["t"], 2), m.name(x["caster"])) for x in others_], r["end_prop"])
+        rows.append(row)
+        if hexed:
+            cx.append(row)
+        elif others_:
+            flight.append(row)
+    n = len(rows)
+    v = "NULL" if n == 0 else ("FAILED" if cx else "HELD")
+    res[SCOURGE_HEALING] = (v, rows, cx, flight, per)
+    parts, wf = [], []
+    for skill in (BALTHAZARS_AURA, ZEALOTS_FIRE):
+        v_, rows_, cx_, inf_, per_, forms_ = res[skill]
+        parts.append(f"{z2n(skill, named)} n={len(rows_)} {dict(per_)} forms {dict(forms_)}: "
+                     f"re-cast inside a live episode (RECONSTRUCTION {ENCH_DURATION[skill]:g} s, "
+                     f"cut by death / re-create / [7, T, 13]) {len(cx_)} -> {v_}; informative "
+                     f"(a previous episode would still have been live uncut) {len(inf_)}")
+    v_, rows_, cx_, flight_, per_ = res[SCOURGE_HEALING]
+    parts.append(f"{z2n(SCOURGE_HEALING, named)} n={len(rows_)} {dict(per_)}: onto a target "
+                 f"already hexed at the announce {len(cx_)} -> {v_} (on the observer "
+                 f"{sum(1 for x in rows_ if x[6].startswith('observer'))} casts, EXACT); "
+                 f"another Monk's 251 in flight at the same target {len(flight_)} (not a "
+                 f"counterexample)")
+    vs = [res[BALTHAZARS_AURA][0], res[ZEALOTS_FIRE][0], res[SCOURGE_HEALING][0]]
+    v = "FAILED" if "FAILED" in vs else ("HELD" if "HELD" in vs else "NULL")
+    text = "; ".join(parts) + (f"; the three parts {vs}: any FAILED fails, else any HELD holds")
+    wf = ("a 272 / 271 announced at a body inside the reconstructed episode of the same skill "
+          "(uncut), or a 251 announced at a body whose hexed bit was set (observer: a live "
+          "0x0042 251) -> FAILED")
+    return v, text, wf, res
+
+
+def recon_ench_count(m, T, ta, ex):
+    """RECONSTRUCTION: type-6 casts completed on T (by anyone) still inside the exe's
+    duration0, not across a death of T, minus one per ZAISHEN 68 completed on T since the
+    oldest of them started; floored at 0."""
+    deaths = m.bit_rises(T, DEAD_BIT)
+    live = []
+    for r2 in m.rows:
+        if r2["target"] != T or not completed(r2) or r2["end_t"] >= ta:
+            continue
+        row = ex.get(r2["skill"])
+        if not row or row["type_code"] != 6:
+            continue
+        te = r2["end_t"]
+        if any(te < d <= ta for d in deaths):
+            continue
+        if te + float(row["duration0"]) > ta:
+            live.append(te)
+    if not live:
+        return 0, 0, 0
+    t0 = min(live)
+    rem = sum(1 for _m, x in monk_rows([m], DRAIN_ENCHANTMENT)
+              if x["target"] == T and completed(x) and t0 < x["end_t"] < ta)
+    return max(0, len(live) - rem), len(live), rem
+
+
+def score_z2_p5(z2, named):
+    rows, un, contested = [], [], []
+    per = collections.Counter()
+    tgt = collections.Counter()
+    for m, r in monk_rows(z2, DRAIN_ENCHANTMENT):
+        ex = exe_skill_rows(m.conn.build) or {}
+        T, ta = r["target"], r["t"]
+        per[m.tag] += 1
+        tgt[m.name(T)] += 1
+        st = m.conn.status_at(T, ta)
+        bit = None if st is None else bool(st & ENCHANTED_BIT)
+        if T == m.obs:
+            live = [(s, a) for (s, a) in ce.applies_live(m.conn, T, ta)
+                    if ex.get(s, {}).get("type_code") == 6]
+            ench, how = bool(live), f"observer 0x0042 type-6 live {live} (EXACT)"
+            recon = None
+            cont = False
+        else:
+            l6 = m.conn.live6(T, ta)
+            vis = ENCH_CLASS_VISUAL in l6
+            recon = recon_ench_count(m, T, ta, ex)
+            ench, how = vis, f"[6, T, 13] live: {vis} (live6 {l6})"
+            cont = bit is not None and bit != vis
+        strips = [t for (t, sgn, eid) in m.conn.effects6.get(T, ())
+                  if sgn < 0 and eid == ENCH_CLASS_VISUAL and t < ta]
+        since_strip = round(ta - strips[-1], 3) if strips else None
+        burst = [(round(x["t"], 2), m.name(x["caster"])) for _m, x in monk_rows([m], DRAIN_ENCHANTMENT)
+                 if x["target"] == T and x["caster"] != r["caster"] and ta - BURST_S <= x["t"] < ta]
+        row = (m.tag, round(ta, 2), m.name(r["caster"]), m.name(T), ench, how, bit, recon,
+               since_strip, burst, r["end_prop"])
+        rows.append(row)
+        if not ench:
+            un.append(row)
+        if cont:
+            contested.append(row)
+    n = len(rows)
+    v = "NULL" if n == 0 else ("FAILED" if un else "HELD")
+    text = (f"{z2n(DRAIN_ENCHANTMENT, named)} by a Monk n={n} {dict(per)}; targets {dict(tgt)}; at "
+            f"an enchanted target {n - len(un)}, at an UNENCHANTED one {len(un)} (henchman: no "
+            f"live [6, T, 13]; observer: no live type-6 0x0042); visual / 0x80 disagreements "
+            f"(CONTESTED rows) {len(contested)}; unenchanted casts' seconds since the last "
+            f"[7, T, 13] and the burst before them: "
+            f"{[(x[0], x[1], x[2], x[8], x[9]) for x in un]}")
+    wf = ("any one 68 announced at a body carrying no live enchantment (the class visual 13 "
+          "on a henchman; a type-6 0x0042 on the observer) -> FAILED")
+    return v, text, wf, {"rows": rows, "un": un, "contested": contested}
+
+
+def current_target(m, a, starts, rises, t, hold=ATTACK_HOLD):
+    """(target, how) -- the Monk's current attack target at t (the docstring's P6 rule)."""
+    prior = [(t4, tg) for (t4, tg) in starts if t4 <= t]
+    if not prior:
+        return None, "no [4] yet"
+    t4, tg = prior[-1]
+    if t - t4 > hold:
+        return None, "expired"
+    if any(t4 < d <= t for d in rises.get(a, ())) or any(t4 < c <= t for c in m.conn.create_t.get(a, ())):
+        return None, "monk died"
+    if any(t4 < d <= t for d in rises.get(tg, ())):
+        return None, "target died"
+    return tg, "held"
+
+
+def p6_windows(m, monks, starts, rises, hold):
+    c = collections.Counter()
+    t = m.span[0]
+    while t <= m.span[1]:
+        alive = [a for a in monks if not m.dead_at(a, t)]
+        if len(alive) >= 2:
+            c["windows >= 2 alive"] += 1
+            holders = {}
+            for a in alive:
+                cur, _how = current_target(m, a, starts[a], rises, t, hold)
+                if cur is not None:
+                    holders[a] = cur
+            if len(holders) >= 2:
+                c["holders >= 2"] += 1
+                if len(set(holders.values())) == 1:
+                    c["agree (>= 2 holders)"] += 1
+            elif len(holders) == 1:
+                c["holders == 1"] += 1
+            else:
+                c["holders == 0"] += 1
+        t += WINDOW_S
+    return c
+
+
+def score_z2_p6(z2):
+    per, switches, fresh = {}, [], []
+    tot = collections.Counter()
+    # POST-HOC (added after the first run printed [FAILED] 93 of 117 = 0.795 under the
+    # registered rule): the same count under other holds and with 1-holder windows counted
+    # as agreeing -- a SENSITIVITY line, printed as a lead; the verdict stays the
+    # registered 30 s / >= 2 holders.
+    sens = collections.defaultdict(collections.Counter)
+    for m in z2:
+        monks = list(m.opp)
+        starts = {a: [(t, v[3]) for t, op, v in m.s2c
+                      if op == ce.OP_INT_T and len(v) > 4 and v[1] == ce.PROP_ATTACK_STARTED and v[2] == a]
+                  for a in monks}
+        rises = {a: m.bit_rises(a, DEAD_BIT) for a in monks + m.party()}
+        c = p6_windows(m, monks, starts, rises, ATTACK_HOLD)
+        for hold in (5.0, 10.0, 20.0, ATTACK_HOLD, 60.0):
+            sens[hold].update(p6_windows(m, monks, starts, rises, hold))
+        for a in monks:
+            st = starts[a]
+            for (tp, tgp), (t4, tg) in zip(st, st[1:]):
+                cur, how = current_target(m, a, st, rises, t4 - 1e-6)
+                if cur is None:
+                    fresh.append((m.tag, round(t4, 2), m.name(a), m.name(tgp), m.name(tg), how))
+                elif tg != cur:
+                    switches.append((m.tag, round(t4, 2), m.name(a), m.name(cur), m.name(tg)))
+        per[m.tag] = dict(c)
+        tot.update(c)
+    n2, a2 = tot["holders >= 2"], tot["agree (>= 2 holders)"]
+    share_ = None if not n2 else round(a2 / n2, 3)
+    v = "NULL" if not n2 else ("HELD" if share_ >= P6_SHARE else "FAILED")
+    sens_txt = {}
+    for hold, c in sorted(sens.items()):
+        k2, g2, k1 = c["holders >= 2"], c["agree (>= 2 holders)"], c["holders == 1"]
+        sens_txt[f"hold {hold:g} s"] = (f">= 2 holders {g2}/{k2} ({round(g2 / k2, 3) if k2 else None}); "
+                                        f"1-holder windows counted as agreeing {g2 + k1}/{k2 + k1} "
+                                        f"({round((g2 + k1) / (k2 + k1), 3) if k2 + k1 else None})")
+    text = (f"1-s windows with >= 2 Monks alive n={tot['windows >= 2 alive']}; with >= 2 "
+            f"holding a current target n={n2}, of which all holders agree {a2} ({share_}); "
+            f"1-holder windows {tot['holders == 1']}, 0-holder {tot['holders == 0']}; per match "
+            f"{per}; SWITCHES (a [4] naming a different target from a still-current one) "
+            f"{len(switches)}; fresh picks after the current target ended {len(fresh)} "
+            f"{dict(collections.Counter(x[5] for x in fresh))}")
+    wf = (f"fewer than {P6_SHARE:.0%} of the >= 2-holder windows with every holder on one "
+          f"target -> FAILED")
+    return v, text, wf, {"switches": switches, "fresh": fresh, "per": per, "sens": sens_txt}
+
+
+def z2_instruments(z2):
+    """The health instrument on the Z2 tape: anchoring, L2 at the Monks' deaths, the
+    party's deaths with the match-end defeat marks named, the revives' +1.0 delta."""
+    out = {"set34": {}, "anchor": collections.Counter(), "l2_monks": [], "l2_party": [],
+           "revives": [], "end_marks": []}
+    for m in z2:
+        out["set34"][m.tag] = len(m.conn.set34)
+        for a in m.opp:
+            out["anchor"][m.conn.health_at(a, m.span[1])[1]] += 1
+        party = set(m.party())
+        deaths = ce.death_checks(m.conn)
+        for d in deaths:
+            row = (m.tag, d["agent"], m.name(d["agent"]), d["t"], d["h_before"], d["h_after_batch"], d["how"])
+            if d["agent"] in m.opp:
+                out["l2_monks"].append(row)
+            elif d["agent"] in party:
+                out["l2_party"].append(row)
+        # the defeat mark: >= 2 party bodies marked dead at ONE instant with health > 0.10
+        # (presentation fix after the first run, which looked only inside the span's last
+        # 2 s and found none: the marks sit ~10 s before the connection's last message,
+        # 572.686 on a span ending 582.5 and 670.166 on one ending 680.0; no verdict reads
+        # this list -- the L2 headline is over the Monks' deaths)
+        by_t = collections.defaultdict(list)
+        for d in deaths:
+            if d["agent"] in party:
+                by_t[d["t"]].append(d)
+        for t, lst in by_t.items():
+            if len(lst) >= 2 and any((d["h_after_batch"] or 0) > 0.10 for d in lst):
+                out["end_marks"].append((m.tag, t, [(m.name(d["agent"]), d["h_after_batch"]) for d in lst]))
+        for a in list(m.opp) + m.party():
+            prev = 0
+            for (t, w) in m.conn.status.get(a, ()):
+                if (prev & DEAD_BIT) and not (w & DEAD_BIT):
+                    plus = [round(v, 3) for (te, k, v) in m.conn.health_ev.get(a, ())
+                            if k == "delta" and abs(te - t) <= 0.1 and v is not None and v > 0.99]
+                    out["revives"].append((m.tag, m.name(a), round(t, 2), plus,
+                                           m.conn.health_at(a, t + 0.3)[0]))
+                prev = w
+    return out
+
+
+def z2_facts(z2, others, named):
+    """Facts beyond the predictions, for the record (not verdicts)."""
+    f = {}
+    f["definitions"] = {}
+    for m in z2:
+        for a in m.opp:
+            d = m.conn.definition(a, m.span[1])
+            f["definitions"][f"{m.conn.build}:{d}"] = m.conn.defs.get(d)
+    f["enter"] = []
+    for port, map_id, merged, obs, cut in others:
+        for t, d, op, v in merged:
+            if d == "c2s" and op == 0x00A6 and len(v) > 2:
+                f["enter"].append((port, round(t, 2), list(v[1:])))
+    forms = collections.defaultdict(collections.Counter)
+    hench = collections.defaultdict(collections.Counter)
+    obs = collections.Counter()
+    for m in z2:
+        for r in m.rows:
+            if r["class"] == "ZAISHEN":
+                forms[r["skill"]][r["form"]] += 1
+            elif r["class"] == "HENCHMAN":
+                hench[m.name(r["caster"])][r["skill"]] += 1
+            elif r["class"] == "OBSERVER":
+                obs[r["skill"]] += 1
+    f["monk_forms"] = {z2n(s, named): dict(c) for s, c in sorted(forms.items())}
+    f["off_bar"] = sorted(set(forms) - MONK_BAR)
+    f["hench"] = {k: dict(sorted(c.items())) for k, c in sorted(hench.items())}
+    f["observer"] = dict(sorted(obs.items()))
+    # [61] words by class / skill over the Z2 matches, with the factor vs the table activation
+    w61 = collections.defaultdict(list)
+    n_ann = collections.Counter()
+    for m in z2:
+        for r in m.rows:
+            if r["form"] not in ("A0[60]", "9F[60]"):
+                continue
+            n_ann[r["class"]] += 1
+            ws = [round(f32(v[-1]), 3) for t, op, v in m.conn.batch_ops(r["t"])
+                  if op in (ce.OP_FLOAT, ce.OP_FLOAT_T) and len(v) > 2 and v[1] == PROP_CAST_TIME
+                  and v[2] == r["caster"]]
+            for s in ws:
+                w61[(r["class"], r["skill"])].append((s, r["activation"],
+                                                      round(s / r["activation"], 3) if r["activation"] else None))
+    f["w61"] = {k: (len(v), sorted({x[2] for x in v})) for k, v in sorted(w61.items())}
+    f["announces_by_class"] = dict(n_ann)
+    # class visuals: a type-6 completion on a body carrying no live 13 just before it (the
+    # VISUAL decides 'clean': after the first run keyed this on the 0x80 bit and counted a
+    # body with no 0x00F1 word yet as clean -- Z-Monk#5 in match 2 was created at 215.62
+    # already carrying [6, 13] + [6, 18] in its create batch and got its first status word
+    # at 263.71 -- four completions on it read as 'clean, adds nothing')
+    adds = collections.defaultdict(collections.Counter)
+    adds_bit = collections.defaultdict(collections.Counter)
+    hex_adds = collections.Counter()
+    for m in z2:
+        for r in m.rows:
+            if not completed(r) or r["target"] is None or r["class"] not in ("ZAISHEN", "HENCHMAN"):
+                continue
+            if r["type"] == 6:
+                if ENCH_CLASS_VISUAL not in m.conn.live6(r["target"], r["end_t"] - 1e-6):
+                    adds[(r["class"], r["skill"])][tuple(sorted(r["adds_on_target"]))] += 1
+                st = m.conn.status_at(r["target"], r["end_t"])
+                adds_bit[(r["class"], r["skill"])][
+                    ("bit set" if st is not None and st & ENCHANTED_BIT else
+                     "bit clear" if st is not None else "no status word yet",
+                     tuple(sorted(r["adds_on_target"])))] += 1
+            if r["skill"] == SCOURGE_HEALING and r["target"] != m.obs:
+                hex_adds[tuple(sorted(r["adds_on_target"]))] += 1
+    f["ench_adds_on_clean"] = {k: dict(v) for k, v in sorted(adds.items())}
+    f["ench_adds_by_bit"] = {k: dict(v) for k, v in sorted(adds_bit.items())}
+    f["scourge_adds"] = dict(hex_adds)
+    # 0x80 transitions vs [6, 13] / [7, 13]
+    tr = collections.Counter()
+    for m in z2:
+        for a in list(m.opp) + m.party():
+            prev = 0
+            for (t, w) in m.conn.status.get(a, ()):
+                rose = (w & ENCHANTED_BIT) and not (prev & ENCHANTED_BIT)
+                fell = (prev & ENCHANTED_BIT) and not (w & ENCHANTED_BIT)
+                prev = w
+                if not (rose or fell):
+                    continue
+                e = {(v[1], v[3]) for tt, op, v in m.conn.batch_ops(t)
+                     if op == ce.OP_INT and len(v) > 3 and v[1] in (6, 7) and v[2] == a}
+                if rose:
+                    tr["rises"] += 1
+                    tr["rises with [6, 13]"] += (6, ENCH_CLASS_VISUAL) in e
+                else:
+                    tr["falls"] += 1
+                    tr["falls with [7, 13]"] += (7, ENCH_CLASS_VISUAL) in e
+    f["bit80"] = dict(tr)
+    # what follows a Monk's [4]
+    after = collections.Counter()
+    for m in z2:
+        for a in m.opp:
+            evs = [(t, v[1]) for (t, op, v) in m.s2c if op in (ce.OP_INT, ce.OP_INT_T)
+                   and len(v) > 2 and v[2] == a and v[1] not in (6, 7, 20, 21)]
+            for i, (t, p) in enumerate(evs):
+                if p == ce.PROP_ATTACK_STARTED and i + 1 < len(evs):
+                    after[evs[i + 1][1]] += 1
+    f["after_4"] = dict(after.most_common())
+    # the condition visuals 25 / 27 on Monks (by number; which condition is UNVERIFIED)
+    cv = collections.Counter()
+    for m in z2:
+        for a in m.opp:
+            for (t, sgn, eid) in m.conn.effects6.get(a, ()):
+                if sgn > 0 and eid in (25, 27):
+                    comps = {r["skill"] for r in m.rows if completed(r) and r["target"] == a
+                             and abs(r["end_t"] - t) <= BATCH}
+                    cv[(eid, "with a completion of " + str(sorted(comps)) if comps else "no completion in the batch")] += 1
+    f["cond_visuals"] = {f"{k[0]} {k[1]}": v for k, v in sorted(cv.items(), key=str)}
+    return f
+
+
 # ------------------------------------------------------------------ the owner's question
 def weapon_of(m):
     items = wc.items_of(m.s2c)
@@ -1275,60 +2012,173 @@ def main(argv=None):
           f"{[(a, m.name(a)) for a in m.opp]}; party {[(a, m.name(a)) for a in m.party()]}{cut}")
     z1 = [m for m in matches if m.team == "DEGENERATION"]
     z3 = [m for m in matches if m.team == "OBSIDIAN"]
+    z2 = [m for m in matches if m.team == "MONKS"]
     obs_dur = observed_durations(z1)
-    ranks, rank_ev, rank_ctl, rank_unatt = observed_ranks(z1)
-    P("")
-    P(f"hex durations OBSERVED on the observer (0x0042 f32, s), Z1 matches: "
-      f"{ {k: sorted(v) for k, v in sorted(obs_dur.items())} }")
-    P(f"caster attribute ranks OBSERVED (0x0042 field3 of a ZAISHEN hex on the observer; "
-      f"None = CONTESTED): {ranks}; evidence {rank_ev}; 0x0042 hexes with no single "
-      f"ZAISHEN completion in their batch {rank_unatt}")
-    for x in rank_ctl:
-        P(f"   rank control (tag, t, skill, def, attribute, rank, exe d0, exe d15, "
-          f"d0 + (d15 - d0) * rank / 15, the 0x0042's own f32): {x}")
-    P("")
-    P(f"Z1 (the Degeneration Team) over {[m.tag for m in z1]}")
-    res = {}
-    res["Z1.P1"] = score_p1(z1, table, obs_dur, ranks)
-    res["Z1.P2"] = score_p2(z1)
-    res["Z1.P3"] = score_p3(z1, table)
-    res["Z1.P4"] = score_p4(z1)
-    res["Z1.P5"] = score_p5(z1, others, table)
-    res["Z1.P6"] = score_p6(z1, table)
-    res["Z1.P7"] = score_p7(z1)
-    for pid in ("Z1.P1", "Z1.P2", "Z1.P3", "Z1.P4", "Z1.P5", "Z1.P6", "Z1.P7"):
-        v, text, wf, _d = res[pid]
-        P(verdict_line(pid, v, text, wf))
-    vb, nb, lb = res["Z1.P7"][3]["b"]
-    P(f"[{vb}] Z1.P7(b): the same storms with the early group required to hold >= 2 bodies: "
-      f"n={nb} (floor {FLOORS['Z1.P7']}), all early bodies left {lb} (a death not counted as "
-      f"leaving) -- NOT the registered form; Z1.P7 above is")
-    d = res["Z1.P1"][3]
-    for k, v in d["dur_src"].items():
-        P(f"      P1 duration used for hex {k} on a non-observer: {v}")
-    for x in d["cx"]:
-        P(f"      P1 cx: {x}")
-    for x in d["informative"]:
-        P(f"      P1 informative: {x}")
-    for x in d["possible"]:
-        P(f"      P1 possible-only: {x}")
-    for x in res["Z1.P2"][3]:
-        P(f"      P2: {x}")
-    for x in res["Z1.P3"][3]["other"]:
-        P(f"      P3 other-ally heal: {x}")
-    for x in res["Z1.P3"][3]["orison"]:
-        P(f"      P3 orison (tag, t, target, deficit, heal, deficit>=heal): {x}")
-    for x in res["Z1.P4"][3]:
-        P(f"      P4: {x}")
-    for x in res["Z1.P5"][3]["casts"]:
-        if x[5] or x[6]:
-            P(f"      P5 observer cast (tag, t, skill, type, activation, Mesmer hexes live (skill, age), 61 words): {x}")
-    for dk, x in sorted(res["Z1.P6"][3].items()):
-        P(f"      P6 {dk}: n={x['n']} skills {x['skills']} overlap {x['overlap']}")
-        for vv in x["violations"][:12]:
-            P(f"         re-fire (tag, prev t, t, body, skill, waiting slot, ready since): {vv}")
-    for x in res["Z1.P7"][3]["storms"]:
-        P(f"      P7 storm: {x[:3]}")
+    if z1:
+        ranks, rank_ev, rank_ctl, rank_unatt = observed_ranks(z1)
+        P("")
+        P(f"hex durations OBSERVED on the observer (0x0042 f32, s), Z1 matches: "
+          f"{ {k: sorted(v) for k, v in sorted(obs_dur.items())} }")
+        P(f"caster attribute ranks OBSERVED (0x0042 field3 of a ZAISHEN hex on the observer; "
+          f"None = CONTESTED): {ranks}; evidence {rank_ev}; 0x0042 hexes with no single "
+          f"ZAISHEN completion in their batch {rank_unatt}")
+        for x in rank_ctl:
+            P(f"   rank control (tag, t, skill, def, attribute, rank, exe d0, exe d15, "
+              f"d0 + (d15 - d0) * rank / 15, the 0x0042's own f32): {x}")
+        P("")
+        P(f"Z1 (the Degeneration Team) over {[m.tag for m in z1]}")
+        res = {}
+        res["Z1.P1"] = score_p1(z1, table, obs_dur, ranks)
+        res["Z1.P2"] = score_p2(z1)
+        res["Z1.P3"] = score_p3(z1, table)
+        res["Z1.P4"] = score_p4(z1)
+        res["Z1.P5"] = score_p5(z1, others, table)
+        res["Z1.P6"] = score_p6(z1, table)
+        res["Z1.P7"] = score_p7(z1)
+        for pid in ("Z1.P1", "Z1.P2", "Z1.P3", "Z1.P4", "Z1.P5", "Z1.P6", "Z1.P7"):
+            v, text, wf, _d = res[pid]
+            P(verdict_line(pid, v, text, wf))
+        vb, nb, lb = res["Z1.P7"][3]["b"]
+        P(f"[{vb}] Z1.P7(b): the same storms with the early group required to hold >= 2 bodies: "
+          f"n={nb} (floor {FLOORS['Z1.P7']}), all early bodies left {lb} (a death not counted as "
+          f"leaving) -- NOT the registered form; Z1.P7 above is")
+        d = res["Z1.P1"][3]
+        for k, v in d["dur_src"].items():
+            P(f"      P1 duration used for hex {k} on a non-observer: {v}")
+        for x in d["cx"]:
+            P(f"      P1 cx: {x}")
+        for x in d["informative"]:
+            P(f"      P1 informative: {x}")
+        for x in d["possible"]:
+            P(f"      P1 possible-only: {x}")
+        for x in res["Z1.P2"][3]:
+            P(f"      P2: {x}")
+        for x in res["Z1.P3"][3]["other"]:
+            P(f"      P3 other-ally heal: {x}")
+        for x in res["Z1.P3"][3]["orison"]:
+            P(f"      P3 orison (tag, t, target, deficit, heal, deficit>=heal): {x}")
+        for x in res["Z1.P4"][3]:
+            P(f"      P4: {x}")
+        for x in res["Z1.P5"][3]["casts"]:
+            if x[5] or x[6]:
+                P(f"      P5 observer cast (tag, t, skill, type, activation, Mesmer hexes live (skill, age), 61 words): {x}")
+        for dk, x in sorted(res["Z1.P6"][3].items()):
+            P(f"      P6 {dk}: n={x['n']} skills {x['skills']} overlap {x['overlap']}")
+            for vv in x["violations"][:12]:
+                P(f"         re-fire (tag, prev t, t, body, skill, waiting slot, ready since): {vv}")
+        for x in res["Z1.P7"][3]["storms"]:
+            P(f"      P7 storm: {x[:3]}")
+    else:
+        P("")
+        P("Z1 (the Degeneration Team): no Degeneration match on this capture -- Z1 is not "
+          "scored here (its verdicts stand on 20260928T103123, FINDINGS 18.1)")
+    if z2:
+        P("")
+        P(f"Z2 (the Smiting Monks) over {[m.tag for m in z2]} -- the SCORER'S RULES are the "
+          f"module docstring's, written before this section first ran")
+        build = z2[0].conn.build
+        named, bad, durs = corroborate_ids(build)
+        P(f"   Z2 ids named after matching the WIKI triple (energy, activation, recharge) "
+          f"against exe {build}: {sorted(named)}; MISMATCH (printed by number) {bad}; the "
+          f"reconstructed enchantment durations (exe d0/d15, used) {durs}")
+        ins = z2_instruments(z2)
+        lm = ins["l2_monks"]
+        low = [x for x in lm if x[5] is not None and x[5] <= 0.10]
+        P(f"   health instrument: 0x00A2 [34] setters per match {ins['set34']}; every Monk body's "
+          f"anchoring {dict(ins['anchor'])}; L2 at the MONKS' deaths (reconstruction <= 0.10 "
+          f"just after the killing batch) {len(low)} of {len(lm)}"
+          f"{' -- the instrument holds' if lm and len(low) >= 0.8 * len(lm) else ' -- UNVERIFIED: every health column below is suspect'}")
+        for x in lm:
+            if x[5] is None or x[5] > 0.10:
+                P(f"      L2 Monk death NOT <= 0.10: {x}")
+        lp = ins["l2_party"]
+        lowp = [x for x in lp if x[5] is not None and x[5] <= 0.10]
+        P(f"   L2 at the party's deaths {len(lowp)} of {len(lp)}; the match-END defeat marks "
+          f"(>= 2 party bodies marked dead at one instant with health > 0.10, RECONSTRUCTION) "
+          f"{ins['end_marks']}")
+        for x in lp:
+            if (x[5] is None or x[5] > 0.10) and not any(x[3] == e[1] for e in ins["end_marks"]):
+                P(f"      L2 party death NOT <= 0.10 and not an END mark: {x}")
+        rv = ins["revives"]
+        P(f"   revives (dead bit clearing) n={len(rv)}; with a +1.0 delta inside 0.1 s "
+          f"{sum(1 for x in rv if x[3])}; reconstruction 0.3 s after: "
+          f"{collections.Counter(x[4] for x in rv)}")
+        r2 = {}
+        r2.update(score_z2_p1(z2, named))
+        r2["Z2.P2"] = score_z2_p2(z2, named)
+        r2["Z2.P3"] = score_z2_p3(r2["Z2.P2"][3]["rows"], named)
+        r2["Z2.P4"] = score_z2_p4(z2, named)
+        r2["Z2.P5"] = score_z2_p5(z2, named)
+        r2["Z2.P6"] = score_z2_p6(z2)
+        for pid in ("Z2.P1", "Z2.P1b", "Z2.P2", "Z2.P3", "Z2.P4", "Z2.P5", "Z2.P6"):
+            v, text, wf, _d = r2[pid]
+            P(verdict_line(pid, v, text, wf))
+        for pid in ("Z2.P1", "Z2.P1b"):
+            d = r2[pid][3]
+            vs, ns, nb = d["sym"]
+            P(f"      {pid[3:]} POST-HOC (not the verdict): with the bit's CLEAR inside the "
+              f"announce's batch (< {BATCH} s before) also counted as carrying -- the mirror of "
+              f"the registered same-batch rise -- clean targets {ns} (same-batch clears set "
+              f"aside {nb}) -> would read {vs}; the registered verdict above stands")
+            for x in d["clean"]:
+                P(f"      {pid[3:]} onto a CLEAN target (tag, t, caster, form, target, carrying, how, "
+                  f"end, (s since the bit last cleared, s until it next rises)): {x}")
+            for x in d["anomalies"]:
+                P(f"      {pid[3:]} self-target anomaly: {x}")
+            if args.rows:
+                for x in d["rows"]:
+                    P(f"      {pid[3:]} (tag, t, caster, form, target, carrying, how, end, context): {x}")
+        d = r2["Z2.P2"][3]
+        for x in d["above"]:
+            P(f"      P2 ABOVE the line (tag, t, caster, form, target, h, min 1 s before, how, end): {x}")
+        for x in d["skipped"]:
+            P(f"      P2 skipped: {x}")
+        for x in d["rows"]:
+            P(f"      P2 cast (tag, t, caster, form, target, h, min 1 s before, how, end): {x}")
+        d = r2["Z2.P4"][3]
+        # POST-HOC (after the first run): the rule as written gave 272 / 271 HELD on 0
+        # counterexamples with NO informative cast (272: 0, 271: 4, all four cut by the
+        # caster's death before the re-cast) -- a check that could not fail. By Z1.P1's
+        # convention (the informative cast is the floor's unit) those two parts read NULL;
+        # the 251 part is the only one tested. The registered line above stands as written.
+        P(f"      P4 POST-HOC (not the verdict): informative casts (a previous episode would "
+          f"have been live uncut) 272: {len(d[BALTHAZARS_AURA][3])}, of them still live at the "
+          f"announce {sum(1 for x in d[BALTHAZARS_AURA][3] if x[5])}; 271: "
+          f"{len(d[ZEALOTS_FIRE][3])}, still live {sum(1 for x in d[ZEALOTS_FIRE][3] if x[5])} "
+          f"(the rest cut by the caster's death) -- a re-cast could only have overlapped a "
+          f"live episode {sum(1 for x in d[ZEALOTS_FIRE][3] + d[BALTHAZARS_AURA][3] if x[5])} "
+          f"times, so the 272 / 271 parts are VACUOUS and read NULL by Z1.P1's "
+          f"informative-floor convention; the 251 part ({len(d[SCOURGE_HEALING][1])} casts) is "
+          f"the tested one")
+        for skill in (BALTHAZARS_AURA, ZEALOTS_FIRE):
+            v_, rows_, cx_, inf_, per_, forms_ = d[skill]
+            for x in cx_:
+                P(f"      P4 {z2n(skill, named)} RE-CAST INSIDE A LIVE EPISODE (tag, t, caster, form, target, live, would-be-live, 0x80): {x}")
+            for x in inf_:
+                if x not in cx_:
+                    P(f"      P4 {z2n(skill, named)} informative, cut before the announce: {x}")
+        v_, rows_, cx_, flight_, per_ = d[SCOURGE_HEALING]
+        for x in cx_:
+            P(f"      P4 {z2n(SCOURGE_HEALING, named)} ONTO A HEXED TARGET: {x}")
+        for x in flight_:
+            P(f"      P4 {z2n(SCOURGE_HEALING, named)} in flight (tag, t, caster, form, target, hexed, how, bit, others in flight, end): {x}")
+        if args.rows:
+            for x in rows_:
+                P(f"      P4 251 (tag, t, caster, form, target, hexed, how, bit, others in flight, end): {x}")
+        d = r2["Z2.P5"][3]
+        for x in d["un"]:
+            P(f"      P5 at an UNENCHANTED target (tag, t, caster, target, enchanted, how, 0x80, recon (count, live, removed), s since [7,T,13], burst, end): {x}")
+        for x in d["contested"]:
+            P(f"      P5 CONTESTED (visual vs 0x80): {x}")
+        for x in d["rows"]:
+            P(f"      P5 cast (tag, t, caster, target, enchanted, how, 0x80, recon, s since strip, burst, end): {x}")
+        d = r2["Z2.P6"][3]
+        P(f"      P6 POST-HOC sensitivity (a lead, not the verdict; the registered rule is hold "
+          f"{ATTACK_HOLD:g} s over >= 2-holder windows): {d['sens']}")
+        for x in d["switches"]:
+            P(f"      P6 switch (tag, t, monk, from, to): {x}")
+        for x in d["fresh"]:
+            P(f"      P6 fresh pick (tag, t, monk, previous [4] target, new, why the previous ended): {x}")
     if z3:
         P("")
         P(f"Z3 (the Obsidian Spike Elementalists) over {[m.tag for m in z3]} -- PARTIAL (one "
@@ -1352,10 +2202,15 @@ def main(argv=None):
           f"0x0035 base {w['attack_base_0x0035']}, {w['changes']} hand record(s))")
         P(f"      offensive casts {x['offensive']} n={sum(x['offensive'].values())}; hexes "
           f"{x['hexes']}; attack starts {x['attack_starts']} n={sum(x['attack_starts'].values())}")
-        P(f"      on the Healer: casts {share(x['offensive'], 'Healer')}, hexes "
-          f"{share(x['hexes'], 'Healer')}, attack starts {share(x['attack_starts'], 'Healer')}; "
-          f"on the observer: casts {share(x['offensive'], 'observer')}, hexes "
-          f"{share(x['hexes'], 'observer')}, attack starts {share(x['attack_starts'], 'observer')}")
+        if "Healer" in x["party"]:
+            P(f"      on the Healer: casts {share(x['offensive'], 'Healer')}, hexes "
+              f"{share(x['hexes'], 'Healer')}, attack starts {share(x['attack_starts'], 'Healer')}; "
+              f"on the observer: casts {share(x['offensive'], 'observer')}, hexes "
+              f"{share(x['hexes'], 'observer')}, attack starts {share(x['attack_starts'], 'observer')}")
+        else:
+            for nm in x["party"]:
+                P(f"      on the {nm}: casts {share(x['offensive'], nm)}, hexes "
+                  f"{share(x['hexes'], nm)}, attack starts {share(x['attack_starts'], nm)}")
         for b, c in sorted(x["per_body"].items()):
             P(f"         casts by {b}: {c}")
         for b, c in sorted(x["attack_body"].items()):
@@ -1371,6 +2226,29 @@ def main(argv=None):
     for x in cast_time_words(z1):
         P(f"   61 word (tag, t, caster, next skill, table act, seconds, Mesmer/Necro hexes "
           f"completed on it in the 20 s before): {x}")
+    if z2:
+        named, _bad, _durs = corroborate_ids(z2[0].conn.build)
+        f = z2_facts(z2, others, named)
+        P(f"   Z2 the Monks' 0x0056 definitions (build:definition -> (file, profession, level)): "
+          f"{f['definitions']}")
+        P(f"   Z2 c2s 0x00A6 ENTER sends on the outpost connections (port, t, [map, team, 0]): "
+          f"{f['enter']}")
+        P(f"   Z2 Monk casts by skill and form: {f['monk_forms']}; ids cast that are NOT on the "
+          f"WIKI bar (+ Resurrection Signet): {f['off_bar']}")
+        P(f"   Z2 henchman casts by skill (by number unless named above): {f['hench']}; the "
+          f"observer's: {f['observer']}")
+        P(f"   Z2 [61] cast-time words in the announce batch, by (class, skill): n and the "
+          f"factors vs the table activation {f['w61']}; announces by class {f['announces_by_class']}")
+        P(f"   Z2 [6] adds in the completion batch of an ENCHANTMENT landing on a body with no "
+          f"live 13 before it (class, skill) -> ids: {f['ench_adds_on_clean']}; the same by the "
+          f"0x80 bit instead (None = no 0x00F1 word yet, which is NOT clean): "
+          f"{f['ench_adds_by_bit']}; Scourge Healing's adds on a non-observer target: "
+          f"{f['scourge_adds']}")
+        P(f"   Z2 0x80 transitions vs the class visual: {f['bit80']}")
+        P(f"   Z2 the prop that follows a Monk's [4] (1 = GV_MELEE_ATTACK_FINISHED, 3 = "
+          f"GV_ATTACK_STOPPED, agents.py UPSTREAM names): {f['after_4']}")
+        P(f"   Z2 [6] condition visuals on Monks by number (which condition: UNVERIFIED): "
+          f"{f['cond_visuals']}")
     if args.rows:
         for m in matches:
             for r in m.rows:
