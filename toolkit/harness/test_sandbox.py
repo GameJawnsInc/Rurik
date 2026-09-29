@@ -34,7 +34,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=162)     # 88 from the green run 2026-09-20; +4 SECONDARY-B4's store_state/store_warnings (the fix pass, CD-3, 2026-09-25); +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net); +2 the heroless party (2026-09-25): a heroless spec's overlay loads with `heroes = []`, and a hero's overlay writes none
+led = checks.Ledger("sandbox", floor=176)     # 88 from the green run 2026-09-20; +4 SECONDARY-B4's store_state/store_warnings (the fix pass, CD-3, 2026-09-25); +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net); +2 the heroless party (2026-09-25): a heroless spec's overlay loads with `heroes = []`, and a hero's overlay writes none; +14 sec. 7, the client-build skill guard (2026-09-28): 176 on the bare run, 178 with the slice run directory's client read
 
 
 # ---------------------------------------------------------------- the fixture
@@ -885,5 +885,110 @@ led.ok("if not ranks:\n        return ENEMY_SKILL_RANK" in _rank
        and 'return ranks.get(int(row.get("attribute", -1)), 0)' in _rank,
        "agent_skill_rank still acts at ENEMY_SKILL_RANK with no ranks and at "
        "ranks.get(attribute, 0) with any (the two lines the window's cell text rests on)")
+
+# ---------------------------------------------------------------- 7. the client-build skill guard
+# 2026-09-28: the overlay regenerated from 38888 carries skill 3446, which the
+# 38797 loopback client this module launches (vault/run/slice) has no record
+# for (skillunlock.SKILL_RECORD_COUNT_BY_BUILD: 3,443 vs 3,476). A bar or a
+# hostile's list naming one is REFUSED before launch; an unlock is left out and
+# named, because the window ticks every row by default. 3446 is the real id;
+# the fixture's 9001..9004 are past every build and ride along as unlocks.
+print("\n7. the client-build skill guard")
+W7 = FakeWorld(dict(WORLD.tables, skills=dict(WORLD.tables["skills"],
+                                              **{"3446": skill(6, 0.5, 30)})))
+
+
+def ele(**over):
+    s = spec(name="ele", player={"profession": 6, "secondary": 0, "level": 3,
+                                 "skills": [170], "weapon": "caster_staff"})
+    s.update(over)
+    return s
+
+
+def refused(s, build):
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            sandbox.compile_spec(s, W7, tmp, exe="x", dat="y", store={}, client_build=build)
+        except sandbox.SpecError as exc:
+            return str(exc)
+    return ""
+
+
+def compiled7(s, build, exe="x"):
+    with tempfile.TemporaryDirectory() as tmp:
+        return sandbox.compile_spec(s, W7, tmp, exe=exe, dat="y", store={},
+                                    client_build=build)
+
+
+def unlock_ids(c):
+    a = c["args"]
+    return [int(x) for x in a[a.index("--unlocks") + 1].split(",")] if "--unlocks" in a else []
+
+
+bar = ele(player=dict(ele()["player"], skills=[170, 3446]))
+why = refused(bar, 38797)
+led.ok("player.skills: skill 3446 is past build 38797's skill table (3,443 records, ids "
+       "0..3442)" in why, "a player bar naming 3446 is refused for a 38797 client, by id and "
+       "by build", why)
+led.ok(refused(bar, 38888) == "",
+       "and the same spec compiles for 38888, whose table has it (the TWIN)", refused(bar, 38888))
+led.ok(refused(ele(), 38797) == "", "a bar inside the table compiles for 38797 (control)")
+hero = ele(heroes=[dict(ele()["heroes"][0], skills=[281, 3446])])
+led.ok("hero 1: skill 3446 is past build 38797's" in refused(hero, 38797),
+       "a hero's bar naming it is refused, by hero", refused(hero, 38797))
+g = [dict(grp) for grp in ele()["groups"]]
+g[0] = {"members": [dict(g[0]["members"][0], skills=[322, 3446]), g[0]["members"][1]]}
+why = refused(ele(groups=g), 38797)
+led.ok("group 1 member 1: skill 3446 is past build 38797's" in why,
+       "a hostile's list naming it is refused, by group and member", why)
+led.ok("belongs to profession" not in why and why.count("\n  - ") == 1,
+       "and it is the only reason -- listed with validate's, not instead of them", why)
+two = ele(player=dict(ele()["player"], skills=[170, 3446]), groups=[])
+why = refused(two, 38797)
+led.ok("at least the boss" in why and "player.skills: skill 3446" in why,
+       "every reason at once: validate's and the table's in one refusal", why)
+
+c = compiled7(ele(), 38797)
+led.ok(3446 not in unlock_ids(c) and 9001 not in unlock_ids(c) and 170 in unlock_ids(c),
+       "the DEFAULT unlocks (every Elementalist row) leave out what 38797 lacks, keep 170",
+       unlock_ids(c))
+led.ok("unlocks: skill 3446 is past build 38797's skill table (3,443 records) -- not sent"
+       in c["notes"] and sum("unlocks:" in n for n in c["notes"]) == 5,
+       "and name each one it left out (3446 and the fixture's 9001..9004)", c["notes"])
+c8 = compiled7(ele(), 38888)
+led.ok(3446 in unlock_ids(c8) and 9001 not in unlock_ids(c8) and c8["client_build"] == 38888,
+       "for 38888 the default unlocks keep 3446 (its table has it)", unlock_ids(c8))
+cw = compiled7(ele(unlocks=[170, 3446]), 38797)
+led.ok(unlock_ids(cw) == [2, 170, 276, 281] and any("skill 3446" in n for n in cw["notes"]),
+       "the window's explicit unlocks (170, 3446; the bars' ids join them) drop 3446, named, NOT refused -- it ticks every "
+       "row by default, so a refusal would refuse every run", (unlock_ids(cw), cw["notes"]))
+why = refused(ele(), 12345)
+led.ok("the client is build 12345, which has no SKILL_RECORD_COUNT row" in why,
+       "a build with no count is refused, as the gamesrv refuses its --client-build", why)
+cx = compiled7(bar, None, exe="x")
+led.ok(cx["client_build"] is None and 3446 in unlock_ids(cx)
+       and any("build was not read" in n and "NOT checked" in n for n in cx["notes"]),
+       "no readable client: nothing is refused or filtered, and the note says so",
+       cx["notes"])
+led.ok(sandbox.client_build_of("x")[0] is None and sandbox.client_build_of(None)[0] is None,
+       "client_build_of answers None, with a reason, for no client")
+# the plumbing: with no exe given, the build is READ from the slice run
+# directory's client -- the one session.py hands the gamesrv as --client-build
+try:
+    run_exe = sandbox.run_paths()[0]
+except sandbox.SpecError as exc:
+    run_exe = None
+    led.skip("the slice run directory's client, read", str(exc).splitlines()[0])
+if run_exe:
+    got, _why = sandbox.client_build_of(run_exe)
+    led.ok(got in sandbox.skillunlock.SKILL_RECORD_COUNT_BY_BUILD,
+           f"the slice client's own build getter answers a registered build ({got})", _why)
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            cr = sandbox.compile_spec(ele(), W7, tmp, store={})
+            led.ok(cr["client_build"] == got,
+                   "compile_spec with no exe reads the run directory's client", cr["client_build"])
+        except sandbox.SpecError as exc:
+            led.ok(False, "compile_spec with no exe reads the run directory's client", str(exc))
 
 sys.exit(led.verdict())

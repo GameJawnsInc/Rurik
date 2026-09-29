@@ -34,7 +34,8 @@ WHAT THIS PINS.
     named nor dropped on purpose), it agrees with test_dispatch §10's restated
     predicate, and removing one allowlist row names that row alone. The
     Zaishen tape's three new opcodes (0x009A, 0x00A3, 0x00A6) carry their
-    decision (named medium / unnamed, dropped, not armed) and ONE exact
+    decision (all three named medium, 0x00A3 by the owner's decision of
+    2026-09-28; dropped, not armed) and ONE exact
     per-tape witness of the evidence behind it.
   * §5 REFUSALS: a root with no live capture makes `main()` exit 2 rather than
     print a clean table, and a dispatch chain that cannot be located refuses.
@@ -304,11 +305,13 @@ if live is not None:
            f"name {named.get(0x0072)}, handled {0x0072 in (handled or {})}, "
            f"dropped {0x0072 in dropped}, live {0x0072 in live[0]}")
     # CASTAI-Z1 (2026-09-28): the Zaishen Challenge tape brought three c2s no
-    # earlier tape carried. Triaged from its own evidence: two NAMED medium in
-    # overrides.json (the why is there), one UNNAMED at n=1, all three on the
-    # allowlist -- the server has no arena to arm them against (R7).
+    # earlier tape carried. Triaged from its own evidence: all three NAMED medium
+    # in overrides.json (the why is there) -- 0x00A3 at n=1 by the owner's decision
+    # the same day, on the PARTY_LEAVE precedent -- and all three on the
+    # allowlist: the server has no arena to arm them against (R7).
     for op, nm in ((0x009A, "ZAISHEN_CHALLENGE_LIST_REQUEST"),
-                   (0x00A6, "ZAISHEN_CHALLENGE_ENTER"), (0x00A3, None)):
+                   (0x00A6, "ZAISHEN_CHALLENGE_ENTER"),
+                   (0x00A3, "ZAISHEN_CHALLENGE_CANCEL")):
         led.ok((named.get(op, (None, ""))[0] == nm)
                and (nm is None or named[op][1] == "medium")
                and op in dropped and op in live[0] and op not in (handled or {}),

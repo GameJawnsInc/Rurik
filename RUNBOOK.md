@@ -834,11 +834,25 @@ through a row the toolkit parsed out of the client's own description templates, 
 hand-verified one (`studies/skills/FINDINGS.md` §55, SKILLS-LT). The rows live in the vault
 and are regenerated, never edited:
 
+**The content follows build 38888 since 2026-09-28** (the owner's ruling; the PIN stays 38797 —
+`studies/crossbuild/FINDINGS.md` §10). Regenerate from that build's pristine snapshot, naming
+the exe (and, for the labels, the archive beside it) explicitly — a default emit reads the pin:
+
 ```bash
-python toolkit/clientscan/skilltable.py --emit-content   # vault/content/skills.toml first, when the pin moves
-python toolkit/clientscan/skilldesc.py --emit-labels     # -> vault/content/skill_labels.toml
-python toolkit/clientscan/test_skilldesc.py              # the file on disk must equal a fresh emit
+python toolkit/clientscan/skilltable.py --exe C:\gd\Rurik\vault\client\2026-09-01_44fbd68767a8\Gw.exe --emit-content <path>   # skills.toml first
+python toolkit/clientscan/skilldesc.py --exe C:\gd\Rurik\vault\client\2026-09-01_44fbd68767a8\Gw.exe --dat C:\gd\Rurik\vault\client\2026-09-01_44fbd68767a8\Gw.dat --emit-labels <path>   # skill_labels.toml
+python toolkit/clientscan/test_skilldesc.py              # the file on disk must equal a fresh emit of ITS OWN header's exe + dat
 ```
+
+The five identical tables (`attribtable.py`, `attribpoints.py`, `composite.py` with
+`--emit-content <path>`; `heroes_table.py --toml > <path>`; `consttable.py --emit-effect --out
+<path>`) take the same `--exe`. **`item_modifiers.toml` is NOT regenerated from 38888**: its
+extractor reads the labels and templates from 38797 call sites and returns them empty on
+38888, so that file stays the pin's. Stage a new overlay in a scratch directory and prove it
+on a shadow vault (every vault directory junctioned in except `content/`, `RURIK_VAULT` pointed
+at it) before it goes into `vault/content/`, and keep the old files OUTSIDE `vault/content/`
+(`vault/research/content-38797-2026-09-28/`) — the loader reads every `*.toml` in that
+directory.
 
 **The vault is machine-wide, and the overlay names the consumer each row rides.** Regenerate
 it from `main` only, and only after every live worktree has merged the gate that produced it:
@@ -849,7 +863,7 @@ carrying a mark it does not know (`content.LABEL_DETAILS_KNOWN`; the server prin
 `CONTENT DROPPED: …` at startup), which is the pre-consumer state and self-heals at the
 merge; a tree older than that fix has no such guard, so the ordering rule stands.
 
-Redo both when the pinned build moves (the emitter stamps the build from the image's own
+Redo both when the content's build moves (the emitter stamps the build from the image's own
 bytes, refuses an exe that is not a pinned pristine build, and refuses a build other than
 the loaded skills table's — the label rows' numbers are interpolated from that table, so
 the two files must come from one build). The gamesrv names the tier in its log at every

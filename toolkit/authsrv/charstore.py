@@ -150,10 +150,14 @@ def _validate_skill_ids(path, where, ids):
     an id past the end of THIS BUILD's skill table asserts in the client's
     ChCliSkill.cpp the moment the Skills panel opens -- is build-specific
     (3,443 rows on 38797), and a store file outlives the build it was
-    authored against. That bound is enforced where the bitmap is BUILT, by
-    skillunlock.build_unlock_bitmap, which already refuses it with the assert
-    named and is tested for the refusal. Duplicating a build constant here
-    would give the two copies somewhere to disagree.
+    authored against. That bound is enforced where the store is READ for
+    the wire, by the SERVED build (2026-09-28): skillunlock.withhold_past_table
+    -- through resolve_library and authsrv.stored_skills_sent -- takes a
+    past-table id out of what is sent and names it, and the file keeps it
+    for the build that has it (a 38888 session's 3446, read by a 38797 one;
+    test_skillbound.py §8). Refusing it here would refuse the file a newer
+    build legitimately wrote. Duplicating a build constant here would give
+    the two copies somewhere to disagree.
 
     Id 0 is refused HERE as well as there, because it is not build-specific
     and it is the most expensive bit in this repo's history: bit 0 set means

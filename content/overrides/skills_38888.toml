@@ -17,6 +17,13 @@
 # charges these. The remaining 130 rows that moved between the builds (recharge 47, scales
 # 43+32, energy 19, durations, activations) are NOT here -- the vault table stays 38797 for
 # them until the pin moves. studies/slice/FINDINGS.md SLICE-F45.1.
+#
+# 2026-09-28 -- the owner: "regenerate content from 38888". The vault's bulk table now IS the
+# 38888 emission (studies/crossbuild/FINDINGS.md 10; the pin itself stays 38797), so the 130
+# rows above arrived with it and these fourteen are equal to the vault's own rows, field for
+# field (MEASURED: 14 of 14, the c38-fin scan). They stay as the TRACKED witness of the 38888
+# adrenaline change: the vault is gitignored and machine-local, and a vault still on the 38797
+# table (a restore from vault/research/content-38797-2026-09-28/) would otherwise lose them.
 
 [skills.336]
 activation = 0.0

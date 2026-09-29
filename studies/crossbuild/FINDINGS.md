@@ -1338,6 +1338,143 @@ in good faith and could not.
 
 ---
 
+## 10. The content overlay follows build 38888 — 2026-09-28 (the owner's ruling)
+
+**The ruling.** The owner, 2026-09-28: *"regenerate content from 38888"*. It answers the
+question CASTAI-Z1 left open (studies/monsterai §18.2, CASTAI-ZF7): the server's bulk content
+was still 38797's while retail had moved on. **The PIN does not move.** Every address in
+`studies/` stays measured on 38797 (§7), and `pinned.PINNED` is still that build. What moves
+is the CONTENT overlay: the numbers the server serves.
+
+### 10.1 What was regenerated, and what was not (OBSERVED)
+
+Each extractor was run with `--exe vault/client/2026-09-01_44fbd68767a8/Gw.exe`, the pristine
+38888 snapshot; the build in each header is derived from the image's own bytes (§9). The
+emissions were diffed row by row against the vault's 38797 files:
+
+| Table | Extractor | 38797 → 38888 |
+|---|---|---|
+| `skills` | `skilltable.py --emit-content` | 1,333 → 1,334 rows. **144 changed** (recharge 35, aoe_range 33, scale15 32, scale0 26, bonus_scale 23 / 21, duration 17 / 14, energy 16, adrenaline 14, activation 7, attribute 2, skill_arguments 2, target 1, half_range 1). **One new id, 3446**: an Elementalist maintained enchantment, type 6, duration slot 0x20000. |
+| `skill_labels` | `skilldesc.py --exe … --dat <snapshot>/Gw.dat --emit-labels` | 56 → 55 rows. **831 drops out**, and one row's `scale_means` changes (templates digest d7809b2c → 79cc0546). |
+| `attributes`, `attribute_cost`, `composite`, `heroes`, `effects` | `attribtable.py`, `attribpoints.py`, `composite.py`, `heroes_table.py --toml`, `consttable.py --emit-effect` | Rows **identical**; only the build stamp moves. |
+| `item_modifiers` | `itemmods.py --emit-content` | **NOT regenerated.** The identifier rows are identical, but on 38888 every `labels` / `templates` list comes back EMPTY. The extractor reads them from TextApi call sites at 38797 addresses (§7: they all moved in 38888), and the server reads those lists. Regenerating the table would erase data rather than update it. It stays 38797's until the extractor reads 38888 (`PLAN.md` §8). |
+| `npcs` | `npcdefs.py` (from captures) | Not a client table; unchanged. |
+
+The 38797 files are kept under `vault/research/content-38797-2026-09-28/`, outside
+`vault/content/` so the loader does not read them.
+
+### 10.2 What a 38797 client sees
+
+The owner plays the LOOPBACK client `vault/run/slice`, build 38797. The 38888 loopback build
+has never been caged (the owner's UAC step). **That client DISPLAYS its own table's numbers
+while the server applies 38888's**: tooltips, recharge bars and adrenaline strike counts are
+the client's. The precedent is SLICE-H17b (`content/overrides/skills_38888.toml`), which took
+fourteen adrenaline rows onto 38888 on 2026-09-14. This ruling takes the other 130.
+
+**Skill 3446 is the one hazard.** A 38797 client has no record for it: the table holds 3,443
+records on 38797 / 38833 / 38849 and 3,476 on 38888 (MEASURED, `skilltable.locate_table`
+over each snapshot). The guard is described in §10.4.
+
+### 10.3 The tests, keyed on the build of the row that is loaded
+
+The regeneration was staged, never written into the vault before the merge (the vault is
+machine-wide). Two stagings were used:
+
+- **`RURIK_CONTENT_EXTRA`.** This found 8 reds. Two of them (`test_content`,
+  `test_consttable`) were artifacts: the variable leaks rows into the deliberately broken
+  stores those tests build, and it cannot remove a row.
+- **A SHADOW vault**, which was definitive. It junctions every real vault directory except
+  `content/` and holds the exact post-swap set, selected by `RURIK_VAULT`. Against it, seven
+  tests were red for content. Three others were red for paths alone, not content:
+  `test_handshake` (the server refuses to write captures outside `RURIK_VAULT`), `test_cage`
+  (firewall rules bound to real exe paths) and `test_movehook` (a compiled DLL's path).
+
+The seven were re-keyed under a contract, each lane checked by a reviewer:
+- the 38797 literals stay exact;
+- the expectation is keyed on the loaded row's provenance build;
+- a build with no expectation is a named FAIL;
+- every 38888 number is measured from the 38888 client table;
+- each test passes on BOTH vaults.
+
+| Test | What moved | Now |
+|---|---|---|
+| `test_agentlife` | Banish 252 scale15 56 → 65 | rank 1 {38797: 22, 38888: 23} |
+| `test_instantannounce` | Frenzy 346 is linked to Strength on 38888 (attribute 51 → 17, bonus 175..125 bit-disabled) | the apply's rank word {38797: 0, 38888: the wearer's Strength rank}; the retail wire (SLICE-F45) already agrees |
+| `test_mechanics` 35 | Faintheartedness 135 bonus_scale0 0 → 1 | pips at rank 15 / 0: {38797: 3 / 0, 38888: 3 / 1} |
+| `test_mechanics` 37 | Rust 204 bonus_scale15 70 → 85 | the hand row follows 38888, 10 / 85 (§10.5); the record is checked against its own build's row |
+| `test_skilldamage` 12 / 12c | `hexjoin` predicted every tape from the content table | each tape is predicted from **its own build's client table**. G3 stays FAILED as registered on `20260928T103123`, and G3r re-states it. The miss's cause: the 38888 re-balance, MEASURED; the integer duration, CORROBORATED by one witness; the rounding rule UNDISCRIMINATED. The label rows' build is the file's own. |
+| `test_weaponcensus` | the absent-id rule read from the 38797 table | read from the table's own builds |
+| `test_weapons` 2b | a fixture copied from 38797 rows (229 energy, 339 scales, 858 aoe moved) | pinned to 38797; its drift is keyed on the row's build |
+| `test_skilldesc` | the file on disk vs a fresh emit of the PINNED exe | a fresh emit from the exe and archive **its own header names**. The build is re-derived from the exe's bytes; the archive is bound to that build by a measured templates digest (`TEMPLATES_SHA256_BY_BUILD`); the bulk skills table's one build must match. Known-bad arms: a typed build, a zeroed digest, a non-pristine exe, the other build's emit, a MIXED exe/archive pair. |
+
+### 10.4 The guard: no skill past the served client's table
+
+A 38797 client has no record for 3446, so serving it is a hazard:
+- the unlock bit past the table is the MEASURED `ChCliSkill.cpp:1022` assert (skillunlock.py);
+- a bar or cast naming such a skill is RECONSTRUCTION, since no run has served one.
+
+The table size per build is MEASURED by `skilltable.locate_table` over every pristine
+snapshot:
+
+| Build | 38519 | 38797 | 38833 | 38849 | 38888 |
+|---|---|---|---|---|---|
+| Records | 3,438 | 3,443 | 3,443 | 3,443 | 3,476 |
+
+(`locate_table` returns (offset, count, score); 1988 is a probe score, and the record size
+is 164.)
+
+**Before the guard** (measured on the base with the 38888 content staged):
+- 3446 would be served on a bar, a spawn or a hero with no complaint.
+- A 38519 client could be handed unlock bits 3438..3442, the assert class above.
+- The orchestrator's default unlock list, every skills row, would have put 3446 in
+  `--unlocks`, so every sandbox run would have exited at startup once the overlay merged.
+
+**The guard** (`3af1a3ed`, `0d89fdcc`, `2296ca0d`; reviewed BLOCK three times, each repaired):
+- `skillunlock.SKILL_RECORD_COUNT_BY_BUILD` sits beside `MAP_ID_COUNT_BY_BUILD`. A build
+  with no row is refused, the same way.
+- Once `--client-build` is settled, `serve_client_skill_table` drops and NAMES every content
+  row past the served table (skills, skill_effect, skill_arrows, skill_speech, skill_visual),
+  and rebinds `SKILL_TABLE_ROWS` per build.
+- `--skills`, `--hero-skills` and `--enemy-skills` refuse a past-table id by name, as does
+  any content row that hands one to a body.
+- The sandbox refuses such a bar before launch and FILTERS the unlock library, naming each id.
+- **Stored character state is bounded at READ time by the served build and never rewritten.**
+  This covers the player bar, hero bars and skills, the account library and the learned
+  library. The store is one per account and shared by every build: a 38888 session's 3446
+  survives a 38797 session and is not sent to it. Before the guard, a stored library holding
+  it reached `words_from_ids`' SystemExit inside the connection thread and died with nothing
+  printed.
+
+`test_skillbound` locks the wiring as TEXT (the serve call, the three flag refusals, the
+instance load's two stored reads) and proves the stored-state bound on a temp-dir store read
+in a thread.
+
+**OPEN:**
+- the HERO write-back through `bar_to_store` has no check;
+- the orchestrator window's picker still LISTS 3446 (the compiled spec refuses it);
+- an explicit `--client-build` that disagrees with the exe's own build can now serve a
+  past-table id: `runargs` lets the operator's flag win, and its docstring calls that a
+  fidelity defect, not a crash.
+
+### 10.5 The hand rows (two independent scans agree)
+
+Every hand row keyed by a skill id (`content/*.toml`, `content/overrides/`) was compared with
+the 38797 and 38888 client rows. **Rust 204 was the only COPY of a moved 38797 number.**
+`skill_effect.204` carried the client's 10 / 70 explicitly, and the wiki's 10..85 was marked
+CONTESTED. **The 38888 table reads 10..85, so the contest resolves for the wiki on 38888**
+(CORROBORATED: client table + WIKI). The row now carries 10 / 85, build 38888.
+
+Every other candidate carries no copied numeric field: 135, 382, 384, 385, 281, 252, 339,
+1136, 1551, 229, 858, and `skill_visual` 135 / 346. Their behaviour follows the table they
+read, but their PROSE still quotes 38797 values:
+- 281's heal is 30..80 on 38888, the wiki's number;
+- 252's 56 is 65;
+- 382 / 384 / 385's adrenaline is 3 / 5 / 8.
+
+That prose is left for the next edit of those rows. Disrupting Chop 340's disable is
+OBSERVED on a tape and is unchanged. The fourteen SLICE-H17b override rows equal the 38888
+table, 14 of 14.
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.

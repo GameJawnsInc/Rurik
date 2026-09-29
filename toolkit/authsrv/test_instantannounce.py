@@ -78,7 +78,10 @@ from codec import Codec                                        # noqa: E402
 # spell literals, the arms agreeing and the hero's spell. Sections 1-3 and 4's driven
 # half need the vault's skills table, section 5's attack literal the 394 row, section
 # 6 the captures; each declares its skip. 67 checks with the vault.
-LEDGER = checks.Ledger("instant announce", floor=6)
+# 7 bare / 68 with the vault since 2026-09-28 (the content38888 arc's fix lane): +1 in
+# section 4's bare half, B50's recorded 346 apply word == B50_FRENZY_APPLY_RANK[38797],
+# MEASURED from the green bare run (7 checks, 6 declared skips) -- floor 6 -> 7.
+LEDGER = checks.Ledger("instant announce", floor=7)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -543,6 +546,37 @@ B50 = {
     "window_body": [(INT, [59, 10, 0]), (INT, [35, 10, 0])],
 }
 
+# THE ONE ROW-DERIVED WORD IN B50["player_346"]["tick"], keyed on the build the
+# loaded 346 row records (the content38888 arc, 2026-09-28). The 0x0042 apply's
+# third word is the wearer's rank in the skill's attribute, which the server takes
+# from `player_rank_for_skill`: the row's `attribute` looked up in the player's
+# ranks (content/world.toml [player.attributes], Strength 17 at 9).
+#   38797: attribute 51 -- no attribute, rank 0 -- which is the literal recorded
+#          from b50da5c8 above, and on a 38797 row B50 is compared UNCHANGED.
+#   38888: attribute 17 (Strength) -> rank 9. OBSERVED: skilltable.py on the
+#          pristine 38888 Gw.exe (vault/client/2026-09-01_44fbd68767a8) reads
+#          346 at attribute 17 (and bonus_scale 175..125 with skill_arguments 0,
+#          so no set is enabled and nothing else on this wire moves).
+# The 38888 tick is a RECONSTRUCTION of what b50da5c8 sends on that row: B50's
+# recorded bytes with only the rank word replaced, because b50da5c8's rank read is
+# the same `player_rank_for_skill` rule (the hero's 346 apply carries the hero's
+# own 12 on either build and is compared to B50 unchanged). A row of any other
+# build has no expectation and the check FAILS naming it.
+B50_FRENZY_APPLY_RANK = {38797: 0, 38888: 9}
+
+
+def _b50_frenzy_tick():
+    """(the expected player_346 tick for the loaded row's build or None, that build)."""
+    build = agents.WORLD.get("skills", str(FRENZY)).provenance.get("build")
+    rank = B50_FRENZY_APPLY_RANK.get(build)
+    if rank is None:
+        return None, build
+    recorded = B50["player_346"]["tick"]
+    if build == 38797:
+        return recorded, build
+    return [(o, [v[0], v[1], rank] + list(v[3:]) if o == APPLY else v)
+            for o, v in recorded], build
+
 
 def section_flags():
     print("\n== 4. the known-bad arms: b50da5c8's own recorded bytes ==")
@@ -569,6 +603,13 @@ def section_flags():
     check(a0.no_instant_announce is False and a0.per_wearer_batch_order is False
           and a1.no_instant_announce is True and a1.per_wearer_batch_order is True,
           "--no-instant-announce and --per-wearer-batch-order parse and default off", "")
+    # B50_FRENZY_APPLY_RANK[38797] made LIVE: on a 38797 row _b50_frenzy_tick returns B50's
+    # recorded tick unchanged, so without this the 38797 key is decorative (a 5 stays green).
+    rec_applies = [v for o, v in B50["player_346"]["tick"] if o == APPLY]
+    check(len(rec_applies) == 1 and rec_applies[0][2] == B50_FRENZY_APPLY_RANK[38797],
+          "B50's recorded player_346 apply carries word 2 == B50_FRENZY_APPLY_RANK[38797] -- "
+          "the 38797 key IS b50da5c8's recorded rank, so the unchanged-B50 branch and the key "
+          "are one expectation", f"{rec_applies} vs {B50_FRENZY_APPLY_RANK.get(38797)}")
     why = _have_rows()
     if why:
         LEDGER.skip("section 4's driven half (14 checks): no skills rows", why)
@@ -586,9 +627,15 @@ def section_flags():
               "marked since = SKILLS-IA and b50da5c8 had none) and no bubble",
               f"{_fmt(tick)}")
         press, tick = _player_cast(FRENZY)
-        check(press == B50["player_346"]["press"] and tick == B50["player_346"]["tick"],
+        want_tick, frenzy_build = _b50_frenzy_tick()
+        check(want_tick is not None
+              and press == B50["player_346"]["press"] and tick == want_tick,
               "  Frenzy's press and completion are b50da5c8's -- and its [21, 1, 601] STILL "
-              "goes out (346's row predates the lane and is unmarked)", f"{_fmt(tick)}")
+              "goes out (346's row predates the lane and is unmarked); the apply's rank word "
+              "is the one the loaded row's build puts there (38797: 0, 38888: 9)",
+              f"build {frenzy_build}: {_fmt(tick)}"
+              + ("" if want_tick is not None else
+                 f" -- NO EXPECTATION for a build-{frenzy_build} row of 346"))
         check(_land(HERO, 0) == B50["hero_348"],
               "  the hero's 348: E5, E3 beside it, [58, 30, 0] and nothing else -- no [21, "
               "30, 596], no bubble (b50da5c8)", f"{_fmt(_land(HERO, 0))}")

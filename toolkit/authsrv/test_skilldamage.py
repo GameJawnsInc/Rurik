@@ -49,8 +49,14 @@ import vaultpath  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
+
+# vault/content/skill_labels.toml's label-tier row count per build its header declares,
+# MEASURED from each generated file (skilldesc.py --emit-labels): 38797 the table until
+# 2026-09-28, 38888 its regeneration (831's row drops out). Section 14 FAILS on any
+# other build rather than passing a table nobody measured.
+LABEL_ROWS_BY_BUILD = {38797: 56, 38888: 55}
 
 
 def main():
@@ -1307,9 +1313,12 @@ def main():
           and all(hsp[k] for k in hexjoin.FAILED_ON_ZAISHEN),
           "on the WHOLE corpus the Zaishen tape FAILS six registered predictions -- I1, I2, I3, "
           "M1, G2, G3, recorded FAILED as registered beside I4 / M2 / C2 -- and the corrected C2c; "
-          "every one but G3 holds RE-STATED (I1r / M1r the [61] seconds, I2r a word riding the "
-          "caster's own Fire Storm tick, I3r / G2r no 0x00F1 onto a target already hexed), and "
-          "every other corrected reading and post-hoc fact holds",
+          "every one holds RE-STATED (I1r / M1r the [61] seconds, I2r a word riding the "
+          "caster's own Fire Storm tick, I3r / G2r no 0x00F1 onto a target already hexed, and "
+          "since 2026-09-28 G3r effects.interp's rounded scaler on the tape's own build's row, the "
+          "build MEASURED, the integerization CORROBORATED once, its rule UNDISCRIMINATED -- "
+          "until then this read 'every one but G3'), and every other corrected reading and "
+          "post-hoc fact holds",
           str((sorted(failed_now), hrv)))
     z_i = [x[3:] for x in hsz["i_ct_casts"]]
     z_m = [x[3:] for x in hsz["m_ct_casts"]]
@@ -1355,8 +1364,15 @@ def main():
     g3_sig = {x[3:] for x in hsz["g3_miss_rows"]}
     ca_sig, ce_sig = set(hsz["c_cast_applied_off"]), set(hsz["c_environmental_off"])
     _sub = lambda a, b: not (collections.Counter(a) - collections.Counter(b))   # noqa: E731
-    check(hsz["g3_miss_rows"] == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, 12.533),
-                                  (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 12.533)]
+    # 2026-09-28 (the regenerate-from-38888 arc): hexjoin scores every tape on ITS OWN
+    # build's table (build_table: the pristine image the tape's VERSION frame names), so
+    # these numbers no longer move with the vault's content overlay. The Zaishen tape is
+    # build 38888, where 135 is 4..18 (MEASURED, skilltable on the 38888 image), so G3 AS
+    # REGISTERED -- unrounded -- predicts 14.267 there and still misses the wire's 14.0.
+    # The 12.533 this check pinned until then was the 38797 row's (3..16), and it is kept,
+    # exact, on the known-bad arm below.
+    check(hsz["g3_miss_rows"] == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, 14.267),
+                                  (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 14.267)]
           and hsp["g3_misses"] == 0 and hsp["g3_miss_rows"] == []
           and hsz["c_cast_applied_off"] == [("Crippled", 0, 15.0)]
           and hsz["c_environmental_off"] == [("Deep Wound", 20, 20.0), ("Poison", 13, 13.0),
@@ -1368,16 +1384,84 @@ def main():
           and all(x[3:] in g3_sig for x in hs["g3_miss_rows"])
           and set(hs["c_cast_applied_off"]) <= ca_sig
           and set(hs["c_environmental_off"]) <= ce_sig,
-          "G3 and C2c FAILED on 20260928T103123 with no re-statement (exact, per tape; none at "
+          "G3 AS REGISTERED and C2c FAILED on 20260928T103123 (exact, per tape; none at "
           "the registration): agent 4's 135 lands on the observer twice at field3 11 with 14.0 s "
-          "where interp(3, 16, 11) is 12.533 -- the corpus's first hex whose duration varies by "
-          "rank (179's 3 / 3 could never fail G3), cause UNMEASURED; a skill-applied Crippled "
+          "where the tape's own build's row (38888, 4..18) gives interp(4, 18, 11) = 14.267 "
+          "unrounded -- the corpus's first hex whose duration varies by "
+          "rank (179's 3 / 3 could never fail G3); G3's re-statement G3r is the next check; "
+          "C2c has none: a skill-applied Crippled "
           "carries field3 0 (15 s, under [10, obs, 334]), and a Deep Wound at hex 44's end plus "
           "two Poisons on an attack's landing carry field3 == f32 where the classifier calls them "
           "environmental; on the whole corpus these rows are among the misses and every miss "
           "has one of their shapes (a miss of a new shape is a new finding and reddens this)",
           str((hsz["g3_miss_rows"], hsz["c_cast_applied_off"], hsz["c_environmental_off"],
                "whole:", hs["g3_miss_rows"], hs["c_cast_applied_off"], hs["c_environmental_off"])))
+    # G3r (hexjoin docstring, 2026-09-28): f32 == effects.interp's ROUNDED two-point scaler
+    # (effects.interp, 0x005A8920) on the tape's OWN build's row. The cause the registration
+    # left UNMEASURED has two parts of UNEQUAL standing: (a) the BUILD, MEASURED -- on the 38797
+    # table (every tape scored on the pin's rows -- what hexjoin read before, when the vault's
+    # bulk table was 38797) G3 misses at 12.533 exactly as pinned until today, and G3r misses
+    # too, at round(12.533) = 13; on the tape's own 38888 row G3 misses at 14.267 and G3r
+    # predicts 14, the wire's 14.0. The endpoints are MEASURED per build (skilltable on each
+    # pristine image): 135 is 3..16 on 38797 / 38833 / 38849 and 4..18 on 38888 (CASTAI-ZF7).
+    # (b) INTEGERIZATION, CORROBORATED by one witness (two applies, one rank, one tape): the
+    # wire's 14.0 against 14.267 unrounded says the duration is an INTEGER; the ROUNDING RULE
+    # is UNDISCRIMINATED -- round-half-up, floor and truncation all give 14 -- and G3r's
+    # half-up is effects.interp's stated choice, not something this tape measured.
+    hc_pin = hexjoin.with_table(hc, 38797)
+    hs_pin = hexjoin.score(hc_pin)
+    hsz_pin = hexjoin.score(hexjoin.narrow(hc_pin, ZAISHEN))
+    faint = [x for x in hsz["g3_rows"] if x[3] == 135]
+    faint_pin = [x for x in hsz_pin["g3_rows"] if x[3] == 135]
+    check(hs["g3r"] and hsp["g3r"] and hsz["g3r"] and hs["g3r_miss_rows"] == []
+          and faint == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, (4.0, 18.0), 38888, 38888),
+                        (ZAISHEN, "50061", 187.725, 135, 11, 14.0, (4.0, 18.0), 38888, 38888)]
+          and faint_pin == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, (3.0, 16.0), 38888, 38797),
+                            (ZAISHEN, "50061", 187.725, 135, 11, 14.0, (3.0, 16.0), 38888, 38797)]
+          and hsz_pin["g3_miss_rows"] == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, 12.533),
+                                          (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 12.533)]
+          and hsz_pin["g3r_miss_rows"] == [(ZAISHEN, "50061", 164.735, 135, 11, 14.0, 13),
+                                           (ZAISHEN, "50061", 187.725, 135, 11, 14.0, 13)]
+          and not hs_pin["g3r"] and hs_pin["g3r_miss_rows"] == hsz_pin["g3r_miss_rows"]
+          and hs_pin["g3_miss_rows"] == hsz_pin["g3_miss_rows"],
+          "G3r HOLDS on the whole corpus, the registration's and the Zaishen tape (effects.interp's "
+          "rounded scaler on each tape's OWN build's row: 135 at field3 11 on 38888's 4..18 is "
+          "round(14.267) = 14, the wire's 14.0) -- the cause of G3's miss in two parts: the 38888 "
+          "re-balance MEASURED, and the duration's INTEGERIZATION CORROBORATED by one witness "
+          "(two applies, one rank, one tape) with the rounding rule UNDISCRIMINATED (half-up, "
+          "floor and truncation all give 14); and the known-bad arm, every tape on the 38797 "
+          "table, reproduces the old pin exactly: G3 misses at interp(3, 16, 11) = 12.533 and "
+          "G3r misses too, at 13",
+          str((faint, hs["g3r_miss_rows"], faint_pin, hsz_pin["g3_miss_rows"],
+               hsz_pin["g3r_miss_rows"], hs_pin["g3r_miss_rows"])))
+    # The per-build table IS the extractor's: every vault skills row, against the table
+    # hexjoin reads for the build that row RECORDS (its provenance.build -- 38797 on today's
+    # vault bar the repo's row-level 38888 overrides, 38888 after the regeneration), on the
+    # four columns the reader consumes. A drift between build_table and --emit-content (a
+    # different corpus rule, a column read at another offset) reddens here.
+    _cols = ("activation", "type_code", "duration0", "duration15")
+    _bad, _n, _vb = [], 0, collections.Counter()
+    for _k, _r in agents.WORLD.rows("skills").items():
+        _b = int(_r.provenance.get("build", 0))
+        _vb[_b] += 1
+        try:
+            _own = hexjoin.build_table(_b)[0].get(int(_k))
+        except LookupError as exc:
+            _bad.append((_k, _b, str(exc)[:60]))
+            continue
+        if _own is None:
+            _bad.append((_k, _b, "not in that build's player corpus"))
+            continue
+        _n += 1
+        _d = [c for c in _cols if c in _r and float(_r[c]) != float(_own[c])]
+        if _d:
+            _bad.append((_k, _b, _d))
+    check(_n >= 1333 and not _bad,
+          "hexjoin's per-build table is the extractor's own: every vault skills row agrees, on "
+          "activation / type_code / duration0 / duration15, with the table read from the "
+          "pristine image of the build the row records",
+          str((_n, dict(_vb), _bad[:6])))
+
     def _exact_179(s):
         return (s["i_per_port"] == hexjoin.EXPECT_179_PER_PORT and s["i_completed"] == 28
                 and s["i_scheduled"] == 20 and s["i_scheduled_with_words"] == 18
@@ -1533,13 +1617,32 @@ def main():
               "at rank 15 (784 was this example until the fix pass excluded it: "
               "its chain requirement has no gate on a Spell)",
               (authsrv.skill_condition(220, 0), authsrv.skill_condition(220, 15)))
+        # The build is the one the FILE declares (skilldesc.py --emit-labels stamps its
+        # header from the image's own sha256), and every label row must record it; the
+        # expectation is keyed on it -- the label-row count each build's table emits,
+        # MEASURED from its generated file (38797: 56, the table until 2026-09-28; 38888:
+        # 55, 831's row dropping out) -- so a table of any other build FAILS naming it.
+        import re
+        _lp = vaultpath.vault_path("content", "skill_labels.toml")
+        try:
+            with open(_lp, encoding="utf-8") as _fh:
+                _hm = re.search(r"^# build: (\d+) ", _fh.read(4096), re.M)
+        except OSError:
+            _hm = None
+        _lb = int(_hm.group(1)) if _hm else None
+        _lrb = {r.provenance.get("build") for r in lab.values()}
         check(lab["187"]["tier"] == "label" and "AREA_BURST" in lab["187"]["tier_detail"]
-              and lab["187"].provenance["source"] == "client-table"
-              and lab["187"].provenance["build"] == 38797
+              and all(r.provenance.get("source") == "client-table" for r in lab.values())
+              and _lrb == {_lb} and _lb in LABEL_ROWS_BY_BUILD
+              and len(lab) == LABEL_ROWS_BY_BUILD[_lb]
               and lab["220"]["tier_detail"] == ["TARGET_FOE"],
               "the rows say what they are: tier label, 187's area is spell_burst's "
-              "(AREA_BURST), 220 reaches its one target; client-table provenance, "
-              "build 38797", (dict(lab["187"]), dict(lab["220"])))
+              "(AREA_BURST), 220 reaches its one target; client-table provenance, every "
+              "row stamped with the build its file declares, a build with a measured "
+              "expectation (38797: 56 rows; 38888: 55)",
+              (dict(lab["187"]), dict(lab["220"]), f"file build {_lb}, row builds "
+               f"{sorted(_lrb, key=str)}, rows {len(lab)}, expected "
+               f"{LABEL_ROWS_BY_BUILD.get(_lb, 'NO EXPECTATION FOR THIS BUILD')}"))
         check(authsrv.skill_label_tier(187) == list(lab["187"]["tier_detail"])
               and authsrv.skill_label_tier(312) is None
               and authsrv.skill_label_tier(999999) is None,

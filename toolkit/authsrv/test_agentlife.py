@@ -8957,12 +8957,29 @@ def section_hold_plane():
             _shot["arrives_at"] -= 30.0
         authsrv.projectile_tick(_send, st, 1)
         dealt = 100.0 - st["player_health"]
+        # Banish's rank-1 number is KEYED ON THE BUILD ITS LOADED ROW RECORDS
+        # (the content38888 arc, 2026-09-28): the client re-balanced Banish's
+        # scale between the pinned build and 38888, so one literal cannot be
+        # exact on both. Each entry is the client's own interpolator,
+        # round(scale0 + (scale15 - scale0) x rank / 15), on that build's row
+        # (OBSERVED, skilltable.py on each pristine Gw.exe): 38797 20..56 ->
+        # 22.4 -> 22 (this check's original literal); 38888 20..65 -> 23.0 -> 23.
+        # A row of any other build has no expectation and FAILS naming it.
+        banish_rank1 = {38797: 22, 38888: 23}
+        banish_build = agents.WORLD.get("skills", "252").provenance.get("build")
+        banish_want = banish_rank1.get(banish_build)
+        banish_got = authsrv.skill_damage(252, authsrv.agent_skill_rank(st["agents"][10], 252))
         LEDGER.ok(12.0 < dealt < 16.0
-                  and authsrv.skill_damage(252, authsrv.agent_skill_rank(st["agents"][10], 252))[0] == 22,
+                  and banish_want is not None and banish_got is not None
+                  and banish_got[0] == banish_want,
                   "a level-2 caster's Flare lands 20 x 2^((6 - 25)/40) ~ 14 on the "
                   "player's elemental armour 25 (the level-20 baseline: 36.7), and "
-                  "its Banish resolves to the rank-1 22 (rank 12: 56)",
-                  f"Flare dealt {dealt:.1f}")
+                  "its Banish resolves to its row's rank-1 number (build 38797's "
+                  "20..56 -> 22, build 38888's 20..65 -> 23)",
+                  f"Flare dealt {dealt:.1f}; Banish {banish_got} at rank 1 on a "
+                  f"build-{banish_build} row, expected {banish_want}"
+                  + ("" if banish_want is not None else
+                     f" -- NO EXPECTATION for build {banish_build}"))
         # the party caster heals ITSELF under an ally-kind heal
         st = _fight_world((1500.0, 0.0), (0.0, 110.0))
         st["agents"][200].update(skills=((281, 1.0, 2.0),), skill_ready=[0.0],
