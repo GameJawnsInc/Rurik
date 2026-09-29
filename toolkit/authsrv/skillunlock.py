@@ -109,7 +109,11 @@ SKILL_RECORD_COUNT_BY_BUILD = {
 }
 # The pin's row, rebound by authsrv.main() to --client-build's. words_from_ids
 # and unlock_all_words read it at CALL time, so the rebind reaches both.
-SKILL_TABLE_ROWS = SKILL_RECORD_COUNT_BY_BUILD[38797]
+# SKILL_TABLE_BUILD is whose row it is -- rebound WITH it by authsrv's
+# serve_client_skill_table, so withhold_past_table's line names the build.
+# One literal for the pin, so the pair cannot name two builds.
+SKILL_TABLE_BUILD = 38797
+SKILL_TABLE_ROWS = SKILL_RECORD_COUNT_BY_BUILD[SKILL_TABLE_BUILD]
 
 
 def ids_past_table(ids, rows=None):
@@ -118,6 +122,44 @@ def ids_past_table(ids, rows=None):
     sorted, each once. Id 0 and negatives are not skills and are not listed."""
     bound = SKILL_TABLE_ROWS if rows is None else int(rows)
     return sorted({int(s) for s in ids if int(s) >= bound})
+
+
+def withhold_past_table(ids, source, seen=None, slots=False):
+    """STORED skill ids -> the ones the served client may be SENT, naming
+    every id withheld. The store's list itself is not touched.
+
+    WHY STORED STATE NEEDS ITS OWN BOUND (2026-09-28, the c38-guard review's
+    blocking item). The character store (vault/state/characters) is one per
+    account and shared by every build, while SKILL_TABLE_ROWS follows the
+    SERVED build: a 38888 session (3,476 records) may legitimately store 3446
+    in a bar or a library -- --unlocks all, a sandbox unlock, a 0x005C edit,
+    a learned skill -- and the next 38797 session (3,443) reads it back. A
+    startup refusal cannot see it (the store is read per connection), and
+    words_from_ids' SystemExit, raised in a connection thread, is swallowed
+    by threading: the connection died at the instance load with nothing
+    printed. So stored state is bounded where it is READ: past-table ids are
+    taken out of what is sent and named, and the store keeps them for the
+    build that has them.
+
+    `slots=True` is a BAR: a withheld id becomes 0 (an empty slot) so the
+    other slots keep their positions; otherwise it is a library and the id
+    is dropped. `seen` (a set, per connection) prints each (source, ids)
+    once however often the store is re-read."""
+    ids = [int(s) for s in ids]
+    past = ids_past_table(ids)
+    if past:
+        key = (source, tuple(past))
+        if seen is None or key not in seen:
+            if seen is not None:
+                seen.add(key)
+            print(f"[skills] {source}: {', '.join(map(str, past))} "
+                  f"{'is' if len(past) == 1 else 'are'} past build "
+                  f"{SKILL_TABLE_BUILD}'s skill table ({SKILL_TABLE_ROWS:,} "
+                  f"records): not sent (the store keeps "
+                  f"{'it' if len(past) == 1 else 'them'})", flush=True)
+    if slots:
+        return [0 if s >= SKILL_TABLE_ROWS else s for s in ids]
+    return [s for s in ids if s < SKILL_TABLE_ROWS]
 
 
 def unlock_all_words():
@@ -283,7 +325,7 @@ def ids_from_words(words):
     return out
 
 
-def resolve_library(store, uuid_hex, fallback_words, fallback_label):
+def resolve_library(store, uuid_hex, fallback_words, fallback_label, seen=None):
     """The two libraries the instance-load burst sends, as wire bitmaps.
 
     Returns (account_words, account_label, character_words, character_label).
@@ -306,6 +348,13 @@ def resolve_library(store, uuid_hex, fallback_words, fallback_label):
     --unlocks flag still answers for it, which is what keeps every run that
     predates the store byte-identical. An EMPTY list is an authored answer
     and is sent as an empty bitmap.
+
+    A STORED id past the served build's table is WITHHELD and named
+    (withhold_past_table; `seen` dedupes the line per connection), never
+    handed to words_from_ids: that SystemExit, raised in the connection
+    thread this runs in, killed the connection silently at the instance
+    load. The fallback is the flag's bitmap, which main() built against the
+    served bound at startup.
     """
     acct_ids = None if store is None else store.account_unlocked_skills()
     char_ids = (None if store is None
@@ -313,13 +362,19 @@ def resolve_library(store, uuid_hex, fallback_words, fallback_label):
     if acct_ids is None:
         acct_words, acct_label = fallback_words, f"{fallback_label}, --unlocks"
     else:
-        acct_words = words_from_ids(acct_ids, "account unlocked_skills")
-        acct_label = f"{len(acct_ids)} stored, account-wide"
+        sent = withhold_past_table(acct_ids, "stored account library", seen)
+        acct_words = words_from_ids(sent, "account unlocked_skills")
+        acct_label = f"{len(sent)} stored, account-wide" + (
+            f", {len(acct_ids) - len(sent)} past build {SKILL_TABLE_BUILD}'s "
+            f"table withheld" if len(sent) != len(acct_ids) else "")
     if char_ids is None:
         char_words, char_label = fallback_words, f"{fallback_label}, --unlocks"
     else:
-        char_words = words_from_ids(char_ids, "character learned_skills")
-        char_label = f"{len(char_ids)} stored, this character"
+        sent = withhold_past_table(char_ids, "stored character library", seen)
+        char_words = words_from_ids(sent, "character learned_skills")
+        char_label = f"{len(sent)} stored, this character" + (
+            f", {len(char_ids) - len(sent)} past build {SKILL_TABLE_BUILD}'s "
+            f"table withheld" if len(sent) != len(char_ids) else "")
     return acct_words, acct_label, char_words, char_label
 
 

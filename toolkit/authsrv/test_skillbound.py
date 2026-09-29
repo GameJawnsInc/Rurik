@@ -35,10 +35,19 @@ WHAT CAN GO RED, section by section:
      and before every skill consumer, or drops the refusal of --skills,
      --hero-skills or --enemy-skills, or reads a flag's id with skill_timing
      ahead of its refusal (a source lock; bare machine)
+  8  STORED state (the character store is shared by every build): a
+     temp-dir store holding 3446 in its player bar, account library,
+     learned library and a hero's bar and skills, read in a THREAD as a
+     connection reads it. Under 38797 3446 is not sent and each source
+     names it once, 3442 still is, nothing raises (0d89fdcc: SystemExit,
+     swallowed by threading), the store on disk keeps 3446, an in-game edit
+     elsewhere on the bar keeps it, a grant of it is refused; under 38888
+     all of it is sent (bare machine). 8b drives _handle_request_players and
+     reads the wire (skips by name without the attribute cost rows).
 
-Imports authsrv (no socket, no client). Floor 37: the green BARE run
-(RURIK_VAULT unset to nothing, 2026-09-28), sections 5 and 6 skipping by name;
-42 with the vault, 49 with the vault and the staged 38888 overlay.
+Imports authsrv (no socket, no client). Floor 55: the green BARE run
+(RURIK_VAULT=C:/nonexistent-vault, 2026-09-28), sections 5, 6 and 8b skipping
+by name; 63 with the vault, 70 with the vault and the staged 38888 overlay.
 """
 import contextlib
 import io
@@ -58,7 +67,7 @@ import skillunlock  # noqa: E402
 with contextlib.redirect_stdout(io.StringIO()):
     import authsrv  # noqa: E402
 
-LEDGER = checks.Ledger("the client-build skill guard", floor=37)   # the bare run, 2026-09-28 (28 + section 7's 9)
+LEDGER = checks.Ledger("the client-build skill guard", floor=55)   # the bare run, 2026-09-28 (28 + section 7's 9 + section 8's 18)
 check = checks.adopt(LEDGER)
 
 PIN = 38797
@@ -74,11 +83,14 @@ def swap(world):
     also puts back both SKILL_TABLE_ROWS bindings."""
     saved = (authsrv.agents.WORLD, authsrv.SKILL_TABLE_ROWS,
              skillunlock.SKILL_TABLE_ROWS, authsrv.SKILL_TABLE_BUILD)
+    saved_leaf_build = getattr(skillunlock, "SKILL_TABLE_BUILD", None)
     authsrv.agents.WORLD = world
 
     def restore():
         (authsrv.agents.WORLD, authsrv.SKILL_TABLE_ROWS,
          skillunlock.SKILL_TABLE_ROWS, authsrv.SKILL_TABLE_BUILD) = saved
+        if saved_leaf_build is not None:
+            skillunlock.SKILL_TABLE_BUILD = saved_leaf_build
     return restore
 
 
@@ -399,5 +411,277 @@ check(timing and not unguarded,
       f"every skill_timing() main() calls on a flag's id ({len(timing)}) sits "
       f"AFTER its block's refusal -- none reads a dropped id first",
       f"unguarded at {unguarded} of {timing}")
+
+print("\n8. STORED state is bounded by the SERVED build, where it is read")
+# The review's blocking item (2026-09-28): the character store is one per
+# account and shared by EVERY build, so a 38888 session (bound 3,476) can
+# leave 3446 in a bar or a library, and the next 38797 session reads it back.
+# On 0d89fdcc the stored bar went out as stored, and a stored library reached
+# words_from_ids' SystemExit inside the connection thread -- which threading
+# swallows, so the connection died at the instance load with nothing printed.
+# Each read below runs in a THREAD for that reason: a raise there is scored,
+# not lost. A temp-dir store, no vault.
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+import threading  # noqa: E402
+import charstore  # noqa: E402
+
+UUID8, EMAIL8, HERO8 = "88888888888888888888888888888888", "skillbound@rurik.invalid", 6
+PAST, KEPT = 3446, 3442                  # past 38797's 3,443 records / its last id
+LIB8 = [1, 2, KEPT, PAST]
+BAR8 = [PAST, KEPT, 0, 0, 0, 0, 0, 0]
+HBAR8 = [KEPT, PAST, 0, 0, 0, 0, 0, 0]
+HSKILLS8 = [KEPT, PAST]
+SOURCES8 = ("stored account library", "stored character library", "stored player bar",
+            f"stored hero {HERO8} bar", f"stored hero {HERO8} skills")
+tmp8 = tempfile.mkdtemp(prefix="skillbound-store-")
+saved_bar8, saved_store_dir8 = list(authsrv.SKILLBAR), charstore.store_dir
+
+
+def open8():
+    with contextlib.redirect_stdout(io.StringIO()):
+        return charstore.Store.open(EMAIL8, base=tmp8)
+
+
+def write8():
+    for f in os.listdir(tmp8):
+        os.remove(os.path.join(tmp8, f))
+    st = open8()
+    with contextlib.redirect_stdout(io.StringIO()):
+        row = st.ensure_character(UUID8, "Bound Test")
+        row["skillbar"] = list(BAR8)
+        row["learned_skills"] = list(LIB8)
+        st.account()["unlocked_skills"] = list(LIB8)
+        h = st.ensure_hero(UUID8, HERO8)
+        h["skillbar"], h["skills"] = list(HBAR8), list(HSKILLS8)
+        st.save()
+
+
+def on_disk8():
+    st = open8()
+    return (st.account_unlocked_skills(), st.character_learned_skills(UUID8),
+            st.character_skillbar(UUID8), (st.hero_row(UUID8, HERO8) or {}).get("skillbar"),
+            (st.hero_row(UUID8, HERO8) or {}).get("skills"))
+
+
+def read8(build):
+    """Serve `build`, then read the store as a connection does, in a thread.
+    Returns ({read: value or ('RAISED', repr)}, log lines, state)."""
+    write8()
+    store = open8()
+    state = {"char_uuid": UUID8, "charstore_game": store}
+    got, out = {}, io.StringIO()
+
+    def attempt(name, fn):
+        try:
+            got[name] = fn()
+        except BaseException as e:                          # noqa: BLE001 -- SystemExit is the defect
+            got[name] = ("RAISED", f"{type(e).__name__}: {e}")
+
+    def connection():
+        # with the per-connection `seen` the load passes, where the tree has it
+        kw = ({"seen": state.setdefault("skills_withheld", set())}
+              if "seen" in inspect.signature(skillunlock.resolve_library).parameters else {})
+        attempt("library", lambda: skillunlock.resolve_library(
+            store, UUID8, authsrv.UNLOCKED, "flag", **kw))
+        attempt("bar", lambda: authsrv.player_bar_at_load(state))
+        attempt("hero", lambda: authsrv.hero_build(state, HERO8))
+        attempt("usable", lambda: authsrv.player_usable_library(state))
+        attempt("hero_usable", lambda: authsrv.hero_usable_library(state, HERO8, [KEPT]))
+    restore = swap(fresh_world({}))
+    try:
+        with contextlib.redirect_stdout(out):
+            authsrv.serve_client_skill_table(build)
+            t = threading.Thread(target=connection)
+            t.start()
+            t.join()
+    finally:
+        restore()
+    return got, out.getvalue().splitlines(), state
+
+
+def raised(v):
+    return isinstance(v, tuple) and len(v) == 2 and v[0] == "RAISED"
+
+
+def bits8(words):
+    return set(authsrv.ids_from_words(words))
+
+
+try:
+    charstore.store_dir = lambda: tmp8
+    got, log8, st8 = read8(PIN)
+    lib = got.get("library")
+    check(lib is not None and not raised(lib),
+          f"{PIN}: a stored library holding {PAST} is READ in the connection thread "
+          f"without raising (0d89fdcc: words_from_ids' SystemExit, swallowed by threading)",
+          f"{lib[1]!r} / {lib[3]!r}" if (lib is not None and not raised(lib)) else repr(lib))
+    ok_lib = lib is not None and not raised(lib)
+    check(ok_lib and KEPT in bits8(lib[0]) and PAST not in bits8(lib[0]),
+          f"{PIN}: 0x001D (the account library) carries {KEPT} and not {PAST}",
+          f"{sorted(bits8(lib[0]))} ({lib[1]})" if ok_lib else repr(lib))
+    check(ok_lib and KEPT in bits8(lib[2]) and PAST not in bits8(lib[2]),
+          f"{PIN}: 0x00DB (the character library) carries {KEPT} and not {PAST}",
+          f"{sorted(bits8(lib[2]))} ({lib[3]})" if ok_lib else repr(lib))
+    check(got.get("bar") == [0, KEPT, 0, 0, 0, 0, 0, 0],
+          f"{PIN}: the stored player bar {BAR8} goes out as [0, {KEPT}, 0, ...] -- "
+          f"its slot EMPTY, the other slots in place", repr(got.get("bar")))
+    hero = got.get("hero")
+    check(not raised(hero) and hero is not None
+          and list(hero[1]) == [KEPT, 0, 0, 0, 0, 0, 0, 0] and list(hero[0]) == [KEPT],
+          f"{PIN}: the stored hero {HERO8} bar {HBAR8} is [{KEPT}, 0, ...] and its skill "
+          f"list (0x0073) is [{KEPT}] -- hero_build, which every hero consumer reads",
+          repr(hero))
+    usable, hero_usable = got.get("usable"), got.get("hero_usable")
+    check(not raised(usable) and not raised(hero_usable)
+          and KEPT in usable and PAST not in usable
+          and KEPT in hero_usable and PAST not in hero_usable,
+          f"{PIN}: the 0x005C referees (player's and hero's library) hold {KEPT}, not {PAST}",
+          f"{usable!r} / {hero_usable!r}")
+    for src in SOURCES8:
+        want = (f"[skills] {src}: {PAST} is past build {PIN}'s skill table "
+                f"({authsrv.SKILL_RECORD_COUNT_BY_BUILD[PIN]:,} records): not sent")
+        n_src = sum(ln.startswith(want) for ln in log8)
+        check(n_src == 1,
+              f"{PIN}: '{src}' names {PAST}, the build and the count, ONCE per connection",
+              f"{n_src} line(s)" + ("" if n_src == 1 else ": " + " | ".join(
+                  ln for ln in log8 if "past build" in ln)))
+    check(on_disk8() == (LIB8, LIB8, BAR8, HBAR8, HSKILLS8),
+          f"{PIN}: the store on disk still holds {PAST} in all five (bounded what is SENT, "
+          f"not what is KEPT)", repr(on_disk8()))
+
+    # an in-game edit under the lower build keeps what the player could not see
+    edit = getattr(authsrv, "handle_skillbar_skill_set", None)
+    sent8 = []
+
+    class _Rec:
+        def event(self, *a, **k):
+            pass
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            edit([0x5C, authsrv.PLAYER_AGENT_ID, 2, 1, 0],
+                 lambda op, v, label=None: sent8.append((op, v)), st8, 0, _Rec())
+            e1 = None
+        except BaseException as e:                          # noqa: BLE001
+            e1 = e
+    check(e1 is None and open8().character_skillbar(UUID8) == [PAST, KEPT, 1, 0, 0, 0, 0, 0],
+          f"{PIN}: a 0x005C into slot 2 stores [{PAST}, {KEPT}, 1, ...] -- the withheld "
+          f"{PAST} stays in slot 0 for the build that has it",
+          f"{open8().character_skillbar(UUID8)} {e1!r}")
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            edit([0x5C, authsrv.PLAYER_AGENT_ID, 0, 2, 0],
+                 lambda op, v, label=None: sent8.append((op, v)), st8, 0, _Rec())
+            e2 = None
+        except BaseException as e:                          # noqa: BLE001
+            e2 = e
+    check(e2 is None and open8().character_skillbar(UUID8) == [2, KEPT, 1, 0, 0, 0, 0, 0],
+          f"{PIN}: ...and a 0x005C INTO that slot replaces it: the player's choice wins",
+          f"{open8().character_skillbar(UUID8)} {e2!r}")
+
+    # a grant of a past-table skill is refused, not sent and not learned
+    gsent = []
+    gout = io.StringIO()
+    with contextlib.redirect_stdout(gout):
+        try:
+            gslot = authsrv.grant_skill(lambda op, v, label=None: gsent.append((op, v)),
+                                        st8, PAST, 0)
+            ge = None
+        except BaseException as e:                          # noqa: BLE001
+            gslot, ge = None, e
+    check(ge is None and gslot is None and not gsent
+          and open8().character_learned_skills(UUID8) == LIB8
+          and f"grant of skill {PAST} REFUSED: past build {PIN}" in gout.getvalue(),
+          f"{PIN}: grant_skill({PAST}) sends nothing, learns nothing, and says so",
+          f"slot {gslot}, sent {gsent}, {ge!r}, log {gout.getvalue().strip()[-160:]}")
+
+    # the control: the build that HAS the record is sent it
+    got, log8, _st = read8(NEWER)
+    lib = got.get("library")
+    ok_lib = lib is not None and not raised(lib)
+    check(ok_lib and PAST in bits8(lib[0]) and PAST in bits8(lib[2])
+          and got.get("bar") == BAR8
+          and not raised(got.get("hero")) and got.get("hero") is not None
+          and list(got["hero"][1]) == HBAR8 and list(got["hero"][0]) == HSKILLS8
+          and PAST in (got.get("usable") or ()),
+          f"CONTROL {NEWER}: the same store is sent whole -- {PAST} in 0x001D, 0x00DB, the "
+          f"player bar, the hero bar, its skill list and the referee",
+          (f"0x001D {sorted(bits8(lib[0]))}, 0x00DB {sorted(bits8(lib[2]))}" if ok_lib
+           else repr(lib)) + f"; bar {got.get('bar')}; hero {got.get('hero')!r}")
+    check(not any("is past build" in ln for ln in log8),
+          f"CONTROL {NEWER}: and nothing is named withheld",
+          "\n".join(ln for ln in log8 if "past build" in ln))
+
+    # the real instance load, when the content it needs is present
+    print("  8b. the instance load itself (_handle_request_players)")
+    HERO_RIG = {"OUTPOST": True, "EXPLORABLE": False, "HERO": HERO8, "HERO_IDS": [HERO8],
+                "HERO_AGENT_ID": 200,
+                "HERO_ROWS": {HERO8: {"hero": HERO8, "body": "academy_monk",
+                                      "profession": 3}},
+                "HERO_BODY": True, "HERO_BODY_NPC": "academy_monk", "HERO_ACTIVATE": True,
+                "HERO_PIPELINE_FIRST": True, "HERO_CHAR": True, "HERO_INVENTORY": 2,
+                "HERO_BAGS": True, "HERO_RIG_RETAIL": True, "PERSIST": True}
+    saved_rig = {k: getattr(authsrv, k) for k in HERO_RIG}
+    skip_load = None
+    try:
+        for k, v in HERO_RIG.items():
+            setattr(authsrv, k, v)
+        for build in (PIN, NEWER):
+            write8()
+            with contextlib.redirect_stdout(io.StringIO()):
+                world = content.load()
+            restore = swap(world)
+            wire, lout = [], io.StringIO()
+            try:
+                with contextlib.redirect_stdout(lout):
+                    authsrv.serve_client_skill_table(build)
+                    try:
+                        authsrv._handle_request_players(
+                            lambda op, v, label=None: wire.append((op, v)),
+                            {"agents": {}, "char_uuid": UUID8, "map_id": 148}, 0,
+                            threading.Event(), _Rec())
+                        lerr = None
+                    except BaseException as e:              # noqa: BLE001
+                        lerr = e
+            finally:
+                restore()
+            if isinstance(lerr, ValueError) and "attribute cost rows" in str(lerr):
+                skip_load = "no attribute cost rows in the content (bare machine)"
+                break
+
+            def of(op, agent=None):
+                return [v for o, v in wire if o == op
+                        and (agent is None or (v and v[0] == agent))]
+            acct, char = of(0x001D), of(0x00DB)
+            pbar = of(authsrv.GAME_SMSG_SKILLBAR_UPDATE, authsrv.PLAYER_AGENT_ID)
+            hbar = of(authsrv.GAME_SMSG_SKILLBAR_UPDATE, 200)
+            hinfo = [v for o, v in wire if o == 0x0073 and v and v[0] == HERO8]
+            seen = (acct and char and pbar and hbar and hinfo) and (
+                PAST in bits8(acct[-1][0]), PAST in bits8(char[-1][0]),
+                PAST in pbar[-1][1], PAST in hbar[-1][1], PAST in hinfo[-1][6])
+            want = (False,) * 5 if build == PIN else (True,) * 5
+            check(lerr is None and seen == want,
+                  f"{build}: the load's wire -- {PAST} in (0x001D, 0x00DB, player 0x00DA, "
+                  f"hero 0x00DA, 0x0073) is {want}",
+                  f"{seen} {lerr!r}")
+            if build == PIN:
+                check(bool(acct and pbar and hbar) and KEPT in bits8(acct[-1][0])
+                      and pbar[-1][1] == [0, KEPT, 0, 0, 0, 0, 0, 0]
+                      and hbar[-1][1] == [KEPT, 0, 0, 0, 0, 0, 0, 0],
+                      f"{PIN}: and {KEPT} still goes out, in its own slot",
+                      f"{acct[-1:] and sorted(bits8(acct[-1][0]))[-3:]} "
+                      f"{pbar[-1:]} {hbar[-1:]}")
+    finally:
+        for k, v in saved_rig.items():
+            setattr(authsrv, k, v)
+    if skip_load:
+        LEDGER.skip("the instance load's wire with a stored 3446", skip_load)
+finally:
+    charstore.store_dir = saved_store_dir8
+    authsrv.SKILLBAR[:] = saved_bar8
+    shutil.rmtree(tmp8, ignore_errors=True)
+check(authsrv.SKILL_TABLE_ROWS == skillunlock.SKILL_TABLE_ROWS
+      == authsrv.SKILL_RECORD_COUNT_BY_BUILD[authsrv.CLIENT_BUILD],
+      "section 8 put the served bound back")
 
 sys.exit(LEDGER.verdict())

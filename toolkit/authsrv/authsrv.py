@@ -6086,7 +6086,7 @@ def serve_client_skill_table(build):
     rows = SKILL_RECORD_COUNT_BY_BUILD[build]
     loaded = list(getattr(agents.WORLD, "dropped", ()))
     SKILL_TABLE_ROWS = skillunlock.SKILL_TABLE_ROWS = rows
-    SKILL_TABLE_BUILD = build
+    SKILL_TABLE_BUILD = skillunlock.SKILL_TABLE_BUILD = build
     lines = agents.WORLD.drop_past(
         agents.content.SKILL_KEYED_KINDS, rows,
         f"past build {build}'s skill table ({rows:,} records)")
@@ -6106,6 +6106,76 @@ def serve_client_skill_table(build):
               "go out on the wire. Refusing at startup: serve the client that "
               "has it (--client-build), or take it off that row.")
     return loaded
+
+
+# THE STORE IS THE OTHER DOOR (2026-09-28, the c38-guard review's blocking
+# item). serve_client_skill_table bounds what STARTUP knows -- flags and
+# content rows. The character store is read per connection and is shared by
+# every build, so a 38888 session can leave 3446 in a bar or a library that
+# the next 38797 session reads back. Every read of a stored bar or library
+# that reaches the wire goes through stored_skills_sent (or through
+# skillunlock.resolve_library, which does the same): the past-table ids are
+# withheld from what is SENT and named once per connection, and the store
+# keeps them -- bar_to_store puts a withheld bar id back into its slot on the
+# next write unless the player filled that slot. test_skillbound.py §8.
+def stored_skills_sent(state, ids, source, slots=False, bar_key=None):
+    """`ids` read from the store -> what this connection may send
+    (skillunlock.withhold_past_table, deduped per connection). A BAR
+    (`slots=True`) keeps its positions and, given `bar_key` ("player" or a
+    hero index), remembers which slot held which withheld id."""
+    sent = skillunlock.withhold_past_table(
+        ids, source, state.setdefault("skills_withheld", set()), slots=slots)
+    if slots and bar_key is not None:
+        held = {i: int(s) for i, s in enumerate(ids) if int(s) >= SKILL_TABLE_ROWS}
+        withheld = state.setdefault("bar_withheld", {})
+        if held:
+            withheld[bar_key] = held
+        else:
+            withheld.pop(bar_key, None)
+    return sent
+
+
+def bar_to_store(state, bar, bar_key):
+    """The bar an in-game edit WRITES: the served bar, with every id the load
+    withheld (stored_skills_sent) put back into its slot when that slot is
+    still empty -- the player could not see it, so an edit elsewhere on the
+    bar must not erase it from the store a later build reads. A slot the
+    player filled keeps the player's skill, and the withheld id is then
+    forgotten (the player replaced it)."""
+    out = [int(s) for s in bar]
+    held = (state.get("bar_withheld") or {}).get(bar_key) or {}
+    for slot, sid in list(held.items()):
+        while len(out) <= slot:
+            out.append(0)
+        if out[slot]:
+            del held[slot]
+        else:
+            out[slot] = sid
+    return out
+
+
+def player_bar_at_load(state):
+    """The eight slots the instance load's player 0x00DA carries. Under
+    --persist a stored bar wins, so a slot the player dragged last session is
+    still there this one -- 0x005C writes it and this reads it back. SKILLBAR
+    is rebound to match so every later reader (grant_skill's empty-slot
+    search, the adrenaline pools) sees the same eight slots.
+
+    Bounded by the SERVED build (2026-09-28): a stored slot holding an id this
+    client has no record for -- a 38888 session's 3446, read by a 38797 one --
+    goes out EMPTY and is named; the store keeps it (bar_to_store). This was
+    inline in the load until then, where no test could reach it."""
+    store = state.get("charstore_game")
+    stored = (None if store is None
+              else store.character_skillbar(state.get("char_uuid", "")))
+    if stored is not None:
+        stored = stored_skills_sent(state, stored, "stored player bar",
+                                    slots=True, bar_key="player")
+        del SKILLBAR[:]
+        SKILLBAR.extend(int(s) for s in stored)
+    skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+    skills += [0] * (SKILLBAR_SLOTS - len(skills))
+    return skills
 
 # Where the world's facts live: content/maps.toml, loaded through toolkit/content.py.
 #
@@ -21737,10 +21807,14 @@ def player_usable_library(state):
     acct = None if store is None else store.account_unlocked_skills()
     if acct is None:
         acct = ids_from_words(UNLOCKED)
+    else:                                   # the served build's bound, as the load's
+        acct = stored_skills_sent(state, acct, "stored account library")
     learned = (None if store is None
                else store.character_learned_skills(state.get("char_uuid", "")))
     if learned is None:
         learned = ids_from_words(UNLOCKED)
+    else:
+        learned = stored_skills_sent(state, learned, "stored character library")
     return set(int(s) for s in acct) | set(int(s) for s in learned)
 
 
@@ -21812,10 +21886,10 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
         del SKILLBAR[:]
         SKILLBAR.extend(after)
         if store is not None:
-            store.set_character_skillbar(uuid_hex, after)
+            store.set_character_skillbar(uuid_hex, bar_to_store(state, after, "player"))
     else:
         if store is not None:
-            store.set_hero_skillbar(uuid_hex, hero_index, after)
+            store.set_hero_skillbar(uuid_hex, hero_index, bar_to_store(state, after, hero_index))
         state.setdefault("hero_bars", {})[hero_index] = list(after)   # the fix pass, ENG-M1
         # The fix pass, EVID-D1C-1: the client's 0x005C sender (0x008212C0,
         # ChCliSkill:258) CLEARS the set slot's suppress bit (`btr [+0xA4],
@@ -21906,10 +21980,10 @@ def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
         del SKILLBAR[:]
         SKILLBAR.extend(after)
         if store is not None:
-            store.set_character_skillbar(uuid_hex, after)
+            store.set_character_skillbar(uuid_hex, bar_to_store(state, after, "player"))
     else:
         if store is not None:
-            store.set_hero_skillbar(uuid_hex, hero_index, after)
+            store.set_hero_skillbar(uuid_hex, hero_index, bar_to_store(state, after, hero_index))
         state.setdefault("hero_bars", {})[hero_index] = list(after)   # the fix pass, ENG-M1
         # The fix pass, EVID-D1C-1: the client's swap routine (0x00821460,
         # ChCliSkill:332/333, the 0x005E sender) EXCHANGES the two slots'
@@ -22253,7 +22327,8 @@ def handle_secondary_change(values, send, state, conn_id, rec):
         # 0x0081FDAE; 0x00DB's event is local-player only. The 0x0073
         # heroData copy of the pair is NOT refreshed in-session (R4 says so).
         _aw, _al, _cw, _cl = skillunlock.resolve_library(
-            store, uuid_hex, UNLOCKED, UNLOCK_LABEL)
+            store, uuid_hex, UNLOCKED, UNLOCK_LABEL,
+            seen=state.setdefault("skills_withheld", set()))
         # PLUS what grant_skill taught this character THIS SESSION (the fix
         # pass, CD-6): state["skills_known"] holds the 0x00DC grants, and
         # without a store the flag-built library does not -- a re-send that
@@ -22261,7 +22336,8 @@ def handle_secondary_change(values, send, state, conn_id, rec):
         # load's library, unchanged" cannot mean. Under --persist
         # learn_character_skill already put them in the store; the union is
         # then a no-op.
-        _known = set(int(s) for s in state.get("skills_known", ()))
+        _known = set(int(s) for s in state.get("skills_known", ())
+                     if int(s) < SKILL_TABLE_ROWS)      # grant_skill refuses past it anyway
         _have = set(ids_from_words(_cw))
         if _known - _have:
             _cw = words_from_ids(sorted(_have | _known))
@@ -22296,10 +22372,10 @@ def handle_secondary_change(values, send, state, conn_id, rec):
                 del SKILLBAR[:]
                 SKILLBAR.extend(after)
                 if store is not None:
-                    store.set_character_skillbar(uuid_hex, after)
+                    store.set_character_skillbar(uuid_hex, bar_to_store(state, after, "player"))
             else:
                 if store is not None:
-                    store.set_hero_skillbar(uuid_hex, hero_index, after)
+                    store.set_hero_skillbar(uuid_hex, hero_index, bar_to_store(state, after, hero_index))
                 state.setdefault("hero_bars", {})[hero_index] = list(after)
                 sync_hero_body_bar(state, agent_id, after, conn_id)
         if unknown:
@@ -24525,6 +24601,14 @@ def grant_skill(send, state, skill_id, conn_id, slot=None, unlocked=False):
     bar learns the skill without equipping it (RECONSTRUCTION: the tape's bar
     had room every time). Returns the slot written, or None."""
     skill_id = int(skill_id)
+    if skill_id >= SKILL_TABLE_ROWS:
+        # The served client has no record for it (serve_client_skill_table).
+        # Nothing is sent and nothing is stored: a learned id past the table
+        # would reach the next load's library as well as this wire.
+        print(f"[c{conn_id}] [skills] grant of skill {skill_id} REFUSED: past "
+              f"build {SKILL_TABLE_BUILD}'s skill table ({SKILL_TABLE_ROWS:,} "
+              f"records) -- not sent, not stored", flush=True)
+        return None
     bar = SKILLBAR
     send(GAME_SMSG_SKILL_SET_COPIES, [skill_id, 1],
          f"SKILL_SET_COPIES(skill {skill_id})")
@@ -24557,7 +24641,10 @@ def grant_skill(send, state, skill_id, conn_id, slot=None, unlocked=False):
     # list without one for exactly that reason.
     store = state.get("charstore_game")
     uuid_hex = state.get("char_uuid", "")
-    seed = None if store is None else ids_from_words(UNLOCKED)
+    # The seed is the flag's bitmap, built against the served bound at startup;
+    # the filter keeps a stale import-time UNLOCKED from seeding past it.
+    seed = (None if store is None
+            else [s for s in ids_from_words(UNLOCKED) if s < SKILL_TABLE_ROWS])
     known = state.setdefault("skills_known", set())
     acct_ids = None if store is None else store.account_unlocked_skills()
     # Read the account BEFORE the mutators below touch it.
@@ -28800,7 +28887,16 @@ def hero_build(state, hero_index):
         return None, None, None, None
     row = store.hero_row(state.get("char_uuid", ""), hero_index) or {}
     ranks = row.get("attributes")
-    return (row.get("skills"), row.get("skillbar"),
+    # The served build's bound (stored_skills_sent): every consumer -- 0x0073's
+    # skill list, the 0x00DA bar, the body's cast bar, the 0x005C/0x005E
+    # referees -- reads the hero's stored build through here.
+    skills, bar = row.get("skills"), row.get("skillbar")
+    if skills is not None:
+        skills = stored_skills_sent(state, skills, f"stored hero {hero_index} skills")
+    if bar is not None:
+        bar = stored_skills_sent(state, bar, f"stored hero {hero_index} bar",
+                                 slots=True, bar_key=hero_index)
+    return (skills, bar,
             ({int(a): int(r) for a, r in ranks} if ranks is not None else None),
             row.get("attribute_points"))
 
@@ -28818,6 +28914,8 @@ def hero_usable_library(state, hero_index, own_skills):
     acct = None if store is None else store.account_unlocked_skills()
     if acct is None:
         acct = ids_from_words(UNLOCKED)
+    else:                                   # the served build's bound, as the load's
+        acct = stored_skills_sent(state, acct, "stored account library")
     return herolib.hero_library(own_skills, acct)
 
 
@@ -36817,7 +36915,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     (_acct_words, _acct_label,
      _char_words, _char_label) = skillunlock.resolve_library(
         state.get("charstore_game"), state.get("char_uuid", ""),
-        UNLOCKED, UNLOCK_LABEL)
+        UNLOCKED, UNLOCK_LABEL, seen=state.setdefault("skills_withheld", set()))
     send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_acct_words],
          f"PVP_UPDATE_UNLOCKED_SKILLS({_acct_label})")
     send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
@@ -36827,15 +36925,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # 0x005C writes it and this reads it back. SKILLBAR is rebound to match so
     # every later reader (grant_skill's empty-slot search, the adrenaline
     # pools) sees the same eight slots.
-    _bar_store = state.get("charstore_game")
-    _stored_bar = (None if _bar_store is None
-                   else _bar_store.character_skillbar(
-                       state.get("char_uuid", "")))
-    if _stored_bar is not None:
-        del SKILLBAR[:]
-        SKILLBAR.extend(int(s) for s in _stored_bar)
-    skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
-    skills += [0] * (SKILLBAR_SLOTS - len(skills))
+    skills = player_bar_at_load(state)
     send(GAME_SMSG_SKILLBAR_UPDATE,
          [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
           SKILLBAR_TRAILER],
@@ -41560,7 +41650,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         (_pv_words, _pv_label,
                          _, _) = skillunlock.resolve_library(
                             state.get("charstore_game"),
-                            state.get("char_uuid", ""), UNLOCKED, UNLOCK_LABEL)
+                            state.get("char_uuid", ""), UNLOCKED, UNLOCK_LABEL,
+                            seen=state.setdefault("skills_withheld", set()))
                         send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_pv_words],
                              f"PVP_UNLOCKED_SKILLS({_pv_label})")
                         # The hero-unlock mask: retail's shape (one dword,
