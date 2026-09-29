@@ -48,10 +48,13 @@ Five questions, each answered per body and never in aggregate:
              swing's WINDUP), launch + flight against the word, the launch closed by
              its 0x00A7, and 0x00A4 field 5 against the held weapon's own 617 word
              (WEAPONS-C3: they are the same number)
-  A WEAPON SHOT is a launch whose shooter's latest event is a swing start, not a
-  skill's (0x00E3 / 0x00E4 / 0x00E5, or the 0x00A0 property 50 / 60 a hostile's skill
-  announces itself by) -- a spell's projectile (field 5 in the hundreds) and a bow
-  attack skill's arrow are different objects and are counted apart.
+  A WEAPON SHOT is a launch whose shooter's latest event AHEAD OF IT IN THE WIRE is
+  a swing start, not a skill's (0x00E4 / 0x00E5, or the 0x00A0 property 50 / 60 a
+  hostile's skill announces itself by) -- a spell's projectile (field 5 in the
+  hundreds) and a bow attack skill's arrow are different objects and are counted
+  apart. `launch_events` is the one rule both censuses read (CASTAI-Z2: a start and
+  an announcement in ONE instant were read by time on one side and by wire order on
+  the other, and a Power Shot was counted twice).
   SKILL SHOTS  the complement (WEAPONS-W2c): a launch whose shooter's latest event is
              a skill's -- a player's 0x00E5 (its launch rides the E5's own batch) or
              a body's announcement -- joined to the skill id, the projectile, the
@@ -253,10 +256,45 @@ def attackers(s2c, min_gaps=3):
     return rows
 
 
+def launch_events(s2c):
+    """Every 0x00A4 in wire order, with the shooter's latest ATTACK EVENT ahead of it:
+    [(t, v, event)], event = (t_event, kind, skill) or None. The event is the latest of
+    a [4] swing start ('start', None), a body's [50 | 60] announcement ('announce50' /
+    'announce60', skill) or the player's 0x00E4 / 0x00E5 ('E4' / 'E5', skill) that
+    sits BEFORE the launch in the wire and inside SHOT_WINDOW; 0x00E3 is the E5's own
+    tail and is never an event. ONE rule for both censuses, so they partition the
+    launches by construction: a weapon shot is a launch whose event is a start
+    (shooters), a skill shot one whose event is a skill's (skill_shots).
+
+    Why WIRE order and not time (CASTAI-Z2, 2026-09-29): the Zaishen Archer's Power
+    Shot on 20260929T100038 :62925 306.840 -- its [4, 8, 4, 0] start and its [50, 8,
+    5, 394] announcement share ONE instant, start first -- was counted by BOTH
+    censuses, because shooters() asked for a skill event strictly LATER than the
+    start (`start < k <= t`) and skill_shots() read the last event in wire order; two
+    more on 20260928T103123 (the Mage's Fireball behind a start at :50295 517.085,
+    the observer's wand shot behind an instant E5 at :58544 621.054). And a launch
+    with an announcement BEHIND it in its own batch (the Mage's wand shot at :62925
+    298.464, the [60, 10, 5, 179] after the 0x00A4) is a weapon shot: a message
+    after the launch is not its cause."""
+    latest = {}
+    out = []
+    for t, op, v in s2c:
+        if op == PINT_T and len(v) > 4 and v[1] == START:
+            latest[v[2]] = (t, "start", None)
+        elif op == PINT_T and len(v) > 4 and v[1] in ANNOUNCED:
+            latest[v[2]] = (t, f"announce{v[1]}", v[4])
+        elif op in (E4, E5) and len(v) > 2:
+            latest[v[1]] = (t, "E4" if op == E4 else "E5", v[2])
+        elif op == LAUNCH and len(v) > 7:
+            e = latest.get(v[1])
+            out.append((t, v, e if e is not None and 0.0 <= t - e[0] < SHOT_WINDOW else None))
+    return out
+
+
 def shooters(s2c):
     """One row per agent with a WEAPON shot (a launch behind a swing start)."""
     items, hands = items_of(s2c), hands_timeline(s2c)
-    starts, skills, launches, arrivals, words = _events(s2c)
+    _starts, _skills, _launches, arrivals, words = _events(s2c)
     table = {}
 
     def row_for(agent, lead):
@@ -273,29 +311,27 @@ def shooters(s2c):
                 "closed": 0, "shots": 0}
         return table[(agent, lead)]
 
-    for agent, shots in launches.items():
-        ts, sk = starts.get(agent, ()), skills.get(agent, ())
-        for t, v in shots:
-            before = [s for s in ts if 0.0 <= t - s < SHOT_WINDOW]
-            if not before or any(before[-1] < k <= t for k in sk):
-                continue                                  # a skill's projectile
-            held = held_at(hands, agent, t)
-            row = row_for(agent, held[0] if held else None)
-            flight = _f32(v[4])
-            row["shots"] += 1
-            row["field5"][v[5]] += 1
-            row["field7"][v[7]] += 1
-            row["start_to_launch"].append(t - before[-1])
-            row["flight"].append(flight)
-            hit = [w for w in words.get(agent, ()) if t <= w < t + flight + 0.25]
-            if hit:
-                row["word_error"].append(min(hit, key=lambda w: abs(w - t - flight))
-                                         - t - flight)
-            closing = [k for a, h, k in arrivals.get(agent, ())
-                       if h == v[6] and t <= a < t + flight + 0.25]
-            if closing:
-                row["closed"] += 1
-                row["arrival_kind"][closing[0]] += 1
+    for t, v, event in launch_events(s2c):
+        if event is None or event[1] != "start":
+            continue                                      # a skill's projectile
+        agent = v[1]
+        held = held_at(hands, agent, t)
+        row = row_for(agent, held[0] if held else None)
+        flight = _f32(v[4])
+        row["shots"] += 1
+        row["field5"][v[5]] += 1
+        row["field7"][v[7]] += 1
+        row["start_to_launch"].append(t - event[0])
+        row["flight"].append(flight)
+        hit = [w for w in words.get(agent, ()) if t <= w < t + flight + 0.25]
+        if hit:
+            row["word_error"].append(min(hit, key=lambda w: abs(w - t - flight))
+                                     - t - flight)
+        closing = [k for a, h, k in arrivals.get(agent, ())
+                   if h == v[6] and t <= a < t + flight + 0.25]
+        if closing:
+            row["closed"] += 1
+            row["arrival_kind"][closing[0]] += 1
     return [r for r in table.values() if r["shots"]]
 
 
@@ -303,36 +339,27 @@ def skill_shots(s2c):
     """One row per SKILL shot (WEAPONS-W2c): a launch whose shooter's latest event
     inside SHOT_WINDOW is a skill's -- a player's 0x00E4 / 0x00E5, or a body's
     [50 | 60, shooter, target, skill] announcement -- rather than a plain [4] start.
-    The complement of shooters(). `event_to_launch` is measured from that event;
-    `close46` says whether a [46, shooter, 0] sits within 50 ms of the launch."""
+    The complement of shooters() -- both read `launch_events`, so every launch is in
+    exactly one of the two. `event_to_launch` is measured from that event; `close46`
+    says whether a [46, shooter, 0] sits within 50 ms of the launch."""
     items, hands = items_of(s2c), hands_timeline(s2c)
     players = {v[1] for _t, op, v in s2c if op == PLAYER_HANDS and len(v) > 3}
-    events = collections.defaultdict(list)       # agent -> [(t, kind, skill)]
     arrivals = collections.defaultdict(list)     # agent -> [(t, handle, kind)]
     words = collections.defaultdict(list)        # source -> [t]
     closes = collections.defaultdict(list)       # agent -> [t] of a 46
     for t, op, v in s2c:
-        if op == PINT_T and len(v) > 4 and v[1] == START:
-            events[v[2]].append((t, "start", None))
-        elif op == PINT_T and len(v) > 4 and v[1] in ANNOUNCED:
-            events[v[2]].append((t, f"announce{v[1]}", v[4]))
-        elif op in (E4, E5) and len(v) > 2:
-            events[v[1]].append((t, "E4" if op == E4 else "E5", v[2]))
-        elif op == ARRIVE and len(v) > 3:
+        if op == ARRIVE and len(v) > 3:
             arrivals[v[1]].append((t, v[2], v[3]))
         elif op == PFLOAT_T and len(v) > 4 and v[1] in WORDS:
             words[v[3]].append(t)
         elif op == PINT and len(v) > 2 and v[1] == 46:
             closes[v[2]].append(t)
     rows = []
-    for t, op, v in s2c:
-        if op != LAUNCH or len(v) < 8:
-            continue
-        agent = v[1]
-        before = [e for e in events.get(agent, ()) if 0.0 <= t - e[0] < SHOT_WINDOW]
-        if not before or before[-1][1] == "start":
+    for t, v, event in launch_events(s2c):
+        if event is None or event[1] == "start":
             continue                                  # a weapon shot: shooters()
-        ev_t, kind, skill = before[-1]
+        agent = v[1]
+        ev_t, kind, skill = event
         held = held_at(hands, agent, t)
         lead = held[0] if held else None
         flight = _f32(v[4])
