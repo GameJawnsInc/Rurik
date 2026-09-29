@@ -3742,7 +3742,46 @@ SCALE_MEANS_DAMAGE = {
     "Cold damage": "standalone",        # Javelin's rows (the wire's own kinds,
     "Earth damage": "standalone",       # section 34); the other two elemental
     "+ Damage": "additive",             # labels join beside them (WIKI, "Damage")
+    # CASTAI-ZF21: Distracting Shot 399's own progression name (GWW rev 2698054).
+    # Not armour-respecting (below); on an ATTACK it replaces the weapon's number
+    # (ATTACK_FIXED_DAMAGE), on anything else it is a skill's own damage as above.
+    "Armor-ignoring damage": "standalone",
 }
+
+# CASTAI-ZF21 (studies/monsterai/FINDINGS.md 18.2, 2026-09-28): THE TWO SHOTS' DAMAGE
+# CLAUSES, read off the Zaishen tape (20260928T103123, the Degeneration Ranger, agent 6).
+# Points are the word's fraction times the victim's maximum: the observer's is on the
+# wire (prop 42), and a body's comes from the integer fit that closes all of its words
+# (agent 8 on :58544: 17 of 17 at 555).
+#
+# ATTACK_FIXED_DAMAGE: an ATTACK skill whose scale is "Armor-ignoring damage" deals
+# EXACTLY that amount, in place of its weapon's roll. There is no armour term, no
+# critical multiplier, no Weakness cut and no several-arrow share. The attack itself
+# stays an attack: it can miss, be blocked or Blinded, it gains adrenaline, it
+# carries its preparation, and a critical still sends property 17. OBSERVED:
+# Distracting Shot 399 dealt 8, 4 of 4 where the maximum is known -- on the observer,
+# a warrior (0.01667 x 480); on agent 8, a monk henchman, twice (x 483, x 555); and on
+# agent 10 as a CRITICAL (prop 17, x 555). Agent 6's plain shots on the same two
+# victims ran 12-18 and 25-42. That is one amount through two armour classes and a
+# critical, where a weapon's number moves with both. WIKI agrees (GWW "Distracting
+# Shot": "deals only 1...16 damage", the variable "Armor-ignoring damage"); the
+# client's own template labels %str1% DAMAGE 1..16. 8 is rank 7 of Expertise, which is
+# RECONSTRUCTION -- no tape states the Ranger's attributes.
+# --no-attack-fixed-damage reverts: the row's amount is dropped on an attack and the
+# weapon's number lands, as for every attack skill before 2026-09-28.
+ATTACK_FIXED_DAMAGE = True
+# BONUS_REQUIRES_SPELL: a row's `bonus_requires = "spell"` lands its "+ Damage" only
+# when the target is ACTIVATING A SPELL as the strike lands -- judged at the hit, an
+# arrow's at its arrival, whether or not the interrupt then succeeds. WIKI (GWW "Savage
+# Shot" rev 2733127: "If that action was a spell, you strike for +13...28 damage";
+# Notes: "Deals additional damage even if spell interruption is prevented"). OBSERVED,
+# the positive: on agent 8, activating a spell, Savage Shot 426 dealt 70 (x 555) and
+# 58 (x 402), while agent 6's non-skill words there were 42 and 30 / 36. The negative
+# is n = 1: on the observer's Healing Signet (a signet) it dealt 36 -- twice the plain
+# 18 through the signet's -40 (skill_effect.1), with no bonus on top.
+# --no-bonus-requires-spell reverts: the bonus lands on every hit, whatever the target
+# is doing.
+BONUS_REQUIRES_SPELL = True
 
 # WHICH OF THOSE LABELS RESPECTS THE TAKER'S ARMOUR. The rule is the DAMAGE
 # TYPE plus its source, never "skill versus swing" (studies/skills 39.2):
@@ -4528,6 +4567,66 @@ def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
     return bonus, inflicted, kd
 
 
+def attack_fixed_damage(state, attacker_id, attacker, skill_id):
+    """CASTAI-ZF21: the amount an ATTACK skill deals IN PLACE OF its weapon's
+    number -- a row whose scale is armour-ignoring ("Armor-ignoring damage",
+    Distracting Shot 399) -- at the attacker's own rank, or None. `attacker`
+    is the body's row (None for the player). ATTACK_FIXED_DAMAGE's banner has
+    the tape; the caller skips the armour, critical, Weakness and share terms."""
+    if not ATTACK_FIXED_DAMAGE or skill_id is None or not _is_attack_skill(skill_id):
+        return None
+    base = (player_rank_for_skill(skill_id) if attacker_id == PLAYER_AGENT_ID
+            else agent_skill_rank(attacker or {}, skill_id))
+    found = skill_damage(skill_id, weakened_rank(state, attacker_id, base))
+    if found is None or found[1] != "standalone":
+        return None
+    return float(found[0])
+
+
+def activating_spell(state, agent_id):
+    """The SPELL `agent_id` is activating right now, or None: the player's open
+    cast (_open_player_cast, not an instant's tick, not an attack skill), a
+    body's `casting` slot while its landing is armed. The same windows the
+    interrupt reads (interrupt_player / interrupt_body), SKILLS-IA's instant
+    excluded as there."""
+    if agent_id == PLAYER_AGENT_ID:
+        cast = _open_player_cast(state)
+        if cast is None or _instant_cast_open(cast) or cast.get("attack"):
+            return None
+        return cast["skill_id"] if _is_spell_skill(cast["skill_id"]) else None
+    row = state.get("agents", {}).get(agent_id)
+    if row is None or row.get("dead"):
+        return None
+    slot, skills = row.get("casting"), row.get("skills") or ()
+    if slot is None or row.get("cast_lands_at") is None or slot >= len(skills):
+        return None
+    sid = skills[slot][0]
+    if not _is_spell_skill(sid) or (INSTANT_ANNOUNCE and _is_instant_skill(sid)):
+        return None
+    return sid
+
+
+def strike_bonus_at_hit(state, skill_id, target_id, bonus, conn_id, who):
+    """CASTAI-ZF21: an attack skill's "+ Damage" as it LANDS -- zero when the
+    row says `bonus_requires = "spell"` (Savage Shot 426) and the target is not
+    activating one at this instant (BONUS_REQUIRES_SPELL's banner). Judged here
+    and not in attack_skill_terms, because an arrow's terms are read at its
+    release and the clause is about the target's action when it is struck."""
+    if not bonus or not BONUS_REQUIRES_SPELL or skill_id is None:
+        return bonus
+    if skill_effect_row(skill_id).get("bonus_requires") != "spell":
+        return bonus
+    spell = activating_spell(state, target_id)
+    if spell is not None:
+        print(f"[c{conn_id}] {who}'s skill {skill_id} at agent {target_id}, "
+              f"activating spell {spell}: its +{bonus:.0f} stands [CASTAI-ZF21]",
+              flush=True)
+        return bonus
+    print(f"[c{conn_id}] {who}'s skill {skill_id} at agent {target_id}, activating "
+          f"no spell: its +{bonus:.0f} is dropped [CASTAI-ZF21]", flush=True)
+    return 0.0
+
+
 def skill_damage(skill_id, rank):
     """(amount, mode) if this skill's scale IS damage, else None.
 
@@ -5245,6 +5344,13 @@ BLIND_MISS_CHANCE = 0.90         # WIKI: "90% chance to miss"
 # "Stance" lists nothing of the kind; the rule is Balanced Stance's).
 KNOCK_DOWN = True             # False (--no-knock-down): prop 63 never goes out, nobody falls.
 KNOCK_DOWN_SECONDS = 2.0      # WIKI, and the corpus's 3 of 3.
+# A BODY KNOCKED DOWN MID-CAST (CASTAI-ZF17, studies/monsterai 18.2; OBSERVED
+# n = 1, 20260928T103123 conn :50061 t=168.977): the Zaishen Healer (agent 8),
+# 0.8 s into skill 288's 2.0 s cast, felled by agent 5's 162 -- retail sent
+# [59, 8, 0] and [63, 8, 2.0] in ONE batch, the stop FIRST, and no [35]: a
+# knock-down is not an interrupt on the wire (interruptjoin's kind
+# 'knockdown'). knock_down sends the cast family's stop ahead of its [63].
+KNOCK_DOWN_STOP = True        # False (--no-knock-down-stop): the cast drops silently, as until 2026-09-28.
 # BLOCK. WIKI (GWW "Block"): a blocked hit deals no damage and yields no
 # adrenaline to either side; the chance comes from skills (a stance, an
 # enchantment), multiplicatively; block chance has no effect on spells. THE
@@ -5556,6 +5662,43 @@ SKILL_DAMAGE_WORD = True
 # attack, not any hit; a spell's damage does not). --no-interrupts reverts to
 # the server that could not interrupt anything.
 INTERRUPTS = True
+
+# CASTAI-ZF17 (studies/monsterai/FINDINGS.md 18.2, 2026-09-28): THE ZAISHEN TAPE'S TWO
+# RUNS AT THE OBSERVER, both by the Degeneration Ranger (agent 6) on 20260928T103123,
+# both with the observer's auto-attack chain LIVE under the cast (its [4] on agent 3 at
+# 195.296 and again at 197.279; on agent 4 at 619.286, stopped by the press's [3]):
+#   * Savage Shot 426 on Healing Signet (1, recharge 4), conn :50061 t=197.153:
+#       [8,0] E5(4) [59] E2 [35] [8,1]
+#     -- no disable E5 (426 carries none) and the chain RE-TAKES THE HOLD; the E6 lands
+#     at +3.995 s, so the E5(4) owns the clock.
+#   * Distracting Shot 399 on skill 2 (table recharge 0), conn :58544 t=621.054:
+#       [8,0] [59] E2 [35] [4,7,4,0] [8,1] E5(20)
+#     -- NO first E5, and the +20 disable E5 AFTER the chain's [4] and [8,1]. (Its E6 is
+#     not on tape: the connection ends at 636.163, before +20.)
+# The pinned 340 witness is the negative control for the hold: its observer had no chain
+# (last swing 180 s before, none after) and its batch ends at the disable E5.
+#
+# INTERRUPT_SKIPS_ZERO_E5: the full-recharge E5 is not sent when the interrupted skill's
+# recharge is 0 (OBSERVED n=1). With nothing recharging at all -- 0 and no disable --
+# no E6 is owed either, since no E5 opened one: RECONSTRUCTION, DAGGERS-B5's `no_e6`
+# ("a failed chain step never began a recharge"); no tape shows that case.
+# --interrupt-zero-e5 reverts: E5(0) first, as every interrupt before 2026-09-28.
+INTERRUPT_SKIPS_ZERO_E5 = True
+# INTERRUPT_CHAIN_RETAKES_HOLD: a cast interrupted under a chain that RESUMES -- a live
+# target in reach, no follow leg, nothing else short of its E3 (_player_chain_running
+# with the released entry set aside) -- sends [8, player, 1] after the [35], and the
+# disable E5 after that (OBSERVED n=2, the order n=1: 426 has no disable). A chain that
+# would NOT resume (walking in, out of reach) is unwitnessed and gets no [8,1], because a
+# hold nothing releases is the walk-gate trap ANIMREF-RE 35 took out of the swing.
+# THE WALK GATE, said out loud: our auto swing holds none (SWING_HOLDS_WALK_GATE), but a
+# COMPLETED cast already leaves the gate SET into the resumed chain until its first
+# landing (ANIMREF_E3_RELEASE off, LANDING_HOLD_RELEASE on), so this puts an interrupted
+# cast in the regime a completed one already runs -- it adds no new one. The chain's own
+# [4] is NOT sent here: attack_tick owns the swing and opens it on its clock, the next
+# tick at the earliest; retail's [4] rode the batch at 621.054 and came 126 ms later at
+# 197.153. --no-interrupt-chain-hold reverts: no re-take, the disable E5 right behind
+# the [35] whatever the chain does, as every interrupt before 2026-09-28.
+INTERRUPT_CHAIN_RETAKES_HOLD = True
 
 # NPC RECHARGE FROM COMPLETION (DESKWORK-D5 step 4, 2026-09-23; `rechargeprobe.py`).
 # Both NPC cast sites armed `skill_ready[slot] = now + recharge` at the cast's START
@@ -13216,10 +13359,15 @@ def casting_armour_penalty(state, now=None):
     penalty "is applied after the armor cap and the effects of Cracked Armor
     and armor penetration". So it is ADDED to the location's capped rating at
     the two sites that read one (land_swing, the NPC cast's spell armour),
-    never folded into the bonus that combatmath caps. The live corpus holds
-    NO Healing Signet cast at all (0 of 19 prop-60 announces name skill 1;
-    heroes retreat to use it), so there is no retail hit to measure the
-    doubling on; 2 ** (40 / 40) = 2 is the wiki's own "double damage" note.
+    never folded into the bonus that combatmath caps. The live corpus held
+    NO Healing Signet cast at all when this was written (0 of 19 prop-60
+    announces named skill 1; heroes retreat to use it); 2 ** (40 / 40) = 2 is
+    the wiki's own "double damage" note. 20260928T103123 has the observer's
+    own, and ONE hit landing inside one: Savage Shot's 36 at 197.153, twice
+    agent 6's largest plain word on the observer (18). That is CONSISTENT with
+    the doubling, but it is not an independent witness, because the same 36
+    is what CASTAI-ZF21 reads as "no bonus on a signet" -- the two readings
+    lean on each other (n = 1).
     Zero with no cast in flight, and for a row that carries no such key.
     `--no-casting-armour` reverts."""
     if not CASTING_ARMOUR:
@@ -17404,6 +17552,17 @@ CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 #     satisfies. --legacy-swing-restart-windup is the control.
 ATTACK_ACTIVATION_WINDUP = True
 SWING_RESTART_RECOVERY = True
+# CASTAI-ZF16 (2026-09-28): law (1) holds for a BODY's attack skill too.
+# OBSERVED 18 of 18, bows, [50] announcement -> projectile launch: the
+# Degeneration Ranger (agent 6, live 20260928T103123) fires Distracting Shot
+# 399 x5 and Savage Shot 426 x6, activation 0.5, at 0.1377-0.1674 s --
+# swing_windup(0.5) = 0.15; agent 28 on 20260819T132414 fires 1197 x7,
+# activation 0.75, at 0.2681-0.2865 s -- swing_windup(0.75) = 0.275
+# (test_weaponcensus's per-tape witness; studies/monsterai 18.2). Both body
+# loops used the raw activation, 0.5 / 0.75 s. The modifier term is the
+# player's law carried over: every activated row so far is at 1.0.
+# --no-body-attack-activation-windup is the control.
+BODY_ATTACK_ACTIVATION_WINDUP = True
 
 
 def attack_skill_clock(state, activation):
@@ -17417,6 +17576,19 @@ def attack_skill_clock(state, activation):
     if activation > 0.0 and ATTACK_ACTIVATION_WINDUP:
         return swing_windup(activation * factor), activation * factor
     return activation, None
+
+
+def body_attack_skill_clock(state, agent_id, activation, interval):
+    """[50] -> landing seconds for a BODY's attack skill: attack_skill_clock's
+    law on the body's own clock. `interval` is the body's current swing
+    (base x attack_interval_factor), the windup of a table-0.0 skill (F24);
+    a listed activation is scaled by the same factor and wound up
+    (CASTAI-ZF16). A ranged body launches its shot at this instant."""
+    if activation == 0.0:
+        return swing_windup(interval)
+    if BODY_ATTACK_ACTIVATION_WINDUP:
+        return swing_windup(activation * attack_interval_factor(state, agent_id))
+    return activation
 
 # ANIMREF-RE §31, LAW A's decoded complement: freeze the swing clock while
 # the player's body is moving, so the next attack-started fires one interval
@@ -20014,6 +20186,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     critical = False
     rank = (weakened_rank(state, PLAYER_AGENT_ID, player_weapon_rank(state))
             if ARMOUR_TERM else None)                      # SKILLS-WK
+    # CASTAI-ZF21: a spell-gated "+ Damage" judged at THIS hit (an arrow's at its
+    # arrival), and an armour-ignoring attack skill's amount in place of the roll.
+    bonus_damage = strike_bonus_at_hit(state, skill_id, target_id, bonus_damage,
+                                       conn_id, "the player")
+    fixed = (attack_fixed_damage(state, PLAYER_AGENT_ID, None, skill_id)
+             if exact is None else None)
     # WEAPONS-Q2: the hornbow's 10 % comes off the rating first (wiki step 3)
     # -- on top of the hit's BASE penetration (studies/weapons 35): an attack
     # skill's own or Strength's 1 % a rank, the larger; a plain swing's is 0.
@@ -20032,6 +20210,19 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     _prep_sl = None                     # ...and its strike level (2026-09-27)
     if exact is not None:
         dealt = float(exact) + bonus_damage
+    elif fixed is not None:
+        # CASTAI-ZF21: Distracting Shot's "deals only" -- the row's amount in
+        # place of the weapon's, no armour exponent, no critical multiplier.
+        # The critical is still ROLLED, because it decides the word's property:
+        # retail's 399 on agent 10 was prop 17 carrying the same 8. A
+        # preparation keeps the weapon's armour term (its own word, below).
+        if rank is not None:
+            critical = random.random() < critical_rate(rank) + (
+                0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
+            if armour is not None:
+                _prep_scale = strike_multiplier(attack_strength(rank), float(armour))
+                _prep_sl = attack_strength(rank)
+        dealt = fixed + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and armour is not None \
             and ARMOUR_TERM and CASTER_LEVEL and caster_weapon(agents.PLAYER_WEAPON):
         # WEAPONS-W4c: a wand or staff scales on the character's LEVEL --
@@ -20068,14 +20259,15 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
     # SLICE-H12: WEAKNESS on the swinger cuts the WEAPON's damage, not the
     # skill's bonus (WIKI) -- the base is everything above but the bonus.
-    if exact is None and swing:
+    # A fixed amount has no weapon number to cut (CASTAI-ZF21, RECONSTRUCTION).
+    if exact is None and fixed is None and swing:
         _wk = weakness_multiplier(state, PLAYER_AGENT_ID)
         if _wk != 1.0:
             dealt = (dealt - bonus_damage) * _wk + bonus_damage
     # WEAPONS-W2d: an arrow of a several-arrow skill deals its share of the
     # WEAPON's number (Dual Shot's 75 %); the skill's bonus, like a
     # preparation's, is not reduced (WIKI "Dual Shot" Notes).
-    if exact is None and swing and damage_mult != 1.0:
+    if exact is None and fixed is None and swing and damage_mult != 1.0:
         dealt = (dealt - bonus_damage) * float(damage_mult) + bonus_damage
     # A PREPARATION RIDES THE SWING, if the weapon fires arrows -- see
     # swing_preparation_bonus for the gate and the named AoE gap. Folded into
@@ -20608,7 +20800,7 @@ def _open_player_cast(state):
     return None
 
 
-def _player_chain_running(state):
+def _player_chain_running(state, released=None):
     """Is the player's auto-attack chain actually SWINGING -- the state the
     swing witness was in (in reach, in its backswing)? False while the chain
     is PAUSED for a cast (any pending entry short of its E3: the pause the
@@ -20622,12 +20814,21 @@ def _player_chain_running(state):
     t=459.419; 230 at 20260917T090355 t=378.100 and 384.106) and none carries
     a [35], 3 of 3; the two that do interrupt hit a cast in activation and a
     chain in its backswing. What a hit on a chain WALKING IN or out of reach
-    does is UNOBSERVED (no such hit is on tape); it is left alone here."""
+    does is UNOBSERVED (no such hit is on tape); it is left alone here.
+
+    `released` (CASTAI-ZF17): the cast an interrupt is releasing, asked "will the
+    chain RESUME once it goes?" -- that entry, and anything still queued behind it
+    (the interrupt un-queues those), are set aside; every other clause stands, so the
+    answer is attack_tick's own gate on the next tick."""
     tid = state.get("attacking")
     if not tid:
         return False
-    if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
-        return False
+    for c in state.get("pending_casts") or ():
+        if released is not None and (c is released or not c.get("begun", True)
+                                     or c.get("cancelled")):
+            continue
+        if not c["e3_sent"]:
+            return False
     if state.get("approach") is not None:
         return False
     agent = state.get("agents", {}).get(tid)
@@ -20667,6 +20868,14 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
     "Any skills waiting to be activated will be un-queued") rides the
     measured pre-begin release ([45] + E2) -- no tape has a queue behind an
     interrupted cast.
+
+    TWO VARIANTS of the cast shape since CASTAI-ZF17 (OBSERVED, 20260928T103123;
+    the flags' banner has the batches): a skill whose recharge R is 0 gets NO
+    first E5 (INTERRUPT_SKIPS_ZERO_E5, Distracting Shot 399 on skill 2); and a
+    cast interrupted under an auto-attack chain that resumes gets [8, player, 1]
+    after the [35], the disable E5 after that (INTERRUPT_CHAIN_RETAKES_HOLD;
+    Savage Shot 426 and 399, both with the observer's chain live). The 340
+    witness above had no chain, and that is why its batch ends at the E5.
 
     An AUTO-ATTACK -- OBSERVED 1 of 1 (Lightning Javelin 230 on the chain in
     its backswing; 20260917T224104 conn 62557 t=434.658), sent BEFORE the
@@ -20712,11 +20921,18 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         extra = skill_interrupt_disable(by_skill)
         stop = (agents.GV_ATTACK_SKILL_STOPPED if cast.get("attack")
                 else agents.GV_SKILL_STOPPED)
+        # CASTAI-ZF17 (the two flags' banner): no E5(0) for a 0-recharge skill, and
+        # the chain's hold re-taken when the chain resumes -- read BEFORE the books
+        # below mark anything, off the state the interrupt found.
+        first_e5 = recharge > 0 or not INTERRUPT_SKIPS_ZERO_E5
+        chain = (INTERRUPT_CHAIN_RETAKES_HOLD
+                 and _player_chain_running(state, released=cast))
         action_hold(send, state, 0, f"skill {by_skill} interrupts the cast")
-        send(GAME_SMSG_SKILL_RECHARGE,
-             [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge],
-             f"SKILL_RECHARGE(skill {cast['skill_id']}, {recharge}s): the "
-             f"interrupted skill's FULL recharge starts")
+        if first_e5:
+            send(GAME_SMSG_SKILL_RECHARGE,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge],
+                 f"SKILL_RECHARGE(skill {cast['skill_id']}, {recharge}s): the "
+                 f"interrupted skill's FULL recharge starts")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [stop, PLAYER_AGENT_ID, 0],
              f"{'attack_skill' if cast.get('attack') else 'skill'}_stopped: "
              f"agent {by_agent}'s skill {by_skill} interrupts skill {cast['skill_id']}")
@@ -20726,6 +20942,9 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_INTERRUPTED, PLAYER_AGENT_ID, 0],
              f"interrupted: the stagger (skill {by_skill})")
+        if chain:
+            action_hold(send, state, 1, "the chain re-takes the hold after the "
+                                        "interrupted cast [CASTAI-ZF17]")
         if extra > 0:
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge + extra],
@@ -20744,6 +20963,10 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         cast["recharge"] = recharge + extra
         cast["recharge_s"] = float(recharge + extra)
         cast["e6_at"] = now + recharge + extra
+        if not first_e5 and extra <= 0:
+            # nothing recharges and no E5 went out: no E6 closes one
+            # (INTERRUPT_SKIPS_ZERO_E5's banner; RECONSTRUCTION)
+            cast["no_e6"] = True
         state["cast_busy_until"] = now
         unqueued = 0
         for other in state.get("pending_casts") or ():
@@ -20756,6 +20979,8 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
               f"stops the player's skill {cast['skill_id']} -- full recharge "
               f"{recharge}s" + (f" + {extra}s disable" if extra else "")
               + (f", {unqueued} queued cast(s) un-queued" if unqueued else "")
+              + ("" if first_e5 else ", no E5(0) [CASTAI-ZF17]")
+              + (", the chain re-takes the hold [CASTAI-ZF17]" if chain else "")
               + " [DESKWORK-D5]", flush=True)
         return "cast"
     if _player_chain_running(state) and mode in ("action", "attacking"):
@@ -22797,9 +23022,16 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # 1.1387 s -- and the windup law derived at ANIMREF-R1 (sec.1) lands on
     # 1.1375 for the ranger's 2.475 s bow: the attack skill's E5 IS the
     # skill-swing's hit instant, begin + swing_windup(current interval).
-    # Wired for the measured case only (table activation 0.0); a LISTED
-    # activation still wins, per the wiki's "activation replaces the weapon
-    # time" reading -- UPSTREAM, no corpus cycle exercises it yet.
+    # A LISTED activation is wound up the same way: E5 at
+    # swing_windup(activation x factor), the caster occupied for the
+    # activation (attack_skill_clock). OBSERVED twice over, no free
+    # parameter: the player's Jagged Strike / Fox Fangs (0.5) land 0.147-
+    # 0.151 s after the debit, n = 33 (SLICE-F51); and bodies' bow shots
+    # launch 0.1377-0.1674 s after [50] for 399 / 426 (0.5, n = 11, live
+    # 20260928T103123 agent 6) and 0.2681-0.2865 s for 1197 (0.75, n = 7,
+    # 20260819T132414 agent 28) -- CASTAI-ZF16, body_attack_skill_clock.
+    # This line read "a LISTED activation still wins ... UPSTREAM, no corpus
+    # cycle exercises it yet" until F51 and ZF16 each exercised it.
     _free = None
     if is_attack:
         _to_e5, _free = attack_skill_clock(state, activation)   # SLICE-F51
@@ -26055,7 +26287,16 @@ def knock_down(send, state, agent_id, conn_id, why, seconds=None):
     halt's own shape); the down player's pending casts are released with the
     measured cancel burst, an armed swing is dropped, and every tick and the
     movement arms refuse until the clock runs out. Already down: nothing
-    (WIKI: cannot be knocked down again until up). Returns True when it fell."""
+    (WIKI: cannot be knocked down again until up). Returns True when it fell.
+
+    A BODY'S CAST IN FLIGHT is stopped on the wire before the [63]
+    (KNOCK_DOWN_STOP, CASTAI-ZF17): [59, body, 0], [63, body, 2.0], no [35]
+    -- OBSERVED n = 1 (20260928T103123 :50061 t=168.977). The stop reads the
+    cast site's own form (_scatter_cancel's rule, R3-F5): [49] for an attack
+    skill announced as one, RECONSTRUCTION -- no attack skill is knocked down
+    on tape. An instant skill opened with no start (SKILLS-IA) drops with no
+    stop. A swing in flight gets no [3]: no stop rides any [63] but the one
+    [59]. A hero's bar gets nothing (no E2 / E5 mirror; unwitnessed)."""
     if not KNOCK_DOWN:
         return False
     now = time.time()
@@ -26078,6 +26319,18 @@ def knock_down(send, state, agent_id, conn_id, why, seconds=None):
         row["knocked_until"] = now + seconds
         row["swing_lands_at"] = None
         row["swinging"] = False
+        slot = row.get("casting")
+        skills = row.get("skills") or ()
+        if (KNOCK_DOWN_STOP and slot is not None and row.get("cast_lands_at") is not None
+                and slot < len(skills)):
+            sid = skills[slot][0]
+            _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(sid)   # the cast site's own form
+            if not (INSTANT_ANNOUNCE and not _atk and _is_instant_skill(sid)):
+                send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                     [agents.GV_ATTACK_SKILL_STOPPED if _atk else agents.GV_SKILL_STOPPED,
+                      agent_id, 0],
+                     f"{'attack_skill' if _atk else 'skill'}_stopped: agent {agent_id} is "
+                     f"knocked down mid-cast of skill {sid} -- no [35] [CASTAI-ZF17]")
         row["cast_lands_at"] = None
         row["casting"] = None
         if row.get("follow") or row.get("moving"):
@@ -27563,9 +27816,11 @@ def enemy_attack_tick(send, state, conn_id):
                      f"skill {skill_id}")
             # SLICE-F24: an attack skill's strike is a windup away (retail
             # [50] -> [46] p50 0.564 s), the table activation for a spell.
-            # A LISTED activation on an attack skill wins, the player's rule.
-            if _atk and activation == 0.0:
-                agent["cast_lands_at"] = now + swing_windup(interval)
+            # A LISTED activation on an attack skill is wound up too, the
+            # player's rule (CASTAI-ZF16, body_attack_skill_clock).
+            if _atk:
+                agent["cast_lands_at"] = now + body_attack_skill_clock(
+                    state, agent_id, activation, interval)
             else:
                 agent["cast_lands_at"] = now + activation
             # THIS LINE'S SHAPE IS abrun.py's `agent_casts` counter (anchored
@@ -27867,8 +28122,8 @@ def ally_cast_tick(send, state, conn_id):
         agent["casting"] = slot
         if _atk:
             agent["last_swing"] = now
-            agent["cast_lands_at"] = (now + swing_windup(_interval)
-                                      if activation == 0.0 else now + activation)
+            agent["cast_lands_at"] = now + body_attack_skill_clock(
+                state, agent_id, activation, _interval)             # CASTAI-ZF16
         else:
             agent["cast_lands_at"] = now + activation
         face_player(send, state, agent_id, agent, conn_id,
@@ -28355,6 +28610,10 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
                  f"agent {agent_id}'s "
                  + ("swing" if skill_id is None else f"skill {skill_id}"))
         return "blocked"
+    # CASTAI-ZF21: the spell-gated bonus at THIS hit; an armour-ignoring skill's
+    # amount replaces the weapon's number below (land_swing's rule).
+    bonus = strike_bonus_at_hit(state, skill_id, tid, bonus, conn_id, f"agent {agent_id}")
+    _fixed = attack_fixed_damage(state, agent_id, agent, skill_id)
     dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
                                         else ENEMY_HIT_FRACTION)
     armour = creature_typed_rating(body_armour_rating(row), row,    # its rating, else
@@ -28372,6 +28631,8 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
         dealt = _ws
     dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
     dealt *= float(mult)                 # WEAPONS-W2f
+    if _fixed is not None:
+        dealt = _fixed                   # CASTAI-ZF21: the row's amount IS the strike
     dealt += float(bonus)
     def _prep_mult(prep_type):
         """The preparation's own term: the arrow's penetration, the rating typed
@@ -33709,6 +33970,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # PHYSICAL, so the pieces' `+20 vs. physical damage` counts; that is a
     # reading, not a measurement, and it is the cheapest thing here for a
     # capture to overturn.
+    # CASTAI-ZF21: the spell-gated bonus at THIS hit, and an armour-ignoring
+    # skill's amount (it replaces the weapon's number below).
+    bonus = strike_bonus_at_hit(state, skill_id, PLAYER_AGENT_ID, bonus, conn_id,
+                                f"agent {agent_id}")
+    _fixed = attack_fixed_damage(state, agent_id, agent, skill_id)
     dealt = player_full_max_health(state) * ENEMY_HIT_FRACTION
     location = None
     armour = None
@@ -33762,6 +34028,12 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # [finished, gain, damage] batch keeps its shape when nothing is open.
     # SLICE-F24: an attack skill's "+ damage", after armour (hit_enemy's
     # order for the player), and its close is the attack trio's 46.
+    if _fixed is not None:
+        # CASTAI-ZF21: the row's amount IS the strike -- the location, armour,
+        # Healing Signet's -40, the weapon, Weakness and the share above all
+        # fed a number this replaces. The taker's own episodes still speak
+        # (taker_damage, below: RECONSTRUCTION, no tape shows one on a 399).
+        dealt = _fixed
     dealt += float(bonus)
     # MANTID: a hex on the swinger punishes the swing ahead of its hit
     # (Empathy on the tape: [42, foe, 25] + [55, foe, hexer, -0.4], then the
@@ -43066,6 +43338,12 @@ def main():
         KNOCK_DOWN = False
         print("[map] --no-knock-down: nobody falls -- no prop 63, no down "
               "state, the pre-H12 arm.", flush=True)
+    if a.no_knock_down_stop:
+        global KNOCK_DOWN_STOP
+        KNOCK_DOWN_STOP = False
+        print("[map] --no-knock-down-stop: a body knocked down mid-cast gets "
+              "the [63] alone, no [59] / [49] ahead of it -- the pre-ZF17 "
+              "arm (retail: [59] then [63], n = 1).", flush=True)
     if a.no_block:
         global BLOCK
         BLOCK = False
@@ -44671,6 +44949,13 @@ def main():
         ATTACK_ACTIVATION_WINDUP = False
         print("NO ATTACK ACTIVATION WINDUP: an attack skill with a listed "
               "activation lands AT that activation (the pre-SLICE-F51 arm).")
+    if a.no_body_attack_activation_windup:
+        global BODY_ATTACK_ACTIVATION_WINDUP
+        BODY_ATTACK_ACTIVATION_WINDUP = False
+        print("NO BODY ATTACK ACTIVATION WINDUP: a hostile's or a party "
+              "body's attack skill with a listed activation lands (a bow: "
+              "launches) AT that activation, 0.5 s for Distracting Shot "
+              "(the pre-CASTAI-ZF16 arm).")
     if a.legacy_swing_restart_windup:
         global SWING_RESTART_RECOVERY
         SWING_RESTART_RECOVERY = False
@@ -44805,6 +45090,36 @@ def main():
         print("NO INTERRUPTS: Disrupting Chop and Lightning Javelin land their "
               "damage and interrupt nothing, as this server did until 2026-09-23 "
               "(retail: interruptjoin.py's two witnesses).", flush=True)
+
+    if a.interrupt_zero_e5:
+        global INTERRUPT_SKIPS_ZERO_E5
+        INTERRUPT_SKIPS_ZERO_E5 = False
+        print("INTERRUPT ZERO E5: an interrupted skill with recharge 0 still gets "
+              "0x00E5 [player, skill, copy, 0] and its 0x00E6, as every interrupt before "
+              "2026-09-28 (retail: none, Distracting Shot 399 on skill 2, CASTAI-ZF17).",
+              flush=True)
+
+    if a.no_attack_fixed_damage:
+        global ATTACK_FIXED_DAMAGE
+        ATTACK_FIXED_DAMAGE = False
+        print("NO ATTACK FIXED DAMAGE: an armour-ignoring attack skill (Distracting Shot "
+              "399) lands its weapon's number, as every attack skill before 2026-09-28 "
+              "(retail: exactly the row's amount, 4 of 4, CASTAI-ZF21).", flush=True)
+
+    if a.no_bonus_requires_spell:
+        global BONUS_REQUIRES_SPELL
+        BONUS_REQUIRES_SPELL = False
+        print("NO BONUS REQUIRES SPELL: Savage Shot 426's +13..28 lands on every hit, "
+              "whatever the target is doing (WIKI and retail: only on a spell, "
+              "CASTAI-ZF21).", flush=True)
+
+    if a.no_interrupt_chain_hold:
+        global INTERRUPT_CHAIN_RETAKES_HOLD
+        INTERRUPT_CHAIN_RETAKES_HOLD = False
+        print("NO INTERRUPT CHAIN HOLD: a cast interrupted under a resuming auto-attack "
+              "chain sends no [8, player, 1] and its disable E5 rides behind the [35], "
+              "as every interrupt before 2026-09-28 (retail re-takes the hold, 2 of 2, "
+              "CASTAI-ZF17).", flush=True)
 
     if a.no_party_wide_shouts:
         global PARTY_WIDE_SHOUTS

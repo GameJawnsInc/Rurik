@@ -4409,6 +4409,48 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the corpus is exactly `capgaps.KNOWN_GAPPED`, still refused; KNOWN-BAD: with the
   declaration withheld the walks raise on :65009 rather than skipping it. `cmsgstream`
   itself is covered by `test_cmsgnames` §0 / §0b. Floor 4 from the green run; bare 2),
+  `toolkit/authsrv/test_bodywindup.py` (**2026-09-28, CASTAI-ZF16: a BODY's attack skill
+  with a LISTED activation lands -- a bow: launches -- at swing_windup(activation x its
+  duration factor), not at the raw activation.** OBSERVED 18 of 18 on the live corpus:
+  399 / 426 (0.5) at 0.1377-0.1674 s after the [50] (20260928T103123 agent 6), 1197
+  (0.75) at 0.2681-0.2865 s (20260819T132414 agent 28) -- the player's SLICE-F51 law.
+  Both body loops now arm the landing through `authsrv.body_attack_skill_clock`, behind
+  `BODY_ATTACK_ACTIVATION_WINDUP` (`--no-body-attack-activation-windup`). §1 the clock on
+  literals, the revert, activation 0 untouched, the body's own factor. §2 the SENDER: a
+  hostile archer through the real `enemy_attack_tick` on a fake clock stepped 1 ms --
+  [50] then one 0x00A4, the gap inside the span of that skill's retail witnesses for
+  399, 426 and 1197; the KNOWN-BAD arm launches at 0.5 / 0.75 s, outside every one. §3
+  the same through `ally_cast_tick` (a party archer at the leader's target). §4 CONTROL:
+  Power Shot 394 (activation 0) launches at swing_windup(2.475) under both arms. §5
+  source: the flag, main()'s flip, both loops calling the clock, the press handler no
+  longer calling the law UPSTREAM. §6 (vault) the carried WITNESS re-derived from the two
+  captures via `weaponcensus.skill_shots`, and the carried skill rows against the
+  vault's; skips only on an absent capture directory / skills table. Floor 21 from the
+  bare green run; 23 with the vault. ~3 s),
+  `toolkit/authsrv/test_interruptshots.py` (**2026-09-28, CASTAI-ZF21: the damage clauses
+  of the Zaishen tape's two interrupters.** Distracting Shot 399's "Armor-ignoring damage"
+  replaces the weapon's number on an attack (`ATTACK_FIXED_DAMAGE`,
+  `--no-attack-fixed-damage`). Savage Shot 426's "+ Damage" lands only on a target
+  activating a spell, judged at the hit (`bonus_requires = "spell"`,
+  `BONUS_REQUIRES_SPELL`, `--no-bonus-requires-spell`). §1 the rules on the carried rows:
+  the scales at ranks 0 / 7 / 15, `attack_fixed_damage` for a body and the player,
+  `activating_spell` (a spell yes; a signet, an attack skill, idle no),
+  `strike_bonus_at_hit`, and each revert. §2 body -> player (`land_swing`): 399 is 8 then
+  the interrupt's [35]; it is 8 on all 20 seeds through Healing Signet's -40, where the
+  plain shot's total doubles (59 -> 113). 426 is +20 on a spell and nothing on skill 2 or
+  on Healing Signet. Both KNOWN-BAD arms. §3 body -> body: 399 is 8 at armour 60 and 100;
+  426 +20 on a henchman casting 288. §4 player -> hostile (`hit_enemy`): 399 is 8 at
+  armour 60 and 120, and a forced critical sends prop 17 carrying 8. §5 one released
+  strike, judged at the ARRIVAL (`land_body_skill_shot`). §6 end to end: a hostile
+  archer's 399 through `enemy_attack_tick` and `body_projectile_tick` lands 8 on the
+  player mid-cast. §7 source and the two rows. §8 (vault):
+  - the carried rows equal the table;
+  - 399 on the observer is 8.000 at its declared 480;
+  - agent 8 on :58544 has ONE maximum (555) closing all 17 of its words, and there 399
+    is 8, 426 on a spell 70, and 393 is 42;
+  - agent 10's 399 crit is bit-identical to agent 8's;
+  - the observer's Healing Signet took 36 = 2 x 18 with no bonus room.
+  Ten plants, each red. Floor 19 from the bare green run; 24 with the vault. ~5 s),
   `toolkit/authsrv/test_livewire.py` (**2026-09-28, CASTAI-Z1: the first GAPPED live
   connection (20260928T103123 :65009, 38 + 20 s2c bytes at offsets 38045 / 38548), which
   `decode_conn` refuses by design, is NAMED, not absorbed. `declared_gaps` reads it from
@@ -7875,7 +7917,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Reversal-of-Fortune heals as damage-word declarations); and ≥ 13 of ≥ 47 positive-55 heal
   words at the observer carry it — some, not all, which is open. 16 checks (was 13), floor 10
   (the sender: §1's 10 fixture-less checks). Read-only on the vault),
-  `toolkit/authsrv/test_interrupt.py` (**2026-09-28, CASTAI-Z1: the Zaishen tape turned
+  `toolkit/authsrv/test_interrupt.py` (**2026-09-28, CASTAI-ZF17, the interrupters: the
+  observer's two Zaishen runs on our sender** (`section_zf17`). 426 on Healing Signet under
+  a live chain: `[8,0] E5(4) [59] E2 [35] [8,1]`, and `--no-interrupt-chain-hold` drops the
+  `[8,1]`. 399 on skill 2 (recharge 0) under a live chain: `[8,0] [59] E2 [35] [8,1] E5(20)`.
+  `--interrupt-zero-e5` puts E5(0) back, and with both arms off the server sends what it
+  sent before 2026-09-28, `[8,0] E5(0) [59] E2 [35] E5(20)`. After it, `attack_tick` opens
+  the chain's `[4]` with no second `[8,1]`. RECONSTRUCTION: 0 recharge with no disable sends
+  no E5 and owes no E6, and the tick drops the entry silently. A chain out of reach or
+  walking in gets no `[8,1]`. Also checked: the 399 / 426 rows, and a source check that
+  both arms default on with their own reverts. §2 compares both runs byte for byte with the
+  tape's. The one message set aside is 621.054's `[4, 7, 4, 0]`, and it is named and
+  counted. Six plants, each red. 68 checks with the knock-down's below; floor 34 → 45 (an
+  empty-vault run: 45, 1 declared skip).
+  **2026-09-28, CASTAI-ZF17: the knock-down's stop landed. §1v drives a real `knock_down` on a body mid-cast: `[59, body, 0]` then `[63, body, 2.0]`, nothing else, no `[35]`; `[49]` for an attack skill announced as one and `[59]` under `--npc-skill-instant` (the cast site's form); the `[63]` alone for an instant skill, for a swing in flight (no `[3]`) and under `--no-knock-down-stop` (the known-bad arm); end to end through `land_skill` (a hostile's Hammer Bash on a party body mid-cast: the word, then `[59]` `[63]` back to back). §2 holds §1v's output against the tape's batch at 20260928T103123 :50061 t=168.977, byte for byte. The type predicates are rebound, so §1v needs no vault. 55 checks; floor 28 -> 34 (34 + 1 skip on an empty vault).**
+  **2026-09-28, CASTAI-Z1: the Zaishen tape turned
   2 of 39 red: 12 [35], 8 of them on bodies (399 / 426 interrupting henchmen), and one
   knock-down stop. Both literals are kept as of the pin (stamps before 20260928T103123);
   P2 AS WRITTEN is recorded FAILED and re-stated for the observer's [35]; a whole-corpus
@@ -11694,7 +11750,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   briefly 90 earlier that day and moved because 90 left 2, and the rationale beside the
   constant already records re-arming *three* short as a mistake that "fires on the next
   session's ordinary work": a tripwire re-armed inside its own noise is a false alarm
-  with a delay, not an early warning. A "defining site" is only a table row or a heading
+  with a delay, not an early warning. **It fired again on 2026-09-28 (133, at `main`
+  2e15a970) and was raised 132 → 200, the same rule applied.** All 133 were read. 109 are
+  bare letter-series. 22 are prefixed tokens that collide only because a log entry, a RUN
+  file or a PLAN cites their defining row; the 133rd is `CASTAI-ZF17`'s PLAN-LOG heading.
+  2 are rung citations. None is the 2.2(a) defect. A "defining site" is only a table row or a heading
   that OPENS with the token, because §2's census pattern was table-rows-only and this
   one is still a FLOOR: prose definitions, bold list-leads (`- **C6** — …`), mid-heading
   references, `RUNBOOK.md`'s F-namespace and §2.4's bare-integer commit prefixes are all

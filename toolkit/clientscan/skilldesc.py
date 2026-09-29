@@ -909,6 +909,9 @@ HAND_FAMILY = {
     "+ Damage": {Label.PLUS_DAMAGE, Label.DAMAGE}
                 | {(lbl, "plus") for lbl in ELEMENT_WORDS.values()},
     "Damage on attack": {Label.DAMAGE, Label.PLUS_DAMAGE},
+    # CASTAI-ZF21: Distracting Shot 399's own progression name (GWW); the client's
+    # template reads "deals only %str1% damage", which the parser labels DAMAGE.
+    "Armor-ignoring damage": {Label.DAMAGE},
     "Damage reduction": {Label.DAMAGE_REDUCTION},
     "Heal": {Label.HEAL}, "Healing": {Label.HEAL}, "Maximum heal": {Label.HEAL},
     "Heal per energy lost": {Label.HEAL},

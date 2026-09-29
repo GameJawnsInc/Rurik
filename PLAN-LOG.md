@@ -28,6 +28,215 @@ move back.
 
 ---
 
+### CASTAI-ZF21: the two interrupters' damage clauses -- 2026-09-28 -- **Distracting Shot 399 deals its row's armour-ignoring amount in place of the weapon's; Savage Shot 426's +13...28 lands only on a target activating a spell; both OBSERVED on the Zaishen tape, both behind their own revert**
+
+**What the tape said** (studies/monsterai §18.2, CASTAI-ZF21; `20260928T103123`, the
+Degeneration Ranger, agent 6). A word is a fraction of its victim's maximum. The
+observer's maximum is on the wire; a body's is the one integer fit that closes all of its
+words.
+- **399 dealt 8 on every hit whose maximum is known, 4 of 4.** The targets: the observer
+  (a warrior, x 480), agent 8 (a monk henchman, x 483 and x 555), and agent 10 as a
+  critical (prop 17, bit-identical to agent 8's -8/555). Agent 6's plain shots on the same
+  targets ran 12-18 and 25-42. That is one amount through two armour classes and a
+  critical: GWW's "deals only 1...16", variable "Armor-ignoring damage", and the client's
+  template labels `%str1%` DAMAGE 1..16.
+- **426's bonus is on spells only.** On agent 8 activating spells it dealt 70 (x 555,
+  beside a 393 shot of 42) and 58 (x 402, beside 30 / 36). On the observer's Healing
+  Signet it dealt 36 = 2 x 18: a plain shot through the signet's -40, nothing on top
+  (n = 1). GWW: "If that action was a spell, you strike for +13...28 damage", and "even
+  if spell interruption is prevented".
+
+**A first reading, refuted before it shipped.** That 36 looked like the bonus landing on a
+signet, against the wiki. It is Healing Signet's -40 (`skill_effect.1`'s
+`armour_while_casting`, which land_swing already applies) doubling a plain 18. A bonus on
+top of a doubled shot could not come to 36, given agent 6's smallest plain word on the
+observer (12).
+
+**What shipped** (`3fd2a8bc`):
+- **Content.** `[skill_effect.399]` gets `scale_means = "Armor-ignoring damage"`; the new
+  label is in `SCALE_MEANS_DAMAGE` as standalone and not in `ARMOUR_RESPECTING_MEANS`.
+  `[skill_effect.426]` gets `scale_means = "+ Damage"` and `bonus_requires = "spell"`.
+  `skilldesc.HAND_FAMILY` learns the label, so both hand rows AGREE with the client's
+  templates (the hand census is now 70 AGREE, 0 CONFLICT).
+- **`ATTACK_FIXED_DAMAGE`** (`--no-attack-fixed-damage` reverts). An attack skill whose
+  scale is standalone deals exactly the row's amount in place of the weapon's: no armour,
+  no critical multiplier, no Weakness, no arrow share. It is still an attack: it can miss
+  or be blocked, it gains adrenaline and carries a preparation, and a critical still
+  sends prop 17.
+- **`BONUS_REQUIRES_SPELL`** (`--no-bonus-requires-spell` reverts). The gate is judged
+  in the three landings (`hit_enemy`, `land_swing`, `land_swing_on_body`) through
+  `strike_bonus_at_hit` and `activating_spell`, so an arrow's is read at its ARRIVAL.
+  "Activating a spell" is the interrupt's own windows, with the instant excluded.
+- `casting_armour_penalty`'s docstring no longer says the corpus holds no Healing Signet
+  cast.
+
+**Tests.** `test_interruptshots` is new. It covers:
+- the rules;
+- each landing path, with both known-bad arms;
+- an armour control over 20 seeds: 399 is 8 on every seed, while the plain shot's total
+  goes 59 -> 113 through the signet;
+- a forced critical;
+- the arrival;
+- one end-to-end 399 through `enemy_attack_tick` and `body_projectile_tick`;
+- the source;
+- the tape's witnesses in points (vault).
+
+Ten plants, each red. 24 checks, floor 19 (bare, measured; the first cut declared 21
+from a guess). 33 affected test files green (3,600 checks); the full suite on
+`8858bbfd`, 250 green / 0 red of 250, 16,602 checks.
+
+**This closes** two of CASTAI-ZF17 (the interrupters)' open lines: "399's 'deals only
+1...16'" and "426's +13...28". **Still open:**
+- **Distracting Shot's Dazed exemption.** GWW: a skill "easily interrupted (including
+  Dazed)" is not disabled.
+- **Criticals on bodies.** Our body landings never roll a critical, so a body's 399 is
+  always prop 16, where retail's was 17 twice in five. That is an older gap than this.
+- **The two ranks.** The Degeneration Ranger's are RECONSTRUCTION (7 fits 399's 8; 426's
+  +28 at rank 15 would fit agent 8's 70 - 42, but a plain roll varies too much to say).
+
+### CASTAI-ZF17 (the interrupters): the Zaishen tape's two interrupters, and the observer's two runs on our sender -- 2026-09-28 -- **rows 399 / 426 (OBSERVED); no E5(0) for a 0-recharge skill; a resuming chain re-takes the hold ahead of the disable; each arm reverts alone; both runs match the tape byte for byte, one named `[4]` set aside**
+
+**What the tape said** (studies/monsterai §18.2, CASTAI-ZF17; `20260928T103123`, the
+Degeneration Ranger, agent 6). On the henchmen the interrupt was `[59, body, 0]` then
+`[35, body, 0]`, 8 of 8, which `interrupt_body` already sent. The observer's two runs
+differed from the pinned 340 witness, and both had the observer's auto-attack chain live
+under the cast:
+- Savage Shot 426 on Healing Signet (:50061 t=197.153): `[8,0] E5(4) [59] E2 [35] [8,1]`.
+  No disable, and the E6 at +3.995 s.
+- Distracting Shot 399 on skill 2, table recharge 0 (:58544 t=621.054): `[8,0] [59] E2 [35]
+  [4,7,4,0] [8,1] E5(20)`. No first E5, and the disable after the chain's `[4]` and `[8,1]`.
+  Its E6 is not on tape, because the connection ends at 636.163.
+
+The 340 witness is the negative control for the hold. Its observer had no chain: the last
+swing was 180 s before, and none came after.
+
+**What shipped** (`5585943b`):
+- **Content.** `content/world.toml` rows `[skill_effect.399]` (`interrupts = "action"`,
+  `interrupt_disable = 20`) and `[skill_effect.426]` (`interrupts = "action"`). Both are
+  `source = "capture"`, carrying the capture, the connection and t. The WIKI page (GWW
+  rev 2698054 / 2733127) is cited for "action" reaching an auto-attack, which the tape
+  does not show.
+- **`INTERRUPT_SKIPS_ZERO_E5`** (`--interrupt-zero-e5` reverts). No full-recharge E5 when
+  the interrupted skill's recharge is 0. With nothing recharging at all (0 and no disable)
+  the entry owes no E6 (`no_e6`). That half is RECONSTRUCTION, DAGGERS-B5's rule, and no
+  tape shows it.
+- **`INTERRUPT_CHAIN_RETAKES_HOLD`** (`--no-interrupt-chain-hold` reverts). A cast
+  interrupted under a chain that resumes sends `[8, player, 1]` after the `[35]`, and the
+  disable E5 after that. "Resumes" is `_player_chain_running(state, released=cast)`:
+  attack_tick's own gate, with the released entry and its un-queued followers set aside. A
+  chain walking in or out of reach gets nothing, since no tape shows one.
+- **The walk gate, weighed.** Our swing holds none (`SWING_HOLDS_WALK_GATE`). A completed
+  cast already leaves the gate set into the resumed chain until its first landing
+  (`ANIMREF_E3_RELEASE` off). So this change puts an interrupted cast in the regime a
+  completed one already runs, and adds no new one.
+
+**Tests.** `test_interrupt` gained `section_zf17`:
+- Each witness is asserted as a literal batch, with its own known-bad arm. Both arms off
+  gives what the server sent before today: `[8,0] E5(0) [59] E2 [35] E5(20)`.
+- The tick after 399 opens the chain's `[4]` with no second `[8,1]`.
+- The RECONSTRUCTION no-E6 case, the no-resume chains, the rows, and a source check that
+  both arms default on.
+
+In §2, our two runs equal the tape's byte for byte. For 621.054 exactly one message is set
+aside, the chain's `[4, 7, 4, 0]`, and it is named and counted. Six plants turned it red: the
+predicate unfixed, E5(0) forced, each default off, `no_e6` dropped, and the disable moved
+ahead of the re-take. 61 checks, floor 28 → 39 (a bare run: 39, 1 declared skip); merged over
+the knock-down half's §1v, 68 checks and floor 34 → 45 (an empty-vault run: 45, 1 declared skip).
+The full suite on the merged tree (`16a1f4e8`) was 248 green / 1 red of 249, 16,550 checks.
+The red was `test_identlint`, and it was red on `main` too: the knock-down half's ZF17
+heading made 133 collisions against a ceiling of 132. All 133 were read and are
+ordinary work, so the ceiling was raised 132 → 200 by the file's own 1.5× rule. 26 affected tests green (3,436 checks).
+
+**What stays open.**
+- **The chain's `[4]` position.** On retail it rode the interrupt batch at 621.054 but came
+  126 ms later at 197.153 (read as "due" against "not yet due" on the swing clock, n = 2,
+  RECONSTRUCTION). On ours it is attack_tick's, the next tick.
+- **Not modelled, said in the rows:** Distracting Shot's "deals only 1...16" and the page's
+  Dazed exemption from the disable, and Savage Shot's +13...28 on an interrupted spell.
+- **The hero's bar mirror** in `interrupt_body` still sends E5(0), because no hero witness
+  exists.
+- The knock-down half of ZF17 landed separately the same day (the entry below). Its last
+  line, "no interrupt rows for 399 / 426, stays in `PLAN.md` §8.1", is closed by this entry.
+
+### CASTAI-ZF17 (the knock-down half): a body knocked down mid-cast gets the cast family's stop ahead of its [63] -- 2026-09-28 -- **SHIPPED; byte-identical to the tape's one witness; `--no-knock-down-stop` reverts**
+
+**The witness** (studies/monsterai §18.2, CASTAI-ZF17; OBSERVED, n = 1): live capture
+`20260928T103123`, connection `:50061`, t=168.977. Agent 8, the Zaishen Healer, was 0.8 s
+into skill 288, announced at 168.171 with a 2.0 s cast-time word, when agent 5's skill 162
+knocked it down. Retail sent `0x009F [59, 8, 0]` and `0x00A2 [63, 8, 2.0f]` in ONE batch,
+the stop first, and no `[35]`. `interruptjoin.py` classifies it as stop kind `knockdown`,
+the only one in the corpus.
+
+**The fix** (`b13c63cd`): `authsrv.knock_down`'s body branch used to clear `cast_lands_at` and
+`casting` and send only the `[63]`. When a cast is in flight it now sends the stop first:
+`[59, body, 0]` for a spell and `[49, body, 0]` for an attack skill.
+- **Which stop:** the one the cast site announced (`NPC_ATTACK_SKILL_SWINGS and
+  _is_attack_skill`, `_scatter_cancel`'s R3-F5 rule), so under `--npc-skill-instant` an
+  attack skill gets `[59]`.
+- **`[49]` is RECONSTRUCTION:** no attack skill is knocked down on tape.
+- **An instant skill (SKILLS-IA) gets no stop:** it opened with no start on the wire. It is
+  still dropped.
+- **A swing in flight still gets the `[63]` alone:** no `[3]` rides any `[63]` on tape.
+- **Flag:** `KNOCK_DOWN_STOP`; `--no-knock-down-stop` is the revert arm.
+
+**The test:** `test_interrupt` §1v adds 6 checks: the witness shape, the attack form both
+ways, the instant, the swing, the known-bad arm, and one end to end through `land_skill` (a
+hostile's Hammer Bash on a party body mid-cast gives the word, then `[59]` and `[63]` back
+to back). §2 adds 1: §1v's own output against the tape's batch at the victim, byte for byte
+with the agent id substituted. The floor goes 28 -> 34, from a run on an EMPTY vault (34
+passed, 1 declared skip); the vault run has 55 checks. The affected set is green, 33 files
+(the knock-down callers, the serverargs readers, the doc lints).
+
+**Not done, and not claimed:**
+- A HERO knocked down mid-cast gets no bar mirror (no E2 / E5). There is no witness.
+- A body's INSTANT cast is still dropped by the knock-down, while the player's is spared
+  (`_mark_cancelled`). That is older than this change and one tick wide.
+- The other half of ZF17, no interrupt rows for 399 / 426, stays in `PLAN.md` §8.1.
+
+### CASTAI-ZF16: a body's activated attack skill lands at swing_windup(activation) -- 2026-09-28 -- **SHIPPED `c4c3d1d0`, both body loops, revert `--no-body-attack-activation-windup`; driven against all 18 retail witnesses; two halves left open**
+
+**The finding** (studies/monsterai §18.2 row CASTAI-ZF16; weapons PLAN §44): retail launches a
+body's bow ATTACK skill that carries a table activation swing_windup(activation × the 0x0035
+modifier) after its [50]. OBSERVED 18 of 18 at modifier 1.0: Distracting Shot 399 ×5 at
+0.1418–0.1674 s and Savage Shot 426 ×6 at 0.1377–0.1589 s (activation 0.5, swing_windup = 0.15;
+live `20260928T103123` agent 6), 1197 ×7 at 0.2681–0.2865 s (0.75 → 0.275; `20260819T132414`
+agent 28). That is SLICE-F51's law for the player (`attack_skill_clock`). Our body loops armed
+the landing at the raw activation, 0.5 / 0.75 s -- for a bow, the launch.
+
+**What shipped** (`c4c3d1d0`): `authsrv.body_attack_skill_clock(state, agent_id, activation,
+interval)` -- activation 0 → swing_windup(interval), F24's branch unchanged; a listed
+activation → swing_windup(activation × `attack_interval_factor` of that body). Both
+`enemy_attack_tick` and `ally_cast_tick` call it for every attack skill. Behind
+`BODY_ATTACK_ACTIVATION_WINDUP` (default ON); `--no-body-attack-activation-windup` is the
+control. The modifier term is the player's law carried over, UNVERIFIED on bodies (every
+activated row on tape is at 1.0). **The press handler's "a LISTED activation still wins ...
+UPSTREAM, no corpus cycle exercises it yet" had been stale since F51** measured it on the
+player's daggers (n = 33); it now reads OBSERVED and names both witnesses.
+
+**The test** (`test_bodywindup`, new, in TESTS.md): a hostile archer through the real
+`enemy_attack_tick`, and a party archer through `ally_cast_tick`, on a fake clock stepped
+1 ms. Each [50] → 0x00A4 gap lands inside the span of that skill's retail witnesses: 0.1500 s
+for 399 / 426, 0.2750 s for 1197. The known-bad arm launches at 0.5000 / 0.7500 s, outside
+every witness. The control, Power Shot 394, launches at swing_windup(2.475) = 1.1375 under both
+arms. §6 re-derives the 18 witnesses from the two captures (`weaponcensus.skill_shots`) and
+checks the carried skill rows against the vault's. Floor 21 bare, 23 with the vault.
+Affected tests, all green: 20 behaviour tests, 2,692 checks (`test_agentlife` 704,
+`test_weapons` 382, `test_mechanics` 369, `test_playerswing` 191, `test_castgate` 81,
+`test_weaponcensus` 50, ...). The full suite was not run.
+
+**Left open, in §8.1's residue line; detail in weapons PLAN §44:**
+- (a) **The busy window.** The body is now free at its launch, where F51's player is occupied
+  for the whole activation. Retail's two archers never act inside it (0 of 18 next events;
+  the earliest is 0.995 s after the [50]), so the tape cannot separate the readings. With a
+  spell ready, ours can now start it 0.35 / 0.475 s sooner than before. No hold was added:
+  that would be a second, unwitnessed behaviour change.
+- (b) **The next swing.** Where the next event is a plain [4], 7 of 12 come 1.60–1.88 s after
+  the [50] (the other 5 at 2.01–5.22 s); ours opens a full 2.475 s interval after it. 1197's
+  1.602 / 1.613 sit on launch + interval − windup(interval) = 1.6125, the player's
+  SWING_RESTART_RECOVERY; 399 / 426 fit no single law. UNVERIFIED.
+
+---
+
 ### CASTAI-Z1: the Zaishen run scored, and the 19 suite reds its capture caused read, not re-pinned -- 2026-09-28 -- **Z1.P4 / P5 / P6 HELD, P7 FAILED, P1-P3 under their floors; the Necromancer's hex class id is 9 and SHIPPED; every red was a test, not the server**
 
 **The run** (studies/monsterai §18.1): the owner's live capture `20260928T103123` (secondary

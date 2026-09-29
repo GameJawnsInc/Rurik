@@ -3043,6 +3043,22 @@ Three close or correct this plan:
   - That is the rule `authsrv.attack_skill_clock` already applies to the player, where it is
     labelled "UPSTREAM, no corpus cycle exercises it yet"; it is now OBSERVED on bodies. Our
     body path still uses the raw activation (`PLAN.md` §8).
+    **SHIPPED 2026-09-28 (CASTAI-ZF16, `PLAN-LOG.md`):** both body loops now land a listed
+    activation at `authsrv.body_attack_skill_clock` = swing_windup(activation × the body's
+    duration factor); `--no-body-attack-activation-windup` reverts. The press handler's
+    "UPSTREAM" line was stale since SLICE-F51 measured the player's daggers, and now reads
+    OBSERVED with both witnesses.
+    **Two halves stay open, neither shipped.** (a) THE BUSY WINDOW: the body is now free at
+    its launch (0.15 / 0.275 s), where F51's player is occupied for the whole activation.
+    Retail's two archers never act inside it — 0 of 18 next events, the earliest 0.995 s
+    after the [50] — so the tape cannot tell the two apart; with a spell or preparation
+    ready, ours can now start it 0.35 s (a 0.5 s skill) or 0.475 s (1197) sooner than before. (b) THE NEXT SWING:
+    where the body's next event is a plain [4], 7 of 12 come 1.60–1.88 s after the [50]
+    and the other 5 at 2.01–5.22 s. 1197's 1.602 / 1.613 sit on launch + interval −
+    windup(interval) = 1.6125; 399 / 426's 1.64–1.88 fit no single law. Ours opens a full
+    2.475 s interval after the [50], later than 8 of the 12. UNVERIFIED as a law; a body's
+    SWING_RESTART_RECOVERY is the candidate. (Both halves: the scan of the two witness
+    tapes for each body's next [4] / [48] / [50] / [60], 2026-09-28.)
   - Two modifier-1.0 shots sit outside the 1.10..1.16 band (1.0948 s at :50061 217.821,
     1.2242 s at :50295 476.727), cause UNVERIFIED; the windup signature holds them as its
     exact out-of-band set.

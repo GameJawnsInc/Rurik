@@ -107,7 +107,19 @@ ROOT = os.path.dirname(HERE)
 # session's ordinary work". A tripwire re-armed inside its own noise is not an
 # early warning, it is a false alarm with a delay -- so the rule was applied
 # instead of a judgement being made against it.
-COLLISION_CEILING = 132
+#
+# 132 -> 200 on 2026-09-28, against a MEASURED 133 (1,433 sites in 116 documents). It
+# fired on `main` at 2e15a970: the 133rd is `CASTAI-ZF17`, a PLAN-LOG heading citing its
+# study's defining row (the knock-down half; the interrupters' entry is a second heading
+# in the SAME log and adds nothing). All 133 were read, and all are ordinary work:
+# - 109 are bare letter-series, grandfathered by CONVENTION.md.
+# - 22 are prefixed tokens (`CASTAI-Z1`, `CASTAI-ZF16`, `DESKWORK-D5`, `SANDBOX-U5`,
+#   `MORALE-P1`...) that collide only because a log entry, a RUN file or a PLAN cites
+#   the row that defines them -- cross-referencing working, the same class as the 9 read
+#   at 88.
+# - 2 are rung citations (`R1.5`, `R-SANDBOX`).
+# None is the 2.2(a) defect. 200 is 133 at the same ~1.5x.
+COLLISION_CEILING = 200
 
 # The other direction. A pattern that rots reports a clean tree, and under a
 # not-growing rule that reads as progress -- so the floor is set BELOW the observed 312
