@@ -40,11 +40,18 @@ WHAT THIS PINS.
     the second Zaishen tape's one new opcode, 0x0042 [agent_id], carries its
     decision too (UNNAMED at n=2, dropped, not armed -- the reason is
     test_dispatch's row), two vault-free arms show that row alone triages it,
-    and five per-tape witnesses (20260929T100038) pin the evidence: both
-    sends with their same-timestamp c2s, EVERY message either way within
-    50 ms after, and the target's AND the PLAYER's last 0x00F1 / 0x0026 words
-    (the player -- agent 7 by PLAYER_INFO -- was DEAD at the first send, 5.3 s
-    into a death, and 21 ms out of one at the second); every TARGET_SELECT of
+    and six per-tape witnesses (20260929T100038) pin the evidence: the own
+    agent on each of the 11 connections by three routes -- the SELF-SCOPED
+    anchor (int property 41, adrenjoin.whose_agent), 0x0199's player number
+    through PLAYER_INFO, and the first PLAYER_INFO -- agreeing on all 11
+    (round 3 defined the own agent by the first PLAYER_INFO, the rule
+    moralescan.py refuted in 2026-08; it is right on this tape and wrong or
+    empty on 43 of the corpus's 110 instance loads, so the anchor is what
+    every witness reads since 2026-09-29's round 4); both sends with their
+    same-timestamp c2s, EVERY message either way within 50 ms after, and the
+    target's AND the PLAYER's last 0x00F1 / 0x0026 words (the player --
+    agent 7 by the anchor -- was DEAD at the first send, 5.3 s into a death,
+    and 21 ms out of one at the second); every TARGET_SELECT of
     agent 9 on the tape with the target's, the player's and the controlled
     agent's state (the two with a 0x0042 are the only ones sent while the
     player was dead or just revived); the :62925 control track (0x0022 [9, 0]
@@ -65,7 +72,8 @@ two vault-free 0x0042 arms; 6 declared skips). With the vault and the pinned
 client present the same run executes 34 (42 since 2026-09-28: the declared-gap
 pin and its known-bad arm, three Zaishen decisions, the Zaishen witness; 45
 after the ENTER field-2 pins; 53 since 2026-09-29: the 0x0042 decision, its
-five witnesses and the two arms); §2, §3's live half, §4's live half, the
+five witnesses and the two arms; 54 the same day, round 4: WITNESS 0, the
+own agent by three routes); §2, §3's live half, §4's live half, the
 witnesses and §6 declare skips without them. The first cut set the floor at 34
 and so failed a vault-free run by construction (checks.py: the floor is the
 core, not the fullest run).
@@ -86,6 +94,7 @@ import checks                                                # noqa: E402
 import c2striage                                             # noqa: E402
 import livewire                                              # noqa: E402
 import test_dispatch as dispatchmod                          # noqa: E402
+import adrenjoin  # noqa: E402  whose_agent: the self-scoped own-agent anchor
 
 # Floor 20 measured bare 2026-09-23; 22 since 2026-09-29 (CASTAI-Z2: +2 -- the
 # two vault-free 0x0042 arms in §4, measured 22 with RURIK_VAULT at an empty
@@ -536,7 +545,7 @@ else:
     led.skip("the Zaishen witness", "capture 20260928T103123 (CASTAI-Z1) missing")
 
 
-# CASTAI-Z2's evidence as FIVE exact per-tape witnesses, all scoped to
+# CASTAI-Z2's evidence as SIX exact per-tape witnesses, all scoped to
 # 20260929T100038 so a later tape adds evidence and never reddens them (C4).
 #
 # WITNESS 1: every c2s 0x0042 on the tape as
@@ -546,9 +555,9 @@ else:
 #              in wire order, as (dir, opcode, fields 1-2),
 #    TARGET -- the target's last 0x00F1 [target, effects] and last 0x0026
 #              [target, flags] before the send, each as (t, word) or None,
-#    PLAYER -- (the own agent, by PLAYER_INFO 0x0059 [1, agent] on the
-#              connection; its last 0x00F1 and last 0x0026 before the send,
-#              each as (t, word) or None)).
+#    PLAYER -- (the own agent, by the self-scoped anchor own_agent() below;
+#              its last 0x00F1 and last 0x0026 before the send, each as
+#              (t, word) or None)).
 # The window carries c2s ON PURPOSE. Round 1 (657d9222) kept only s2c there
 # and so pinned the s2c 0x0022 [9, 0] as "0x0042's answer" while structurally
 # hiding the nearer candidate: a SECOND TARGET_SELECT [9, 0] at 245.268, 26 ms
@@ -568,16 +577,50 @@ else:
 # 0x800, no 0x0026 of it yet), followed by nothing. Which of the two c2s 11
 # and 37 ms before the 0x0022 drew it is not shown at n=1; what that 0x0022
 # IS -- a handoff of control while dead -- reads off witness 3.
-PLAYER_INFO = 0x0059
+PLAYER_INFO = 0x0059          # [player NUMBER, agent, appearance, ...] -- the
+                              # server sends one per PLAYER in the instance
+INSTANCE_LOAD_INFO = 0x0199   # field 1 is the OWN player's NUMBER (the send
+                              # site in authsrv.py; studies/heroes/FINDINGS.md 22)
+
+
+def own_routes(merged):
+    """The connection's own agent by three routes, as (anchor, load, first),
+    each None where it cannot resolve.
+      ANCHOR -- adrenjoin.whose_agent over the s2c: int property 41 on 0x009F
+        is SELF-SCOPED (studies/skills/FINDINGS.md 23: every one in the corpus
+        names the observing player's own agent), a hero's copy broken by the
+        kind-5 0x0020 (JARIN, 2026-09-14). The sound rule, and the one the
+        witnesses below read.
+      LOAD -- 0x0199's field 1, the own player's NUMBER, mapped through the
+        PLAYER_INFO (number, agent) pairs: moralescan.py's independent second
+        route, which agrees with the anchor on every corpus connection where
+        both resolve (110 of 116 on 2026-09-29, z2c2s-r4-own.py).
+      FIRST -- field 2 of the PLAYER_INFO whose number is 1. NOT a definition:
+        round 3 (72e2ba21) took it for one, and it is the class of rule
+        moralescan.py refuted on 2026-08-21 ("wrong 20 times in 44") -- over
+        the live corpus it names the WRONG agent on 34 of 116 connections and
+        none on 14 more, 43 of the 110 instance loads (20260807T143055 :60935
+        says 536 where the anchor and scriptrun.py say 725). Carried so the
+        tape's agreement is a measurement (WITNESS 0), never as a fallback."""
+    s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
+    anchor = adrenjoin.whose_agent(s2c)
+    pairs = {v[1]: v[2] for _t, op, v in s2c
+             if op == PLAYER_INFO and len(v) > 2}
+    number = next((v[1] for _t, op, v in s2c
+                   if op == INSTANCE_LOAD_INFO and len(v) > 1), None)
+    return anchor, pairs.get(number), pairs.get(1)
 
 
 def own_agent(merged):
-    """The connection's own agent: field 2 of the PLAYER_INFO whose player id
-    (field 1) is 1, or None."""
-    for _t, d, op, v in merged:
-        if d == "s2c" and op == PLAYER_INFO and len(v) > 2 and v[1] == 1:
-            return v[2]
-    return None
+    """The connection's own agent: own_routes' ANCHOR, cross-checked against
+    its LOAD route -- None when the anchor cannot resolve or the two disagree.
+    A refusal, never a guess (adrenjoin.whose_agent's NO FALLBACK): a None
+    empties every PLAYER column downstream and reddens the witness that
+    pinned it, with the three routes printed by WITNESS 0."""
+    anchor, load, _first = own_routes(merged)
+    if anchor is None or (load is not None and load != anchor):
+        return None
+    return anchor
 
 
 def life_state(merged, upto, agent):
@@ -755,6 +798,40 @@ def dead_selects(capdir):
     return sorted(out, key=lambda r: r[1]), aside
 
 
+def owns(capdir):
+    """({client port: own_routes(connection)}, aside) over every connection
+    the manifest does not declare gapped; a gapped one is set aside by name
+    with its routes, as above."""
+    gaps = livewire.declared_gaps(capdir)
+    out, aside = {}, {}
+    for gf in livewire.connections(capdir):
+        name = livewire.conn_name(gf)
+        _conn, merged, _ok = livewire.decode_conn(capdir, gf)
+        routes = own_routes(merged)
+        if name in gaps:
+            aside[name] = routes
+            print(f"      [aside] {name}: declared gapped by its manifest "
+                  f"({gaps[name]}); own routes {routes}")
+            continue
+        out[int(name.split("->")[0].rsplit(":", 1)[1])] = routes
+    return out, aside
+
+
+# WITNESS 0: the own agent on each of the tape's 11 connections by the three
+# routes of own_routes -- (anchor, load, first), exact: 7 on the five match
+# connections, 11 on the six outpost ones, all three routes agreeing on all
+# 11. This is WHY witnesses 1-5 below survived round 4's correction of the
+# rule that built them: the own player's number is 1 on every connection of
+# this tape (0x0199 field 1), so the refuted first-PLAYER_INFO rule happens
+# to name the anchor's agent here, where on 43 of the corpus's 110 instance
+# loads it does not (34 wrong, 9 none). Scoped to the tape (C4); the anchor
+# is what the other five read.
+Z2_OWN = {
+    51077: (11, 11, 11), 51090: (7, 7, 7), 51187: (11, 11, 11),
+    51199: (7, 7, 7), 57580: (7, 7, 7), 59334: (11, 11, 11),
+    60536: (11, 11, 11), 62915: (11, 11, 11), 62925: (7, 7, 7),
+    64548: (11, 11, 11), 64557: (7, 7, 7),
+}
 Z2_0042_WITNESS = [
     (62925, 245.242, (9,), ((0x00C1, (9, 3)),),
      (("s2c", 0x00E6, (7, 364)), ("c2s", 0x00C1, (9, 0)),
@@ -802,9 +879,15 @@ Z2_SEL9_WITNESS = [
 # control passed to agent 9 while the player was dead and came back when it
 # revived: 0x0022 [x, 0] as the handoff and [own, 1] as the return is a
 # RECONSTRUCTION (UPSTREAM name WORLD_UPDATE_CONTROLLED_AGENT, Headquarter /
-# OpenTyria), and the same [other, 1] then [own, 1] pair shape sits on
-# 20260817T180610 (268.147 / 279.220) and 20260913T210901 (73.874 / 117.877).
-# The player's second death on the connection (300.460 - 305.705, no
+# OpenTyria), and the same [other, 1] then [own, 1] pair shape sits on EVERY
+# earlier tape with a mid-connection 0x0022, own by the anchor: 20260807T143055
+# ([300, 1] 18.200 then [725, 1] 20.140; own 725), 20260810T235916 ([201, 1]
+# 20.053 then [176, 1] 22.054; own 176), 20260817T180610 ([73, 1] 268.147
+# then [8, 1] 279.220; own 8) and 20260913T210901 ([73, 1] 73.874 then [8, 1]
+# 117.877; own 8) -- four pairs, not the two round 3 named: its
+# first-PLAYER_INFO rule read 807's and 810's own as 536 and 63 and so called
+# both pairs "both other". The player's second death on the connection
+# (300.460 - 305.705, no
 # TARGET_SELECT sent in it) drew neither.
 Z2_CONTROL_TRACK = [
     (182.663, 0x0020, (1, 3424, 3)),
@@ -861,6 +944,14 @@ Z2_DEAD_SELECTS = [
 ]
 z2dir = os.path.join(livewire.captures_root(), "20260929T100038")
 if os.path.isdir(z2dir):
+    z2owns, z2ownsaside = owns(z2dir)
+    led.ok(z2owns == Z2_OWN and z2ownsaside == {},
+           "WITNESS 0 (20260929T100038, exact): the own agent by the self-scoped "
+           "anchor (property 41), by 0x0199's player number through PLAYER_INFO "
+           "and by the first PLAYER_INFO agree on all 11 connections -- 7 on the "
+           "five matches, 11 on the six outposts; no connection set aside",
+           "\n      " + "\n      ".join(f"{p}: {z2owns[p]}" for p in sorted(z2owns))
+           + f"\n      aside {z2ownsaside}")
     z2s, z2aside = sends_0042(z2dir)
     led.ok(z2s == Z2_0042_WITNESS and z2aside == {},
            "WITNESS 1 (20260929T100038, exact): 0x0042 [9] x2, each at the "
@@ -884,8 +975,8 @@ if os.path.isdir(z2dir):
            + f"\n      aside {z2selaside}")
     z2own, z2track = control_track(z2dir, 62925)
     led.ok(z2own == 7 and z2track == Z2_CONTROL_TRACK,
-           "WITNESS 3 (20260929T100038 :62925, exact): the player (7 by "
-           "PLAYER_INFO) dead at 239.957; 0x0022 [9, 0] in one chunk with "
+           "WITNESS 3 (20260929T100038 :62925, exact): the player (7 by the "
+           "anchor) dead at 239.957; 0x0022 [9, 0] in one chunk with "
            "WORLD_REMOVE_AGENT of agents 1 and 2 at 245.279; its return 0x0022 "
            "[7, 1] with their re-creates and the player's revival at 259.459; "
            "the second death (300.460-305.705) drew neither",

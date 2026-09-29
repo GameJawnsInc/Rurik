@@ -6412,7 +6412,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `toolkit/authsrv/test_dispatch.py` (**2026-09-29, CASTAI-Z2: data only, no check
   changed. `DROPPED_ON_PURPOSE` gains `0x0042` (UNNAMED, n = 2, `[agent_id]`: both sends
   name the Zaishen Fighter at the timestamp of a TARGET_SELECT of it; the PLAYER (agent 7
-  by PLAYER_INFO) was DEAD at the first -- `0x00F1 [7, 0x10]` + `0x0026 [7, 4]` 5.3 s
+  by the self-scoped property-41 anchor, `adrenjoin.whose_agent`; round 4 the same day
+  replaced round 3's first-PLAYER_INFO rule, right on this tape and wrong or empty on 43
+  of the corpus's 110 instance loads, and re-described the corpus's nine `[x, 1]` as an
+  `[other, 1]` then `[own, 1]` pair on EVERY earlier tape that has any -- four, not two --
+  0.98-77.2 s after the first message) was DEAD at the first -- `0x00F1 [7, 0x10]` + `0x0026 [7, 4]` 5.3 s
   earlier, the Fighter dead too -- and 21 ms revived at the second; "one input sends both"
   is a RECONSTRUCTION; after the first send came `0x00E6`, a second TARGET_SELECT `[9, 0]`,
   then in one chunk `0x0021` WORLD_REMOVE_AGENT of agents 1 and 2 and the next `0x0022`,
@@ -6504,7 +6508,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   longer named alone; untriaged over the live census). Triaged UNNAMED at n = 2 on the
   0x00A3 precedent: both sends name the Zaishen Fighter henchman at the very timestamp
   of a TARGET_SELECT of it ("one input, two messages" is a RECONSTRUCTION; the one
-  loopback arrival has both in ONE frame); the PLAYER (agent 7 by PLAYER_INFO) was DEAD
+  loopback arrival has both in ONE frame); the PLAYER (agent 7 by the SELF-SCOPED anchor,
+  int property 41 on 0x009F through `adrenjoin.whose_agent`, cross-checked against
+  0x0199's player number through PLAYER_INFO and refused as None on a disagreement --
+  round 4, the reviewer's third block: round 3 had defined the own agent as the first
+  PLAYER_INFO's agent, the class of rule `moralescan.py` refuted on 2026-08-21, right on
+  this tape's 11 connections and wrong or empty on 43 of the corpus's 110 instance
+  loads) was DEAD
   at the first send (`0x00F1 [7, 0x10]` + `0x0026 [7, 4]` at 239.957, 5.3 s earlier; the
   Fighter too, since 243.458) and 21 ms out of a death at the second (`0x0026 [7, 5]` at
   402.778); after the first send came `0x00E6`, a second TARGET_SELECT `[9, 0]`, then in
@@ -6516,9 +6526,12 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   0x0042, and the sender is read to its module (GmView, where the same two call sites
   also send `0x0044`, and where 0x0042's predicate 0x004E0830 tests bit 0x10 of a SECOND
   agent's word -- RECONSTRUCTION that it is the death bit). Dropped on purpose -- the
-  reason is `test_dispatch.DROPPED_ON_PURPOSE`'s row -- and not armed. +8: §4's decision
-  check (`>= 2`, a later send is confirming evidence), five exact witnesses all scoped to
-  the tape (the same capture planted under a future stamp leaves the run green): both
+  reason is `test_dispatch.DROPPED_ON_PURPOSE`'s row -- and not armed. +9: §4's decision
+  check (`>= 2`, a later send is confirming evidence), six exact witnesses all scoped to
+  the tape (the same capture planted under a future stamp leaves the run green): the own
+  agent on each of the 11 connections by the three routes (anchor, 0x0199's number
+  through PLAYER_INFO, the first PLAYER_INFO), agreeing on all 11 -- 7 on the matches, 11
+  in the outposts -- which is why witnesses 1-5 survived the rule's correction; both
   sends with their same-timestamp c2s, EVERY message either way within 50 ms after (round
   1 kept only s2c there and so hid the competing TARGET_SELECT -- the reviewer's first
   block) and the target's AND the player's last `0x00F1` / `0x0026` words (round 2 read
@@ -6534,10 +6547,16 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the row it is UNTRIAGED, named alone). Injection: the player's death words at 239.957
   flipped to alive reddens witnesses 1, 2, 3 and 5; the return `0x0022 [7, 1]` dropped
   reddens 3 and 4; the :51090 revival moved past the second send reddens 1, 2 and 5; the
-  target's death word flipped reddens 1 and 2; a planted third send reddens 1 alone.
+  target's death word flipped reddens 1 and 2; a planted third send reddens 1 alone;
+  round 4's anchor arms: property 41's agent rewritten 7 → 9 on :62925 makes the anchor
+  and the 0x0199 route disagree, `own_agent` refuses (None) and 0, 1, 2, 3 and 5 go red
+  (WITNESS 0's detail reads `(9, 7, 7)`); the same plus PLAYER_INFO `[1, 7]` → `[1, 9]`,
+  a consistent lie all three routes agree on, reddens the same five through the literals
+  alone (own 9; agent 9's words in every PLAYER column); the 0x0199 dropped leaves the
+  anchor standing alone and reddens 0 only (`(7, None, 7)`).
   `--write` regenerated `retail_c2s.json` (116 connections, 31 captures, 14,907 c2s, 61
   opcodes): 38 rows byte-equal, 22 moved by exactly the new tape's own contribution, 1
-  new. 53 checks with the vault; floor 20 → 22, measured bare (22, 6 declared
+  new. 54 checks with the vault (53 before round 4's WITNESS 0); floor 20 → 22, measured bare (22, 6 declared
   skips).** **2026-09-28, 0x00A3 named: c2s `0x00A3` is
   ZAISHEN_CHALLENGE_CANCEL, medium, the owner's decision (2d9a7547; `overrides.json`, n=1
   with GWCA / Py4GW's PARTY_CANCEL_ENTER_CHALLENGE corroborating, the PARTY_LEAVE
