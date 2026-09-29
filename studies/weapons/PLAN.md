@@ -2456,9 +2456,16 @@ separates the corpus (the best is wrong 4 times); across ≤ B and |along| ≤ A
 it for B in [51.0, 57.5] and A in [101, 128]. What ships: the target connects within
 `DODGE_TOLERANCE` = 54 u of the aim ACROSS the line of fire (the shot's recorded `origin` →
 the aim) and `DODGE_ALONG` = 114 u ALONG it -- both FITTED inside those bands, RECONSTRUCTION,
-the mechanism UNVERIFIED, and the along band rests on 3 hits and 2 misses. A shot with no
-origin falls back to a 54 u disc (ours). The lead is CORROBORATED: on 58 moving launches
-retail's aim sits speed × flight ahead (ratio median 0.97). Section 27's three checks whose
+the mechanism UNVERIFIED, and the along band rests on 4 hits
+(along -100.1, -97.5, +68.6, +88.8) and 2 misses. A shot with no origin falls back to a 54 u
+disc (ours). The lead is CORROBORATED, with evidence against it: of the 75 launches the
+RANGERPRE-S9 design pass classed as at a moving target, 58 are aimed speed × flight ahead
+(ratio median 0.97) and **17 are NOT led** -- aimed within 20 u of where the model put the target at the launch
+(RECONSTRUCTION), several of them 180-290 u misses. The 58 were selected by that same
+along ≈ speed × flight test, so they alone are partly circular. The 17 are OPEN (that design
+pass; the target's move age does not explain them) -- e.g. launch 337.615 on
+`20260929T150923` :55934, 46 ms into retail's own `0x002A` approach, a miss. Ours always
+leads, so on shots like those 17 our aim is not retail's. Section 27's three checks whose
 offsets lay along the line are re-aimed across it, and it gains retail's nine deciding
 arrivals as literal rows. A pinned strafe / backpedal / run-in capture would narrow both bands.
 
