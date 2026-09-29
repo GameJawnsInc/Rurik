@@ -4394,6 +4394,30 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   steers while moving, and this is the only step that does. `--settle SECONDS` exposes
   `walk_legs`'s pause between steps for the same reason.
 
+  `toolkit/authsrv/test_skillbound.py` (**2026-09-28, the regenerate-from-38888 arc: no
+  skill past the SERVED client's own table.** The 38888 content carries skill 3446, and the
+  owner's loopback client (`vault/run/slice`) is 38797, whose table ends at 3,442.
+  `skillunlock.SKILL_RECORD_COUNT_BY_BUILD` holds one MEASURED count per build (38519 3,438;
+  38797 / 38833 / 38849 3,443; 38888 3,476 -- `skilltable.locate_table` over each pristine
+  snapshot, re-measured here when the vault is present), re-exported beside
+  `MAP_ID_COUNT_BY_BUILD`. Sections 1-6: once `--client-build` is settled,
+  `serve_client_skill_table` drops and NAMES every content row past the served table (skills,
+  skill_effect, skill_arrows, skill_speech, skill_visual) and rebinds `SKILL_TABLE_ROWS`; a
+  build with no count row is refused like one with no map count; staged (38888 content) 3446
+  is dropped for 38797 and served for 38888. Section 7 locks the wiring as TEXT: `main()`
+  calls the guard once, after the rebind and before every skill consumer; `--skills`,
+  `--hero-skills` and `--enemy-skills` each refuse inside their own block before the bar is
+  bound, exactly three sites; and the instance load reads the stored bar through
+  `player_bar_at_load` and the stored libraries through `resolve_library` with the withheld
+  set. Section 8 (bare, a temp-dir store read in a THREAD, as a connection reads it): the
+  character store is shared by every build, so a 38888 session's 3446 in the player bar,
+  account library, learned library and a hero's bar and skills is NOT sent under 38797 --
+  each of five sources named once, 3442 still sent, nothing raising (on 0d89fdcc the library
+  read's SystemExit died silently in the thread) -- the store on disk keeps it, a 0x005C
+  elsewhere keeps it, and under 38888 all of it is sent; 8b drives `_handle_request_players`
+  and reads the wire (vault only). Red on 0d89fdcc: 15 FAIL bare, 17 with the vault. OPEN
+  (the round-3 review): the HERO write-back through `bar_to_store` has no check. Floor 56
+  bare (3 named skips); 64 with the vault; 71 with the staged 38888 overlay),
   `toolkit/authsrv/test_gapreaders.py` (**2026-09-28, CASTAI-Z1: the corpus readers
   outside `livewire` honour a capture's declared gap — and nothing else.** The first
   gapped live connection, 20260928T103123 :65009 (38 + 20 s2c bytes the sniffer never

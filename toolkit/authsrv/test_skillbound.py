@@ -67,7 +67,7 @@ import skillunlock  # noqa: E402
 with contextlib.redirect_stdout(io.StringIO()):
     import authsrv  # noqa: E402
 
-LEDGER = checks.Ledger("the client-build skill guard", floor=55)   # the bare run, 2026-09-28 (28 + section 7's 9 + section 8's 18)
+LEDGER = checks.Ledger("the client-build skill guard", floor=56)   # the bare run, 2026-09-28 (28 + section 7's 9 + section 8's 18; +1 the instance load's stored-state lock, 56)
 check = checks.adopt(LEDGER)
 
 PIN = 38797
@@ -411,6 +411,24 @@ check(timing and not unguarded,
       f"every skill_timing() main() calls on a flag's id ({len(timing)}) sits "
       f"AFTER its block's refusal -- none reads a dropped id first",
       f"unguarded at {unguarded} of {timing}")
+
+# The instance load's two reads of STORED state, locked the same way (the round-3 review:
+# 8b proves the load's wiring only when the vault's attribute rows are present -- a load
+# that went back to the old inline bar read was GREEN on a bare machine, M15). The bar is
+# read through player_bar_at_load and the libraries through resolve_library with the
+# withheld set, and the bar read comes after the library send, before SKILLBAR_UPDATE.
+LOAD = inspect.getsource(authsrv._handle_request_players)
+at_lib = LOAD.find("skillunlock.resolve_library(")
+at_bar = LOAD.find("skills = player_bar_at_load(state)")
+at_send = LOAD.find("send(GAME_SMSG_SKILLBAR_UPDATE,", max(at_bar, 0))
+check(LOAD.count("player_bar_at_load(state)") == 1 and LOAD.count("skillunlock.resolve_library(") == 1
+      and 'seen=state.setdefault("skills_withheld", set())' in LOAD[at_lib:at_bar]
+      and 0 <= at_lib < at_bar < at_send,
+      "the instance load reads the stored bar ONCE through player_bar_at_load and the stored "
+      "libraries ONCE through resolve_library with the withheld set, bar before its "
+      "SKILLBAR_UPDATE -- the load's wiring, bare",
+      f"bar reads {LOAD.count('player_bar_at_load(state)')}, library reads "
+      f"{LOAD.count('skillunlock.resolve_library(')}; lib {at_lib}, bar {at_bar}, send {at_send}")
 
 print("\n8. STORED state is bounded by the SERVED build, where it is read")
 # The review's blocking item (2026-09-28): the character store is one per
