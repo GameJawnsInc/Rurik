@@ -5771,6 +5771,7 @@ The corpus is still **n = 2** for 482 (one capture; the census excludes
 nothing). The WIKI cap — never more than 100 — cannot bind at 480 and is
 carried as a rule, not a measurement. Rounding below a multiple of 5 is
 UNVERIFIED (480 × 0.2 is exact); `deep_wound_reduction` rounds and says so.
+**Settled 2026-09-29, §41.7: retail FLOORS it (64 → 52), and the code now does too.**
 
 ### 41.2 The message in between is the STATUS WORD, and it is on every condition — OBSERVED
 
@@ -5814,7 +5815,7 @@ server never produced. Bit 0x400 (skill 999) is recorded and not mapped.
   strip-at-death records the dead word so the book agrees with what the kill
   path sent. `--no-status-word` is the pre-today wire.
 - **`deep_wound_open` / `deep_wound_close`**: on a 482 apply the maximum
-  falls by `min(100, round(20 %))` and is sent as `0x009F 42` third in the
+  falls by `min(100, round(20 %))` (floored since §41.7) and is sent as `0x009F 42` third in the
   batch; current health falls by the same amount in the server's book —
   **SIGNED and UNCLAMPED**, because the client's is (`--probe health_shrink`,
   studies/unitsetup §8 Q5: 25 + (50−100) = −25 in the store, 1 on the HUD, 25
@@ -5886,6 +5887,51 @@ world-anchored aiming, not fixed UI).
   separable at the frame cadence here and is left as the one open sub-clause;
   the shipped server sends the bit either way, so nothing downstream turns on
   it. Verdict PASS, `undecodable 0`.
+
+### 41.7 The 20 % is FLOORED — OBSERVED (RANGERPRE-S1, 2026-09-29)
+
+§41.1 left the rounding below a multiple of 5 UNVERIFIED, and `deep_wound_reduction`
+used `round()`. Two retail edges off the 5s settle it. Both were re-decoded from the
+capture bytes through `deepwoundjoin.sequence`, which refuses a tape that does not frame
+whole, and every dword below matches f32(k/m) bit for bit:
+
+- **An NPC, 64 → 52** (20260929T150923, `10.0.0.210:53756`, agent 30; the connection
+  frames 3003 messages whole). At t=1113.4097 it has `0x009F [42, 30, 64]` and 3 Bleeding
+  pips, `0x00A2 [44, 30, 3183476736]` = −6/64. Deep Wound's edge at t=1116.0485 is
+  `0x00A3 [16, 30, 9, −9/64]`, then `0x00F1 [30, 0x23]`, then `0x00A2 [44, 30, 3186380485]`
+  = **−6/52**. There is no 42 in that batch (PVPMAX, slice F46.10). The observer's next
+  landed hit at t=1117.3818 is `0x009F [42, 30, 52]` ahead of `[16, 30, 9, 3181218265]` =
+  −4/52. 12 = floor(12.8); round gives 13, which is 51.
+- **A PvP-arena opponent, 483 → 387** (20260817T231139, `10.0.0.210:50513`, agent 10,
+  the PVPMAX tape). This is a player's opponent, **not an NPC**, so the NPC witness is
+  n = 1. 483 is the morale-reduced maximum (555 − 72). The edge at t=460.161 is
+  `0x00F1 [10, 0x23]` then `0x00A2 [44, 10, 3176377849]` = **−20/387**, under Bleeding +
+  Burning. 96 = floor(96.6); round gives 386. The 20 % comes off the CURRENT maximum:
+  taken off 555, it would be capped at 100 and give 383.
+- **The denominator is the new maximum.** In both batches the damage word is still over
+  the OLD maximum, and the `[44]` after the status word is over the new one. Ours already
+  matches this: `apply_condition` runs `deep_wound_open` before `push_regen`.
+- **The census** (the design lane's scratch walker, not yet tracked; `edge_census` is
+  deferred). Over 127 game connections, with 1 declared-gapped connection set aside, 31
+  status-word edges set 0x20. 15 of them can be read: a maximum was declared that life,
+  and a later 42 or an edge `[44]` exists. The floor fits 15 of 15. Round fits 13, and
+  misses exactly the two edges above. The other 13 are 480 → 384 (6) and the capped
+  555 → 455 (7), and both rules agree on those. All 10 edge `[44]`s are over the new
+  maximum and 0 over the old; the prior `[44]`, the control, is over the old maximum on
+  10 of 10.
+- **Arithmetic (MEASURED, ours).** floor(0.2m) = m − ceil(0.8m) for every m in 1..3000, so
+  it does not matter which of the two retail computes. floor(m × (1.0 − 0.8)) is one
+  short on all 600 multiples of 5 up to 3000, because 1.0 − 0.8 is 0.19999999999999996.
+  So the server spells the rule `floor(m * 0.2)` and `deepwoundjoin.predicted_max` spells
+  it `m // 5`.
+- **RECONSTRUCTION:** the PLAYER's own reduction at such a maximum. The design lane's
+  census puts every player edge at 480, and a level maximum is a multiple of 20, so only
+  a morale-scaled maximum could differ. No player witness exists off the 5s. Also RECONSTRUCTION: that the rule does not depend on the applier (both
+  discriminating edges are skill 384).
+
+Shipped: `deep_wound_reduction` floors and `predicted_max` uses integer arithmetic.
+`test_mechanics` §16b reproduces both edges offline, bit for bit, with the retired
+round() and `--no-deep-wound` as known-bad arms. §18 adds 64, 483 and a 1..2000 sweep.
 
 ## 42. SKILLS-HN — the heal number was in the frames all along (it is BLUE), and retail sends the overheal (2026-09-09)
 

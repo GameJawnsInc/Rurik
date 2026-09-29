@@ -5292,7 +5292,8 @@ EFFECTS = True
 #
 # Deep Wound (482) is the one condition whose mechanic is on the WIRE rather
 # than in the client: retail's apply batch is [0x0042 482, 0x00F1, 0x009F
-# 42 = max*0.8] and its close [0x0044, 0x00F1, 0x009F 42 = max], 2 of 2 each
+# 42 = max - floor(max/5), cap 100] and its close [0x0044, 0x00F1, 0x009F
+# 42 = max], 2 of 2 each
 # in the Isle capture (isle 8.2, mechanised by deepwoundjoin.py). The CLIENT
 # then applies the maximum change as a SIGNED delta to current health --
 # `--probe health_shrink` (studies/unitsetup 8 Q5): 25 + (50-100) = -25 in
@@ -5305,7 +5306,7 @@ EFFECTS = True
 # known-bad arm: the episode opens and times out, the maximum never moves.
 STATUS_WORD = True     # False (--no-status-word): no 0x00F1 rides an effect.
 DEEP_WOUND = True      # False (--no-deep-wound): 482 is an icon and nothing else.
-DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"
+DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"; FLOORED, OBSERVED (skills 41.7)
 DEEP_WOUND_CAP = 100             # WIKI: "never ... by more than 100 health"
 DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 #
@@ -25816,13 +25817,25 @@ def push_status(send, state, agent_id, conn_id):
 
 
 def deep_wound_reduction(maximum):
-    """How much Deep Wound takes off a maximum. WIKI rule, retail-exact at 480.
+    """How much Deep Wound takes off a maximum: 20 % FLOORED, capped at 100.
 
-    round() rather than floor: the one retail witness is 480 -> 384, which
-    every rounding fits; below a multiple of 5 the rounding is UNVERIFIED and
-    named so here rather than hidden in an int().
+    FLOORED, OBSERVED (RANGERPRE-S1, studies/skills 41.7): an NPC at 64 went
+    to 52 (20260929T150923 :53756, agent 30, the edge at t=1116.0485, its
+    [44] f32(-6/52) exactly and the next hit's 42 = 52), n=1; a PvP-arena
+    opponent at 483 went to 387 (20260817T231139 :50513, agent 10, t=460.161,
+    [44] f32(-20/387)). round() sent 51 and 386. Every multiple of 5 -- the
+    480 -> 384 witnessed six times, the capped 555 -> 455 -- fits both, which
+    is why round() stood until a maximum off the 5s was read. The PLAYER's
+    own reduction at such a maximum is RECONSTRUCTION: no player witness sits
+    off a multiple of 5.
+
+    floor(0.2m) == m - ceil(0.8m) for every m, so which of the two retail
+    computes is immaterial. NEVER spell it floor(m * (1.0 - 0.8)): 1.0 - 0.8
+    is 0.19999999999999996 and comes out one short on every multiple of 5
+    (480 -> 95). 0.2's double sits ABOVE 0.2, so this floor is exact on the
+    integers (test_mechanics 18 sweeps 1..2000).
     """
-    return min(DEEP_WOUND_CAP, int(round(float(maximum) * DEEP_WOUND_FRACTION)))
+    return min(DEEP_WOUND_CAP, int(math.floor(float(maximum) * DEEP_WOUND_FRACTION)))
 
 
 def deep_wound_open(send, state, agent_id, conn_id):
