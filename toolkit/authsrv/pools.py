@@ -33,7 +33,7 @@ the bar flat at 25 through eight presses.
 
 THE QUANTUM, and this is the finding this module exists to carry:
 
-    rate = f32(0.33) * pips / max_energy
+    rate = f32( f32( f32(0.33) * pips ) / max_energy )
 
 MEASURED 2026-08-20 against every distinct property-43 value in the corpus. It
 reproduces ALL FIVE observed clusters BIT-EXACTLY -- 0.032999999821186066,
@@ -49,6 +49,13 @@ client's constant is a float literal 0.33f and not 1/3, and the difference is
     (`f32(f32(f32(0.33)*p)/m)`, which rounds the intermediate product too,
     agrees on all five as well -- the corpus does not separate those two, and
     nothing here pretends it does.)
+    SEPARATED 2026-09-29 (CASTAI-Z2): with nineteen distinct rates now joined
+    to their own maxima, the per-operation spelling reproduces 19 of 19 and the
+    single-rounding one 17. It was one ulp off on (3, 19) -- JARIN's Ranger AND
+    the second Zaishen tape's Warrior under the arena's +1-pip effect, two
+    characters -- and on (3, 18); the double-first twin gets 12
+    (test_pools 2b). So the client rounds after EACH single-precision
+    operation, as compiled float code does, and `wire_regen_rate` now does too.
 
   * AND THE PIPS ARE INTEGERS, WHICH IS THE CHECK WITH NO FREE PARAMETER.
     Join each of the 52 property-43 events to that agent's OWN property-41 max
@@ -306,13 +313,16 @@ def f32(value):
 def wire_regen_rate(pips, max_energy):
     """The f32 property-43 value for `pips` pips over a pool of `max_energy`.
 
-        f32( f32(0.33) * pips / max_energy )
+        f32( f32( f32(0.33) * pips ) / max_energy )
 
-    MEASURED: reproduces all five of the corpus's distinct nonzero rates
-    bit-exactly, and the inverse (rate * max / 0.33) lands on an integer for 52
-    of 52 property-43 events joined to their own agent's max. The nominal
-    1/3 energy per second reproduces none of the five. Full evidence in the
-    module docstring; `test_pools.py` section 1 re-runs both halves.
+    MEASURED: reproduces every distinct nonzero rate the corpus holds
+    bit-exactly -- 19 of 19 since the second Zaishen tape (CASTAI-Z2,
+    2026-09-29), where the single-rounding spelling this function used until
+    that day got 17 (one ulp off on (3, 19) and (3, 18)) -- and the inverse
+    (rate * max / 0.33) lands on an integer for every property-43 event joined
+    to its own agent's max. The nominal 1/3 energy per second reproduces none.
+    Full evidence in the module docstring; `test_pools.py` sections 1 and 2b
+    re-run both halves.
 
     NEGATIVE PIPS ARE PERMITTED -- energy DEGENERATION is a real mechanic and
     this is the channel it would ride, by symmetry with property 44's health
@@ -325,7 +335,7 @@ def wire_regen_rate(pips, max_energy):
             f"and a pool of zero has no fractions. Refusing rather than "
             f"dividing: an inf or a nan reinterpreted into the dword slot is a "
             f"value the client will happily animate towards.")
-    return f32(f32(PIP_ENERGY_PER_SECOND) * pips / max_energy)
+    return f32(f32(f32(PIP_ENERGY_PER_SECOND) * pips) / max_energy)
 
 
 def spend_fraction(cost, max_energy):

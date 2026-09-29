@@ -858,6 +858,24 @@ The census is now 105 connections / 30 captures / 13,888 c2s / 60 opcodes. One c
 `0x01D9` behaves as a travel-state carrier (`[2, 1, '']` after every MAP_TRAVEL and every
 ENTER), and `0x01D7` / `0x01BB` are unnamed SMSG candidates.
 
+**Addendum, 2026-09-29 (CASTAI-Z2): a fourth, `0x0042`.** The Smiting Monks' capture
+`20260929T100038` brought one more opcode the census had never seen (monsterai §18.4,
+CASTAI-ZF35). **Dropped on purpose, not armed, and left UNNAMED at n = 2**: the name is the
+owner's to decide, as `0x00A3`'s was. No upstream names it (GWLP-R: `P066_Unknown`); the
+`[agent_id]` layout is OpenTyria's row (UPSTREAM).
+
+| Opcode | Decision | Evidence |
+|---|---|---|
+| `0x0042` | UNNAMED, n = 2 | `[9]` twice, each at the timestamp of a TARGET_SELECT of the Zaishen Fighter (agent 9). The first was sent 5.285 s into the player's death, with the Fighter dead too (:62925 245.242). The second came 21 ms after the player's revival (:51090 402.799). 37 ms after the first, s2c `0x0022 [9, 0]` (UPSTREAM WORLD_UPDATE_CONTROLLED_AGENT) handed control to the Fighter, in one chunk with WORLD_REMOVE_AGENT of agents 1 and 2. `0x0022 [7, 1]` handed it back in the batch that revived the player. Four earlier tapes carry the same [other, 1] then [own, 1] pair. "Observe a party member while dead" is RECONSTRUCTION. The own agent is read by the self-scoped property-41 anchor; the first-PLAYER_INFO rule is wrong on 34 of 116 connections |
+
+The census is now 116 connections / 31 captures / 14,907 c2s / 61 opcodes. Only the new tape
+moved it: 38 rows are byte-equal, 22 moved by exactly the tape's own contribution, and 1 is
+new. The second field of s2c `0x0022` (UPSTREAM WORLD_UPDATE_CONTROLLED_AGENT) now has
+three observed values over the corpus's 120: 3 at every instance load (110); 0 once, at the
+handoff while the player was dead; and 1 nine times, on both halves of the four earlier
+[other, 1] then [own, 1] pairs and at this tape's return. What 0 and 1 mean beyond that is
+RECONSTRUCTION.
+
 ### The hero add — `c2s 0x001E HERO_ADD`, RECONSTRUCTION (DESKWORK-D1 step 4, 2026-09-23; corrected by the fix pass the same day)
 
 **CORRECTED 2026-09-23 (the D1 fix pass), and read this list before the section.**

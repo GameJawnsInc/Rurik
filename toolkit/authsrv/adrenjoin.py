@@ -410,6 +410,18 @@ def scan(costs=None, set_aside=None):
                              and len({u for _i, u in sub}) == 1
                              and len({round(d[3], 9) for d in dmg}) == 1)
                 clean = len(dmg) == 1 or symmetric
+                # CASTAI-Z2 (2026-09-29): EVERY 207 at me in the batch, strikes
+                # included, rides on each of its rows as `batch_gains`. An
+                # ambiguous batch is still not attributed row by row -- the
+                # Smiting Monks' tape holds 14 armed batches of two to five
+                # UNEQUAL words (a Zealot's Fire beside a Smite Hex from the
+                # same monk, two auras from two monks) and whichever word
+                # sorted first would be a guess -- but the relation the consumer
+                # can test without guessing is the MULTISET one: each word's
+                # round(pct) consumes a distinct gain of the batch, or the batch
+                # holds a word retail did not answer (test_adrenwire 12).
+                batch_gains = sorted(int(v[2]) for _i, op, v in items
+                                     if op == ADRENALINE_GAIN and int(v[1]) == me)
                 for di, prop, src, val in dmg:
                     rows.append({
                         "capture": stamp, "connection": conn, "arm": arm,
@@ -418,6 +430,7 @@ def scan(costs=None, set_aside=None):
                         "value": val, "pct": abs(val) * 100.0,
                         "units": (sub[0][1] if sub and clean else None),
                         "ambiguous": not clean,
+                        "batch_gains": batch_gains,
                         "adrenal_on_bar": adrenal,
                     })
     return {"captures": captures, "arms": stats}, rows, skipped

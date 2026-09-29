@@ -28,6 +28,54 @@ move back.
 
 ---
 
+### CASTAI-Z2, the Smiting Monks -- 2026-09-29 -- **the owner's live run scored (P1-P4 and P6 held, P5 failed 1 of 43); the Monk's hex class marker 19 and retail's regen-rate rounding SHIPPED; the tape's 6 suite reds repaired by 5 reviewed lanes**
+
+**The run** (monsterai §18.3): live capture `20260929T100038`, five matches, all against the
+Smiting Monks, no capture gap. Maps 319 and 321 were new arenas, so
+`castethogram.ZAISHEN_MAPS` holds all five of the outpost menu's ids.
+- **Verdicts:**
+  - P1 Mend Condition only on a monk with a condition: 92 of 92.
+  - P2 Reversal of Fortune at or below 70 %: 95 of 95, max 0.699. That is the hero tier:
+    CASTAI-W2's first tape evidence.
+  - P3: 79 % of RoF on another monk.
+  - P4 no re-application while live: Zealot's Fire declined 18 ready slots; Scourge Healing
+    0 of 19; Balthazar's Aura a structural null.
+  - P5 Drain Enchantment only at an enchanted target: FAILED, 1 of 43, 0.5 s after three
+    Drains had stripped the Mage.
+  - P6 one target at a time: 0.984.
+- **How it was scored:** `zaishenrun.py --capture 20260929T100038` (`957b9c64`), three blind
+  replicators and a judge (six fixes, `221ef122`), and two review rounds (`b41c1b54`).
+- **Two verdicts moved after the first run, both disclosed:**
+  - P1, by an instrument repair. State is now read in stream order: the millisecond-rounded
+    announce had let a read see its own batch (CASTAI-ZF22).
+  - P6, by a rule change after the data. The wire's own `[3]` now ends a monk's attack
+    target. The three replicators chose that rule blind, and the pre-run rule's 0.795 is
+    printed beside it.
+- The registration's premise for Smite Hex was wrong: the Zaishen Mage's Incendiary Bonds
+  hexes the monks.
+
+**Shipped** (monsterai §18.4):
+- `HEX_EFFECT_CLASS[3] = 19`: Scourge Healing draws [1, 19], 14 of 14 (ZF23, `7625de3e`).
+- `pools.wire_regen_rate` rounds after each float operation: 19 of 19 rates, against the old
+  spelling's 17 (ZF28, `5e2c3ee2`).
+
+**The reds.** The tape turned 6 of 251 files red:
+- `test_adrenwire`, `test_c2striage`, `test_pools`, `test_skilldamage`: 4 rounds for three of
+  them.
+- `test_weaponcensus` and `test_weapons`: 3 rounds.
+
+Five lanes ran under the Z1 contract, and every red was the test's. Pinned literals were
+exact as of the pin. They carried findings ZF24-ZF37:
+- the arena's morale (+2 per kill) drives the maximum health;
+- Zealot's Fire's payoff rides the monk's ally-cast completion;
+- holy damage rides property 55;
+- Divine Favor's 3-point heal;
+- a post-mortem adrenaline gain;
+- c2s `0x0042`, UNNAMED at n = 2, dropped: the name is the owner's.
+
+**Open** (PLAN.md §8): the unmodelled Zealot's Fire / Balthazar's Aura / Divine Favor; the
+channel for holy damage; the gain on a hit after the killing blow; naming `0x0042`.
+
 ### The content overlay follows build 38888, and c2s 0x00A3 is named -- 2026-09-28 -- **the owner's rulings ("regenerate content from 38888", "name 0x00A3"); the PIN stays 38797; a guard keeps skill 3446 off a 38797 client**
 
 **0x00A3** (`2d9a7547`): named `ZAISHEN_CHALLENGE_CANCEL`, medium, on the PARTY_LEAVE precedent

@@ -73,6 +73,14 @@ a check:
       only where a slot is actually written, and `test edi,edi` / `je` at
       0x008219F8 jumps past the UI event. A 207 no slot accepted repaints
       nothing and arms no timer.
+  §3b (CASTAI-Z2, 2026-09-29) THE SIGNATURE'S FOURTH KIND, made to refuse on
+      synthetic batches: a gain with no word of its own, after a killing word,
+      in the agent's death batch, whose units name a points window some hit
+      the agent took elsewhere on the connection lands in, is `post_mortem`
+      (retail sends the gain and drops the word for a hit landing on an agent
+      already dead in the tick -- 2 of 2 on the Smiting Monks' tape); drop
+      any of its four terms (the death flag, a damage word at the agent, the
+      order, the value) and it is `unexplained` again.
 
 Sections 1-3 need no captures and no client; 4-7 and 12 need
 `vault/captures/live/`; 8-11 and 13 need the pinned build-38797 image. The last two groups declare skips, the
@@ -99,15 +107,26 @@ sys.path.insert(0, os.path.join(TOOLKIT, "schema"))
 sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
 import checks  # noqa: E402
 
-# FLOOR 10, and it is the MANDATORY CORE rather than the full count, which is
+# FLOOR 15, and it is the MANDATORY CORE rather than the full count, which is
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
-# machine executes 72 (55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28),
-# and a run with neither the
-# captures nor the pinned image
-# executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
-# also turns §3 RED (3 failures, not a skip) because the content overlay is NOT
+# machine executes 72 (55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28;
+# 95 since CASTAI-Z2, 2026-09-29: +3 for 3b's synthetic arms, +1 for the
+# Smiting Monks' tape pinned whole -- measured 95 on the green run; 96 since
+# the CASTAI-Z2 round-1 review, 2026-09-29: +1 for 3b's wordless-death arm,
+# measured 96; 97 since the round-2 review, 2026-09-29: +1 for 3b's
+# value-term arms, measured 97), and a run with neither the captures nor the
+# pinned image executes 15 (10 until CASTAI-Z2; 2026-09-29, CASTAI-Z2 + its
+# review: +4 -- 3b's synthetic arms run without fixtures, measured 14 with
+# `RURIK_VAULT` at an empty directory; 2026-09-29, CASTAI-Z2 round-2 review:
+# +1 -- 3b's value-term arms, measured 15 the same way -- and the floor
+# follows that measurement as the new mandatory core) -- forced by pointing
+# `RURIK_VAULT` at an empty directory,
+# which also turns §3 RED (a failure, not a skip: 3 failures when this was
+# written, 1 on the 2026-09-29 measurement -- the off-grid census over 0 rows;
+# the control and the width check pass on the content overlay alone) because
+# the content overlay is NOT
 # in the skippable half. That is `test_pools`' split and the reason for it: the
 # overlay regenerates from the owner's own install via
 # `skilltable.py --emit-content`, so a machine without it should go red rather
@@ -118,14 +137,14 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 91 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 15 of 97 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
-# fixtures, one section quietly ceasing to run would still clear 10. The guards
+# fixtures, one section quietly ceasing to run would still clear 15. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
 # capture, connection and message counts, so a corpus walk that visited less
 # goes red instead of silent, and §8 prints the image it read and then makes
 # four assertions about it. The floor's job here is the fixture-less run.
-LEDGER = checks.Ledger("the adrenaline wire model", floor=10)
+LEDGER = checks.Ledger("the adrenaline wire model", floor=15)
 
 # ---------------------------------------------------------------------------
 # THE FAMILY. Ours: NOT FOUND in GWCA, OpenTyria, Headquarter, GWLP-R,
@@ -139,6 +158,9 @@ FAMILY = (SMSG_ADRENALINE_CHARGE, SMSG_ADRENALINE_CLEAR,
           SMSG_ADRENALINE_SET, SMSG_ADRENALINE_SPEND)
 
 SMSG_SKILLBAR_UPDATE = 218          # the connection's own bar -- §5's join key
+SMSG_AGENT_UPDATE_FLAGS = 0x0026    # [agent, flags]; 4 is the agent's death
+                                    # (adrenjoin.PLAYER_DEAD_FLAG) -- 4b's
+                                    # post-mortem term (CASTAI-Z2)
 
 # The four generic-property opcodes, prop id FIRST in every one. Same constants
 # as `test_pools.py`, restated rather than imported so this file depends on no
@@ -201,6 +223,9 @@ CENSUS = {SMSG_ADRENALINE_CHARGE: 1028, SMSG_ADRENALINE_CLEAR: 37,
 #     disagreement band is the single observation that would SETTLE the
 #     boundary. Reddening is the point.
 # When either goes red, investigate the new row. Do not widen the constant.
+#   2026-09-29 (CASTAI-Z2): the second went red and was not widened -- 24
+#   armed rows in the band on 20260929T100038, investigated at NEAR_MISS_BITS
+#   below and pinned on their own tape.
 
 # 207's amount, split into the two populations §4b is about. A STRIKE is 25 --
 # GWW ("Adrenaline", rev. 2026-07-02) gives one per successful weapon hit -- and
@@ -314,6 +339,119 @@ PVP_SPENDS_WITNESS = {2858: 348}
 # CASTAI-Z1 review): an NPC's own skill, outside the player corpus. test_pools
 # 2d pins the same set from its own walk.
 UNRESOLVED_CASTS_AT_PIN = {1870}
+
+# CASTAI-Z2 (2026-09-29): THE SMITING MONKS' TAPE, 20260929T100038 -- five
+# Zaishen Challenge matches against four Monk AI (Balthazar's Aura 272,
+# Zealot's Fire 271, Smite Hex 302, Scourge Healing 251 ...) beside the owner's
+# axe Warrior, no capture gaps. It reddened four checks, and re-scanned AS OF
+# ITS PIN (every stamp before Z2_PIN_STAMP) each reproduces to the digit:
+#   - 4b's 10x dominance: 1219 at 25 against 106 below, before the pin. On the
+#     tape itself the tail OUTNUMBERS the strikes, 229 to 123 -- the monks'
+#     aura ticks, Zealot's Fire and 3-point wand hits charge the bar more often
+#     than the axe lands -- so by 4b's own rule (a fact about how the owner
+#     plays; a tape made to be hit is named out of the ratio) it is a
+#     hits-taken tape: named OUT of the ratio BY STAMP (RATIO_NAMED_OUT, the
+#     way the two DAMAGE_TAPES are), pinned whole per connection (Z2_207), and
+#     the ratio stays LIVE over every other tape, future ones included, with
+#     the pin's own numbers EXACT beside it as a second conjunct. (The round-1
+#     form read the ratio as of the pin only, which froze it -- a future tape
+#     could not redden it -- while its detail still called it "the durable
+#     form"; the round-2 review caught the contradiction.)
+#   - THE SIGNATURE: two 207s the damage rule does not explain, both in the
+#     observer's DEATH batch, both AFTER the killing word: 0x00CF [7, 6] at
+#     t 50.751 on :51090 (monk 4's Balthazar's Aura visual 487 immediately
+#     ahead of it; that monk's aura ticks on this observer are 27 of 480 =
+#     5.625 % -> 6, 3 of 3 elsewhere on the connection -- OBSERVED) and
+#     0x00CF [7, 16] at t 46.512 on :64557 (75 of 480 is a Smite Hex on this
+#     tape; no visual names its source -- RECONSTRUCTION). A hit landing in
+#     the tick the observer dies in, after the blow that killed, sends its
+#     GAIN and NOT its damage word: 2 of 2. THE COUNT (OBSERVED, corrected by
+#     the round-1 review; the method: walk every batch carrying 0x0026 [me, 4]
+#     on an ARMED connection -- one whose observer's bar carried an adrenal
+#     skill -- and list its gains, damage words at the observer, 0x00D0
+#     clears): 17 armed observer deaths in the corpus
+#     -- 12 on this tape, 3 on RB2 20260917T090355, 1 on 20260928T103123, 1 on
+#     20260821T152147. 16 carry a damage word at the observer in the death
+#     batch (the killing word); 1 carries NONE (20260821T152147 :63150
+#     t 490.312, a non-damage death -- no word, no gain, no clear), so the
+#     kind's rule REQUIRES a word in the batch. The 2 orphans sit on 2 of
+#     the 16. The killing word is UNCLAMPED -- RECONSTRUCTION, not observed:
+#     integrating the observer's damage words alone from spawn leaves 29.4 %
+#     against RB2's 59.58 % word and 6.67 % against :51090's 15.63 %, but the
+#     observer's regeneration (prop 43 = 0.033 in force from t 0.6, reset to
+#     0 in the death batch) and degeneration (prop 62 = -0.25 at t 36.15) are
+#     NOT integrated, so the remainder is an estimate of the health the word
+#     met, not a reading of it. THE VALUE TERM (round-2 review): the kind
+#     cannot verify its units against a word -- the word is what was dropped
+#     -- so it verifies them against the POINTS of the fight: at the maximum
+#     in force at the gain, the units' preimage under round is a points
+#     window, and some damage word the observer took elsewhere on the
+#     connection must land in it. 2 of 2: the 6 at 480 is [26.4, 31.2) and
+#     :51090 carries seven 27-point words at the observer (five 5.625 % aura
+#     ticks at 480, two 7.219 % at 374); the 16 at 480 is [74.4, 79.2) and
+#     :64557 carries ONE 75-point word at the observer -- 18.382 % at 408,
+#     t 52.764, AFTER the death, rounding to 18 there. A term over ROUNDS
+#     fails on that row and a term over POINTS holds, which is why the term
+#     is points: a skill's damage does not move with the target's maximum.
+#     It is a plausibility bound, not a mechanism, and n = 2: a post-mortem
+#     gain from a hit the observer took nowhere else on its connection reads
+#     `unexplained` and reddens 4b, to be named there. `_classify_gains`
+#     names the kind `post_mortem` by that four-term rule; a gain off it
+#     anywhere is `unexplained`.
+#     OUR SERVER drops both the word and the gain for a hit on a dead player
+#     (`player_dead` guards at the three grant sites) -- a wire-shape
+#     divergence at the margin, ESCALATED, not edited here.
+#   - 12's grant relation: 35 armed rows in 14 batches of UNEQUAL words (a
+#     Zealot's Fire beside a Smite Hex from one monk; auras from two), which
+#     adrenjoin refuses to attribute row by row. The relation holds as a
+#     MULTISET per batch -- each word's round(pct) consumes a distinct gain of
+#     the batch -- 14 of 14, and floor consumes 1 of 14 (:57580 t 54.715, a
+#     5.392 % Zealot's Fire beside an 18.382 % Smite Hex, where floor and
+#     round agree on both).
+#   - THE NEAR MISS, FAILED AS WRITTEN (NEAR_MISS_BITS below): 24 armed rows
+#     land in [0.5 %, 1.0 %) -- every one a 3-point wand hit on a 374..418
+#     maximum -- and every one grants 1.
+Z2_PIN_STAMP = "20260929T100038"
+Z2_TAPE = "20260929T100038"
+# 4b's dominance AS OF THE PIN: (at 25, below 25) over the corpus before
+# Z2_PIN_STAMP without the two DAMAGE_TAPES. EXACT: that set of tapes is closed.
+Z2_PIN_RATIO = (1219, 106)
+# The tapes named OUT of 4b's dominance ratio, BY STAMP: the two DAMAGE_TAPES
+# (pinned whole above) and the Smiting Monks' tape (pinned whole per
+# connection, Z2_207). The ratio is LIVE over every other tape, future ones
+# included -- the Zaishen tape 20260928T103123 is inside it (94 at 25 against
+# 38 below on its own) -- so a tape whose tail rivals its strikes reddens it
+# and is named here, never widened past. Headroom is thin and the check's
+# detail reports it: at (1219, 106) the tail may grow by 15 with no new strike
+# before 10x fails.
+RATIO_NAMED_OUT = frozenset(DAMAGE_TAPES) | {Z2_TAPE}
+# The tape's 207s per connection, pinned WHOLE (a tape does not grow); the
+# five matches in port order.
+Z2_207 = {
+    "10.0.0.210:51090->44.217.41.117:80":
+        {1: 10, 5: 14, 6: 10, 7: 2, 9: 6, 10: 2, 11: 1, 15: 1, 16: 2, 18: 2,
+         20: 1, 25: 35, 29: 1},
+    "10.0.0.210:51199->52.23.107.149:80":
+        {1: 4, 5: 3, 6: 3, 7: 5, 8: 8, 9: 4, 10: 6, 11: 3, 15: 2, 16: 3, 17: 2,
+         25: 27},
+    "10.0.0.210:57580->34.196.135.145:80":
+        {1: 5, 5: 26, 6: 9, 7: 2, 9: 1, 16: 1, 18: 1, 25: 14},
+    "10.0.0.210:62925->52.23.107.149:80":
+        {1: 6, 2: 1, 5: 11, 6: 7, 8: 7, 10: 3, 11: 1, 12: 6, 16: 1, 17: 2,
+         25: 30, 27: 1, 28: 1},
+    "10.0.0.210:64557->52.23.107.149:80":
+        {1: 11, 5: 6, 7: 13, 8: 7, 9: 4, 10: 2, 16: 1, 18: 1, 25: 17, 27: 1,
+         31: 1},
+}
+# Every 207 on the tape by kind (`_classify_gains`), and the two post-mortem
+# gains as (connection, t, units) -- EXACT on the witness tape only.
+Z2_KINDS = {"strike": 123, "damage": 232, "post_mortem": 2}
+Z2_POST_MORTEM = [("10.0.0.210:51090->44.217.41.117:80", 50.751, 6),
+                  ("10.0.0.210:64557->52.23.107.149:80", 46.512, 16)]
+# 12: the ambiguous armed (batches, rows) on the tape, none before the pin;
+# and the band rows: 24 wand hits of 3 points, each granting 1.
+Z2_AMBIGUOUS = (14, 35)
+Z2_BAND_ROWS = 24
 
 # THE BAR GATE, measured 2026-08-21 (12). Split the 58 usable connections on
 # whether the observing player's skillbar ever carried a skill with a non-zero
@@ -430,6 +568,20 @@ NEAR_MISS_BITS = 0xBC23D70A
 # constant actually was and which the check caught immediately.
 NEAR_MISS_PCT = abs(struct.unpack("<f", struct.pack("<I", NEAR_MISS_BITS))[0]) * 100.0
 DISAGREEMENT_BAND = (0.5, 1.0)
+# FAILED AS WRITTEN, 2026-09-29 (CASTAI-Z2), and recorded rather than re-worded.
+# The prediction was "exactly one damage event in the corpus lands in [0.5 %,
+# 1.0 %), and it is DARK" -- a size of the vault dressed as a claim -- and the
+# Smiting Monks' tape put 24 ARMED rows in the band (3-point wand hits on a
+# 374..418 maximum, 0.718 %..0.802 %), every one answered by a 207 carrying 1.
+# What that settles: round (and ceil) grant 1 across the band, and floor,
+# granting 0, is refuted on 24 more rows. What it does NOT settle is the
+# question the check actually guarded, which sits BELOW the band: no row in
+# the corpus, armed or dark, has ever landed in (0, 0.5 %), so whether such a
+# hit sends a 207 carrying 0 or nothing is still NOT OBSERVED (test_pools 11d
+# predicts the zero). The check now reads: as of Z2_PIN_STAMP exactly the one
+# dark near miss; on the witness tape exactly Z2_BAND_ROWS armed rows, each 3
+# points, each granting round(pct) = 1 and not floor; past the pin every armed
+# band row must grant round(pct); the (0, 0.5 %) count REPORTED, not asserted.
 
 # The three skills retail spends adrenaline on in this corpus, and the number of
 # connections carrying 207 at all.
@@ -633,6 +785,118 @@ def section_cost_column():
               f"answers, and this is the check that would notice")
 
 
+def section_classifier_arms():
+    """THE SIGNATURE'S CLASSIFIER, made to refuse (CASTAI-Z2, 2026-09-29).
+
+    `_classify_gains` gained a fourth kind, and a kind that can only ever be
+    assigned is a hole in the signature: every unexplained gain would find a
+    home in it and the check below it could not go red. So seven synthetic
+    batches, no captures needed: the rule's four terms -- the agent's death
+    flag in the batch, a damage word at the agent in the batch, the gain
+    AFTER the last such word, and the VALUE (the units' points window at the
+    maximum in force holds the points of a hit the agent took elsewhere on
+    the connection) -- are each dropped in turn and the same orphan gain must
+    go back to `unexplained`; and a gain a pooled word fits must still read
+    `damage`, death flag or not, because the pooled rule is tried first. The
+    third term was the round-1 review's hole: with no word at the agent
+    `last_word` is -1, so a WORDLESS death batch (the corpus has one,
+    20260821T152147 :63150 t 490.312, a non-damage death) admitted any orphan
+    -- the reviewer planted one under a future stamp and the whole test stayed
+    green. The fourth was the round-2 review's: with the three context terms
+    met, a 60 and a 0 planted as the orphan both stayed green, because nothing
+    constrained the units. The arms below are those plants.
+    """
+    print("\n3b. the post-mortem kind refuses without any of its four terms")
+    import adrenjoin
+    me, t = 7, 1.0
+
+    def word(pct, at=t):
+        dw = struct.unpack("<I", struct.pack("<f", -pct / 100.0))[0]
+        return (at, adrenjoin.PROP_FLOAT_TARGET, [adrenjoin.PROP_FLOAT_TARGET, 16, me, 4, dw])
+
+    def gain(units, at=t):
+        return (at, SMSG_ADRENALINE_CHARGE, [SMSG_ADRENALINE_CHARGE, me, units])
+
+    death = (t, SMSG_AGENT_UPDATE_FLAGS,
+             [SMSG_AGENT_UPDATE_FLAGS, me, adrenjoin.PLAYER_DEAD_FLAG])
+    # The agent's maximum (property 42, 480 as on every armed connection of the
+    # tape) and, at t 0.5, an earlier 5.625 % word at the agent -- 27 points,
+    # monk 4's aura tick -- alone in its batch: no 207 sits beside it, so it
+    # classifies nothing and only feeds the value term.
+    max_hp = (0.1, adrenjoin.PROP_INT,
+              [adrenjoin.PROP_INT, adrenjoin.PROP_MAX_HEALTH, me, 480])
+    base = [max_hp, word(5.625, 0.5)]
+
+    def kinds(msgs):
+        agg = {"gain_kinds": collections.defaultdict(collections.Counter),
+               "gain_rows": []}
+        _classify_gains(agg, "synthetic", "c", msgs, adrenjoin)
+        return dict(agg["gain_kinds"]["synthetic"])
+
+    # The shape of 20260929T100038 :51090 t 50.751: the killing word (15.625 %,
+    # gain 16 ahead of it), then a gain of 6 with no word, then the death flag.
+    rule = kinds(base + [gain(16), word(15.625), gain(6), death])
+    LEDGER.ok(rule == {"damage": 1, "post_mortem": 1},
+              f"an orphan gain AFTER the killing word, in a batch that carries "
+              f"the agent's death, whose 6 at 480 names [26.4, 31.2) points and "
+              f"the connection carries a 27-point word, reads post_mortem: {rule}",
+              "expected {'damage': 1, 'post_mortem': 1}. The pooled word still "
+              "takes the 16 first; only the gain nothing fits, sitting past the "
+              "last word at the agent in a death batch, with a value the fight "
+              "has shown, takes the new kind")
+    no_death = kinds(base + [gain(16), word(15.625), gain(6)])
+    not_after = kinds(base + [gain(6), gain(16), word(15.625), death])
+    LEDGER.ok(no_death == {"damage": 1, "unexplained": 1}
+              and not_after == {"damage": 1, "unexplained": 1},
+              f"KNOWN-BAD ARMS: the same orphan WITHOUT the death flag reads "
+              f"{no_death}; with the flag but BEFORE the last word it reads "
+              f"{not_after}",
+              "expected {'damage': 1, 'unexplained': 1} both times. Each term "
+              "refuses on its own, so a gain that merely arrives in a busy "
+              "batch, or merely on a tape with a death in it, cannot hide in "
+              "post_mortem; the corpus check in 4b reddens on it")
+    # The round-1 review's plant, verbatim: a lone orphan gain beside the death
+    # flag in a batch with NO damage word at the agent. Before the word became
+    # a term this read post_mortem (gi > -1) and the whole test stayed green.
+    no_word = kinds(base + [gain(13), death])
+    LEDGER.ok(no_word == {"unexplained": 1},
+              f"KNOWN-BAD ARM (rv1): the orphan WITH the death flag but in a "
+              f"batch carrying NO damage word at the agent reads {no_word}",
+              "expected {'unexplained': 1}. A wordless death batch has no "
+              "killing word for the gain to sit after, so `last_word` is -1 and "
+              "the order term is vacuous; the word itself must be present. The "
+              "corpus has one such batch (20260821T152147 :63150 t 490.312, a "
+              "non-damage death, no gain in it) and a stray gain there must "
+              "redden 4b, not hide")
+    # The round-2 review's plants: the three context terms met and the units
+    # unconstrained. The same orphan 6 on a connection that never showed a
+    # 27-point hit (no `base` word), and a 60 -- [285.6, 290.4) points at 480,
+    # a hit nothing on the connection took -- after the killing word.
+    no_points = kinds([max_hp, gain(16), word(15.625), gain(6), death])
+    big = kinds(base + [gain(16), word(15.625), gain(60), death])
+    LEDGER.ok(no_points == {"damage": 1, "unexplained": 1}
+              and big == {"damage": 1, "unexplained": 1},
+              f"KNOWN-BAD ARMS (rv2, the value term): the orphan 6 on a "
+              f"connection with no 27-point hit at the agent reads {no_points}; "
+              f"a 60 after the killing word, on the connection that has the "
+              f"27, reads {big}",
+              "expected {'damage': 1, 'unexplained': 1} both times. The kind "
+              "cannot check its units against a word (the word is what was "
+              "dropped), so it checks them against the fight: the units at the "
+              "maximum in force name a points window, and some damage word at "
+              "the agent elsewhere on the connection must land in it. Without "
+              "this term a 60 or a 0 planted after a killing word read "
+              "post_mortem and the whole test stayed green")
+    control = kinds(base + [gain(6), word(5.625), death])
+    LEDGER.ok(control == {"damage": 1},
+              f"CONTROL: a gain a pooled word fits reads damage even in a death "
+              f"batch: {control}",
+              "expected {'damage': 1}. The 16 killing words in the corpus's "
+              "death batches (16 of 17 armed observer deaths carry one) are "
+              "present and their gains read this way; the post-mortem kind is "
+              "reached only when the pool has nothing left for the gain")
+
+
 # ---------------------------------------------------------------------------
 # 4-7: the live corpus. ArenaNet's own wire.
 
@@ -654,21 +918,73 @@ def _classify_gains(agg, stamp, conn, msgs, adrenjoin):
       damage       equal to one pooled word's round(%) -- the damage rule
       summed       25 + one pooled word's round(%) -- a strike and a hit taken
                    in one message, JARIN's reading of its three
+      post_mortem  (CASTAI-Z2, 2026-09-29) no pooled word fits, and FOUR
+                   terms hold: the batch carries the agent's DEATH flag
+                   (0x0026 [agent, 4]); the batch carries at least one damage
+                   word at the agent (the killing word); the gain sits AFTER
+                   the last of them; and THE VALUE TERM -- at the agent's
+                   maximum M in force at the gain, the units u name the points
+                   window [(u - 0.5) M / 100, (u + 0.5) M / 100), round's
+                   preimage, and some damage word the agent took ELSEWHERE ON
+                   THE CONNECTION (any batch, at that word's own maximum)
+                   lands in it. A hit landing in the tick the agent died in,
+                   after the blow that killed: retail sends its gain and not
+                   its word -- 2 of 2 on 20260929T100038. OBSERVED, counted by
+                   walking every batch carrying 0x0026 [me, 4] on an ARMED
+                   connection: the corpus holds 17 armed observer deaths, 16
+                   with a killing word in the death batch and 1 with no damage
+                   word at all (20260821T152147 :63150 t 490.312, a non-damage
+                   death) -- which is why the word is a term: without it
+                   `last_word` is -1 and every gain sits "after" it. The value
+                   term (round-2 review) is what this kind can carry of the
+                   signature's "round(% of current maximum)" when the word is
+                   the thing dropped: it is over POINTS, not rounds, because
+                   the 16 on :64557 is round of NO word at the observer there
+                   (the one 75-point word, 18.382 % at 408 after the death,
+                   rounds to 18) while its window [74.4, 79.2) at 480 holds
+                   that word's points -- a skill's damage does not move with
+                   the target's maximum. 2 of 2, a plausibility bound and not
+                   a mechanism: a post-mortem hit the agent took nowhere else
+                   on the connection reads `unexplained`. All four terms are
+                   load-bearing: section 3b drops each in turn and the same
+                   orphan goes back to `unexplained`
       unexplained  anything else, which is what the check refuses
     """
     batches = collections.defaultdict(list)
+    cur_max = {}        # agent -> property 42 in force: whose_max_health's rule, walked once
+    max_at = {}         # stream index of each 207 -> its agent's maximum in force there
+    conn_points = collections.defaultdict(list)   # agent -> points of every damage word at it
     for i, (t, op, v) in enumerate(msgs):
-        batches[t].append((op, v))
+        batches[t].append((i, op, v))
+        if op == SMSG_ADRENALINE_CHARGE:
+            max_at[i] = cur_max.get(int(v[1]))
+        elif (op == adrenjoin.PROP_INT and len(v) > 3
+              and int(v[1]) == adrenjoin.PROP_MAX_HEALTH and int(v[3]) > 1):
+            cur_max[int(v[2])] = int(v[3])          # the (1, real_max) pair's 1 skipped, as there
+        elif op in adrenjoin.DAMAGE_OPS and adrenjoin.is_damage_to(op, v, int(v[2])):
+            m = cur_max.get(int(v[2]))
+            if m:
+                pct = abs(adrenjoin.f32(v[4] if op == adrenjoin.PROP_FLOAT_TARGET else v[3])) * 100.0
+                conn_points[int(v[2])].append(pct * m / 100.0)
     for t, items in batches.items():
-        agents = {int(v[1]) for op, v in items if op == SMSG_ADRENALINE_CHARGE}
+        agents = {int(v[1]) for _i, op, v in items if op == SMSG_ADRENALINE_CHARGE}
         for a in sorted(agents):
-            gains = [int(v[2]) for op, v in items
+            gains = [(i, int(v[2])) for i, op, v in items
                      if op == SMSG_ADRENALINE_CHARGE and int(v[1]) == a]
-            pcts = [abs(adrenjoin.f32(
-                        v[4] if op == adrenjoin.PROP_FLOAT_TARGET else v[3])) * 100.0
-                    for op, v in items if adrenjoin.is_damage_to(op, v, a)]
+            words = [(i, abs(adrenjoin.f32(
+                         v[4] if op == adrenjoin.PROP_FLOAT_TARGET else v[3])) * 100.0)
+                     for i, op, v in items if adrenjoin.is_damage_to(op, v, a)]
+            pcts = [x for _i, x in words]
             pool = [_round_half_up(x) for x in pcts]
-            for g in sorted(gains, reverse=True):
+            last_word = max((i for i, _x in words), default=-1)
+            dies = any(op == SMSG_AGENT_UPDATE_FLAGS and len(v) > 2
+                       and int(v[1]) == a and int(v[2]) == adrenjoin.PLAYER_DEAD_FLAG
+                       for _i, op, v in items)
+            # Largest units first, as before (a summed 25 + x is tried before
+            # the x it would otherwise consume); stable, so equal units keep
+            # stream order.
+            for gi, g in sorted(gains, key=lambda ig: ig[1], reverse=True):
+                m, seen = max_at.get(gi), None
                 if g == STRIKE_UNITS:
                     kind = "strike_beside_25pct" if STRIKE_UNITS in pool else "strike"
                 elif g in pool:
@@ -678,13 +994,31 @@ def _classify_gains(agg, stamp, conn, msgs, adrenjoin):
                     pool.remove(g - STRIKE_UNITS)
                     kind = "summed"
                 else:
-                    kind = "unexplained"
+                    # THE VALUE TERM (rv2): the points of every damage word at
+                    # this agent on the connection that fall in the window the
+                    # units name at the maximum in force here. No maximum yet
+                    # seen means no window, and the term refuses.
+                    seen = (sorted({int(round(p)) for p in conn_points[a]
+                                    if (g - 0.5) * m / 100.0 <= p < (g + 0.5) * m / 100.0})
+                            if m else [])
+                    if dies and words and gi > last_word and seen:
+                        # `words` is the third term (rv1): with no damage word
+                        # at the agent, `last_word` is -1 and `gi > -1` holds
+                        # for every gain, so a wordless death batch would admit
+                        # any orphan. The corpus has one (20260821T152147
+                        # :63150). `seen` is the fourth (rv2): without it the
+                        # kind constrained nothing about the units, and a 60
+                        # or a 0 planted after a killing word stayed green.
+                        kind = "post_mortem"
+                    else:
+                        kind = "unexplained"
                 agg["gain_kinds"][stamp][kind] += 1
                 if g != STRIKE_UNITS:
                     agg["gain_rows"].append({"stamp": stamp, "conn": conn,
                                              "t": round(t, 3), "agent": a,
                                              "units": g, "kind": kind,
-                                             "pcts": pcts})
+                                             "pcts": pcts, "max": m,
+                                             "points_seen": seen})
 
 
 class MissingRow(KeyError):
@@ -985,12 +1319,12 @@ def section_populations(agg):
     # corpus WITHOUT the two named hits-taken tapes, which are pinned whole by
     # the last check of this section (DAMAGE_TAPES says what each one is).
     everything = agg["amounts"]
-    amounts = collections.Counter()
+    amounts = collections.Counter()     # the ratio's population: every tape but RATIO_NAMED_OUT, LIVE
     at_pin = collections.Counter()      # CASTAI-Z1: the corpus the claims were made over
     for stamp, c in agg["amounts_by_stamp"].items():
-        if stamp not in DAMAGE_TAPES:
+        if stamp not in RATIO_NAMED_OUT:
             amounts.update(c)
-            if stamp < PIN_STAMP:
+            if stamp < PIN_STAMP:           # Z2_TAPE is past PIN_STAMP: at_pin is unchanged by the naming-out
                 at_pin.update(c)
     # THE COUNT IS A FLOOR AND THE DOMINANCE IS THE CLAIM. Every gain the
     # corpus has added since this was first pinned carried exactly 25, twice
@@ -1007,19 +1341,63 @@ def section_populations(agg):
               f"as a value; that it is one strike per landed hit is the "
               f"reading, and it is the reading `pools.on_hit_landed` already "
               f"implements")
-    LEDGER.ok(amounts[STRIKE_UNITS] > 10 * tail_total,
+    # CASTAI-Z2 (2026-09-29): the Smiting Monks' tape put the tail ahead of
+    # the strikes, 229 to 123 -- the axe landed 123 times while four monks'
+    # aura ticks, Zealot's Fire and 3-point wand hits charged the bar 229
+    # times -- and this check's own prose already says what that is: a fact
+    # about how the owner plays, and a tape made to be hit is named out of
+    # the ratio rather than allowed to drag it. So the tape is named out BY
+    # STAMP (RATIO_NAMED_OUT, beside the two DAMAGE_TAPES) and pinned whole
+    # (Z2_207, below); the ratio stays LIVE over every other tape, future
+    # ones included, which is what "durable form" in the detail means and
+    # what a7c46706 wrote it for; and the pin's own numbers are EXACT beside
+    # it. (Round 1 read the ratio as of the pin ONLY, which froze it -- no
+    # future tape could redden it -- while the detail went on calling it
+    # durable; the round-2 review caught that.) The whole-corpus and per-tape
+    # numbers are REPORTED. What carries the tail's MEANING is the SIGNATURE
+    # two checks down -- every one of the 229 is a joined damage word or a
+    # post-mortem gain -- not this ratio, which never measured the wire.
+    z2_pin = collections.Counter()
+    for stamp, c in agg["amounts_by_stamp"].items():
+        if stamp not in DAMAGE_TAPES and stamp < Z2_PIN_STAMP:
+            z2_pin.update(c)
+    tail_pin = sum(n for a, n in z2_pin.items() if a < STRIKE_UNITS)
+    per_tape = {st: (c[STRIKE_UNITS], sum(n for a, n in c.items() if a < STRIKE_UNITS))
+                for st, c in sorted(agg["amounts_by_stamp"].items())}
+    every_tail = sum(n for a, n in everything.items() if a < STRIKE_UNITS)
+    headroom = (amounts[STRIKE_UNITS] - 1) // 10 - tail_total
+    headroom_read = (f"the tail may grow by {headroom} with no new strike before "
+                     f"10x fails" if headroom >= 0 else
+                     f"the tail is {-headroom} PAST what 10x allows -- find the "
+                     f"tape that did it in the per-tape list below and name it "
+                     f"out by stamp (RATIO_NAMED_OUT), as the three are")
+    LEDGER.ok((z2_pin[STRIKE_UNITS], tail_pin) == Z2_PIN_RATIO
+              and amounts[STRIKE_UNITS] > 10 * tail_total,
               f"and {STRIKE_UNITS} is the overwhelming mode, not merely the "
               f"commonest (10x: JARIN's melee hero took a 2-unit bite for every "
-              f"skale swing and doubled the tail on one tape)",
-              f"{amounts[STRIKE_UNITS]} at 25 against {tail_total} below it, "
-              f"outside the {len(DAMAGE_TAPES)} hits-taken tapes. "
+              f"skale swing and doubled the tail on one tape) -- LIVE over "
+              f"every tape but the {len(RATIO_NAMED_OUT)} named hits-taken "
+              f"tapes, and EXACT as of the pin (captures before {Z2_PIN_STAMP})",
+              f"{amounts[STRIKE_UNITS]} at 25 against {tail_total} below it "
+              f"({amounts[STRIKE_UNITS] / max(tail_total, 1):.1f}x) over every "
+              f"tape but {sorted(RATIO_NAMED_OUT)}, future tapes included; "
+              f"headroom: {headroom_read}. As of the pin {z2_pin[STRIKE_UNITS]} against "
+              f"{tail_pin}, EXACT {Z2_PIN_RATIO}. The whole corpus with the "
+              f"named tapes in reads {everything[STRIKE_UNITS]} against "
+              f"{every_tail}, and per tape (at 25, below) {per_tape}. "
               f"THIS is the durable form of the count above: a tail that grew "
               f"to rival the strikes would mean the 1%-of-health rule fires far "
               f"more often than a landed hit, and no re-pinning would hide it. "
               f"(It is a fact about HOW THE OWNER PLAYS as much as about the "
               f"wire, which is why a tape made to be hit is named out of it "
               f"rather than allowed to drag a ratio: 20260917T090355 has 26 "
-              f"gains and not one 25, because nobody swung)")
+              f"gains and not one 25, because nobody swung -- and CASTAI-Z2: "
+              f"{Z2_TAPE} has 229 below 25 against 123, because four Smiting "
+              f"Monks tick faster than one axe swings. The Zaishen tape "
+              f"20260928T103123 is INSIDE the ratio at 94 against 38 of its "
+              f"own, which is most of why the headroom is thin: the next "
+              f"arena tape reddens this, and is named out here, not widened "
+              f"past)")
     tail = {a: n for a, n in at_pin.items() if a < STRIKE_UNITS}
     LEDGER.ok(tail == SUB_STRIKE,
               f"and {sum(tail.values())} carry less, as {dict(sorted(tail.items()))}"
@@ -1078,29 +1456,44 @@ def section_populations(agg):
 
     rows = agg["gain_rows"]
     kinds = collections.Counter(r["kind"] for r in rows)
-    off = [r for r in rows if r["kind"] != "damage"]
+    # CASTAI-Z2: a second kind on the signature, `post_mortem` -- a gain with
+    # no word, AFTER the killing word, in the agent's death batch (the rule is
+    # in `_classify_gains`; section 3b shows each of its terms refusing). None
+    # before the pin, EXACT; the two on the witness tape are pinned by name in
+    # the Smiting Monks' check below; a future one is classified, and reported.
+    off = [r for r in rows if r["kind"] not in ("damage", "post_mortem")]
+    pm = [r for r in rows if r["kind"] == "post_mortem"]
+    pm_pin = [r for r in pm if r["stamp"] < Z2_PIN_STAMP]
     # THE KNOWN-BAD ARM: GWW's "floored" in place of round. If the join could
     # only agree, floor would pass too; it must refute some rows.
     floor_miss = [r for r in rows if r["kind"] == "damage"
                   and not any(math.floor(x) == r["units"] for x in r["pcts"])]
     stamps = {r["stamp"] for r in rows}
-    LEDGER.ok(not off and len(rows) >= DAMAGE_RULE_GAINS
+    LEDGER.ok(not off and not pm_pin and len(rows) >= DAMAGE_RULE_GAINS
               and set(DAMAGE_TAPES) <= stamps and ZAISHEN_TAPE in stamps
               and floor_miss,
               f"THE SIGNATURE: every 207 that is not a {STRIKE_UNITS}, over the "
               f"whole corpus, is ONE damage word at its own agent in its own "
-              f"batch, carrying round(% of that agent's current maximum): "
-              f"{kinds.get('damage', 0)} of {len(rows)}",
+              f"batch, carrying round(% of that agent's current maximum) -- or, "
+              f"past {Z2_PIN_STAMP}, a post-mortem gain after the killing word: "
+              f"{kinds.get('damage', 0)} + {kinds.get('post_mortem', 0)} of "
+              f"{len(rows)}",
               f"kinds {dict(kinds)}; off the signature: "
-              f"{[(r['stamp'], r['t'], r['units'], r['kind']) for r in off][:6]}. "
+              f"{[(r['stamp'], r['t'], r['units'], r['kind']) for r in off][:6]}; "
+              f"post-mortem before the pin: {len(pm_pin)} (must be 0), after it "
+              f"{[(r['stamp'], r['t'], r['units']) for r in pm]}. "
               f"At least {DAMAGE_RULE_GAINS} (a vacuity floor). This is what "
               f"carries 4b's three shape claims past the pin, so a new tape of "
               f"hits taken CONFIRMS rather than reddens -- and it covers both "
-              f"named hits-taken tapes (the positive controls) and the Zaishen "
-              f"tape. KNOWN-BAD ARM: floor(%) in place of round misses "
-              f"{len(floor_miss)} of the same rows, so the join discriminates. "
-              f"OBSERVED, and it retires SUB_STRIKE's 'nothing joins these to "
-              f"health traffic': every one of them now does")
+              f"named hits-taken tapes (the positive controls), the Zaishen "
+              f"tape and the Smiting Monks' tape. KNOWN-BAD ARM: floor(%) in "
+              f"place of round misses {len(floor_miss)} of the same rows, so "
+              f"the join discriminates. OBSERVED, and it retires SUB_STRIKE's "
+              f"'nothing joins these to health traffic': every DAMAGE-kind "
+              f"gain joins a health word, and the post-mortem gains are joined "
+              f"only to their death batch's killing word and death flag -- and, "
+              f"by the value term, to the points of a hit taken elsewhere on "
+              f"the connection -- with no word of their own")
 
     jarin = sorted((r["units"], round(max(r["pcts"]), 3)) for r in rows
                    if r["stamp"] == "20260914T005758" and r["units"] > STRIKE_UNITS)
@@ -1133,6 +1526,59 @@ def section_populations(agg):
               f"(2809) cast at the observer 1.5 s before; the zero is a +0.0 hit "
               f"under the observer's Reversal of Fortune (307) -- RB's mechanism "
               f"on a second tape. OBSERVED, CASTAI-Z1")
+
+    # CASTAI-Z2: THE SMITING MONKS' TAPE, pinned whole and ONLY on itself --
+    # every filter here is `== Z2_TAPE`, so the same rows under a later stamp
+    # change nothing in this check (they are classified by the signature).
+    z2_conn = {c: dict(n) for (st, c), n in agg["amounts_by_conn"].items()
+               if st == Z2_TAPE}
+    z2_pm = sorted((r["conn"], r["t"], r["units"]) for r in rows
+                   if r["stamp"] == Z2_TAPE and r["kind"] == "post_mortem")
+    # Each post-mortem gain against its batch's killing word(s) and the
+    # value term's evidence: (port, t, units, the batch's words at the
+    # observer in %, the maximum in force, the points at the observer
+    # elsewhere on the connection that land in the units' window).
+    z2_pm_report = sorted((r["conn"].split("->")[0].rsplit(":", 1)[-1], r["t"],
+                           r["units"], [round(x, 3) for x in r["pcts"]],
+                           r["max"], r["points_seen"])
+                          for r in rows
+                          if r["stamp"] == Z2_TAPE and r["kind"] == "post_mortem")
+    z2_kinds = dict(agg["gain_kinds"].get(Z2_TAPE, {}))
+    LEDGER.ok(z2_conn == Z2_207 and z2_pm == Z2_POST_MORTEM
+              and z2_kinds == Z2_KINDS,
+              f"THE SMITING MONKS' TAPE, pinned whole: {len(z2_conn)} connections, "
+              f"{z2_kinds} -- the tail outnumbers the strikes, and its two "
+              f"post-mortem gains are {z2_pm_report} as (port, t, units, "
+              f"the batch's words at the observer in %, max, points seen "
+              f"elsewhere in the units' window)",
+              f"{z2_conn}. EXACT, per connection (a tape does not grow). The "
+              f"229 below 25 are four Monk AI's Balthazar's Aura ticks (27 of "
+              f"480 -> 6; 46 -> 10), Zealot's Fire (22 -> 5; 38 -> 8), Smite "
+              f"Hex (75 -> 16; 129 -> 27) and 3-point wand hits (-> 1) on the "
+              f"owner's Warrior; the five over 25 are four Smite Hexes (129 "
+              f"points: 26.875 % at 480, 27.68 % at 466, 30.86 % at 418) and "
+              f"one Scourge Healing (122 at 427 -> 29). The two post-mortem gains sit "
+              f"in the observer's death batch AFTER the killing word with no "
+              f"word of their own: 6 is monk 4's aura tick (its visual 487 "
+              f"immediately ahead; 5.625 % on this observer, 3 of 3 elsewhere "
+              f"on :51090 -- OBSERVED) and 16 is one Smite Hex at 480 (no visual "
+              f"names its source -- RECONSTRUCTION). Retail sends the gain and "
+              f"drops the word for a hit that lands on an agent already dead in "
+              f"the same tick. OBSERVED (walk every 0x0026 [me, 4] batch on an "
+              f"armed connection and list its gains, words at the observer and "
+              f"0x00D0 clears): 17 armed observer deaths in the "
+              f"corpus, 16 with a killing word in the death batch and 1 with no "
+              f"damage word at all (20260821T152147 :63150 t 490.312) -- the "
+              f"kind requires the word. The value term: the 6 at 480 names "
+              f"[26.4, 31.2) points and :51090 shows 27 at the observer seven "
+              f"times; the 16 at 480 names [74.4, 79.2) and :64557 shows 75 "
+              f"once -- 18.382 % at 408, t 52.764, after the death, where it "
+              f"rounds to 18 (so the term is over points, not rounds). The "
+              f"killing word is unclamped: "
+              f"RECONSTRUCTION, health integrated from the damage words alone, "
+              f"regen/degen (props 43, 62) not integrated. OUR SERVER sends "
+              f"neither for a dead player (`player_dead` at the grant sites) -- "
+              f"escalated, not edited")
 
 
 def section_self_scope(agg):
@@ -1863,21 +2309,63 @@ def section_bar_gate(agg):
     # message that ARRIVED, and `if r["units"]` filed RB's seven zero grants
     # with the rows that got nothing -- 83 of 90, a red on the very rows that
     # prove every damage word is answered.
-    armed_gr = [r for r in armed_dmg if r["units"] is not None]
+    # CASTAI-Z2 (2026-09-29): AN AMBIGUOUS ROW IS NOT AN UNGRANTED ROW. The
+    # Smiting Monks' tape holds 14 armed batches of two to five UNEQUAL words
+    # (a Zealot's Fire beside a Smite Hex from one monk; auras from two), and
+    # `adrenjoin` leaves those 35 rows `units None` BY DESIGN -- attributing
+    # whichever word sorted first would be a guess. Until this tape no armed
+    # batch was ambiguous, so `units is not None` over every armed row read as
+    # "all of them granted" and was really "none was ambiguous". The grant
+    # relation now has two arms: every UNAMBIGUOUS row carries its gain, and
+    # every AMBIGUOUS batch's words each consume a DISTINCT gain of the batch
+    # at round(pct) -- a multiset relation with no assignment in it, which
+    # floor(pct) must fail on some batch (the known-bad arm). None before the
+    # pin, EXACT; the witness tape's (batches, rows) EXACT on itself.
+    armed_clean = [r for r in armed_dmg if not r["ambiguous"]]
+    armed_gr = [r for r in armed_clean if r["units"] is not None]
     dark_gr = [r for r in dark_dmg if r["units"] is not None]
+    amb = collections.defaultdict(list)
+    for r in armed_dmg:
+        if r["ambiguous"]:
+            amb[(r["capture"], r["connection"], r["t"])].append(r)
+
+    def _covered(rs, f):
+        gains = list(rs[0]["batch_gains"])
+        for r in rs:
+            u = f(r["pct"])
+            if u not in gains:
+                return False
+            gains.remove(u)
+        return True
+    amb_round = [k for k, rs in amb.items() if _covered(rs, _round_half_up)]
+    amb_floor = [k for k, rs in amb.items() if _covered(rs, math.floor)]
+    amb_pin = [k for k in amb if k[0] < Z2_PIN_STAMP]
+    amb_z2 = [k for k in amb if k[0] == Z2_TAPE]
+    amb_rows = sum(len(v) for v in amb.values())
 
     LEDGER.ok(armed["damage_taken"] >= ARMED_DAMAGE_TAKEN
               and len(armed_dmg) == armed["damage_taken"]
-              and armed_gr and len(armed_gr) == len(armed_dmg),
+              and armed_gr and len(armed_gr) == len(armed_clean)
+              and len(amb_round) == len(amb) and not amb_pin
+              and (len(amb_z2), sum(len(amb[k]) for k in amb_z2)) == Z2_AMBIGUOUS
+              and len(amb_floor) < len(amb),
               f"the armed side took {armed['damage_taken']} damage messages, "
-              f"and EVERY ONE of them granted ({len(armed_gr)}/"
-              f"{len(armed_dmg)})",
+              f"and EVERY ONE of them granted: {len(armed_gr)}/{len(armed_clean)} "
+              f"unambiguous rows carry a gain, and {len(amb_round)}/{len(amb)} "
+              f"ambiguous batches ({amb_rows} rows) have a distinct gain of "
+              f"round(pct) for every word",
               f"at least {ARMED_DAMAGE_TAKEN} expected, and the grant share "
-              f"must be ALL. The row count is cross-checked against the arm's "
-              f"own counter so a joiner that dropped rows cannot make 'all of "
-              f"them' true by shrinking the denominator, and `armed_gr` is "
-              f"asserted non-empty because all() of nothing is this repo's own "
-              f"recorded trap")
+              f"must be ALL in both arms. The row count is cross-checked "
+              f"against the arm's own counter so a joiner that dropped rows "
+              f"cannot make 'all of them' true by shrinking the denominator, "
+              f"and `armed_gr` is asserted non-empty because all() of nothing "
+              f"is this repo's own recorded trap. Ambiguous batches before "
+              f"{Z2_PIN_STAMP}: {len(amb_pin)} (must be 0); on {Z2_TAPE}: "
+              f"{(len(amb_z2), sum(len(amb[k]) for k in amb_z2))}, EXACT "
+              f"{Z2_AMBIGUOUS}. KNOWN-BAD ARM: floor(pct) covers "
+              f"{len(amb_floor)} of {len(amb)} of the same batches, so the "
+              f"multiset relation discriminates -- e.g. two 5.625 % aura ticks "
+              f"and a 4.583 % Zealot's Fire beside gains of 6, 6 and 5")
 
     zero_units = [r for r in armed_dmg if r["units"] == 0]
     zero_dmg = [r for r in armed_dmg if r["pct"] == 0.0]
@@ -2061,25 +2549,55 @@ def section_bar_gate(agg):
               f"1.04%..70.1%. half-up vs half-even is still untouched: no "
               f"row lands on .5")
 
+    # FAILED AS WRITTEN on 2026-09-29 (CASTAI-Z2) -- the record is at
+    # DISAGREEMENT_BAND. It read `len(band) == 1 and band[0]["arm"] == "dark"`
+    # over the whole corpus, and the Smiting Monks' tape put 24 armed rows in
+    # the band, every one a 3-point wand hit granting 1. Now: the one dark
+    # near miss EXACT as of the pin; the 24 EXACT on their own tape, each 3
+    # points, each granting round(pct) and not floor(pct); past the pin every
+    # armed band row must grant round(pct) (the rule, one stray reddens); and
+    # the (0, 0.5 %) count -- the question this check actually guards -- is
+    # REPORTED, not asserted: it is 0, and NOT OBSERVED stays the label.
     band = [r for r in rows if not r["ambiguous"]
             and DISAGREEMENT_BAND[0] <= r["pct"] < DISAGREEMENT_BAND[1]]
-    LEDGER.ok(len(band) == 1 and band[0]["arm"] == "dark"
-              and abs(band[0]["pct"] - NEAR_MISS_PCT) < 1e-9,
-              f"THE NEAR MISS: exactly one damage event in the corpus lands in "
-              f"[{DISAGREEMENT_BAND[0]}%, {DISAGREEMENT_BAND[1]}%), and it is "
-              f"DARK",
-              f"{[(r['arm'], round(r['pct'], 9), r['capture']) for r in band]}. "
-              f"When this was written that band was the only place round and "
-              f"ceil disagreed and this row was what the question turned on; "
-              f"ceil has since died on rows ABOVE 1% (the family check), so "
-              f"what the band still guards is narrower -- no ARMED row has "
-              f"ever landed under 1%, and the first one that does says "
-              f"whether a sub-0.5% hit sends a 207 carrying 0 or nothing. "
-              f"Its observer's bar has no adrenal skill, so there was nothing "
-              f"to charge. Its value is {NEAR_MISS_PCT:.9f}%, from bits "
-              f"0x{NEAR_MISS_BITS:08X}: at four decimals it prints as 1.0000, "
-              f"which is exactly where the two rules AGREE. Three independent "
-              f"readers printed it rounded and all three read past it")
+    band_pin = [r for r in band if r["capture"] < Z2_PIN_STAMP]
+    band_z2 = [r for r in band if r["capture"] == Z2_TAPE]
+    armed_band = [r for r in band if r["arm"] == "armed"]
+    z2_points = sorted({int(round(r["pct"] / 100.0 * r["max_health"]))
+                        for r in band_z2 if r["max_health"]})
+    under_half = [r for r in rows if not r["ambiguous"]
+                  and 0.0 < r["pct"] < DISAGREEMENT_BAND[0]]
+    LEDGER.ok(len(band_pin) == 1 and band_pin[0]["arm"] == "dark"
+              and abs(band_pin[0]["pct"] - NEAR_MISS_PCT) < 1e-9
+              and len(band_z2) == Z2_BAND_ROWS
+              and all(r["arm"] == "armed" for r in band_z2)
+              and z2_points == [3]
+              and armed_band
+              and all(r["units"] == _round(r["pct"]) for r in armed_band)
+              and all(math.floor(r["pct"]) != r["units"] for r in armed_band),
+              f"THE NEAR MISS, FAILED AS WRITTEN and re-scoped: as of "
+              f"{Z2_PIN_STAMP} exactly one damage event lands in "
+              f"[{DISAGREEMENT_BAND[0]}%, {DISAGREEMENT_BAND[1]}%) and it is "
+              f"DARK; on {Z2_TAPE} exactly {len(band_z2)} ARMED rows do, each "
+              f"{z2_points} point(s), each granting 1",
+              f"as of the pin {[(r['arm'], round(r['pct'], 9), r['capture']) for r in band_pin]}; "
+              f"armed band rows over the corpus {len(armed_band)}, units "
+              f"{sorted(collections.Counter(r['units'] for r in armed_band).items())}, "
+              f"maxima {sorted({r['max_health'] for r in armed_band})}, "
+              f"round fits all and floor (0) fits none -- the known-bad arm. "
+              f"Rows in (0, {DISAGREEMENT_BAND[0]}%): {len(under_half)} "
+              f"{[(r['arm'], round(r['pct'], 6), r['units'], r['capture']) for r in under_half]} "
+              f"-- REPORTED, and while it is 0 what a sub-0.5% hit sends (a "
+              f"207 carrying 0, or nothing) stays NOT OBSERVED. When the "
+              f"check was written the band was the only place round and ceil "
+              f"disagreed; ceil has since died on rows ABOVE 1% (the family "
+              f"check) and the band's 24 armed rows agree with round and ceil "
+              f"both. The dark near miss's observer's bar has no adrenal "
+              f"skill, so there was nothing to charge; its value is "
+              f"{NEAR_MISS_PCT:.9f}%, from bits 0x{NEAR_MISS_BITS:08X}: at four "
+              f"decimals it prints as 1.0000, exactly where the two rules "
+              f"AGREE. Three independent readers printed it rounded and all "
+              f"three read past it")
 
     # THE PREDICATE, NOT THE COUNT. `len(skipped) <= 1` capped an absolute
     # number over a growing corpus -- every live session contributes its own
@@ -2311,6 +2829,7 @@ def main():
     declared = section_schema()
     section_pin_consistency()
     section_cost_column()
+    section_classifier_arms()
 
     live = live_corpus_dir()
     # Deliberately OUTSIDE any handler (CASTAI-Z1 review): a load failure here

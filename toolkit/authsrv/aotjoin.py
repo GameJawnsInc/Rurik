@@ -116,6 +116,62 @@ parameter) on the whole corpus:
       arrival -- agent 10's Fireball landings on the same tape carry one too; a tick batch
       with an 0x00A7 and NO such [20] stays unexplained). A skill with no row explains
       nothing (R8's stated rule: counted, never assumed).
+THE SECOND ZAISHEN CAPTURE (2026-09-29, CASTAI-Z2, 20260929T100038 -- the smiting monks; the
+predictions and the first re-statements are NOT re-worded). Its twelve Fire Storms (all agent
+10, the Zaishen Mage) break P5 as written and P6r, each scored the same three ways (`p5r`,
+`p6r2` on the whole corpus; P5 / P6r as registered hold before that stamp):
+  P5  the k = 2 tick of 51090 390.030 lands at +2.068 -- inside the REGISTERED phase limit
+      (0.100) and outside the reader's tick gate (TICK_TOL 0.05), so its three words (3, 5,
+      6 at -0.0559, the pairs' tick values) come out on the stray arm as "tick values
+      outside the gate". P5r: a CLEAN group of the caster's words carrying the pairs' tick
+      values within PHASE_LIMIT AFTER completion + k, k = 1..10, at a k the cast did NOT
+      tick, is that tick, LATE (`late_ticks`); the k / phase / completion clauses as
+      registered; a group beyond the limit, one EARLY (the re-statement is one-sided, on
+      its one witness), or one at a k the cast already ticked (a DUPLICATE) stays a stray
+      (`stray_r`). No tolerance moved: the gate is still TICK_TOL, and the late tick is
+      not among `tick_instants`.
+  P6r ten tick batches carry the caster's `[20, T, 10, 546]` that is neither another
+      skill's 58 nor a landing: a REVERSAL of the tick's own damage by the taker's
+      enchantment -- Reversal of Fortune 307 on the monks (announced [60, C, T, 307], its
+      cast visual [20, T, C, 545]) -- sent as the visual with the DAMAGE's source, a
+      `[55, T, C, +f]` gain credited to the enchantment's caster C (f the tick's own
+      fraction; where the cast completes in the same batch a second, smaller [55] from C
+      rides its 58 -- Divine Favor's on-cast gain, RECONSTRUCTION from the wiki), and
+      the caster's ZERO word `[16 | 17, T, 10, 0.0]`. That is the FULL shape, and on the
+      ten tick batches P6r2 explains every reversed target -- eleven: nine batches with
+      one, 62925 259.977 k = 3 with two -- carries the zero alone; across EVERY tick batch
+      carrying a 546 the count is 12 full and 1 partial (51090 390.030 k = 7), the two
+      390.030 batches (k = 1 full, k = 7 partial) explained by P6 as written through the
+      caster's own 58 there, so not among the ten. Off the ticks the tape sends two more
+      shapes under the same 546 (the review of 2026-09-29, counted over every [20, T, S,
+      546] with its batch: 37 full / 20 / 25 on this tape, 7 full / 3 on
+      20260916T213125, 1 full on 20260928T103123): the zero BESIDE a nonzero word from S
+      on T, which is TWO sub-shapes of ten rows each -- ten where the gain equals the
+      surviving word (nine from S = 10, the Mage: 51090 399.033 [16, 5, 10, 0.0] and
+      [16, 5, 10, -0.0973], the gain 0.0973; 51199 535.440 x2 and 542.441; 57580
+      142.158 x3; 64557 648.428 x2 -- and one from S = 8, 62925 251.171, the gain
+      0.0793 beside a [17, 5, 8, -0.0793]), read as two same-value hits from S on T in
+      one batch with one reversed, UNVERIFIED; and ten, ALL from S = 8 (the Zaishen
+      Archer: 51090 427.884 / 430.302, 51199 565.826 / 568.450, 62925 248.826 /
+      253.638 / 256.121 / 278.727, 64557 647.937 / 666.250), where the zero sits beside
+      a SMALL word (-0.0072 / -0.0081 / -0.0083) and the gain (0.0468 .. 0.1201) equals
+      NO word in the batch, read as one packet of a multi-packet shot reversed while a
+      small second packet lands (a preparation's added damage, say), UNVERIFIED -- and
+      NO zero word, a nonzero damage word and a gain that differs from it (57580 139.072:
+      three takers of the Mage's Fireball, gains 0.1279 / 0.1207 / 0.1207 against
+      -0.0486 / -0.0559 / -0.0559 -- a capped gain with the remainder landing as damage,
+      RECONSTRUCTION). The rule reads the zero word and never the absence of another, so
+      the partial shape on a tick would pass as a reversal too (test_weapons 29's
+      `partial` arm); one tick batch carries it (51090 390.030 k = 7, target 5, its
+      reversed hit not the tick's word) and P6 as written already explains that batch
+      through the caster's own 58 there; and one batch (51090 437.870 k = 5)
+      carries a bare 0x00A7 [10, 1, 5] with no [20]: the caster's own wand launch (0x00A4
+      handle 1, flight 0.83 s) arriving 40 ms ahead of the tick's word with no word of its
+      own. P6r2: a [20] on a tick is another skill's 58, its projectile's landing, or a
+      reversal -- [20, T, caster, V] beside a positive [55, T, C, f] and the caster's zero
+      word on T in the batch (V is REPORTED, 546 on every row; the rule has no visual
+      term) -- and an 0x00A7 on a tick rides a landing or closes the caster's own 0x00A4
+      (launch + flight at the arrival, within BATCH; `arrivals`).
 The order fact "a re-sent 350 rides its tick BEFORE the words" meets its first batch with
 another agent's words in it (50295 502.828 k = 3: agent 10's Fireball landing on 5 comes
 first); `visual_before_caster_words` reads the claim's own operand -- the tick's own caster's
@@ -171,7 +227,8 @@ OP_INT = 0x009F
 OP_INT_TARGET = 0x00A0
 OP_POINT_EFFECT = 0x00A1
 OP_FLOAT_TARGET = 0x00A3
-OP_A7 = 0x00A7
+OP_LAUNCH = 0x00A4         # [shooter, aim, u16, f32 flight, projectile, handle, arrow]
+OP_A7 = 0x00A7             # [shooter, handle, kind]: the launch with that handle arrives
 OP_FLOAT = 0x00A2          # [prop, agent, f32]
 OP_ADRENALINE = 0x00CF     # adrenjoin.ADRENALINE_GAIN
 PROP_CAST_TIME = 61        # agents.GV_CASTTIME: a modified cast's seconds, ahead of its [60]
@@ -315,11 +372,14 @@ def rows_of(seq, skill=FIRE_STORM, ground=GROUND, table=None):
     last61 = {}
     deaths = collections.defaultdict(list)        # agent -> [(t, dead)]
     moves = collections.defaultdict(list)         # agent -> [(t, xy, op)]
+    launches = collections.defaultdict(list)      # shooter -> [(t, handle, flight)] 0x00A4
     last_status = {}
     for _i, t, op, v in seq:
         w61 = _cast_time_word(op, v)
         if w61 is not None:
             last61[w61[0]] = (t, w61[1])
+        elif op == OP_LAUNCH and len(v) > 6:
+            launches[v[1]].append((t, v[6], _f32(v[4])))
         elif op == OP_CREATE and len(v) > 12:
             creates[int(v[1])] = (int(v[4]), int(v[12]))
             if _xy(v[5]):
@@ -447,9 +507,31 @@ def rows_of(seq, skill=FIRE_STORM, ground=GROUND, table=None):
                 flown = {impacts[s] for (ta2, s, _tg, _f) in announces.get(caster, ())
                          if ta2 < gr["t"] - BATCH and s in impacts}
                 landing = [(tg2, vis) for tg2, vis in fx20 if vis in flown]
+                # P6r2 (CASTAI-Z2): a [20] that is a REVERSAL of the tick's own damage by
+                # the taker's enchantment -- [20, T, caster, V] beside a [55, T, C, +f]
+                # gain and the caster's ZERO word [16 | 17, T, caster, 0.0] on T in the
+                # batch (Reversal of Fortune 307 on the smiting monks; the wire's V is
+                # 546, reported, never a rule term); and an 0x00A7 from the caster that
+                # is the ARRIVAL of its own 0x00A4: the handle's launch + flight at it
+                gains = [(v[2], v[3], round(_f32(v[4]), 4)) for _t, op, v in bb
+                         if op == OP_FLOAT_TARGET and v[1] == PROP_HEALTH_GAIN and _f32(v[4]) > 0]
+                zero = {v[2] for _t, op, v in bb if op == OP_FLOAT_TARGET and v[1] in PROP_DAMAGE
+                        and v[3] == caster and _f32(v[4]) == 0.0}
+                reversal = [(tg2, vis, [(c2, f) for (t2, c2, f) in gains if t2 == tg2])
+                            for tg2, vis in fx20 if vis not in flown and tg2 in zero
+                            and any(t2 == tg2 for t2, _c, _f in gains)]
+                arrivals = []                       # (handle, launch + flight - arrival)
+                for t_a7, op, v in bb:
+                    if op == OP_A7 and len(v) > 2 and v[1] == caster:
+                        near = [round(t2 + fl - t_a7, 3) for t2, h2, fl in launches.get(caster, ())
+                                if h2 == v[2] and abs(t2 + fl - t_a7) <= BATCH]
+                        arrivals.append((v[2], near[0] if near else None))
                 ent = {"off": round(off, 3), "k": k, "t": gr["t"], "words": gr["words"],
                        "own58": own58, "a7": a7, "fx20": fx20,
                        "landing": bool(fx20) and len(landing) == len(fx20),
+                       "reversal": reversal, "arrivals": arrivals,
+                       "explained_r2": (len(landing) + len(reversal) == len(fx20)
+                                        and (bool(landing) or all(d is not None for _h, d in arrivals))),
                        "landing_skills": sorted({s for (ta2, s, _tg, _f) in announces.get(caster, ())
                                                  if ta2 < gr["t"] - BATCH and s in impacts
                                                  and impacts[s] in {vis for _tg2, vis in landing}}),
@@ -770,6 +852,28 @@ def score(c):
     p5 = (bool(ticks) and set(ks) <= set(EXPECT_TICKS_K)
           and all(abs(p) <= PHASE_LIMIT for p in phases) and not stray
           and not at_completion)
+    # P5r (the re-statement, 2026-09-29): a clean group carrying the pair's tick values
+    # within the REGISTERED phase limit AFTER completion + k, k = 1..10, at a k the cast
+    # did NOT tick, is that tick, LATE (the reader's gate is TICK_TOL, narrower). Two
+    # terms the first cut lacked (the review of 2026-09-29): the k must be ABSENT from
+    # that cast's own ticks -- a second group at a k the cast already ticked is a
+    # DUPLICATE, not a late tick -- and the phase is POSITIVE: the re-statement is
+    # one-sided, on its one witness (+0.068); an early group, or one beyond the limit,
+    # stays a stray (`stray_r`), seen and never absorbed.
+    late, stray_r = [], []
+    for r in done:
+        for s in r["stray_tick_values"]:                          # (off, target, value)
+            k = round(s[0])
+            row = (r["capture"], r["port"], r["announce_t"]) + s
+            if (1 <= k <= EXPECT_TICKS_K[-1] and 0.0 < s[0] - k <= PHASE_LIMIT
+                    and k not in r["tick_ks"]):
+                late.append(row)
+            else:
+                stray_r.append(row)
+    late_ticks = sorted({(s[0], s[1], round(s[2], 3), s[3], round(s[3])) for s in late})
+    p5r = (bool(ticks) and set(ks) <= set(EXPECT_TICKS_K)
+           and all(abs(p) <= PHASE_LIMIT for p in phases) and not stray_r
+           and not at_completion)
     # P6
     fs58 = sum(len(r["tick_58_of_skill"]) for r in done)
     vis_ticks = [x for _r, x in ticks if x["fx20"] or x["a7"]]
@@ -783,6 +887,16 @@ def score(c):
                 if id(x) in unexplained_ids and x.get("landing")]
     unexplained_r = [x for x in unexplained if not x.get("landing")]
     p6r = bool(ticks) and fs58 == 0 and not unexplained_r
+    # P6r2 (the re-statement, 2026-09-29): or the [20] is a REVERSAL of the tick's own
+    # damage by the taker's enchantment, and the 0x00A7 the arrival of the caster's own
+    # launch (rows_of: "reversal" / "arrivals" / "explained_r2")
+    unexplained_r_ids = {id(x) for x in unexplained_r}
+    reversals = [(r["capture"], r["port"], round(r["announce_t"], 3), x["k"], x["reversal"])
+                 for r, x in ticks if id(x) in unexplained_r_ids and x["reversal"]]
+    bare_arrivals = [(r["capture"], r["port"], round(r["announce_t"], 3), x["k"], x["arrivals"])
+                     for r, x in ticks if id(x) in unexplained_r_ids and x["a7"] and not x["fx20"]]
+    unexplained_r2 = [x for x in unexplained_r if not x.get("explained_r2")]
+    p6r2 = bool(ticks) and fs58 == 0 and not unexplained_r2
     # P7
     n350 = sum(len(r["visual_offsets"]) for r in done)
     p7 = n350 > 0 and not c["unattributed"]
@@ -854,6 +968,8 @@ def score(c):
         "completion_words": completion_words, "stray_tick_values": stray,
         "tick_at_completion": at_completion,
         "p5": p5,
+        "late_ticks": late_ticks, "late_tick_values": late, "stray_r": stray_r,
+        "p5r": p5r,
         "mixed_ticks": sum(len(r["mixed_ticks"]) for r in done),
         "fs58_on_tick": fs58, "ticks_with_20_or_a7": len(vis_ticks),
         "unexplained_20_or_a7": len(unexplained),
@@ -861,6 +977,12 @@ def score(c):
         "p6": p6,
         "landings_on_tick": landings, "unexplained_r": len(unexplained_r),
         "p6r": p6r,
+        "reversals_on_tick": reversals, "bare_arrivals_on_tick": bare_arrivals,
+        "unexplained_r2": len(unexplained_r2),
+        "unexplained_r2_rows": [(r["capture"], r["port"], round(r["announce_t"], 3), x["k"],
+                                 x["fx20"], x["arrivals"]) for r, x in ticks
+                                if id(x) in {id(y) for y in unexplained_r2}],
+        "p6r2": p6r2,
         "unattributed": len(c["unattributed"]),
         "p7": p7,
         "sweep": {f"{k[0]} {k[1]}": n for k, n in sorted(c["sweep"].items())},
@@ -989,6 +1111,12 @@ def main():
           f"other agents' 58s in a completion batch (agent, offset, same instant) "
           f"{s['other_58s']}; P6r {_verdict(s['p6r'])} -- tick batches whose [20] is a "
           f"projectile's landing {s['landings_on_tick']}, still unexplained {s['unexplained_r']}")
+    print(f"   RE-STATED (docstring, THE SECOND ZAISHEN CAPTURE): P5r {_verdict(s['p5r'])} -- "
+          f"late ticks (capture, port, announce, offset, k) {s['late_ticks']}, strays beyond "
+          f"the registered {PHASE_LIMIT} {s['stray_r']}; P6r2 {_verdict(s['p6r2'])} -- tick "
+          f"batches whose [20] is a reversal of the tick's own damage {s['reversals_on_tick']}, "
+          f"whose bare 0x00A7 is the caster's own arrival {s['bare_arrivals_on_tick']}, still "
+          f"unexplained {s['unexplained_r2']} {s['unexplained_r2_rows']}")
     print(f"[{_verdict(s['p7'])}] P7 unattributed 350s: {s['unattributed']} of "
           f"{s['n350'] + s['unattributed']}")
     for u in c["unattributed"][:20]:
