@@ -2000,26 +2000,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
   `standing` gate (step 5's deferred half — the `0x00B0`-climbs-by-2 field size is NOT FOUND). The per-map cap and the Leave CONFIRMED on the client (CONFIRM-2 §11).
-* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
-  2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
-  and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
-  adrenaline replay (ANIMREF §19, a second refusal gate named). LANDED 2026-09-23: the
-  interrupt (castmech §4's note, animref D5's note; `interruptjoin.py`, `interrupt_player`
-  OBSERVED n=1 per shape at the player -- a cast, a swing -- `interrupt_body`
-  RECONSTRUCTION); the NPC recharge anchor moved to the cast's COMPLETION
-  (`rechargeprobe.py`, six spells OBSERVED, 229 a named divergence;
-  `--no-npc-recharge-from-completion`); the fix pass the same day (the body hook, the
-  running-chain gate, P2/P3 recorded FAILED as written -- the log's fix-pass entry).
-  LANDED 2026-09-23 (pass 3): party-wide shouts (skills §56, `shoutjoin.py`: 23 foreign
-  applies of 364/348 on the observer, 6 of them a hero's, 0 of 8 foe shouts; the radius the
-  client's own `aoe_range` 1000, CORROBORATED, which the tape neither measures nor bounds —
-  every pair rests on a lead, §56.8 (the fix pass withdrew "≥ 913 u" and corrected the hero
-  tape's observer); `party_wide = "earshot"`, `--no-party-wide-shouts`); the refusal ids
-  (skills §57, `chatdefs.REFUSAL_REASONS`: the 60
-  plain ids 1934–1993 by label, four OBSERVED — 1988 the recharge refusal, witnessed once,
-  the fix pass — `--refusal-reasons` DEFAULT OFF, the weapon
-  gate's #1985 its one consumer); 3(d) Mend Condition (skills §58, `heal_if_removed`). Still
-  OPEN: §56.9's residuals (the instant E3's slot and the `[8]` hold pair, the E4→E5 tick gap, a hero's E4 and debit at its start); a 348 row (no armour-bonus mechanic to hang
+* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle (every pass
+  LANDED 2026-09-22/23, PLAN-LOG). Still OPEN: §56.9's residuals (the instant E3's slot and the `[8]` hold pair, the E4→E5 tick gap, a hero's E4 and debit at its start); a 348 row (no armour-bonus mechanic to hang
   it on); the hero's cure on screen (final-confirmation-needs-run; the hero's apply itself
   CONFIRMED on our wire 2026-09-23, 2 of 2 vs 0 of 2, as was the interrupt at the PLAYER,
   2 of 2 with the 24 s disable drawn — studies/deskwork/CONFIRM-2026-09-23.md; the player-to-hero
@@ -2222,11 +2204,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Areas over time and scatter** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §41–§42, [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §16
 
-* **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); a Necromancer hex's class id (NOT FOUND); Rust's damage CONTESTED (client 10..70, wiki 10..85 -- a tooltip run); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a condition on a FOE sends no `[6]` id (Burning 25, Dazed 28, Cracked Armor / Weakness 29); a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy; retail's `[61]` for a player's own cast.
+* **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a condition on a FOE sends no `[6]` id (Burning 25, Dazed 28, Cracked Armor / Weakness 29); a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy; retail's `[61]` for a player's own cast.
 * **The other eleven areas over time** carry no row and are inert; Meteor Shower and Eruption have no ground-visual id; whether a caster's death ends its area is UNVERIFIED (ours outlives it, an n = 1 lean).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
 * **CASTAI's residue** (monsterai §17-18; §7 Q19): which READY skill a normal-mode monster fires (round robin stays; three Zaishen bars are not round robin, Z1.P6); the AI TIER (CASTAI-W2); heal-on-ally and removal under their floors (Z1.P2-P3); four casts before their recharge (CASTAI-C7); area-hex wearers ungated (CASTAI-R3); upkeep enchantments (289, 290) open no episode.
-* **The Zaishen tape's server residue** (monsterai §18.2): ZF16's open halves, a body's busy window and next swing (PLAN-LOG); Deep Wound re-applied stacks (ZF18).
+* **The Zaishen tapes' server residue** (monsterai §18.2, §18.4): ZF16's open halves, a body's busy window and next swing (PLAN-LOG); Deep Wound re-applied stacks (ZF18); Zealot's Fire's payoff, Balthazar's Aura's tick and Divine Favor unmodelled (ZF30, ZF32); holy damage and life steal ride property 55, ours 16 (ZF31); a hit after the killing blow keeps its adrenaline gain (ZF34); naming c2s `0x0042` is the owner's (ZF35).
 * **The 38888 content's residue** (crossbuild §10): `item_modifiers` stays 38797's until `itemmods.py` reads 38888's text sites; the hero `bar_to_store` write-back is untested.
 * **Typed creature armour: witnesses past the Warrior** (the Ranger's bonus typed "+30 vs. elemental", its untyped +10 withdrawn -- PLAN-LOG 2026-09-27, Ranger; the Assassin / Dervish / Paragon columns withdrawn whole, 3 x level on every hit -- PLAN-LOG 2026-09-27, the three columns; no witness separates the readings for any of the four, and no hostile of the last three is on tape at all): a creature Warrior's +20 now meets physical damage only (WIKI + the owner's Daggers on def 3113, one definition; PLAN-LOG 2026-09-27). A non-physical weapon hit skips it too (a wand's chaos, a staff's holy; PLAN-LOG 2026-09-27, later) -- with NO weapon witness: 355 non-physical weapon shots on tape, none on a hostile Warrior; a single-weapon capture on one would settle it. A preparation's own damage too (Kindle / Ignite Arrows' fire; PLAN-LOG 2026-09-27, latest), also with no witness (the corpus's only preparation words hit a level-1 Mesmer). Also open: a witness for the Ranger and for the three columns (a fight with a Factions or Nightfall Paragon settles its 20 cheaply). The PLAYER's side is typed too (a hostile's Kindle Arrows word meets the pieces' elemental 25; PLAN-LOG 2026-09-27, last), and none of the preparation or weapon halves has a retail witness yet.
 
@@ -2342,7 +2324,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   holding an authored map is the owner's, unmade, and "launch and quit is enough" is
   UNVERIFIED ([studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md)).
 * **CASTAI's live runs** (monsterai §18): Z1 SCORED 2026-09-28 (P4-P6 held, P7 failed,
-  P1-P3 under their floors); Z2, H1 and a full Z3 unrun. Plans: `vault/plans/castai_*.txt`.
+  P1-P3 need a second Degeneration session); Z2 SCORED 2026-09-29 (P5 failed 1 of 43, the
+  rest held); H1 and a full Z3 unrun. Plans: `vault/plans/castai_*.txt`.
 * **296 map rows are limited by information, not effort**: one live capture on a
   known-named zone yields one exact `(map id, file id)` pair
   ([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md)).

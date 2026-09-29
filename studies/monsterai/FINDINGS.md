@@ -2503,7 +2503,7 @@ photographed.
 
 ---
 
-## 18. CASTAI's live runs — REGISTERED 2026-09-28; Z1 run and scored the same day, Z3 partial (§18.1, §18.2)
+## 18. CASTAI's live runs — REGISTERED 2026-09-28; Z1 run and scored the same day, Z3 partial (§18.1, §18.2); Z2 run and scored 2026-09-29 (§18.3, §18.4)
 
 **Identifiers.** `CASTAI-Z<n>` — the Zaishen Challenge runs; `CASTAI-H<n>` — the PvE healer
 run; `.P<n>` — a run's predictions (§17's word).
@@ -2722,7 +2722,8 @@ twenty rows, is §18.2):
 (2 informative casts of the 10 needed), so §7 Q19's gate keeps its footing and nothing reopens
 it. Z1.P7's failure is evidence against group scatter in this AI population only; MONSTERAI-S3
 was derived for normal-mode monsters and stands as WIKI there. Z1.P1–P3 need a second
-Degeneration session to reach their floors. Z2 and H1 are still registered and unrun.
+Degeneration session to reach their floors. Z2 was run and scored on 2026-09-29 (§18.3);
+H1 is still registered and unrun.
 
 ### 18.2 What the Zaishen tape told the corpus — the suite's 19 reds, read (2026-09-28)
 
@@ -2765,6 +2766,123 @@ per-tape witness in the test named.
 | **CASTAI-ZF19** | **Property 55's sign follows allegiance.** Every negative 55 onto another agent crosses `0x0020` tokens, 104 of 104; negatives onto self are sacrifices. Two cross-token positives exist (20260817T231139 543.301); Heal Area healing an adjacent foe is a WIKI candidate, UNVERIFIED. healjoin P1 and P2 are FAILED as written through this tape (1219 / 1304 and 1126 / 1332). | OBSERVED | test_mechanics §20 |
 | **CASTAI-ZF20** | The 2 s movement window's largest step, 565.29 u in 1.770 s, is the observer's **continuous auto-approach walk** (:58544 587.058 → 588.827) under a declared `0x0027` of 383.04 u/s: 567.07 u up to the server's halt, with no `0x002C` and no self-report inside. `HARD_JUMP_UNITS` = 520 gates nothing on the server. It is `movesync.hard_step`'s distance arm below the 0.05 s floor, where retail peaks at 24.19 u. **Ruling: it stays 520.** Its decision record (the 2 s window) is frozen as of the pin: 6,194 intervals, 518.69 u (not the 518.25 quoted in movement FINDINGS), 195 within 5 u. A continuous-movement signature now carries the window. | OBSERVED | test_movesync §16 |
 | **CASTAI-ZF21** | **The two interrupters' damage.** Distracting Shot 399 dealt ONE amount, 8, on every hit whose target's maximum is known, 4 of 4: the observer, a warrior (0.01667 x its declared 480); agent 8, a monk henchman (x 483 and x 555); and agent 10 as a critical (prop 17, bit-identical to agent 8's -8/555). A body's maximum is the one integer fit closing all of its words (agent 8 on :58544: 555, 17 of 17). Agent 6's plain shots on the same targets ran 12-18 and 25-42. One amount through two armour classes and a critical is GWW's "deals only 1...16", whose variable is "Armor-ignoring damage"; that 8 is rank 7 is RECONSTRUCTION. Savage Shot 426's +13...28 sat on agent 8 activating spells: 70 at 555 beside a 393 shot of 42, and 58 at 402 beside 30 / 36. It did not sit on the observer's Healing Signet: 36 = 2 x 18, a plain shot through the signet's -40. That negative is n = 1, and the same 36 is the corpus's only retail hit inside a Healing Signet, so the two readings lean on each other. Both clauses modelled 2026-09-28 (`PLAN-LOG.md`, CASTAI-ZF21). | OBSERVED; the clauses' wording WIKI, the labels CORROBORATED by the client's templates | test_interruptshots §8 |
+
+### 18.3 SCORED — CASTAI-Z2, the Smiting Monks (2026-09-29)
+
+**The run.** Live capture `20260929T100038`: the owner, the secondary account, build 38888,
+base mode, plan `castai_z2_monks.txt` sealed with its seals in agreement. Five matches from
+the Zaishen Challenge outpost (map 281), all five against the Smiting Monks, with the party
+the plan named: the observer (an axe in every match), the Zaishen Archer, Fighter and Mage.
+**No connection has a capture gap.** No F11 note was pressed.
+
+| Match | Connection | Map | t (s) | Outcome |
+|---|---|---|---|---|
+| 1 | `:57580` | 318 | 83.5–170.3 | won |
+| 2 | `:62925` | 321 | 182.2–335.0 | won |
+| 3 | `:51090` | 322 | 347.3–467.1 | won |
+| 4 | `:51199` | 319 | 479.7–582.5 | lost |
+| 5 | `:64557` | 321 | 595.1–680.0 | lost |
+
+The outcome is RECONSTRUCTION. In matches 4 and 5 the surviving party bodies are all marked
+dead at one instant with their health untouched (CASTAI-ZF25); matches 1–3 show no such mark.
+Maps 319 and 321 had never been measured as arenas, so the unmodified scorer saw two of the
+five matches. `castethogram.ZAISHEN_MAPS` now holds all five ids the outpost's menu lists,
+each measured on a match connection.
+
+**How it was scored.** The scorer is `studies/monsterai/review/zaishenrun.py --capture
+20260929T100038`. Its Z2 rules were written into the docstring before its Z2 section first
+ran. Three blind replicators scored the same predictions from the raw wire without seeing the
+scorer, and a judge reconciled all four. The judge's six fixes and a second review round are
+dated at their sites in the scorer. **Two verdicts moved after the first run, and both
+changes are disclosed:**
+- **P1, FAILED → HELD, an instrument repair.** `castethogram.build_casts` rounded the announce
+  time to the millisecond. A read "strictly before the announce" therefore saw the rest of the
+  announce's own batch, and in two casts that included the word that cleared the target's
+  condition. Inside a batch the stream order is causal: the announce comes first (CASTAI-ZF22).
+  State is now read in stream order. The rule did not change; the code now does what the rule
+  said.
+- **P6, FAILED → HELD, a rule changed after the data (POST-HOC).** The scorer's pre-run rule
+  held a monk's attack target for 30 s and ignored `0x009F [3]`, and it read 93 of 117 windows,
+  0.795. `[3]` is the wire's own statement that the attack ended; 24 of the 45 dissenting
+  monks in that reading had sent one and gone on to cast. The three replicators each ended a
+  target at `[3]` without seeing the scorer's rule, and read 0.887–0.945. With the `[3]` cut the
+  verdict holds at every hold cap tried, from 2 s to 60 s (0.945–1.0). The 0.795 is printed
+  beside it as the lead it is.
+
+| Prediction | Verdict | Numbers (OBSERVED on this capture unless labelled) |
+|---|---|---|
+| **Z2.P1** Mend Condition only on a monk carrying a condition | **HELD** (floor 5) | 92 casts, all 92 onto a monk whose `0x00F1` condition bit (0x02) was set before the announce; 0 onto a clean one. Never self-cast: the exe gives 275 target byte 4, "other ally", which corroborates the wiki's "other allies". 38 of the 92 were cast while another monk's Mend Condition was already in flight at the same target, and 24 of 91 completions removed nothing. |
+| *Smite Hex*, a companion line, not registered | FAILED, 1 of 29 | 28 onto a hexed monk. 1 onto a monk whose hex had ended 0.241 s earlier (match 3, 398.291). **The registration's premise was wrong:** it said only the owner's bar could hex a monk. The Zaishen Mage's Incendiary Bonds (179) hexed the monks 26 times. |
+| **Z2.P2** Reversal of Fortune only at or below 70 % health | **HELD** (floor 10) | 95 casts, all 95 on a target at or below 0.70. Max 0.699, median 0.326, min 0.039. Health is RECONSTRUCTION; it reads ≤ 0.10 at 24 of 24 monk deaths. The eight highest readings run 0.652–0.699. **The ceiling sits 0.001 under the hero rule's line: for this skill the Zaishen run the hero tier (CASTAI-W2's first tape evidence).** |
+| **Z2.P3** heals and protection on OTHER monks | **HELD** | 75 of the 95 Reversals of Fortune (0.789) went to another monk, 20 to the caster. |
+| **Z2.P4** no re-application while live | **HELD** | Scourge Healing (251): 19 casts, 0 onto a target already hexed (12 on the observer, EXACT via `0x0042`; 7 on henchmen via the hexed bit). Zealot's Fire (271): 22 casts; in 18 episodes the 30 s recharge elapsed while the 60 s effect still lived, and 0 were re-cast. Balthazar's Aura (272): a STRUCTURAL NULL. It was self-cast 27 of 27 times, and its 8 s duration is shorter than its 20 s recharge, so the slot is never ready while its own effect lives. The exposure unit (opportunities declined, not casts made) was chosen after the first run (POST-HOC, the judge's fix 4). The verdict was HELD either way. |
+| **Z2.P5** Drain Enchantment only at an enchanted target | **FAILED**, 1 of 43 | All 43 aimed at the Zaishen Mage, the only enchanted body on our side; the observer's bar has no enchantment. 42 landed on an enchanted Mage. The exception, match 3 388.551, came 0.502 s after three Drains completing together had stripped her, and nothing re-enchanted her in between. The Drains come in volleys of 2–4, and 15–19 of 42 completions stripped nothing. |
+| **Z2.P6** one target at a time | **HELD** (the rule change above) | 61 of 62 1-s windows with ≥ 2 monks holding an attack target agree (0.984). A target is a monk's latest `0x00A0 [4]`, ended by its own `[3]`, a death, or 5 s without a `[4]`. Only 7 switches, and they arrive as a group within ~2 s (match 1 144.39–144.47: three monks observer → Fighter). The monks swing at a median 1.709 s (103 gaps), and a hit `[1]` follows each `[4]` by a median 0.565 s. |
+
+**The owner's question, carried over from Z1** (whom they attack). The monks' melee went to
+the melee bodies. Attack starts by target, matches 1–5:
+
+| Match | Fighter | observer | Mage |
+|---|---|---|---|
+| 1 | 14 | 10 | 0 |
+| 2 | 33 | 10 | 17 |
+| 3 | 25 | 12 | 0 |
+| 4 | 0 (dead 50.8 s) | 12 | 10 |
+| 5 | 5 | 21 | 0 |
+
+They never swung at the Archer. Every Drain Enchantment went to the Mage. The Scourge
+Healings went to the observer and the Fighter, and once to the Mage.
+
+**Two near-misses share one shape.** The Smite Hex at a monk just un-hexed and the Drain at a
+Mage just stripped were each announced 0.24–0.50 s after a teammate's cast had changed the
+target. Z1.P2's Remove Hex latency from the hex's rise was 0.19–0.54 s, the same window. Both
+casts follow the caster's previous completion by one aftercast (0.75 s): 104 of the monks'
+308 chained announces sit exactly there. The reading is that a monk acts on the target's
+state from roughly one AI step earlier. That is RECONSTRUCTION, n = 2; the decision time is
+not on the wire.
+
+**What changes.** Two server changes ship from this tape, both covered in §18.4: the Monk
+hex class marker (CASTAI-ZF23) and retail's rounding of the energy-regen rate
+(CASTAI-ZF28). None of the AI verdicts ships code, for two reasons. The AI policy beyond Q19's
+skip gate is the owner's to open. And these are PvP-simulation AI, scored as their own
+population and never pooled with normal-mode monsters. P2 is the first tape evidence on the
+AI tier, and it says hero tier for Reversal of Fortune. P4's Zealot's Fire half (18 ready
+slots declined, 0 re-casts) is Q19's skip gate seen in a retail AI. For a self-enchantment,
+that is the half Z1 never saw. For Scourge Healing, how many of the 19 casts had the slot
+ready while the chosen target still wore it was not computed, so Z1.P1's foe-hex half stays
+open. P5's one miss says the gate's 0.25 s rearm is the right order of magnitude: the retail
+AI is itself up to half a second stale. Z1.P1–P3 still need a second Degeneration session, and Z3.P2 and
+H1 are still unrun.
+
+### 18.4 What the Smiting Monks' tape told us — the scorer, and the suite's 6 reds (2026-09-29)
+
+The capture turned 6 of 251 suite files red on every tree (`test_adrenwire`,
+`test_c2striage`, `test_pools`, `test_skilldamage`, `test_weaponcensus`, `test_weapons`).
+No server code had changed. Five lanes, one worktree each, ran under the §18.2 contract with
+an adversarial reviewer: WPN and ADR passed after 3 rounds, POOL after 4, and C2S and SDMG
+after 4. For every red, a re-scan as of the pin (stamps before `20260929T100038`)
+reproduced the pinned literals exactly, so the whole story was the new tape again. Every row
+below is OBSERVED on `20260929T100038` unless labelled otherwise. The ones from the lanes
+each have an exact per-tape witness in the test named.
+
+| Finding | What the tape showed | Label | Held by |
+|---|---|---|---|
+| **CASTAI-ZF22** | **Inside one server batch the stream order is causal.** A monk's announce is emitted before a teammate's completion and its effect words, all at one timestamp. A reader that asks for the state "before the announce" by time sees the whole batch. `castethogram.build_casts` had rounded the announce to the millisecond, which gave Z2.P1 two false counterexamples. Every state read (`status_before`, `live6_before`, `health_before`) is now keyed on the stream index. Z1's verdicts did not move; ten detail rows moved by 1 ms. | OBSERVED (4 batches read raw by the judge) | `zaishenrun` (the judge's fix 1) |
+| **CASTAI-ZF23** | **The Monk's hex class marker is 19.** Scourge Healing (251) draws `[6, T, 1]` + `[6, T, 19]`: 14 of 14 completions, on the observer, the Fighter and the Mage alike. On the observer it also rides `0x0042 [obs, 251, 13, buff, 30.0]`, with field3 13 = the monks' Smiting Prayers. **Shipped**: `HEX_EFFECT_CLASS[3] = 19`, keyed on the skill's profession like the Necromancer's 9. The slice Hatcher's Scourge Sacrifice therefore sends it too, which is RECONSTRUCTION by that key. | OBSERVED 14/14 | `test_weapons` §37 |
+| **CASTAI-ZF24** | **Enchantment state on another body is class-keyed, not skill-keyed.** The first live enchantment adds `[6, T, 13]` plus a profession class: 18 for a Monk's (271 / 272 / 307), 11 for the Elementalist Mage's (180 / 184). The last one to end removes them. The `0x00F1` enchanted bit 0x80 tracks the pair: 59 of 60 rises, 58 of 58 falls. So which enchantment a non-observer body wears is not on the wire; a per-skill episode is a RECONSTRUCTION from durations. | OBSERVED | `zaishenrun` Z2 instruments |
+| **CASTAI-ZF25** | **`0x00A2 [162, 55, agent, f32]` is a health SETTER.** It reads 1.0 at every resurrection (26 of 26). At every match end it resets each body to 300 / max (0.5405 = 300/555, 0.6085 = 300/493, and so on). No `[34]` setter appears on any arena connection, on either Zaishen tape. `castethogram` had read it as a +delta, which clamped a 0.998 body to 1.0. **A lost match marks every surviving party body dead at one instant, health untouched** (matches 4 and 5). | OBSERVED | `zaishenrun` (the judge's fix 3) |
+| **CASTAI-ZF26** | **The arena.** Maps 319 and 321 are Zaishen arenas too, so all five ids in the outpost's menu are now measured. ENTER team id 57 = the Smiting Monks (ZF4: 52 Obsidian, 55 Degeneration). The monks are one definition, `38888:124` (file 16202, profession 3, level 20, token `att2`), with maximum health 555. **Morale climbs +2 per kill** (85 → 87 → … 97 on the observer), and the maximum health follows it. round(480 × m / 100) reproduces every step the wire shows: 408 / 418 / 427 / 437 / 446 at morale 85–93, then 355 / 365 / 374 / 394 at 74–82 after a second death. Two lanes measured the two halves separately; this arithmetic, the orchestrator's, joins them (CORROBORATED, 9 of 9). **The morale-scaled maximum ROUNDS**, never floors: 89 → 18, 93 → 19, 74 → 15, 78 → 16, 84 → 17 from a base of 20. | OBSERVED; +2 per kill as a rule RECONSTRUCTION; the maximum-health join CORROBORATED 9/9 | `test_pools` 2b, `test_skilldamage` §12 |
+| **CASTAI-ZF27** | **The arena's rule effects.** 3394 rides every arena load (19 of 19 over both tapes) and moves no rate. **THE BOSS** (3395) arrives as `0x0041` on the killer 0.26 s before its victim's death word. While it lives, the killer regenerates one energy pip over its own pips (3 over 17 / 18 / 19 as morale steps) plus 6 health pips, and the death's `0x0044` removes it. That the kill applies it is RECONSTRUCTION. | OBSERVED n = 1 (the pip); 19/19 (3394) | `test_pools` |
+| **CASTAI-ZF28** | **Energy regen is rounded after each float operation**: f32(f32(0.33f × pips) / max) reproduces 19 of 19 distinct rates, against 17 for our old single rounding (one ulp off on (3, 19), on two characters, and on (3, 18)). **Shipped**: `pools.wire_regen_rate`. JARIN's CONTESTED "which spelling" is resolved by this third answer. | RECONSTRUCTION corroborated 19/19 | `test_pools` 2b |
+| **CASTAI-ZF29** | **A Resurrection Signet raise pays round(0.25 × current max) energy** (0.25 × 15 → 4, JARIN's 0.25 × 19 → 5), in the revive batch exactly the signet's 3.0 s after the completing cast. The henchmen queue signets, up to three at one corpse, and the revive belongs to the one that completed. The monks raise each other too: 22 casts, 11 stopped. | OBSERVED n = 10 (+ JARIN); WIKI 25 % | `test_pools` |
+| **CASTAI-ZF30** | **Zealot's Fire (271) fires on the monk's ally- or self-targeted cast.** Its payoff rides the COMPLETION batch of that cast: Mend Condition ×95, Reversal of Fortune ×56, Balthazar's Aura ×37, Smite Hex ×24, Resurrection Signet ×6; never Drain Enchantment. The wire names it with `[10, obs, 271]` on the observer. It strikes the foes next to the target, each once. The damage takes several whole-point values on one body, whoever casts: 22 ×62 and 38 ×31 on the observer, with every monk landing both; 17 / 15 / 30 on the Fighter. The cause is UNVERIFIED. **Unmodelled on our server.** | OBSERVED 218 rows | `test_skilldamage` §12 |
+| **CASTAI-ZF31** | **Holy damage and life stealing ride property 55 as a NEGATIVE fraction**, not 16 / 17: Smite Hex, Balthazar's Aura, Scourge Healing (and before the tape 102 / 133 / 143 / 2809). Each is named ahead by `[10, obs, S]`. Fire, lightning and every swing ride 16 / 17. Whether the rule is "holy" or "ignores armour" is UNDISCRIMINATED. **Our server sends Holy Strike on 16**: an escalation, not edited. | OBSERVED | `test_skilldamage` §12 |
+| **CASTAI-ZF32** | **Divine Favor.** Every monk spell cast on an ally or itself carries a small heal from the caster onto its target in the completion batch: 259 of 259 (271, 272, 275, 302, 307), mostly 3 HP (0.0054 of 555). Reading it as Divine Favor is RECONSTRUCTION. **Unmodelled on our server.** | OBSERVED 259/259 (the orchestrator's count) | — |
+| **CASTAI-ZF33** | **Reversal of Fortune on a non-observer body** rides visual 546, with the damage's source as the visual's source, and a `[55, T, C, +f]` gain credited to the enchantment's caster. Three shapes: full (a +0.0 damage word, 37); a zero beside a nonzero word from the same source (20); and no zero word (25), whose gain and damage sum to the hit, read as cap-and-remainder (RECONSTRUCTION). On Fire Storm ticks only the full shape appears. | OBSERVED | `test_weapons` §29 |
+| **CASTAI-ZF34** | **A hit in the death tick after the killing blow sends its adrenaline gain but not its damage word**, 2 of 2. The gain's value is the points of a hit taken elsewhere in the fight, a plausibility bound. **A hit in [0.5 %, 1 %) grants 1**, 24 of 24 (round, not floor), which records the "near miss" as FAILED as written. **Our server drops both the word and the gain on a dead player**: an escalation, not edited. | OBSERVED | `test_adrenwire` |
+| **CASTAI-ZF35** | **c2s `0x0042 [agent]`**: sent twice, each time with a TARGET_SELECT of the Zaishen Fighter, once while the player was dead and once 21 ms after it revived. After the first, retail handed control to the Fighter (s2c `0x0022 [9, 0]`, UPSTREAM WORLD_UPDATE_CONTROLLED_AGENT, removing agents 1 and 2) and handed it back (`[7, 1]`) in the batch that revived the player. Four earlier tapes carry the same [other, 1] then [own, 1] pair. "Observe a party member while dead" is RECONSTRUCTION. **Left UNNAMED at n = 2, dropped on purpose; the name is the owner's to decide**, as 0x00A3's was. The lane's own-agent rule had to be replaced: the first-PLAYER_INFO rule names the wrong agent on 43 of 110 corpus loads. | OBSERVED (the sends, the handoff); RECONSTRUCTION (the meaning) | `test_c2striage`, `test_dispatch` |
+| **CASTAI-ZF36** | **Smaller things.** 1. 680 is Power Shot's (394) own projectile, not a new arrow. 2. A Fire Storm tick can land 68 ms late, inside D6's registered 100 ms. 3. A body's `[4]` attack start and `[50]` attack-skill announce can share one instant. 4. A buff id is reused the instant it is freed. 5. A round's end strips every effect on every body in one batch, 8 of 8 rounds. 6. Aura of Restoration is cast as the PvE row 180, which corroborates GWW's bug note. 7. The exe's 276 row has the same (energy, activation, recharge, byte) as 275, so the triple cannot tell the two apart. 8. `0x009F [159, 57, agent, 0]` arrives at ~0.5 s intervals on the monks, meaning NOT FOUND. 9. The monks swing at a median 1.709 s, and their target switches come as a group within ~2 s. | OBSERVED | the lanes' tests; `zaishenrun` |
+| **CASTAI-ZF37** | **The Zaishen Mage's `[61]` cast-time word is intermittent**: 30 words over 107 casts, only in matches 2 and 3 and starting mid-match. Matches 1, 4 and 5 run at table speed. ZF10's "the Mage casts at × 0.67 on every cast" holds on the Z1 tape only. No monk cast carries a `[61]`. The cause is UNVERIFIED. | OBSERVED | `zaishenrun` |
 
 ---
 
