@@ -15132,16 +15132,21 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
 # velocity at the launch (the flight refined once) -- CORROBORATED
 # 2026-09-29, WITH evidence against it: of the 75 launches the RANGERPRE-S9
 # design pass classed as at a moving target, 58 are aimed speed x flight
-# ahead (ratio median 0.97) and 17 are NOT led -- aimed within 20 u of where the
-# model put the target at the launch (RECONSTRUCTION), several of them
-# 180-290 u misses. The 58 were picked by that same along ~ speed x flight
-# test, so they alone are partly circular. The 17 are OPEN (that design
-# pass; the target's move age does not explain them) -- e.g. launch 337.615
-# on 20260929T150923 :55934, 46 ms into retail's own 0x002A approach, a
-# miss. Ours ALWAYS leads, so on shots like those 17 our aim is not
-# retail's. A body's velocity is a finite difference over VELOCITY_WINDOW
-# of its own model position (the trail the world tick keeps); a stander's
-# is 0, so a standing target is aimed at where it stands.
+# ahead (ratio median 0.97) and 17 are NOT led -- aimed within 20 u, along
+# and across, of where the model put the target at the launch
+# (RECONSTRUCTION), several of them 180-290 u misses. The 58 were picked by
+# that same along ~ speed x flight test, so they alone are partly circular.
+# The 17 are OPEN (that design pass; the target's move age does not explain
+# them) -- e.g. launch 337.615 on 20260929T150923 :55934, 46 ms into
+# retail's own 0x002A approach, a miss. A body's velocity is a finite
+# difference over VELOCITY_WINDOW of its own model position (the trail the
+# world tick keeps), HELD between samples; a stander's is 0, so a standing
+# target is aimed at where it stands. So ours too is unled until the
+# trail's next sample (up to one window into a walk) and under-led until
+# the one after (up to two): at 337.615, 46 ms in, ours aims 0-29 u from the
+# target's point where a full lead is ~142 u -- like retail. Only an unled
+# launch later in a move is one ours would lead where retail did not, and
+# whether any of the 17 is one is untested.
 #
 # THE GEOMETRY (2026-09-29, RANGERPRE-S9, studies/presearing/RANGERPRE.md;
 # it supersedes 2026-09-20's). At the arrival the projectile CONNECTS when
@@ -15164,8 +15169,9 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
 # all of them for B in [51.0, 57.5] and A in [101, 128]. BOTH NUMBERS BELOW
 # ARE FITTED inside those bands -- RECONSTRUCTION, the mechanism UNVERIFIED
 # (a swept volume? square or rounded ends fit alike) -- and the ALONG band
-# rests on 4 hits (along -100.1, -97.5, +68.6, +88.8) and 2 misses (-128.5,
-# -394.5), the weaker of the two. What it buys: a target that steps
+# rests on 6 hits (along -100.1, -97.5, -55.8, +59.9, +68.6, +88.8; 4 of
+# them beyond the 66 u disc) and 2 misses (-128.5, -394.5), the weaker of
+# the two. What it buys: a target that steps
 # SIDEWAYS dodges; one that backs straight away or runs straight in is
 # still met inside DODGE_ALONG. The corpus walk that measured the bands is
 # not a tool in this tree yet (RANGERPRE section 4 defers it);
@@ -15182,7 +15188,7 @@ DODGE = True
 DODGE_TOLERANCE = 54.0       # u ACROSS the line of fire. RECONSTRUCTION: fitted inside retail's
                              # band [51.0, 57.5] (RANGERPRE-S9; test_weapons 27 holds the rows)
 DODGE_ALONG = 114.0          # u ALONG it, short of or past the aim. RECONSTRUCTION: fitted
-                             # inside [101, 128] -- a band 4 hits and 2 misses wide
+                             # inside [101, 128] -- a band 6 hits and 2 misses wide
 VELOCITY_WINDOW = 0.25                     # s: the trail's sampling span
 
 

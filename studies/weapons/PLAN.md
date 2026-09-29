@@ -2456,18 +2456,22 @@ separates the corpus (the best is wrong 4 times); across ≤ B and |along| ≤ A
 it for B in [51.0, 57.5] and A in [101, 128]. What ships: the target connects within
 `DODGE_TOLERANCE` = 54 u of the aim ACROSS the line of fire (the shot's recorded `origin` →
 the aim) and `DODGE_ALONG` = 114 u ALONG it -- both FITTED inside those bands, RECONSTRUCTION,
-the mechanism UNVERIFIED, and the along band rests on 4 hits
-(along -100.1, -97.5, +68.6, +88.8) and 2 misses. A shot with no origin falls back to a 54 u
-disc (ours). The lead is CORROBORATED, with evidence against it: of the 75 launches the
+the mechanism UNVERIFIED, and the along band rests on 6 hits (along -100.1, -97.5, -55.8,
++59.9, +68.6, +88.8; 4 of them beyond the 66 u disc) and 2 misses. A shot with no origin
+falls back to a 54 u disc (ours). The lead is CORROBORATED, with evidence against it: of the 75 launches the
 RANGERPRE-S9 design pass classed as at a moving target, 58 are aimed speed × flight ahead
-(ratio median 0.97) and **17 are NOT led** -- aimed within 20 u of where the model put the target at the launch
-(RECONSTRUCTION), several of them 180-290 u misses. The 58 were selected by that same
-along ≈ speed × flight test, so they alone are partly circular. The 17 are OPEN (that design
-pass; the target's move age does not explain them) -- e.g. launch 337.615 on
-`20260929T150923` :55934, 46 ms into retail's own `0x002A` approach, a miss. Ours always
-leads, so on shots like those 17 our aim is not retail's. Section 27's three checks whose
-offsets lay along the line are re-aimed across it, and it gains retail's nine deciding
-arrivals as literal rows. A pinned strafe / backpedal / run-in capture would narrow both bands.
+(ratio median 0.97) and **17 are NOT led** -- aimed within 20 u, along and across, of where
+the model put the target at the launch (RECONSTRUCTION), several of them 180-290 u misses.
+The 58 were selected by that same along ≈ speed × flight test, so they alone are partly
+circular. The 17 are OPEN (that design pass; the target's move age does not explain them) --
+e.g. launch 337.615 on `20260929T150923` :55934, 46 ms into retail's own `0x002A` approach,
+a miss. Ours leads by the trail's last `VELOCITY_WINDOW` sample, HELD between samples, so
+ours too is unled until the trail's next sample (up to one window into a walk) and under-led
+until the one after (up to two): at 337.615, 46 ms in, ours aims 0-29 u from the target's
+point where a full lead is ~142 u -- like retail. Only an unled launch later in a move is one
+ours would lead where retail did not, and whether any of the 17 is one is untested.
+Section 27's three checks whose offsets lay along the line are re-aimed across it, and it
+gains retail's nine deciding arrivals as literal rows. A pinned strafe / backpedal / run-in capture would narrow both bands.
 
 ## 40. A point-blank burst -- 2026-09-20: no flight -- every foe around the target, at the completion
 
