@@ -43250,12 +43250,13 @@ def main():
               flush=True)
     if a.hero_skills:
         global HERO_SKILLS
+        _hids = [int(_tok.strip(), 0) for _tok in a.hero_skills.split(",")]
+        # refused by id BEFORE skill_timing, as --enemy-skills is (test_skillbound 7)
+        refuse_skills_past_table(_hids, "--hero-skills")
         _hbar = []
-        for _tok in a.hero_skills.split(","):
-            _sid = int(_tok.strip(), 0)
+        for _sid in _hids:
             _act, _after, _rech = skill_timing(_sid)
             _hbar.append((_sid, _act, float(_rech)))
-        refuse_skills_past_table([s[0] for s in _hbar], "--hero-skills")
         HERO_SKILLS = tuple(_hbar)
         print(f"HERO BAR: {len(HERO_SKILLS)} skill(s) "
               f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
@@ -44803,9 +44804,14 @@ def main():
               "(--no-enemy-skills). The cast channel is silent for agents; "
               "the player's own is unaffected.", flush=True)
     if a.enemy_skills:
+        # The hostile's bar is bounded by the served client's skill table as
+        # --skills and --hero-skills are (2026-09-28): refused by id BEFORE
+        # skill_timing, whose "no content row" line would otherwise misname a
+        # row serve_client_skill_table dropped on purpose. test_skillbound 7.
+        _eids = [int(token.strip(), 0) for token in a.enemy_skills.split(",")]
+        refuse_skills_past_table(_eids, "--enemy-skills")
         bar = []
-        for token in a.enemy_skills.split(","):
-            sid = int(token.strip(), 0)
+        for sid in _eids:
             # ACTIVATION AND RECHARGE COME FROM THE CLIENT'S TABLE, not from
             # the command line -- the same rule ENEMY_SKILL_BAR's comment sets
             # out. What is OURS is the selection; every number is ArenaNet's.

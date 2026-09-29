@@ -31,10 +31,14 @@ WHAT CAN GO RED, section by section:
   6  every vaulted client re-measured with skilltable.locate_table and
      buildid.read against SKILL_RECORD_COUNT_BY_BUILD (skips by name on a
      bare machine)
+  7  main() stops calling serve_client_skill_table once, after --client-build
+     and before every skill consumer, or drops the refusal of --skills,
+     --hero-skills or --enemy-skills, or reads a flag's id with skill_timing
+     ahead of its refusal (a source lock; bare machine)
 
-Imports authsrv (no socket, no client). Floor 28: the green BARE run
+Imports authsrv (no socket, no client). Floor 37: the green BARE run
 (RURIK_VAULT unset to nothing, 2026-09-28), sections 5 and 6 skipping by name;
-33 with the vault, 40 with the vault and the staged 38888 overlay.
+42 with the vault, 49 with the vault and the staged 38888 overlay.
 """
 import contextlib
 import io
@@ -54,7 +58,7 @@ import skillunlock  # noqa: E402
 with contextlib.redirect_stdout(io.StringIO()):
     import authsrv  # noqa: E402
 
-LEDGER = checks.Ledger("the client-build skill guard", floor=28)   # the bare run, 2026-09-28
+LEDGER = checks.Ledger("the client-build skill guard", floor=37)   # the bare run, 2026-09-28 (28 + section 7's 9)
 check = checks.adopt(LEDGER)
 
 PIN = 38797
@@ -330,5 +334,70 @@ else:
     check(len({v[0] for v in measured.values()}) >= 2,
           "and the count is NOT one constant across builds",
           str(sorted({v[0] for v in measured.values()})))
+
+print("\n7. the guard is WIRED into main(): a source lock on the serve path")
+# Sections 3-5 call serve_client_skill_table and refuse_skills_past_table
+# directly, so a main() that stopped calling them stayed green (the review of
+# 2026-09-28: replacing the serve call with the load's own drops, or deleting
+# the SKILLBAR refusal, left sections 1-6 green unstaged and staged). main() is
+# 3,000+ lines that end in a socket, so it is locked as TEXT, as ~40 other
+# tests lock authsrv.py: the call's presence, its place, and one refusal per
+# flag that hands a body skill ids.
+import inspect  # noqa: E402
+MAIN = inspect.getsource(authsrv.main)
+SERVE = "_loaded_drops = serve_client_skill_table(CLIENT_BUILD)"
+check(MAIN.count("serve_client_skill_table(") == 1 and MAIN.count(SERVE) == 1,
+      f"main() calls serve_client_skill_table exactly once, as `{SERVE}`",
+      f"{MAIN.count('serve_client_skill_table(')} call(s), "
+      f"{MAIN.count(SERVE)} of that form")
+at_serve, at_rebind = MAIN.find(SERVE), MAIN.find("CLIENT_BUILD = a.client_build")
+check(0 <= at_rebind < at_serve,
+      "after --client-build rebinds CLIENT_BUILD (else it bounds by the pin)",
+      f"rebind at {at_rebind}, serve at {at_serve}")
+CONSUMERS = ("if a.party:", "if a.hero_skills:", "if a.enemy_skills:",
+             "SKILLBAR = (", "build_unlock_bitmap(a.unlocks)")
+late = [c for c in CONSUMERS if not 0 <= at_serve < MAIN.find(c)]
+check(at_serve >= 0 and not late,
+      "and before every skill consumer (" + ", ".join(CONSUMERS) + ")",
+      f"not after the serve call, or missing: {late}")
+check(0 <= at_serve < MAIN.find("for _line in _loaded_drops"),
+      "the load's own drops are still printed from what it returns")
+# (block opener, the refusal, the line that binds the bar) -- the AUDIT of
+# every main() block that parses skill ids from a flag into a body's bar. A
+# party row reaches these through the flags it sets (a.hero_skills, and
+# PARTY_SKILLBAR through default_skillbar into SKILLBAR); content rows are
+# serve_client_skill_table's own refusal; --unlocks is words_from_ids' gate
+# (a library, not a bar). --hero / --hero-chunk / --hero-bytes carry hero ids
+# and raw bytes, not skill ids.
+GUARDED = (
+    ("--skills", "SKILLBAR = (", "refuse_skills_past_table(SKILLBAR, ",
+     'print(f"skillbar: {SKILLBAR}")'),
+    ("--hero-skills", "if a.hero_skills:", 'refuse_skills_past_table(_hids, "--hero-skills")',
+     "HERO_SKILLS = tuple(_hbar)"),
+    ("--enemy-skills", "if a.enemy_skills:", 'refuse_skills_past_table(_eids, "--enemy-skills")',
+     "ENEMY_SKILLS = tuple(bar)"),
+)
+spans = []
+for flag, opener, refusal, bind in GUARDED:
+    o, r = MAIN.find(opener), MAIN.find(refusal)
+    b = MAIN.find(bind, max(o, 0))
+    check(MAIN.count(refusal) == 1 and 0 <= o < r < b,
+          f"{flag}: its bar refused once, inside its block, before it is bound",
+          f"{MAIN.count(refusal)} refusal(s); opener {o}, refusal {r}, bind {b}")
+    spans.append((r, b))
+check(MAIN.count("refuse_skills_past_table(") == len(GUARDED),
+      f"main() refuses at exactly the {len(GUARDED)} audited sites -- a new "
+      f"flag that hands a body skill ids adds its row to GUARDED here",
+      f"{MAIN.count('refuse_skills_past_table(')} call(s)")
+timing = []
+i = MAIN.find("skill_timing(")
+while i >= 0:
+    timing.append(i)
+    i = MAIN.find("skill_timing(", i + 1)
+unguarded = [p for p in timing if not any(r < p < b for r, b in spans)]
+check(timing and not unguarded,
+      f"every skill_timing() main() calls on a flag's id ({len(timing)}) sits "
+      f"AFTER its block's refusal -- none reads a dropped id first",
+      f"unguarded at {unguarded} of {timing}")
 
 sys.exit(LEDGER.verdict())
