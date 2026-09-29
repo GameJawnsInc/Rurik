@@ -43,7 +43,8 @@ is a section's UPPER_CASE families, "moved out" a leaf that took part of it. Fil
 - SCALE_MEANS_DAMAGE: what a skill's scale means, and the simulation's own constants; flags
   SCALE_MEANS_*, TICK_SECONDS, COLLISION_STEP; e.g. skill_damage, skill_heal; moved out: skillread
 - GAME_SMSG_NPC_UPDATE_PROPERTIES: agent properties, kill rewards, the attribute opcodes; flags
-  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*; e.g. accrue_kill_rewards; moved out: attribcolumns
+  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*, KILL_XP_RULE, REFORGED_XP; e.g. accrue_kill_rewards;
+  moved out: attribcolumns, killxp (the per-foe table; kill_experience sits above kill_agent)
 - "skills ----" and its three sub-banners: effects, the status word, what a skill costs, the
   adrenaline family, the skill bar, the unlocks; flags EFFECTS, DEEP_WOUND_*, AGENT_ADRENALINE_*,
   SKILLBAR_*; e.g. build_unlock_bitmap; moved out: skillunlock
@@ -133,6 +134,7 @@ import pools  # noqa: E402
 import chain  # noqa: E402
 import wearmap  # noqa: E402
 import morale  # noqa: E402
+import killxp  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -5077,9 +5079,29 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 # attr_id 0 = experience is UPSTREAM and UNVERIFIED; 26 is copied from the wire,
 # not derived. Whether it varies by creature is UNMEASURED: three different
 # creatures gave 26, which is evidence that it does NOT vary, at n=3.
+#
+# REFUTED 2026-09-29 (RANGERPRE-S6, KILLXP-a): the last sentence above. The value
+# is per foe -- 20, 25, 26, 30, 32, 84, 105, 126 and 176 are all on ArenaNet's
+# wire -- and all 49 own-kill awards in the live corpus are the wiki's
+# level-difference table, split by the party and times the Reforged effect's
+# +5% (CORROBORATED, zero free parameters; `killxp.py`, content/world.toml
+# [player.experience]). The three 26s were level-0 foes at player level 1 under
+# that effect: floor(25 x 1.05). The 20260929T150923 kill at wire t 477.1186 on
+# :55934 pays [0, 176] for a level-5 foe at player level 1. attr 0 = experience
+# is CORROBORATED by the same fit: the values are the wiki's experience table.
+# KILL_REWARD_VALUE stays as the PRE-KILLXP constant: what a body with no level on
+# its row is paid (a test fixture -- every spawn path sets `npc.level`), and every
+# kill under --kill-xp-constant.
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
+KILL_XP_RULE = True     # False (--kill-xp-constant): every kill pays KILL_REWARD_VALUE
+# The Reforged Mode effect's +5%, which retail pays only where it sends the
+# effect (0x0041 [own, 0, 3434, 0, 1] at a Prophecies explorable load) and this
+# server never sends. OFF by default; --reforged-xp pays it on the row's
+# reforged_effect_maps as a stand-in until the effect itself is served, and a
+# state["reforged_effect"] that load sets overrides both (reforged_effect).
+REFORGED_XP = False
 
 # THE SAME OPCODE, the other attribute. `0x00EE` is `[attr_id, delta]` over the
 # 15 player attributes, so the kill reward above (attr 0, experience) and the
@@ -5120,10 +5142,14 @@ def balthazar_rate(map_id):
     return int(row.get("balthazar_per_kill", 0))
 
 
-def accrue_kill_rewards(send, state, conn_id):
+def accrue_kill_rewards(send, state, conn_id, xp=KILL_REWARD_VALUE):
     """Make the kill reward ACCRUE instead of evaporating.
 
-    The [0, 26] xp delta hit_enemy sends is ArenaNet's own kill shape and the
+    `xp` is what kill_agent just paid on the wire (kill_experience, RANGERPRE-S6):
+    the store gains the number the client added, not a constant beside it. The
+    default is the pre-KILLXP constant, for callers that name no kill.
+
+    The [0, xp] delta hit_enemy sends is ArenaNet's own kill shape and the
     client applies it += to the sheet -- but nothing on our side remembered
     it, so the next 0x00E9 (or the next session) snapped the sheet back to
     the store's old numbers. With --persist armed and the burst having found
@@ -5144,7 +5170,7 @@ def accrue_kill_rewards(send, state, conn_id):
     row = store.character_by_uuid(state.get("char_uuid", ""))
     if row is None:
         return
-    row["xp"] += KILL_REWARD_VALUE
+    row["xp"] += int(xp)
     balth = store.account()["factions"].get("balthazar")
     rate = balthazar_rate(state.get("map_id", -1))
     if balth is not None and rate > 0:
@@ -20148,6 +20174,39 @@ def attack_tick(send, state, conn_id, rec=None):
 
 
 
+def reforged_effect(state):
+    """Is the Reforged Mode effect (skill 3434) on in this instance?
+
+    Retail's answer is the zone's, not the character's: 0x0041 [own, 0, 3434,
+    0, 1] arrives once per load on 15 of 15 pre-Searing explorable connections
+    and 0 of 112 others, and a Reforged-flagged character on a Factions or
+    Nightfall map is paid 100% (content/world.toml [player.experience], note).
+    So the character flag (0x003C bit 2, the summary's bit 16) is NOT read
+    here. `state["reforged_effect"]`, when a load has set it, is the answer;
+    until one does, --reforged-xp stands in on the row's observed maps."""
+    if "reforged_effect" in state:
+        return bool(state["reforged_effect"])
+    return bool(REFORGED_XP) and killxp.reforged_map(state.get("map_id"))
+
+
+def kill_experience(state, agent):
+    """What this hostile's death pays the player: 0x00EE [0, x]'s x.
+
+    RANGERPRE-S6 (KILLXP-a): killxp.share over the foe's row level, the
+    player's level, the party (party_member_count -- the roster, the player
+    included; the wiki's "nearby" is UNVERIFIED) and the Reforged effect.
+    CORROBORATED on 49 of 49 live awards. A body with no level on its row
+    is paid the pre-KILLXP constant; so is every kill under
+    --kill-xp-constant, the revert arm."""
+    if not KILL_XP_RULE:
+        return KILL_REWARD_VALUE
+    lvl = (agent.get("npc") or {}).get("level")
+    if lvl is None:
+        return KILL_REWARD_VALUE
+    return killxp.share(int(lvl), player_level_of(state),
+                        party_member_count(state), reforged_effect(state))
+
+
 def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     """Put an agent down. ONE place since SKILLS-DW (2026-09-09).
 
@@ -20238,9 +20297,19 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # coincidence -- and that tick carries the 0x009C marker too, which is
     # what gives the coincidence away. The three CLEAN kills carry one
     # message and no 0x009C. studies/combat/PLAN.md 13.
-    send(GAME_SMSG_AGENT_KILL_REWARD,
-         [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
-         f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+    #
+    # RANGERPRE-S6 (KILLXP-a): the VALUE is per foe (kill_experience; 26 was
+    # one row of the wiki's table), so "[0, 26]" above is REFUTED as a
+    # constant. The pair paragraph is CONTESTED by the same capture -- read
+    # there as the 75-XP death-penalty tick -- and is RANGERPRE-S7's, not
+    # this step's. A share of 0 (a foe six or more levels below) sends
+    # nothing: whether retail sends [0, 0] is UNVERIFIED, and the corpus's
+    # two unpaid deaths carry no 0x00EE at all.
+    _xp = kill_experience(state, agent)
+    if _xp:
+        send(GAME_SMSG_AGENT_KILL_REWARD,
+             [KILL_REWARD_ATTR, _xp],
+             f"kill reward [{KILL_REWARD_ATTR}, {_xp}]")
     _strip_and_step_down()             # between the reward and the flags: 631.935
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
          f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
@@ -20248,8 +20317,9 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     hero_locks_release(send, state, target_id, conn_id)
     # AFTER the measured three-message template, never inside it: the
     # status/reward/flags order is ArenaNet's own tick shape, and the
-    # accrual only appends to it (and only under --persist).
-    accrue_kill_rewards(send, state, conn_id)
+    # accrual only appends to it (and only under --persist). The same _xp the
+    # wire just carried: the store must gain what the client added.
+    accrue_kill_rewards(send, state, conn_id, _xp)
     # SLICE-B4: and a kill can meet a quest objective. Same rule about where it
     # sits -- the three-message template is ArenaNet's shape and nothing of ours
     # goes inside it.
@@ -20258,9 +20328,11 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
     # so the kill reward that just went out is also the way back up. Sends
     # nothing at all while morale is neutral, which is every session in
-    # which nothing has died -- and nothing on the first two kills after a
-    # death either, because 26 XP is not a percent yet.
-    morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
+    # which nothing has died -- and nothing on a kill that leaves the bank
+    # short of 75. It is fed the xp this kill PAID (RANGERPRE-S6): a 26 took
+    # three kills to a percent, a level-1 foe's 100 at player level 1 takes
+    # one. Where the tick sits and what it counts is RANGERPRE-S7's.
+    morale_experience(send, state, conn_id, _xp)
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -45815,6 +45887,26 @@ def main():
               f"{morale.display(morale.FLOOR)}). Retail charges nothing in "
               f"pre-Searing, which is every map this server ships -- so this "
               f"is a deliberate experiment, not the world.")
+    if a.kill_xp_constant and a.reforged_xp:
+        raise SystemExit("--reforged-xp scales the per-foe award and "
+                         "--kill-xp-constant replaces it with the constant: "
+                         "together the first does nothing. Pick one.")
+    if a.kill_xp_constant:
+        global KILL_XP_RULE
+        KILL_XP_RULE = False
+        print(f"[map] --kill-xp-constant: every kill pays [0, "
+              f"{KILL_REWARD_VALUE}] -- the pre-RANGERPRE-S6 constant; retail "
+              f"pays the wiki's per-foe table (killxp.py) [KILLXP revert]",
+              flush=True)
+    if a.reforged_xp:
+        global REFORGED_XP
+        REFORGED_XP = True
+        print(f"[map] --reforged-xp: kills pay the Reforged Mode effect's "
+              f"{killxp.REFORGED_PERCENT - 100}% on maps "
+              f"{sorted(killxp.REFORGED_EFFECT_MAPS)} (content/world.toml "
+              f"[player.experience]) -- a stand-in: retail pays it where it "
+              f"sends 0x0041 skill 3434, which this server does not yet",
+              flush=True)
     if a.secondary_bits is not None:
         spec = a.secondary_bits.strip()
         try:

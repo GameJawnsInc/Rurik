@@ -13112,6 +13112,28 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
+  `toolkit/authsrv/test_killxp.py` (**2026-09-29, RANGERPRE-S6 (KILLXP-a): kill
+  experience is per foe.** Every hostile death used to pay `0x00EE [0, 26]`; retail
+  pays GWW's "Experience per foe" table by foe level minus player level, split by
+  the party, times the Reforged Mode effect's +5% where the effect (0x0041 skill
+  3434) is on -- 49 of 49 live awards, nothing fitted (20260929T150923 :55934 wire t
+  477.1186 pays `[0, 176]` for a level-5 foe). §1 is `killxp.py` against the wiki's
+  rows and the five wire values under the effect, the party split, the effect's
+  observed maps (146, 160). §2 pins the corpus scan's 49 awards as 12 cited input
+  rows and scores `killxp.share`, `authsrv.kill_experience` (49/49 with the load's
+  effect, 49/49 with `--reforged-xp`'s map-scoped stand-in, 32/49 at the default)
+  and three KNOWN-BAD ARMS that must fall short: the constant 26 (5/49), the rule
+  without the +5% (32/49), and the +5% unscoped, which is what the character's
+  Reforged flag would pay (17/49 -- the 17 level-0 kills on map 212 and the 6 on
+  430 are Reforged characters outside the effect's zone, paid 100%). §3 drives
+  `kill_agent`: status, `[0, 100]`, flags for a level-1 foe at L1; 64 at L3; the
+  worm's 15; a henchman halving it; a zero share sending no `0x00EE`; the no-level
+  fixture's 26; the stand-in's scope and the `reforged_effect` seam; the store and
+  the death-penalty bank fed the same number the wire carried; and the revert arm
+  `--kill-xp-constant`, whose `[0, 26]` the level-1 predicate refuses. §4 pins both
+  flags (serverargs text, `main()`'s flips and the pair's refusal). Proven red by
+  reverting kill_agent's award hunk to the constant. The 75-XP tick is S7's.
+  Floor 30, measured with and without the vault -- nothing here reads it),
   `toolkit/authsrv/test_timingjoin.py` (**2026-09-18, SLICE-F49..F51's instrument:
   `timingjoin.py`, every timed quantity around an attacker with a RETAIL tape and one of
   OUR recorder captures decoded through the same codec and run through the same joins,

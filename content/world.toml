@@ -1056,6 +1056,62 @@ studies/skills/FINDINGS.md section 23. The pip count 3 rides with max 25 as a
 pair; change either only together.
 """
 
+# ------------------------------------------------- kill experience (RANGERPRE-S6)
+#
+# What one hostile's death pays the player: a table by foe level minus player level,
+# split by the party, times the Reforged Mode effect where that effect is on. The
+# arithmetic is toolkit/authsrv/killxp.py; the wire evidence is
+# studies/presearing/RANGERPRE.md (KILLXP).
+
+[player.experience]
+kill_by_level_difference = [0, 16, 32, 48, 64, 80, 100, 120, 136, 152, 168, 184, 200, 216, 232, 248, 264, 280]
+difference_min = -6
+kill_level_zero_foe = [25, 20, 15, 10, 5]
+reforged_percent = 105
+reforged_effect_maps = [146, 160]
+
+[player.experience.provenance]
+source = "wiki"
+page = """GWW "Experience" section Experience per foe (rev 2740292, \
+2026-09-09T18:22:13Z) and "Reforged Mode (effect)" id 3434 with its Notes (rev \
+2722562, 2026-03-05T03:36:40Z), both re-read 2026-09-29."""
+verified = """OBSERVED against ArenaNet's own wire, with zero free parameters: 48 of 48 \
+PvE own-kill awards (0x00EE [0, x] in the segment of 0x0026 [foe, 8]) in seven live \
+captures, plus 1 of 1 in a PvP arena, with every input re-derived from the same \
+connection -- the foe's 0x0056 level byte, the player's 0x00E9 level, the party as 1 + \
+the 0x01BF and 0x01C2 roster rows, and 0x0041 [own, 0, 3434, 0, 1] on the connection. \
+The wire exercised differences -2..+4, the level-0 row at player level 1, parties of 1, \
+2 and 4, and level 20 against 20; every other entry is the wiki's alone. The +5% has \
+its own control: a level-0 foe at player level 1 pays 25 on 17 of 17 kills with no 3434 \
+on the connection (20260913T210901, map 212) and 26 on 5 of 5 with it (20260807T143055, \
+20260810T235916, 20260929T150923). Known-bad arms on the same awards: the old constant \
+26 fits 5 of 49, the rule without the +5% fits 32 of 49. reforged_effect_maps: the \
+effect arrives once per load on 15 of 15 pre-Searing explorable connections (maps 146 \
+and 160) and on 0 of the 112 others."""
+note = """
+difference_min is the first entry's difference: the table runs -6 (or more levels
+below: 0) to +11 (or more above: 280, the wiki's cap "before applying any
+multipliers"). kill_level_zero_foe is the wiki's second table, player level 1..5;
+paying 0 at player level 6 and above is RECONSTRUCTION (the table stops at 5).
+
+The divide is floor(base x percent / (100 x party)): multiply before divide and floor
+are RECONSTRUCTION -- floor and round agree on all 49 awards. The party is the whole
+roster; the wiki says "nearby party members", and a dead or distant member's share is
+UNVERIFIED. Boss x2 and hard mode x1.5 are wiki-only and not modelled. Quest rewards
+are NOT scaled by any of this (250/500/100 on the Reforged capture, 1000 in a party of
+4): grant_quest_reward pays its row's number.
+
+THE +5% IS THE ZONE EFFECT, NEVER THE CHARACTER FLAG. The wiki's own Notes: the effect
+"is present in normal mode in every explorable area in Prophecies if every character in
+the party is opted in". The character's Reforged bit (0x003C bit 2, the summary blob's
+bit 16) is carried by Factions and Nightfall characters too, and on those maps no 3434
+arrives and a kill pays 100% -- the 25 x 17 on map 212 above and 32 x 6 on map 430
+(20260914T005758). So reforged_effect_maps is the effect's scope: the Prophecies
+explorables it was OBSERVED on. Another Prophecies explorable belongs here by the wiki's
+sentence; add it with the capture that shows 3434 there. The server pays the +5% only
+under --reforged-xp (off by default) until it sends the effect itself.
+"""
+
 # ------------------------------------------------- weapon types (WEAPONS-W1)
 #
 # One row per weapon type a PLAYER can hold, keyed by the word this server calls it.

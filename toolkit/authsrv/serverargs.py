@@ -204,6 +204,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "watched anyway -- the --explorable idiom, a switch "
                          "rather than a lie in content/maps.toml. "
                          "studies/morale/FINDINGS.md.")
+    ap.add_argument("--kill-xp-constant", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S6 (KILLXP-a): every "
+                         "hostile death pays 0x00EE [0, 26], the constant this "
+                         "server paid until 2026-09-29. The default pays the "
+                         "wiki's per-foe table by foe level minus player level, "
+                         "split by the party (killxp.py, content/world.toml "
+                         "[player.experience]) -- 49 of 49 live awards, where "
+                         "the constant fits 5.")
+    ap.add_argument("--reforged-xp", action="store_true",
+                    help="Pay the Reforged Mode effect's +5%% kill experience "
+                         "on the maps the effect was observed on "
+                         "([player.experience] reforged_effect_maps: the "
+                         "pre-Searing explorables). OFF by default: retail pays "
+                         "it only where it sends the effect, 0x0041 [own, 0, "
+                         "3434, 0, 1] at a Prophecies explorable load, and this "
+                         "server does not send it yet -- a stand-in until it "
+                         "does. The character's Reforged flag never drives it: "
+                         "a Factions or Nightfall character carries the flag "
+                         "and is paid 100%%.")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
                     help="OVERRIDE the mask GAME_SMSG 0x00B6 carries in the spawn "
                          "burst: which professions the character may take as a "
