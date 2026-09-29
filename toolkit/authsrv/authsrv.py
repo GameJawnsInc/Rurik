@@ -14071,7 +14071,8 @@ def launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how):
     shot = {"shooter": agent_id, "target": tid, "arrives_at": now + flight,
             "handle": 1 + sum(1 for s in flying if s["shooter"] == agent_id),
             "damage_type": how["damage_type"],
-            "aim": (float(tx), float(ty))}                     # studies/weapons 38
+            "aim": (float(tx), float(ty)),                     # studies/weapons 38
+            "origin": (float(ax), float(ay))}                  # RANGERPRE-S9: the line of fire
     flying.append(shot)
     send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
          [agent_id, [float(tx), float(ty)], 0, _f32(flight), how["projectile"],
@@ -14544,7 +14545,8 @@ def launch_player_projectile(send, state, conn_id, swing, how):
     flying = state.setdefault("player_projectiles", [])
     shot = {"target": swing["target"], "arrives_at": now + flight,
             "handle": len(flying) + 1, "damage_type": how["damage_type"],
-            "aim": (tx, ty)}                                   # studies/weapons 38
+            "aim": (tx, ty),                                   # studies/weapons 38
+            "origin": (px, py)}                                # RANGERPRE-S9: the line of fire
     flying.append(shot)
     send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
          [PLAYER_AGENT_ID, [tx, ty], 0, _f32(flight), how["projectile"],
@@ -15112,7 +15114,8 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
     return "landed" if foes else None
 
 
-# ---- THE HIT TEST: THE LEAD AND THE DODGE (2026-09-20, studies/weapons 39) ----
+# ---- THE HIT TEST: THE LEAD AND THE DODGE (2026-09-20, studies/weapons 39;
+# ---- the geometry re-fitted 2026-09-29, RANGERPRE-S9) ----
 #
 # WIKI (GWW "Projectile"): "A projectile's trajectory is calculated based on
 # the location and velocity of the target at the time of fire, automatically
@@ -15124,25 +15127,55 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
 # spell draws its impact on the ground at the aim and no word (the Daggers,
 # 2 of 17); a burst still explodes and words whoever stands in its area
 # (Fireball, 21 of 35 impacts on the ground, 31 of 35 announced targets
-# worded). The GEOMETRY is NOT measurable from the tapes: the nearest
-# position samples sit up to a third of a second from the arrival, a walker
-# covers tens of units in that, and direct hits read 0..104 u from the aim
-# where misses read 0..140; a "course change in flight" reading is REFUTED
-# outright (7 misses with none, 12 hits with one). So the mechanism is the
-# wiki's and the two numbers are ours, said so: the AIM leads the target by
-# its velocity at the launch (the flight refined once), and at the arrival
-# the projectile CONNECTS when the target stands within DODGE_TOLERANCE of
-# the aim -- rA + rB, the two body radii the client's own follow-stop adds
-# (BOUNDING_RADIUS, 12 u, what every 0x0020 carries), 24 u -- else it is
-# dodged. A body's velocity is a finite difference over VELOCITY_WINDOW of
-# its own model position (the trail the world tick keeps); a stander's is 0,
-# so a standing target is aimed at where it stands and hit there, as every
-# test before today assumed. RUN-WEAPONS-1B's Orb block measures both
-# numbers (studies/weapons 39). --no-dodge reverts: the aim is the target's
-# position and every projectile connects.
+# worded). A "course change in flight" reading is REFUTED outright (7
+# misses with none, 12 hits with one). The AIM leads the target by its
+# velocity at the launch (the flight refined once) -- CORROBORATED
+# 2026-09-29: on 58 live launches at a moving target retail's aim sits
+# speed x flight ahead (ratio median 0.97). A body's velocity is a finite
+# difference over VELOCITY_WINDOW of its own model position (the trail the
+# world tick keeps); a stander's is 0, so a standing target is aimed at
+# where it stands.
+#
+# THE GEOMETRY (2026-09-29, RANGERPRE-S9, studies/presearing/RANGERPRE.md;
+# it supersedes 2026-09-20's). At the arrival the projectile CONNECTS when
+# the target stands within DODGE_TOLERANCE of the aim ACROSS the line of
+# fire (the shooter's point at the launch -> the aim, the shot's "origin")
+# and within DODGE_ALONG of it ALONG that line, short or long; else it is
+# dodged. 2026-09-20's 24 u disc -- rA + rB, the two BOUNDING_RADIUS body
+# radii the follow-stop adds -- is REFUTED: 3 of retail's 4 Flare hits on
+# 20260929T150923 land outside it. The Flare tape (skill 194, projectile
+# 343, :55934) read first by dead reckoning off the client's own reports
+# (~18 u of error) put hits 7.9-48 u from the aim (one at 80 u) and misses
+# 71-101 u: a band, not a derived constant. Rebuilt from retail's OWN orders
+# (0x0029 / 0x002A dests, 0x002B speed factors, 0x0028 stops; positive
+# control: 11 standing launches' aims predicted within 1.28 u) its 12
+# anchored arrivals read hits 0-52 u and misses 71.8-105.8 u, every one
+# displaced SIDEWAYS, and the 80 u hit was the first instrument's artefact.
+# Over 572 trusted live arrivals on 39 captures (72 with the target moved
+# >= 5 u: 60 hits, 12 misses) no single radius separates the two (the best
+# is wrong 4 times, 24 u 15 times); "across <= B and |along| <= A" separates
+# all of them for B in [51.0, 57.5] and A in [101, 128]. BOTH NUMBERS BELOW
+# ARE FITTED inside those bands -- RECONSTRUCTION, the mechanism UNVERIFIED
+# (a swept volume? square or rounded ends fit alike) -- and the ALONG band
+# rests on 3 hits (along -100.1, +68.6, +88.8) and 2 misses (-128.5,
+# -394.5), the weaker of the two. What it buys: a target that steps
+# SIDEWAYS dodges; one that backs straight away or runs straight in is
+# still met inside DODGE_ALONG. The corpus walk that measured the bands is
+# not a tool in this tree yet (RANGERPRE section 4 defers it);
+# test_weapons 27 carries retail's deciding rows literally. 54 sits near
+# FOLLOW_STOP_PAD (56) with no known causal link -- not a derivation. Our
+# player's position adopts the client's report where retail keeps its own
+# model point (0-16 u apart on that tape), so a verdict within ~15 u of the
+# across edge can still differ from retail's. A burst's direct-or-ground
+# choice (send_area_impact) takes the same verdict, though bursts were left
+# out of the fit: UNVERIFIED there. A shot with no origin on record falls
+# back to a DODGE_TOLERANCE disc: OUR choice, not retail's. --no-dodge
+# reverts: the aim is the target's position and every projectile connects.
 DODGE = True
-DODGE_TOLERANCE = 24.0       # u: rA + rB -- twice BOUNDING_RADIUS (12.0, the follow-stop
-                             # block below; test_weapons 27 locks the relation). RECONSTRUCTION
+DODGE_TOLERANCE = 54.0       # u ACROSS the line of fire. RECONSTRUCTION: fitted inside retail's
+                             # band [51.0, 57.5] (RANGERPRE-S9; test_weapons 27 holds the rows)
+DODGE_ALONG = 114.0          # u ALONG it, short of or past the aim. RECONSTRUCTION: fitted
+                             # inside [101, 128] -- a band 3 hits and 2 misses wide
 VELOCITY_WINDOW = 0.25                     # s: the trail's sampling span
 
 
@@ -15201,13 +15234,24 @@ def led_aim(shooter, target, velocity, speed):
 
 def projectile_connects(state, shot):
     """Does a projectile that has reached its aim find its target there --
-    within DODGE_TOLERANCE of the aim? Always, with the feature off or no
-    aim on record."""
+    within DODGE_TOLERANCE of the aim across the line of fire and
+    DODGE_ALONG along it (RANGERPRE-S9)? A shot with no origin on record, or
+    one launched from its own aim, is tested against a DODGE_TOLERANCE disc
+    (ours). Always, with the feature off or no aim on record."""
     if not DODGE or shot.get("aim") is None:
         return True
     x, y = target_pos(state, shot["target"])
     ax, ay = shot["aim"]
-    return math.hypot(float(x) - float(ax), float(y) - float(ay)) <= DODGE_TOLERANCE
+    dx, dy = float(x) - float(ax), float(y) - float(ay)
+    o = shot.get("origin")
+    if o is not None:
+        lx, ly = float(ax) - float(o[0]), float(ay) - float(o[1])
+        n = math.hypot(lx, ly)
+        if n > 1e-6:
+            ux, uy = lx / n, ly / n
+            return (abs(dx * uy - dy * ux) <= DODGE_TOLERANCE
+                    and abs(dx * ux + dy * uy) <= DODGE_ALONG)
+    return math.hypot(dx, dy) <= DODGE_TOLERANCE      # no line of fire on record: OURS
 
 
 # ---- A POINT-BLANK BURST: no flight, every foe around the target (2026-09-20, studies/weapons 40)

@@ -2444,6 +2444,24 @@ largest that hit, the client's own move-to coordinates giving the position). The
 model steers between samples; the `[55]` energy word; the bonus penetration tier (item word
 574).
 
+**CORRECTED 2026-09-29 (RANGERPRE-S9, [studies/presearing/RANGERPRE.md](../presearing/RANGERPRE.md)).**
+The geometry above is superseded; the shapes, the lead and the flag stand. The 24 u disc
+(rA + rB) is REFUTED: 3 of retail's 4 Flare hits on `20260929T150923` (:55934) land outside
+it, and over 572 trusted live arrivals it is wrong 15 times. "NOT measurable" held for the
+nearest-sample reading; rebuilding retail's server model from retail's own orders (`0x0029` /
+`0x002A` dests, `0x002B` factors, `0x0028` stops; positive control: 11 standing aims predicted
+within 1.28 u) made it measurable, and all 12 anchored Flare arrivals were displaced
+SIDEWAYS -- hits 0-52 u from the aim, misses 71.8-105.8 u (RECONSTRUCTION). No single radius
+separates the corpus (the best is wrong 4 times); across ≤ B and |along| ≤ A separates all of
+it for B in [51.0, 57.5] and A in [101, 128]. What ships: the target connects within
+`DODGE_TOLERANCE` = 54 u of the aim ACROSS the line of fire (the shot's recorded `origin` →
+the aim) and `DODGE_ALONG` = 114 u ALONG it -- both FITTED inside those bands, RECONSTRUCTION,
+the mechanism UNVERIFIED, and the along band rests on 3 hits and 2 misses. A shot with no
+origin falls back to a 54 u disc (ours). The lead is CORROBORATED: on 58 moving launches
+retail's aim sits speed × flight ahead (ratio median 0.97). Section 27's three checks whose
+offsets lay along the line are re-aimed across it, and it gains retail's nine deciding
+arrivals as literal rows. A pinned strafe / backpedal / run-in capture would narrow both bands.
+
 ## 40. A point-blank burst -- 2026-09-20: no flight -- every foe around the target, at the completion
 
 > **Correction, 2026-09-26 (§41, `aotjoin.py`).** Two statements below are wrong and stand
