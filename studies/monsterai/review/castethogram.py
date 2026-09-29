@@ -52,6 +52,10 @@ carry the header at v[0]; the monsterai 10 trap was reading 0x00A0 at the wrong 
             max-health fractions (agents.py 55 note: 16/17 negative 1,494 of 1,494)
   0x00A2 [162, 34, agent, f32]  the health SETTER -- 45 in the corpus, EVERY one on a
             create tick (recon); 0x00A2 [162, 44, agent, f32] the net regen rate
+  0x00A2 [162, 55, agent, f32]  ALSO a health SETTER (FIX 3, 2026-09-29, the CASTAI-Z2
+            judge: 1.0 at every revive and 300/max at a match-end reset on 20260929T100038,
+            onto bodies at 0.2-0.998 -- never a delta; the TARGETED 0x00A3 [55] above is
+            the heal delta). Conn used to append it as a delta.
   0x00F1 [241, agent, status]   0x10 dead, 0x800 hexed, 0x02 a condition (hexjoin)
   0x0020 create: v[1] agent, v[2] tag<<28 | definition, v[4] kind, v[5] pos, v[12] token
   0x0056 [86, definition, file_id, 0, scale, 0, flags, profession, level, name]
@@ -331,32 +335,63 @@ class Conn:
         self.heals = collections.defaultdict(list)       # target -> [(t, source, f)]
         self.create_t = collections.defaultdict(list)
         self.set34 = []
+        # FIX 1 (2026-09-29, the CASTAI-Z2 judge): the s2c INDEX of every state event, in
+        # lists parallel to health_ev / effects6 / status / create_t, so a reader can take
+        # the state STRICTLY BEFORE an announce in the server's own emission order
+        # (status_before / live6_before / health_before below) instead of by a clock that
+        # zaishenrun had rounded to the ms -- round(ta, 3) rounds up half the time, and a
+        # reader asked for "words strictly before the announce" then saw the announce's own
+        # batch. The tuples above keep their shape: every consumer unpacks them.
+        self.health_i = collections.defaultdict(list)
+        self.effects6_i = collections.defaultdict(list)
+        self.status_i = collections.defaultdict(list)
+        self.create_i = collections.defaultdict(list)
+        self.set55 = []                                  # [(t, agent, value, s2c index)]
+
+        def hev(agent, t, kind, val, i):
+            self.health_ev[agent].append((t, kind, val))
+            self.health_i[agent].append(i)
+
         for i, (t, op, v) in enumerate(self.s2c):
             if op == OP_CREATE and len(v) > 12:
                 self.create_t[v[1]].append(t)
-                self.health_ev[v[1]].append((t, "create", None))
+                self.create_i[v[1]].append(i)
+                hev(v[1], t, "create", None, i)
             elif op == OP_FLOAT and len(v) > 3:
                 if v[1] == PROP_HEALTH_SET:
-                    self.health_ev[v[2]].append((t, "set", f32(v[3])))
+                    hev(v[2], t, "set", f32(v[3]), i)
                     self.set34.append(f32(v[3]))
                 elif v[1] == PROP_REGEN:
-                    self.health_ev[v[2]].append((t, "regen", f32(v[3])))
-                elif v[1] in PROP_DMG + (PROP_HEAL,):
-                    self.health_ev[v[2]].append((t, "delta", f32(v[3])))
+                    hev(v[2], t, "regen", f32(v[3]), i)
+                elif v[1] == PROP_HEAL:
+                    # FIX 3 (2026-09-29, the CASTAI-Z2 judge): the UNTARGETED 0x00A2 [162, 55,
+                    # agent, f32] is a health SETTER, not a heal delta. On 20260929T100038 it
+                    # is 1.0 at every revive (the body at 0.0 before it) and, at the match-end
+                    # resets, 0.5405 / 0.6085 / 0.5917 = 300/555, 300/493, 300/507 onto bodies
+                    # at 0.2-0.998 -- a delta would clamp a 0.998 body to 1.0, a setter yields
+                    # 300/max. The TARGETED 0x00A3 [163, 55, target, source, f32] stays the
+                    # heal delta (the OP_FLOAT_T branch). This word used to be appended as a
+                    # 'delta'; from 0.0 a +1.0 delta and a 1.0 setter coincide, which is why
+                    # the revives read right under the old reading.
+                    hev(v[2], t, "set55", f32(v[3]), i)
+                    self.set55.append((t, v[2], f32(v[3]), i))
+                elif v[1] in PROP_DMG:
+                    hev(v[2], t, "delta", f32(v[3]), i)
             elif op == OP_FLOAT_T and len(v) > 4:
                 if v[1] in PROP_DMG + (PROP_HEAL,):
                     x = f32(v[4])
-                    self.health_ev[v[2]].append((t, "delta", x))
+                    hev(v[2], t, "delta", x, i)
                     if v[1] in PROP_DMG:
                         self.damage_on[v[2]].append((t, v[3], x))
                     else:
                         self.heals[v[2]].append((t, v[3], x))
                 elif v[1] == PROP_HEALTH_SET:
-                    self.health_ev[v[2]].append((t, "set", f32(v[4])))
+                    hev(v[2], t, "set", f32(v[4]), i)
             elif op == OP_STATUS and len(v) > 2:
                 self.status[v[1]].append((t, int(v[2])))
+                self.status_i[v[1]].append(i)
                 if int(v[2]) & DEAD_BIT:
-                    self.health_ev[v[1]].append((t, "dead", None))
+                    hev(v[1], t, "dead", None, i)
             elif op == OP_APPLY and len(v) > 5:
                 self.applies[v[1]].append((t, v[2], v[4], f32(v[5]), i))
             elif op == OP_UNAPPLY and len(v) > 2:
@@ -364,6 +399,7 @@ class Conn:
             elif op == OP_INT and len(v) > 3:
                 if v[1] in (PROP_ADD_EFFECT, PROP_REMOVE_EFFECT):
                     self.effects6[v[2]].append((t, 1 if v[1] == PROP_ADD_EFFECT else -1, v[3]))
+                    self.effects6_i[v[2]].append(i)
                 elif v[1] in (PROP_CAST, PROP_INSTANT):
                     self.announces.append((t, i, v[2], None, v[3], v[1], f"9F[{v[1]}]"))
                 elif v[1] in END_PROPS:
@@ -427,16 +463,14 @@ class Conn:
         return c[4]
 
     # -- health ---------------------------------------------------------------
-    def health_at(self, agent, t, use_dead=True):
-        """(fraction, how) just before t, or (None, why). RECONSTRUCTION. With
-        use_dead=False the dead bit does not zero it (L2 must not be forced true)."""
-        evs = self.health_ev.get(agent)
-        if not evs:
-            return None, "no create"
+    @staticmethod
+    def _integrate(evs, t, use_dead):
+        """The health integrator over an already-selected event list, read at instant t
+        (the 44 rate runs from the last event to t). Shared by health_at (events strictly
+        before t on the clock) and health_before (events strictly before an s2c index --
+        FIX 1, 2026-09-29), so the two readers cannot drift numerically."""
         h, how, rate, last = None, None, 0.0, None
         for (te, kind, val) in evs:
-            if te >= t - 1e-9:
-                break
             if h is not None and last is not None and rate:
                 h = min(1.0, max(0.0, h + rate * (te - last)))
             last = te
@@ -444,6 +478,9 @@ class Conn:
                 h, how, rate = 1.0, "create-full (no 34)", 0.0
             elif kind == "set":
                 h, how = max(0.0, min(1.0, val)), "anchored (34)"
+            elif kind == "set55":
+                # FIX 3 (2026-09-29): the untargeted [162, 55] word sets the fraction
+                h, how = max(0.0, min(1.0, val)), "anchored (55)"
             elif kind == "regen":
                 rate = val
             elif kind == "delta" and h is not None:
@@ -455,6 +492,26 @@ class Conn:
         if last is not None and rate:
             h = min(1.0, max(0.0, h + rate * (t - last)))
         return round(h, 4), how
+
+    def health_at(self, agent, t, use_dead=True):
+        """(fraction, how) just before t, or (None, why). RECONSTRUCTION. With
+        use_dead=False the dead bit does not zero it (L2 must not be forced true)."""
+        evs = self.health_ev.get(agent)
+        if not evs:
+            return None, "no create"
+        return self._integrate([e for e in evs if e[0] < t - 1e-9], t, use_dead)
+
+    def health_before(self, agent, i, use_dead=True):
+        """health_at in STREAM ORDER: the events with s2c index < i, read at the instant
+        of message i. FIX 1 (2026-09-29, the CASTAI-Z2 judge): a word in the announce's
+        own batch counts when the server emitted it BEFORE the announce and not after,
+        which is how the three blind replicators read the tape and what resolves a batch
+        without a +/- BATCH tolerance."""
+        evs = self.health_ev.get(agent)
+        if not evs:
+            return None, "no create"
+        sel = [e for e, j in zip(evs, self.health_i.get(agent, ())) if j < i]
+        return self._integrate(sel, self.s2c[i][0], use_dead)
 
     # -- effects ----------------------------------------------------------------
     def live6(self, agent, t):
@@ -473,10 +530,39 @@ class Conn:
                 live[eid] = 0
         return sorted(k for k, n in live.items() if n > 0)
 
+    def live6_before(self, agent, i):
+        """live6 in STREAM ORDER: the [6] / [7] words with s2c index < i, reset at the
+        agent's last create before i. FIX 1 (2026-09-29)."""
+        live = collections.Counter()
+        ci = [c for c in self.create_i.get(agent, ()) if c < i]
+        since = ci[-1] if ci else -1
+        for (te, sgn, eid), j in zip(self.effects6.get(agent, ()), self.effects6_i.get(agent, ())):
+            if j >= i:
+                break
+            if j < since:
+                continue
+            if sgn > 0:
+                live[eid] += 1
+            elif live[eid] > 0:
+                live[eid] = 0
+        return sorted(k for k, n in live.items() if n > 0)
+
     def status_at(self, agent, t):
         w = None
         for (te, word) in self.status.get(agent, ()):
             if te >= t - 1e-9:
+                break
+            w = word
+        return w
+
+    def status_before(self, agent, i):
+        """The agent's last 0x00F1 word with s2c index < i (STREAM ORDER), or None when
+        it has none yet. FIX 1 (2026-09-29): verified on the raw stream at :51090 392.0485
+        and :64557 642.1476 / 647.8979 / 658.8958 -- in every batch the announce PRECEDES
+        the word that clears the bit, so the state strictly before the announce is 'set'."""
+        w = None
+        for (te, word), j in zip(self.status.get(agent, ()), self.status_i.get(agent, ())):
+            if j >= i:
                 break
             w = word
         return w
@@ -593,9 +679,19 @@ def build_casts(conn, table, rec_table, stats):
                 tclass = {5: "foe", 3: "ally", 4: "ally", 6: "ally"}.get(tbyte, "other") + "(byte)"
             else:
                 tclass = "foe"
+        # FIX 1 (2026-09-29, the CASTAI-Z2 judge): the announce's EXACT time and its s2c
+        # index ride the record beside the ms-rounded 't' (kept for printing and for the
+        # JSON), and the end word's index beside 'end_t' -- every state read keys on these
+        # (zaishenrun's bit_state / P2 / P4 / P5 read r['i']; 't' rounded up half the time
+        # and a "strictly before" reader then saw the announce's own batch).
+        end_i = None
+        if te is not None:
+            end_i = next((ei for (te2, ei, p2) in conn.ends.get(caster, ())
+                          if te2 == te and p2 == eprop and ei > idx), None)
         rec = {
             "capture": conn.stamp, "port": conn.port, "build": conn.build,
-            "map": conn.map_id, "t": round(ta, 3), "caster": caster, "inc": inc,
+            "map": conn.map_id, "t": round(ta, 3), "t_exact": ta, "i": idx, "end_i": end_i,
+            "caster": caster, "inc": inc,
             "arena": "zaishen" if getattr(conn, "zaishen", False) else None,
             "class": klass, "form": form, "skill": skill, "type": typ,
             "type_name": TYPE_NAMES.get(typ, str(typ)), "target_byte": tbyte,
@@ -609,14 +705,16 @@ def build_casts(conn, table, rec_table, stats):
         rec["definition"] = d
         rec["def_key"] = None if d is None else f"{conn.build}:{d}"
         rec["def_info"] = conn.defs.get(d) if d is not None else None   # (file, prof, level)
-        # health
-        rec["h_caster"], rec["h_caster_how"] = conn.health_at(caster, ta)
+        # health -- FIX 1 (2026-09-29): read STRICTLY BEFORE the announce in stream order
+        # (the s2c index), not on the clock: a same-batch word the server emitted before
+        # the announce counts, one it emitted after does not
+        rec["h_caster"], rec["h_caster_how"] = conn.health_before(caster, idx)
         if tgt is not None:
-            rec["h_target"], rec["h_target_how"] = conn.health_at(tgt, ta)
+            rec["h_target"], rec["h_target_how"] = conn.health_before(tgt, idx)
             dmg = [x for x in conn.damage_on.get(tgt, ()) if ta - HURT_WINDOW <= x[0] < ta]
             rec["dmg_on_target_10s"] = len(dmg)
-            rec["live6_target"] = conn.live6(tgt, ta)
-            st = conn.status_at(tgt, ta)
+            rec["live6_target"] = conn.live6_before(tgt, idx)
+            st = conn.status_before(tgt, idx)
             rec["status_target"] = st
             rec["hexed_bit"] = None if st is None else bool(st & HEX_BIT)
             rec["cond_bit"] = None if st is None else bool(st & COND_BIT)
@@ -735,6 +833,21 @@ def applies_live(conn, tgt, ta):
         gone = [u for (u, b, iu) in conn.unapplies.get(tgt, ()) if b == buff and iu > ia and u < ta]
         if not gone:
             out.append((s, round(ta - t, 3)))
+    return out
+
+
+def applies_live_before(conn, tgt, i):
+    """applies_live in STREAM ORDER (FIX 1, 2026-09-29): the 0x0042 applies on tgt with
+    s2c index < i whose buff has no 0x0044 at an index between the apply and i; the age
+    is measured to message i's instant."""
+    out = []
+    t_i = conn.s2c[i][0]
+    for (t, s, buff, dur, ia) in conn.applies.get(tgt, ()):
+        if ia >= i:
+            continue
+        gone = [u for (u, b, iu) in conn.unapplies.get(tgt, ()) if b == buff and ia < iu < i]
+        if not gone:
+            out.append((s, round(t_i - t, 3)))
     return out
 
 

@@ -132,13 +132,25 @@ is marked POST-HOC at its site with the verdict it replaced.
 THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
   * HEALTH. No 0x00A2 [34] setter on any body of any match: every body is anchored
     'create-full' -- created at full health when the match instance loads -- and
-    integrated from there (16 / 17 / 55 deltas, the 44 regen rate; Conn.health_at). A
-    revive is a +1.0 delta at the dead-bit clear (Resurrection Signet's 100 %), so a
-    revived body is re-anchored at 1.0 by the wire itself. The L2 check (the
-    reconstruction <= 0.10 just after the killing batch) is printed over the MONK
-    bodies' deaths -- the instrument the P2 threshold rests on -- and over the party's.
-    A match END marks every surviving party body dead at ONE instant with health > 0
-    (the defeat mark; RECONSTRUCTION); those are printed and not counted.
+    integrated from there (the targeted 0x00A3 16 / 17 / 55 deltas, the 44 regen rate;
+    Conn.health_before, in stream order since fix 1). A revive carries an UNTARGETED
+    0x00A2 [162, 55, agent, 1.0] at the dead-bit clear, and that word is a health SETTER
+    (fix 3, 2026-09-29): the same word carries the match-end RESETS -- 0.6085 = 300/493,
+    0.5405 = 300/555, 0.5917 = 300/507 onto the four Monks at 0.2-0.998 (matches 4 and 5,
+    the lost ones) and 0.5405 / 0.5545 / 0.5758 onto the party (matches 1-3, the won
+    ones; the observer's 0.6726 / 0.7264 / 0.7444 read 300/446, 300/413, 300/403, not its
+    maximum -- cause UNVERIFIED) -- which a delta cannot express -- so a revived body is
+    re-anchored at 1.0 by the wire itself ('anchored (55)' in the census). This bullet
+    used to read "a revive is a +1.0 delta at the dead-bit clear (Resurrection Signet's
+    100 %)": castethogram's misreading of the word, invisible at a revive (from 0.0 a
+    +1.0 delta and a 1.0 setter coincide) and wrong after a reset. 'Set to 300 points'
+    is a RECONSTRUCTION. No Monk cast on this tape is announced after a reset (the
+    Monks' resets close the lost matches; the party's close the won ones, when the Monks
+    are dead). The L2 check (the reconstruction <= 0.10 just after the killing batch) is
+    printed over the MONK bodies' deaths -- the instrument the P2 threshold rests on --
+    and over the party's. A match END marks every surviving party body dead at ONE
+    instant with health > 0 (the defeat mark; RECONSTRUCTION); those are printed and not
+    counted.
   * THE CONDITION BIT 0x02 (effects.STATUS_CONDITION) rides the monks' 0x00F1 words: it
     rises in the batch of the Fighter's Hamstring [46]. The 275 target's state is read
     off it; the observer is never a 275 target (the byte says other ALLY).
@@ -158,16 +170,29 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
     [1] (GV_MELEE_ATTACK_FINISHED) or [3] (GV_ATTACK_STOPPED) ~0.5 s later, then the
     next [4]; a monk STOPS ([3]) to cast and resumes with a new [4]. No monk sends a
     [50] attack skill (none on the bar).
-  * NO cast-time word: 0 of the Monks' 349 cast announces carries a 0x00A3 / 0x00A2
-    [61] (the henchman Mage's and Fighter's casts do, at 0.67 x, as on the Z1 tape).
+  * NO cast-time word on a Monk cast: 0 of the Monks' 349 announces carries a 0x00A3 /
+    0x00A2 [61]. The henchman Mage's DO, and INTERMITTENTLY (fix 5, 2026-09-29): 30
+    [61] words on 30 of her 107 non-signet casts, in match 2 (14, from 274.4 s) and
+    match 3 (16, from 412.56 s) only -- none in matches 1, 4 and 5, where she cast at
+    table speed; one each on the Fighter's skill 1 (match 1) and the observer's 153
+    (match 4); every factor 0.67 x (180: 0.672). The Z1 tape's Mage carried one on
+    every cast (FINDINGS 18.1); this bullet used to say "as on the Z1 tape", which the
+    tape refutes: two matches, starting mid-match. Cause UNVERIFIED.
   * The team: the c2s 0x00A6 [map, team, 0] ENTER (CASTAI-ZF4) carries team 57 on every
     outpost connection of this tape, and every match is four 38888:124 Monks.
 
-  Z2.P1  every 275 (Mend Condition) by a Monk body -> the target's condition bit at the
-         announce (Conn.status_at), OR rising inside the announce's own batch (t <= ta +
-         BATCH: a word's order inside one batch is not a time order; counted as carrying
-         and printed apart as 'same batch'). Counterexample: the bit clear through
-         ta + BATCH -> FAILED; none, with n >= 5 -> HELD; n < 5 -> NULL. 275's exe target
+  Z2.P1  every 275 (Mend Condition) by a Monk body -> the target's condition bit
+         STRICTLY BEFORE the announce IN STREAM ORDER (Conn.status_before on the
+         announce's s2c index -- fix 1, 2026-09-29). Counterexample: the bit clear
+         there -> FAILED; none, with n >= 5 -> HELD; n < 5 -> NULL. This rule used to
+         read "at the announce (Conn.status_at), OR rising inside the announce's own
+         batch (t <= ta + BATCH: a word's order inside one batch is not a time order;
+         counted as carrying and printed apart as 'same batch')": that premise was
+         asserted without evidence, and the batches read on this tape are causally
+         ordered -- an announce, then a teammate's [58], then its effects (:51090
+         392.0485, :64557 647.8979 / 658.8958) -- so the asymmetric same-batch rise
+         clause is dropped as subsumed (a rise emitted before the announce counts, one
+         emitted after does not; 0 rows carried the clause on this tape). 275's exe target
          byte is 4 (other ally, effects.OTHER_ALLY_TARGET): a Monk CANNOT Mend itself; a
          9F self form or an A0 naming the caster is printed as an anomaly and counted as
          a counterexample of the table, not of P1.
@@ -196,9 +221,17 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
          side removes an enchantment (the party's bars carry no removal; the observer's
          casts are 1 / 2 / 153 / 364 / 2858 / 3443, none a removal). A counterexample is
          an announce of S at T while such an episode of S on T is live -> FAILED; none
-         -> HELD, with the number of casts that HAD a live previous episode to overlap
-         at all ('informative') printed: 272 recharges in 20 s and lives 8, 271 in 30 s
-         and lives 60, so only a 271 re-cast, or a 272 onto ANOTHER monk, can overlap.
+         -> HELD when the tape EXPOSED the rule (fix 4, 2026-09-29): the exposure is the
+         episodes in which the caster's slot came READY (completion + the exe recharge)
+         while the episode still lived on a living body, and the re-casts declined
+         inside them (ench_exposure; printed with and without the [7, T, 13] cut); a
+         re-cast inside one FAILS, no exposure is NULL -- STRUCTURAL for 272, which
+         recharges in 20 s and lives 8 and was self-cast 27 / 27, so no slot is ready
+         while its own episode lives, and that null is printed on the verdict line,
+         never folded into a HELD. The first run counted 'casts that HAD a live previous
+         episode to overlap' ('informative', uncut): a unit that is non-zero only when
+         the prediction fails or a death intervened, so a compliant AI could never meet
+         it -- the mirror of a check that cannot fail.
          251 (Scourge Healing): an announce at T with T's hexed bit 0x800 set at the
          announce (the Monks' only hex is 251, so on our bodies hexed = 251 live,
          RECONSTRUCTION), or on the observer a live 0x0042 [obs, 251] (EXACT) -> FAILED;
@@ -221,16 +254,30 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
   Z2.P6  per MONKS match, 1-s windows over the match span (the state read at each
          window's start instant), kept while >= 2 Monks are alive (the dead bit). A
          Monk's CURRENT TARGET at t is the target of its latest 0x00A0 [4] at or before t,
-         held until its next [4]; it ENDS at the target's death, the Monk's own death /
-         re-create, or 30 s without a [4] (castethogram.ATTACK_WINDOW). A [3] attack
-         stopped does NOT end it (a Monk stops to cast and resumes on the same body). A
-         window AGREES when every Monk holding a current target holds the same one; the
-         HEADLINE denominator is windows with >= 2 alive AND >= 2 holders (one holder is
-         vacuous); the counts over 1-holder and 0-holder windows are printed beside it.
-         >= 80 % -> HELD, else FAILED; no window with >= 2 holders -> NULL. Every SWITCH
-         -- a [4] naming a different target from the Monk's still-current one -- is
-         listed (t, monk, from, to); a [4] after the current target ended (death /
-         expiry) is a fresh pick and is counted apart.
+         held until its next [4]; it ENDS at the Monk's own 0x009F [3] (attack stopped)
+         after that [4], at the target's death, the Monk's own death / re-create, or
+         P6_HOLD = 5 s without a [4] (a safety cap: the 1.33 s swing cadence x several).
+         FIX 2, 2026-09-29, the judge: the [3] is the wire's own statement that the
+         attack ended, and the registration says 'attack targets'. This rule used to
+         read "or 30 s without a [4] (castethogram.ATTACK_WINDOW). A [3] attack stopped
+         does NOT end it (a Monk stops to cast and resumes on the same body)": that held
+         a target 10-27 s through a cast, so a group switch made while one Monk cast
+         counted as a disagreement (24 of the first run's 45 odd-Monk instances had sent
+         a [3] since their [4]), and ATTACK_WINDOW was written for build_casts'
+         attack-target column, a different question. A window AGREES when every Monk
+         holding a current target holds the same one; the HEADLINE denominator is windows
+         with >= 2 alive AND >= 2 holders (one holder is vacuous); the counts over
+         1-holder and 0-holder windows are printed beside it. >= 80 % -> HELD, else
+         FAILED; no window with >= 2 holders -> NULL. The REGISTRATION fixed the 1-s
+         window and the 80 % bar and nothing else: the hold, the [3] cut and the >= 2-
+         holder denominator are SCORER'S RULES, and the [3] cut is POST-HOC -- chosen
+         after the first run's [FAILED] 93 of 117 = 0.795 under the sticky 30 s hold,
+         which the sensitivity line prints as the lead it is (beside caps of 2 / 5 / 10 /
+         30 / 60 s under the cut). Every SWITCH -- a [4] naming a different target from
+         the Monk's still-current one -- is listed (t, monk, from, to); a [4] after the
+         current target ended ([3], death, expiry) is a fresh pick and is counted apart,
+         and the fresh picks that name a different body from the previous [4] are listed
+         too ('target changes across a [3]'), so every change of target is on the page.
 
 CHANGES AFTER THE JUDGE (2026-09-28: a judge reconciled this scorer against three blind
 replicators over 20260928T103123 and listed five fixes; each is applied here and dated
@@ -254,6 +301,72 @@ at its site, and none was chosen to move a verdict):
   5  Z3.P1 prints Obsidian Flame CASTS per target beside GROUPS per target (the first
      line's "targets" counted groups); castethogram's ALL-CASTS line labels arena casts
      '@zaishen' so the old corpus's HENCHMAN and the arena's never print as one sum.
+
+CHANGES AFTER THE JUDGE (2026-09-29, CASTAI-Z2: a judge reconciled this scorer against
+three blind replicators over 20260929T100038 and listed six fixes and eight labelling
+faults; each is applied here and dated at its site; TWO MOVED A VERDICT and say so):
+  1  STREAM ORDER (moved verdicts). Every state read at an announce keys on the
+     announce's s2c index (castethogram.Conn.status_before / live6_before /
+     health_before, applies_live_before, Match.dead_before; the cast record carries
+     t_exact, i and end_i beside the ms-rounded t), never on r['t']: round(ta, 3) rounds
+     up half the time, and a reader asked for 'words strictly before the announce' then
+     saw the announce's own batch -- in which the announce PRECEDES the clearing word
+     (verified on the raw stream at :51090 392.0485, :64557 642.1476 / 647.8979 /
+     658.8958). bit_state's asymmetric 'same batch' rise clause is dropped as subsumed
+     (0 rows carried it). Z2.P1 FAILED 2 of 92 -> HELD 0 of 92; Z2.P1b 2 of 29 -> 1 of
+     29 (398.291 stands: FAILED); Z2.P5 2 of 43 -> 1 of 43 (388.551 stands: FAILED); the
+     '0.0 s since the bit last cleared' context values are gone. build_casts' own
+     columns (h_target, live6_target, the bits) read the same way. THE Z1 TAPE
+     (--prefix), re-diffed against the run before this block: no verdict moved; ten
+     lines changed -- Z1.P2's verdict line (its latency list 0.185 / 0.274 -> 0.186 /
+     0.275, measured to the exact instant; the verdict NULL n=4 as before) and nine
+     detail rows: Z1.P2's two rows the same way, Z1.P5's hex ages by 1 ms, two printed
+     times by 0.01 s (198.56 -> 198.55, 619.88 -> 619.87: the double rounding
+     round(round(t, 3), 2) is gone), one health by 0.0001 (the 44 rate to the exact
+     instant), and Z3.P1's group row at :50295 484.45, where the Healer reads 0.791, not
+     0.5838: its own +0.1315 / +0.0757 heal words sit in the announce's batch BEFORE
+     Z-Elementalist#5's Obsidian Flame announce and now count. castethogram's own pooled
+     output (--no-save): the headline (L1, L2, P1-P8) is byte-identical; four rows of
+     its POST-HOC heal-threshold table moved their minimum off 0.0.
+  2  Z2.P6 (moved a verdict): a Monk's current target ENDS at its own 0x009F [3] after
+     its last [4]; the hold is a 5 s safety cap (P6_HOLD), and the first run's sticky
+     30 s reading (castethogram.ATTACK_WINDOW, a constant written for another question)
+     is printed in the sensitivity line as a lead. FAILED 93 of 117 = 0.795 -> HELD 61
+     of 62 = 0.984 (cap 2 s 48/48, 10 s 69/73, 30 s 76/80, 60 s 76/80; sticky 93/117 as
+     before); switches 20 -> 7, plus 26 target changes across a [3] and 64 fresh picks
+     (45 stopped, 17 expired, 1 target died, 1 stopped in the [4]'s own batch), all
+     listed. The sensitivity line no longer calls the hold 'the registered rule'.
+  3  0x00A2 [162, 55, agent, f32] is a health SETTER (castethogram.Conn kind 'set55',
+     'anchored (55)'); the targeted 0x00A3 [55] stays the heal delta. The setter values
+     are printed beside the revives (26, all 1.0) and the match-end resets (the HEALTH
+     bullet above). No verdict moved; the anchoring census reads {'create-full (no 34)':
+     7, 'anchored (55)': 13} where it read 20 create-full. The Z1 tape carries three such
+     words (:50061 229.5, :50295 523.44, :58544 626.14), each 1.0 onto a body at 0.0 by
+     the judge's reading, where the two readings coincide: no Z1 line moved for this.
+  4  Z2.P4's 272 / 271 unit is the EXPOSURE (ench_exposure): episodes in which the
+     caster's slot came ready while the episode still lived on a living body, and the
+     re-casts declined inside them -- 271: 16 with the [7, T, 13] cut, 18 without, 0
+     re-casts -> HELD; 272: 0, a STRUCTURAL NULL printed on the verdict line (8 s < 20 s,
+     27 / 27 self), no longer folded into HELD via ['HELD', 'HELD', 'HELD']. The
+     combined verdict stays HELD (251 HELD, 0 of 19). The judge counted 15 with the cut
+     and 18 without; this reader counts 16 and 18, and lists the 16, so the one-episode
+     difference is auditable.
+  5  The Mage's [61] words are printed per match beside her non-signet casts and called
+     INTERMITTENT: 30 on 30 of 107, match 2 (14, from 274.4 s) and match 3 (16, from
+     412.56 s) only. The instrument bullet no longer says 'as on the Z1 tape'.
+  6  The lead 'the AI casts on a state that has just changed' is restated over its two
+     real witnesses -- Smite Hex 398.291 (0.241 s after the hex ended) and Drain
+     Enchantment 388.551 (0.502 s after the strip, 0.752 s after the caster's own Mend
+     completed) -- n = 2, RECONSTRUCTION; the first run's other two were the ms rounding.
+     Printed as the 'LEAD' line under P1 / P1b (n = 0 / 1) and as P5's unenchanted row.
+  Labelling, in the same commit: the Z2.P1 premise 'a word's order inside one batch is
+  not a time order' is withdrawn (asserted without evidence; the batches read are
+  causally ordered); Z2.P6's text and sensitivity line call the hold, the [3] cut and
+  the >= 2-holder denominator SCORER'S RULES and the [3] cut POST-HOC; the HEALTH bullet
+  names the setter word; the P4 POST-HOC vacuity note is replaced by the exposure line.
+  Every registered floor (P1 5, P2 10) and threshold (0.70, 1 in 4, 80 %) is unchanged;
+  no check was deleted (the first run's 'would still have been live' count still prints,
+  labelled superseded; the sticky P6 reading still prints, labelled a lead).
 
 Refuses (exit 2) when the capture is missing or holds no Zaishen arena connection.
 Standard library only. Read-only: writes nothing.
@@ -344,7 +457,13 @@ ENCHANTED_BIT = 0x80             # effects.STATUS_ENCHANTED; on the Z2 tape it r
 ENCH_CLASS_VISUAL = 13           # [6, T, 13]: the shared 'enchanted' class marker, MEASURED
                                  # on 20260929T100038 (271 / 272 / 307 / 180 / 184 add it on a
                                  # clean body; a 68's completion removes it)
-ATTACK_HOLD = ce.ATTACK_WINDOW   # 30 s: a [4] older than this no longer names a current target
+ATTACK_HOLD = ce.ATTACK_WINDOW   # 30 s: the first run's sticky hold (build_casts' constant, written for
+                                 # another question) -- since FIX 2 (2026-09-29) a LEAD in P6's
+                                 # sensitivity line, not the rule
+P6_HOLD = 5.0                    # FIX 2: the safety cap on a current target with no [3] / [4] since
+                                 # (the 1.33 s swing cadence x several) -- SCORER'S RULE, POST-HOC
+PROP_ATTACK_STOPPED = 3          # 0x009F [159, 3, agent, 0]: agents.GV_ATTACK_STOPPED (UPSTREAM name;
+                                 # the shape MEASURED on 20260929T100038 -- 35 on :51090 alone)
 ENCH_DURATION = {272: 8.0, 271: 60.0}   # exe 38888 duration0 = duration15 (checked at run time)
 HEX_REMOVERS = {REMOVE_HEX}
 # The Healer's heal skills, as cast on this tape: 281 / 282 / 286 / 288 (names
@@ -482,11 +601,16 @@ class Match:
         st = self.conn.status_at(agent, t)
         return bool(st is not None and st & DEAD_BIT)
 
-    def bit_rises(self, agent, bit):
+    def dead_before(self, agent, i):
+        """dead_at in STREAM ORDER (FIX 1, 2026-09-29): the status word before s2c index i."""
+        st = self.conn.status_before(agent, i)
+        return bool(st is not None and st & DEAD_BIT)
+
+    def bit_rises(self, agent, bit, with_index=False):
         out, prev = [], 0
-        for (t, w) in self.conn.status.get(agent, ()):
+        for (t, w), i in zip(self.conn.status.get(agent, ()), self.conn.status_i.get(agent, ())):
             if (w & bit) and not (prev & bit):
-                out.append(t)
+                out.append((t, i) if with_index else t)
             prev = w
         return out
 
@@ -804,14 +928,16 @@ def score_p2(z1):
             if r["caster"] != h or r["skill"] != REMOVE_HEX:
                 continue
             per[m.tag] += 1
-            T, ta = r["target"], r["t"]
-            st = m.conn.status_at(T, ta)
+            # FIX 1 (2026-09-29): the state STRICTLY BEFORE the announce in stream order
+            # (r['i']), not at the ms-rounded r['t'] -- the Z1 readers shared the slip
+            T, ta, i = r["target"], r["t_exact"], r["i"]
+            st = m.conn.status_before(T, i)
             hexed_bit = bool(st is not None and st & HEX_BIT)
             obs_hex = []
             if T == m.obs:
-                obs_hex = [(s, a) for (s, a) in ce.applies_live(m.conn, T, ta)
+                obs_hex = [(s, a) for (s, a) in ce.applies_live_before(m.conn, T, i)
                            if (ce.skill_rows().get(s, {}).get("type_code") == 4)]
-            rises = [t for t in m.bit_rises(T, HEX_BIT) if t <= ta]
+            rises = [t for (t, i2) in m.bit_rises(T, HEX_BIT, True) if i2 < i]
             lat = round(ta - rises[-1], 3) if rises and hexed_bit else None
             rows.append((m.tag, round(ta, 2), m.name(T), r["form"], hexed_bit, obs_hex, lat,
                          r["end_prop"]))
@@ -851,12 +977,13 @@ def score_p3(z1, table):
                 self_n[m.tag] += 1
                 continue
             per[m.tag] += 1
-            ta = r["t"]
+            ta = r["t_exact"]
             hp = {}
             for a in m.party():
-                if m.dead_at(a, ta):
+                # FIX 1 (2026-09-29): stream order, not the ms-rounded clock
+                if m.dead_before(a, r["i"]):
                     continue
-                hp[a] = m.conn.health_at(a, ta)[0]
+                hp[a] = m.conn.health_before(a, r["i"])[0]
             # FIX 2 (2026-09-28, the judge): a skill whose target byte is 4 (OTHER ally --
             # 286 Heal Other; the byte read off agents.WORLD's skills row) cannot land on
             # its caster, so the caster is not a candidate for "the lowest-health ally". The
@@ -958,10 +1085,11 @@ def score_p5(z1, others, table):
         for r in m.rows:
             if r["caster"] != m.obs or r["form"] not in ("A0[60]", "9F[60]"):
                 continue
-            ta = r["t"]
-            live = [(s, a) for (s, a) in ce.applies_live(m.conn, m.obs, ta) if s in mes_hexes]
-            # the word rides the announce's own batch (r["t"] is rounded to the ms, so the
-            # batch window, not "t <= ta", decides -- the first run's cut missed it)
+            ta = r["t_exact"]
+            # FIX 1 (2026-09-29): the hexes live STRICTLY BEFORE the announce in stream order
+            live = [(s, a) for (s, a) in ce.applies_live_before(m.conn, m.obs, r["i"]) if s in mes_hexes]
+            # the word rides the announce's own batch (the batch window around the exact
+            # announce time, not "t <= ta", decides -- the first run's cut missed it)
             w61 = [(round(t, 3), op, v) for t, op, v in m.conn.batch_ops(ta)
                    if op in (ce.OP_FLOAT, ce.OP_FLOAT_T) and len(v) > 2 and v[1] == PROP_CAST_TIME
                    and v[2] == m.obs]
@@ -1214,7 +1342,7 @@ def score_z3(m3):
         if r["caster"] not in opp or r["skill"] not in (MEND_AILMENT, REMOVE_HEX):
             continue
         T = r["target"]
-        st = m3.conn.status_at(T, r["t"])
+        st = m3.conn.status_before(T, r["i"])     # FIX 1 (2026-09-29): stream order
         bit = COND_BIT if r["skill"] == MEND_AILMENT else HEX_BIT
         rm.append((round(r["t"], 2), r["skill"], m3.name(r["caster"]), m3.name(T), r["form"],
                    None if st is None else bool(st & bit)))
@@ -1295,26 +1423,34 @@ def monk_rows(z2, skill):
                 yield m, r
 
 
-def bit_state(m, agent, bit, ta):
-    """(carrying, how): the status bit at the announce (words strictly before), or a
-    word carrying it inside the announce's own batch (ta .. ta + BATCH)."""
-    st = m.conn.status_at(agent, ta)
+def bit_state(m, agent, bit, r):
+    """(carrying, how): the status bit STRICTLY BEFORE the announce in STREAM ORDER (the
+    s2c index r['i'], Conn.status_before). FIX 1 (2026-09-29, the CASTAI-Z2 judge): this
+    read `status_at(agent, r['t'])` with r['t'] rounded to the ms -- round(ta, 3) rounds
+    up half the time, and the reader then saw the announce's own batch, in which the
+    announce PRECEDES the clearing word (verified on the raw stream at :51090 392.0485,
+    :64557 642.1476 / 647.8979 / 658.8958) -- and it carried an asymmetric 'same batch'
+    clause (a word carrying the bit inside ta .. ta + BATCH counted as carrying), which
+    the stream-order read subsumes: a same-batch rise the server emitted before the
+    announce counts, one it emitted after does not. Dropping it changed no row here
+    (0 'same batch' rows in the first run)."""
+    st = m.conn.status_before(agent, r["i"])
     if st is not None and st & bit:
-        return True, "at the announce"
-    for (t, w) in m.conn.status.get(agent, ()):
-        if ta - 1e-9 <= t <= ta + BATCH and (w & bit):
-            return True, "same batch"
+        return True, "at the announce (stream order)"
     return False, ("clear" if st is not None else "clear (no status word yet)")
 
 
-def bit_context(m, agent, bit, ta):
-    """(seconds since the bit last CLEARED before ta, seconds until it next RISES after
-    ta) -- printed on every P1 / P1b clean-target row after the first run, as context
-    (a decision made on a state that had just ended, or a cast that preceded the
-    condition); the verdict does not read it."""
+def bit_context(m, agent, bit, r):
+    """(seconds since the bit last CLEARED before the announce, seconds until it next
+    RISES after it), both in STREAM ORDER (FIX 1, 2026-09-29) -- printed on every P1 /
+    P1b clean-target row after the first run, as context (a decision made on a state
+    that had just ended, or a cast that preceded the condition); the verdict does not
+    read it. A stream-order reader cannot print 0.0 here: the first run's '0.0 s since
+    the bit last cleared' rows were the ms rounding, not an observation."""
+    ta, i = r["t_exact"], r["i"]
     prev_w, last_clear, next_rise = 0, None, None
-    for (t, w) in m.conn.status.get(agent, ()):
-        if t < ta - 1e-9:
+    for (t, w), j in zip(m.conn.status.get(agent, ()), m.conn.status_i.get(agent, ())):
+        if j < i:
             if (prev_w & bit) and not (w & bit):
                 last_clear = t
         elif next_rise is None and (w & bit) and not (prev_w & bit):
@@ -1330,27 +1466,34 @@ def score_z2_p1(z2, named):
                                    ("Z2.P1b", SMITE_HEX, HEX_BIT, "hexed bit 0x800")):
         rows, per, anomalies = [], collections.Counter(), []
         for m, r in monk_rows(z2, skill):
-            T, ta = r["target"], r["t"]
+            T, ta = r["target"], r["t_exact"]
             per[m.tag] += 1
-            carrying, how = bit_state(m, T, bit, ta)
+            carrying, how = bit_state(m, T, bit, r)
             if skill == MEND_CONDITION and (r["form"] == "9F[60]" or T == r["caster"]):
                 anomalies.append((m.tag, round(ta, 2), m.name(r["caster"]), r["form"]))
             rows.append((m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T),
                          carrying, how, r["end_prop"],
-                         None if carrying else bit_context(m, T, bit, ta)))
+                         None if carrying else bit_context(m, T, bit, r)))
         n = len(rows)
         clean = [x for x in rows if not x[5]]
-        same_batch = sum(1 for x in rows if x[6] == "same batch")
+        same_batch = sum(1 for x in rows if x[6] == "same batch")   # 0 since FIX 1 (the clause is gone)
         v = "NULL" if n < FLOORS[pid] else ("FAILED" if clean else "HELD")
         # POST-HOC (after the first run printed [FAILED] 2 of 92 for P1 and 2 of 29 for
-        # P1b): the registered rule counts a bit RISING inside the announce's batch as
+        # P1b): the first run's rule counted a bit RISING inside the announce's batch as
         # carrying but not a bit that CLEARED inside it -- and both P1 counterexamples
-        # carry a clear word < 1 ms before the announce (the same batch: the condition
-        # ended in the tick the Monk announced in). The symmetric reading -- the bit set
-        # at any instant inside ta +/- BATCH -- was NOT pre-registered; its verdict is
-        # printed as a lead beside the registered one, which stands.
+        # carried a clear word < 1 ms 'before' the announce. FIX 1 (2026-09-29) showed
+        # that reading to be the ms rounding: in stream order those announces PRECEDE the
+        # clears, so both are carrying and P1 reads HELD. This symmetric line (a clear
+        # inside the BATCH before the announce, stream order, also counted as carrying)
+        # is kept as the lead it was, never the verdict.
         sym_clean = [x for x in clean if x[8] is None or x[8][0] is None or x[8][0] > BATCH]
         v_sym = "NULL" if n < FLOORS[pid] else ("FAILED" if sym_clean else "HELD")
+        # FIX 6 (2026-09-29): the lead 'the AI casts on a state that has just changed'
+        # over its REAL witnesses -- clean-target casts inside 1 s after the bit cleared
+        # (stream order); n = 2 on this tape (Smite Hex 398.291, 0.241 s; and P5's Drain
+        # 388.551, 0.502 s), RECONSTRUCTION. The first run's two other witnesses were the
+        # rounding artifact.
+        recent = [x for x in clean if x[8] is not None and x[8][0] is not None and x[8][0] <= 1.0]
         forms = collections.Counter(x[3] for x in rows)
         extra = ""
         if skill == SMITE_HEX:
@@ -1364,19 +1507,21 @@ def score_z2_p1(z2, named):
         wf = (f"with >= {FLOORS[pid]} casts, any one at a target whose {bname} was clear through "
               f"the announce's batch -> FAILED")
         out[pid] = (v, text, wf, {"rows": rows, "clean": clean, "anomalies": anomalies,
-                                  "sym": (v_sym, len(sym_clean), len(clean) - len(sym_clean))})
+                                  "sym": (v_sym, len(sym_clean), len(clean) - len(sym_clean)),
+                                  "recent": recent})
     return out
 
 
 def score_z2_p2(z2, named):
     rows, per, skipped = [], collections.Counter(), []
     for m, r in monk_rows(z2, REVERSAL_OF_FORTUNE):
-        T, ta = r["target"], r["t"]
-        if m.dead_at(T, ta):
+        # FIX 1 (2026-09-29): the state STRICTLY BEFORE the announce in stream order
+        T, ta, i = r["target"], r["t_exact"], r["i"]
+        if m.dead_before(T, i):
             skipped.append((m.tag, round(ta, 2), m.name(r["caster"]), m.name(T),
                             "target dead at the announce"))
             continue
-        h, how = m.conn.health_at(T, ta)
+        h, how = m.conn.health_before(T, i)
         if h is None:
             skipped.append((m.tag, round(ta, 2), m.name(r["caster"]), m.name(T),
                             f"no reconstruction: {how}"))
@@ -1422,16 +1567,17 @@ def score_z2_p3(p2rows, named):
     return v, text, wf, other
 
 
-def ench_episodes(m, T, skill):
-    """[(start, end, how, caster)]: RECONSTRUCTION -- every completed ZAISHEN cast of
-    `skill` on T, live for ENCH_DURATION, cut by T's death / re-create and by the class
-    marker's [7, T, 13] (the last enchantment on T ended)."""
+def ench_episodes(m, T, skill, marker_cut=True):
+    """[(start, end, how, caster, end index)]: RECONSTRUCTION -- every completed ZAISHEN
+    cast of `skill` on T, live for ENCH_DURATION, cut by T's death / re-create and (with
+    marker_cut, the verdict's reading) by the class marker's [7, T, 13] (the last
+    enchantment on T ended). marker_cut=False is the exposure's upper count (FIX 4)."""
     conn = m.conn
     dur = ENCH_DURATION[skill]
     deaths = m.bit_rises(T, DEAD_BIT)
     creates = list(conn.create_t.get(T, []))
     marker_ends = [t for (t, sgn, eid) in conn.effects6.get(T, ())
-                   if sgn < 0 and eid == ENCH_CLASS_VISUAL]
+                   if sgn < 0 and eid == ENCH_CLASS_VISUAL] if marker_cut else []
     out = []
     for r in m.rows:
         if r["class"] != "ZAISHEN" or r["skill"] != skill or r["target"] != T or not completed(r):
@@ -1444,56 +1590,117 @@ def ench_episodes(m, T, skill):
         end = min(te + dur, cut1, cut2)
         how = ("natural" if end == te + dur else
                ("death / re-create" if end == cut1 else "[7, T, 13]"))
-        out.append((te, end, how, r["caster"]))
+        out.append((te, end, how, r["caster"], r["end_i"]))
     return out
+
+
+def ench_exposure(m, skill, marker_cut):
+    """FIX 4 (2026-09-29, the CASTAI-Z2 judge): the EXPOSURE of Z2.P4's 272 / 271 half --
+    the episodes (ench_episodes, with or without the [7, T, 13] cut) in which the CASTER's
+    slot for the skill became READY (completion + the exe recharge) while the episode still
+    lived on a living body (the caster alive at the ready instant), and the re-casts of the
+    skill by that caster at that body announced inside [ready, end). Returns (exposed
+    [(tag, target, caster, completion, ready, end, how)], re-casts [(tag, t, caster,
+    target, ready, end)]). The first run's unit -- 'a cast whose previous episode would
+    still have been live uncut' -- is non-zero only when the prediction FAILS or a death
+    intervened, so a compliant AI could never meet it (the mirror of a check that cannot
+    fail); the registration's 'never re-cast while live' is tested by the opportunities
+    declined."""
+    exposed, recasts = [], []
+    bodies = {r["target"] for r in m.rows
+              if r["class"] == "ZAISHEN" and r["skill"] == skill and completed(r)}
+    for T in sorted(bodies):
+        for (te, end, how, caster, _ei) in ench_episodes(m, T, skill, marker_cut):
+            rech = next((float(x["recharge"] or 0.0) for _m, x in monk_rows([m], skill)
+                         if x["caster"] == caster), 0.0)
+            ready = te + rech
+            if not ready < end or m.dead_at(caster, ready):
+                continue
+            exposed.append((m.tag, m.name(T), m.name(caster), round(te, 2), round(ready, 2),
+                            round(end, 2), how))
+            for _m, x in monk_rows([m], skill):
+                if x["caster"] == caster and x["target"] == T and ready <= x["t_exact"] < end:
+                    recasts.append((m.tag, round(x["t_exact"], 2), m.name(caster), m.name(T),
+                                    round(ready, 2), round(end, 2)))
+    return exposed, recasts
 
 
 def score_z2_p4(z2, named):
     res = {}
     for skill in (BALTHAZARS_AURA, ZEALOTS_FIRE):
-        rows, cx, inf = [], [], []
+        rows, cx, would_rows = [], [], []
         per = collections.Counter()
         forms = collections.Counter()
         for m, r in monk_rows(z2, skill):
-            T, ta = r["target"], r["t"]
+            # FIX 1 (2026-09-29): an episode is live at the announce when its completion
+            # word PRECEDES the announce in stream order and its end is after the instant
+            T, ta, i = r["target"], r["t_exact"], r["i"]
             per[m.tag] += 1
             forms[r["form"]] += 1
             eps = ench_episodes(m, T, skill)
-            live = [e for e in eps if e[0] < ta - 1e-6 and e[1] > ta]
-            would = [e for e in eps if e[0] < ta - 1e-6 and e[0] + ENCH_DURATION[skill] > ta]
-            st = m.conn.status_at(T, ta)
+            live = [e for e in eps if e[4] is not None and e[4] < i and e[1] > ta]
+            would = [e for e in eps if e[4] is not None and e[4] < i and e[0] + ENCH_DURATION[skill] > ta]
+            st = m.conn.status_before(T, i)
             bit = None if st is None else bool(st & ENCHANTED_BIT)
             row = (m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T),
-                   [(round(a, 2), round(b, 2), h, m.name(c)) for a, b, h, c in live],
-                   [(round(a, 2), round(b, 2), h, m.name(c)) for a, b, h, c in would],
+                   [(round(a, 2), round(b, 2), h, m.name(c)) for a, b, h, c, _e in live],
+                   [(round(a, 2), round(b, 2), h, m.name(c)) for a, b, h, c, _e in would],
                    bit)
             rows.append(row)
             if would:
-                inf.append(row)
+                would_rows.append(row)
             if live:
                 cx.append(row)
+        # FIX 4 (2026-09-29): the exposure, with the [7, T, 13] cut (the verdict's episode
+        # reading) and without it (the upper count); a re-cast inside a cut exposure FAILS
+        exp_cut, rc_cut, exp_nat, rc_nat = [], [], [], []
+        for m in z2:
+            e1, r1 = ench_exposure(m, skill, True)
+            e2, r2 = ench_exposure(m, skill, False)
+            exp_cut += e1
+            rc_cut += r1
+            exp_nat += e2
+            rc_nat += r2
         n = len(rows)
-        v = "NULL" if n == 0 else ("FAILED" if cx else "HELD")
-        res[skill] = (v, rows, cx, inf, per, forms)
+        rech = next((float(r["recharge"] or 0.0) for _m, r in monk_rows(z2, skill)), None)
+        self_only = n > 0 and all(x[2] == x[4] for x in rows)
+        reason = ""
+        if n == 0:
+            v = "NULL"
+        elif cx or rc_cut:
+            v = "FAILED"
+        elif not exp_cut:
+            v = "NULL"
+            if self_only and rech is not None and ENCH_DURATION[skill] < rech:
+                reason = (f" (STRUCTURAL: exe duration {ENCH_DURATION[skill]:g} s < recharge "
+                          f"{rech:g} s and {n} / {n} self-cast, so no slot is ready while its "
+                          f"own episode lives -- a null the tape cannot inform)")
+            else:
+                reason = " (no exposure on this tape)"
+        else:
+            v = "HELD"
+        res[skill] = (v, rows, cx, would_rows, per, forms, exp_cut, rc_cut, exp_nat, rc_nat,
+                      reason, rech)
     # 251
     rows, cx, flight = [], [], []
     per = collections.Counter()
     for m, r in monk_rows(z2, SCOURGE_HEALING):
-        T, ta = r["target"], r["t"]
+        T, ta, i = r["target"], r["t_exact"], r["i"]
         per[m.tag] += 1
-        st = m.conn.status_at(T, ta)
+        st = m.conn.status_before(T, i)                      # FIX 1: stream order
         hexed_bit = bool(st is not None and st & HEX_BIT)
         obs_live = []
         if T == m.obs:
-            obs_live = [(s, a) for (s, a) in ce.applies_live(m.conn, T, ta) if s == SCOURGE_HEALING]
+            obs_live = [(s, a) for (s, a) in ce.applies_live_before(m.conn, T, i)
+                        if s == SCOURGE_HEALING]
         hexed = bool(obs_live) if T == m.obs else hexed_bit
         others_ = [x for _m, x in monk_rows([m], SCOURGE_HEALING)
-                   if x["target"] == T and x["caster"] != r["caster"] and x["t"] < ta
-                   and ((x["end_t"] is not None and x["end_t"] > ta - 1e-9)
-                        or (x["end_t"] is None and ta - x["t"] <= float(x["activation"] or 2.0) + 0.5))]
+                   if x["target"] == T and x["caster"] != r["caster"] and x["i"] < i
+                   and ((x["end_i"] is not None and x["end_i"] > i)
+                        or (x["end_t"] is None and ta - x["t_exact"] <= float(x["activation"] or 2.0) + 0.5))]
         row = (m.tag, round(ta, 2), m.name(r["caster"]), r["form"], m.name(T), hexed,
                "observer 0x0042 (EXACT)" if T == m.obs else "hexed bit (RECONSTRUCTION: 251 is the Monks' only hex)",
-               hexed_bit, [(round(x["t"], 2), m.name(x["caster"])) for x in others_], r["end_prop"])
+               hexed_bit, [(round(x["t_exact"], 2), m.name(x["caster"])) for x in others_], r["end_prop"])
         rows.append(row)
         if hexed:
             cx.append(row)
@@ -1504,11 +1711,14 @@ def score_z2_p4(z2, named):
     res[SCOURGE_HEALING] = (v, rows, cx, flight, per)
     parts, wf = [], []
     for skill in (BALTHAZARS_AURA, ZEALOTS_FIRE):
-        v_, rows_, cx_, inf_, per_, forms_ = res[skill]
+        v_, rows_, cx_, would_, per_, forms_, exp_cut, rc_cut, exp_nat, rc_nat, reason, rech = res[skill]
         parts.append(f"{z2n(skill, named)} n={len(rows_)} {dict(per_)} forms {dict(forms_)}: "
                      f"re-cast inside a live episode (RECONSTRUCTION {ENCH_DURATION[skill]:g} s, "
-                     f"cut by death / re-create / [7, T, 13]) {len(cx_)} -> {v_}; informative "
-                     f"(a previous episode would still have been live uncut) {len(inf_)}")
+                     f"cut by death / re-create / [7, T, 13]) {len(cx_)}; EXPOSURE (episodes in "
+                     f"which the caster's slot came ready -- completion + exe recharge "
+                     f"{rech if rech is None else f'{rech:g}'} s -- while the episode still lived "
+                     f"on a living body) {len(exp_cut)} with the [7, T, 13] cut, {len(exp_nat)} "
+                     f"without; re-casts inside them {len(rc_cut)} / {len(rc_nat)} -> {v_}{reason}")
     v_, rows_, cx_, flight_, per_ = res[SCOURGE_HEALING]
     parts.append(f"{z2n(SCOURGE_HEALING, named)} n={len(rows_)} {dict(per_)}: onto a target "
                  f"already hexed at the announce {len(cx_)} -> {v_} (on the observer "
@@ -1517,21 +1727,24 @@ def score_z2_p4(z2, named):
                  f"counterexample)")
     vs = [res[BALTHAZARS_AURA][0], res[ZEALOTS_FIRE][0], res[SCOURGE_HEALING][0]]
     v = "FAILED" if "FAILED" in vs else ("HELD" if "HELD" in vs else "NULL")
-    text = "; ".join(parts) + (f"; the three parts {vs}: any FAILED fails, else any HELD holds")
+    text = "; ".join(parts) + (f"; the three parts {vs}: any FAILED fails, else any HELD holds, "
+                               f"and a NULL part is a null, never a HELD")
     wf = ("a 272 / 271 announced at a body inside the reconstructed episode of the same skill "
-          "(uncut), or a 251 announced at a body whose hexed bit was set (observer: a live "
-          "0x0042 251) -> FAILED")
+          "(cut), a re-cast inside an exposure, or a 251 announced at a body whose hexed bit "
+          "was set (observer: a live 0x0042 251) -> FAILED")
     return v, text, wf, res
 
 
-def recon_ench_count(m, T, ta, ex):
-    """RECONSTRUCTION: type-6 casts completed on T (by anyone) still inside the exe's
-    duration0, not across a death of T, minus one per ZAISHEN 68 completed on T since the
-    oldest of them started; floored at 0."""
+def recon_ench_count(m, T, r, ex):
+    """RECONSTRUCTION: type-6 casts completed on T (by anyone) BEFORE the announce r in
+    stream order (FIX 1) and still inside the exe's duration0, not across a death of T,
+    minus one per ZAISHEN 68 completed on T since the oldest of them started; floored
+    at 0."""
+    ta, i = r["t_exact"], r["i"]
     deaths = m.bit_rises(T, DEAD_BIT)
     live = []
     for r2 in m.rows:
-        if r2["target"] != T or not completed(r2) or r2["end_t"] >= ta:
+        if r2["target"] != T or not completed(r2) or r2["end_i"] is None or r2["end_i"] >= i:
             continue
         row = ex.get(r2["skill"])
         if not row or row["type_code"] != 6:
@@ -1545,7 +1758,8 @@ def recon_ench_count(m, T, ta, ex):
         return 0, 0, 0
     t0 = min(live)
     rem = sum(1 for _m, x in monk_rows([m], DRAIN_ENCHANTMENT)
-              if x["target"] == T and completed(x) and t0 < x["end_t"] < ta)
+              if x["target"] == T and completed(x) and x["end_i"] is not None
+              and x["end_i"] < i and x["end_t"] > t0)
     return max(0, len(live) - rem), len(live), rem
 
 
@@ -1555,28 +1769,30 @@ def score_z2_p5(z2, named):
     tgt = collections.Counter()
     for m, r in monk_rows(z2, DRAIN_ENCHANTMENT):
         ex = exe_skill_rows(m.conn.build) or {}
-        T, ta = r["target"], r["t"]
+        # FIX 1 (2026-09-29): every state read STRICTLY BEFORE the announce in stream order
+        T, ta, i = r["target"], r["t_exact"], r["i"]
         per[m.tag] += 1
         tgt[m.name(T)] += 1
-        st = m.conn.status_at(T, ta)
+        st = m.conn.status_before(T, i)
         bit = None if st is None else bool(st & ENCHANTED_BIT)
         if T == m.obs:
-            live = [(s, a) for (s, a) in ce.applies_live(m.conn, T, ta)
+            live = [(s, a) for (s, a) in ce.applies_live_before(m.conn, T, i)
                     if ex.get(s, {}).get("type_code") == 6]
             ench, how = bool(live), f"observer 0x0042 type-6 live {live} (EXACT)"
             recon = None
             cont = False
         else:
-            l6 = m.conn.live6(T, ta)
+            l6 = m.conn.live6_before(T, i)
             vis = ENCH_CLASS_VISUAL in l6
-            recon = recon_ench_count(m, T, ta, ex)
+            recon = recon_ench_count(m, T, r, ex)
             ench, how = vis, f"[6, T, 13] live: {vis} (live6 {l6})"
             cont = bit is not None and bit != vis
-        strips = [t for (t, sgn, eid) in m.conn.effects6.get(T, ())
-                  if sgn < 0 and eid == ENCH_CLASS_VISUAL and t < ta]
+        strips = [t for (t, sgn, eid), j in zip(m.conn.effects6.get(T, ()), m.conn.effects6_i.get(T, ()))
+                  if sgn < 0 and eid == ENCH_CLASS_VISUAL and j < i]
         since_strip = round(ta - strips[-1], 3) if strips else None
-        burst = [(round(x["t"], 2), m.name(x["caster"])) for _m, x in monk_rows([m], DRAIN_ENCHANTMENT)
-                 if x["target"] == T and x["caster"] != r["caster"] and ta - BURST_S <= x["t"] < ta]
+        burst = [(round(x["t_exact"], 2), m.name(x["caster"])) for _m, x in monk_rows([m], DRAIN_ENCHANTMENT)
+                 if x["target"] == T and x["caster"] != r["caster"] and ta - BURST_S <= x["t_exact"]
+                 and x["i"] < i]
         row = (m.tag, round(ta, 2), m.name(r["caster"]), m.name(T), ench, how, bit, recon,
                since_strip, burst, r["end_prop"])
         rows.append(row)
@@ -1597,12 +1813,23 @@ def score_z2_p5(z2, named):
     return v, text, wf, {"rows": rows, "un": un, "contested": contested}
 
 
-def current_target(m, a, starts, rises, t, hold=ATTACK_HOLD):
-    """(target, how) -- the Monk's current attack target at t (the docstring's P6 rule)."""
-    prior = [(t4, tg) for (t4, tg) in starts if t4 <= t]
+def current_target(m, a, starts, stops, rises, t, hold=P6_HOLD, use_stops=True):
+    """(target, how) -- the Monk's current attack target at t (the docstring's Z2.P6
+    rule). `starts` are the Monk's 0x00A0 [4] as (t, target, s2c index), `stops` its
+    0x009F [3] (attack stopped) as (t, s2c index). FIX 2 (2026-09-29, the CASTAI-Z2
+    judge): a [3] after the latest [4] ENDS the target -- the wire's own statement that
+    the attack ended -- and the hold is P6_HOLD = 5 s, a safety cap. The first run held a
+    target THROUGH a [3] for 30 s (castethogram.ATTACK_WINDOW, a constant written for
+    build_casts' 'attack target' column, a different question), so a group switch made
+    while one Monk cast counted as a disagreement: 24 of its 45 odd-Monk instances had
+    sent a [3] since their [4]. use_stops=False is that sticky reading, printed in the
+    sensitivity line as the lead it is. SCORER'S RULE, POST-HOC: it moved the verdict."""
+    prior = [(t4, tg, i4) for (t4, tg, i4) in starts if t4 <= t]
     if not prior:
         return None, "no [4] yet"
-    t4, tg = prior[-1]
+    t4, tg, i4 = prior[-1]
+    if use_stops and any(i3 > i4 and t3 <= t for (t3, i3) in stops):
+        return None, "stopped ([3])"
     if t - t4 > hold:
         return None, "expired"
     if any(t4 < d <= t for d in rises.get(a, ())) or any(t4 < c <= t for c in m.conn.create_t.get(a, ())):
@@ -1612,7 +1839,7 @@ def current_target(m, a, starts, rises, t, hold=ATTACK_HOLD):
     return tg, "held"
 
 
-def p6_windows(m, monks, starts, rises, hold):
+def p6_windows(m, monks, starts, stops, rises, hold, use_stops=True):
     c = collections.Counter()
     t = m.span[0]
     while t <= m.span[1]:
@@ -1621,7 +1848,7 @@ def p6_windows(m, monks, starts, rises, hold):
             c["windows >= 2 alive"] += 1
             holders = {}
             for a in alive:
-                cur, _how = current_target(m, a, starts[a], rises, t, hold)
+                cur, _how = current_target(m, a, starts[a], stops[a], rises, t, hold, use_stops)
                 if cur is not None:
                     holders[a] = cur
             if len(holders) >= 2:
@@ -1637,28 +1864,42 @@ def p6_windows(m, monks, starts, rises, hold):
 
 
 def score_z2_p6(z2):
-    per, switches, fresh = {}, [], []
+    per, switches, fresh, across = {}, [], [], []
     tot = collections.Counter()
-    # POST-HOC (added after the first run printed [FAILED] 93 of 117 = 0.795 under the
-    # registered rule): the same count under other holds and with 1-holder windows counted
-    # as agreeing -- a SENSITIVITY line, printed as a lead; the verdict stays the
-    # registered 30 s / >= 2 holders.
+    n_stops = collections.Counter()
+    # POST-HOC sensitivity (added after the first run printed [FAILED] 93 of 117 = 0.795
+    # under the sticky 30 s hold): the same count under other caps, with the FIRST RUN's
+    # sticky reading (no [3] cut, hold 30 s) beside them as a lead, and with 1-holder
+    # windows counted as agreeing. FIX 2 (2026-09-29): the verdict is the [3]-cut, 5 s
+    # capped reading (SCORER'S RULE, chosen after the data); the 1-s window and the 80 %
+    # bar are the registration's, nothing else on this line is.
     sens = collections.defaultdict(collections.Counter)
     for m in z2:
         monks = list(m.opp)
-        starts = {a: [(t, v[3]) for t, op, v in m.s2c
+        starts = {a: [(t, v[3], i) for i, (t, op, v) in enumerate(m.s2c)
                       if op == ce.OP_INT_T and len(v) > 4 and v[1] == ce.PROP_ATTACK_STARTED and v[2] == a]
                   for a in monks}
+        # FIX 2: each Monk's 0x009F [3] (attack stopped) beside its [4]s
+        stops = {a: [(t, i) for i, (t, op, v) in enumerate(m.s2c)
+                     if op == ce.OP_INT and len(v) > 3 and v[1] == PROP_ATTACK_STOPPED and v[2] == a]
+                 for a in monks}
+        n_stops[m.tag] = sum(len(v) for v in stops.values())
         rises = {a: m.bit_rises(a, DEAD_BIT) for a in monks + m.party()}
-        c = p6_windows(m, monks, starts, rises, ATTACK_HOLD)
-        for hold in (5.0, 10.0, 20.0, ATTACK_HOLD, 60.0):
-            sens[hold].update(p6_windows(m, monks, starts, rises, hold))
+        c = p6_windows(m, monks, starts, stops, rises, P6_HOLD, True)
+        for hold in (2.0, P6_HOLD, 10.0, ATTACK_HOLD, 60.0):
+            sens[("[3] cut", hold)].update(p6_windows(m, monks, starts, stops, rises, hold, True))
+        sens[("sticky, no [3] cut (the first run's rule)", ATTACK_HOLD)].update(
+            p6_windows(m, monks, starts, stops, rises, ATTACK_HOLD, False))
         for a in monks:
             st = starts[a]
-            for (tp, tgp), (t4, tg) in zip(st, st[1:]):
-                cur, how = current_target(m, a, st, rises, t4 - 1e-6)
+            for (tp, tgp, ip), (t4, tg, i4) in zip(st, st[1:]):
+                cur, how = current_target(m, a, st, stops[a], rises, t4 - 1e-6)
+                if cur is not None and any(ip < i3 < i4 for (_t3, i3) in stops[a]):
+                    cur, how = None, "stopped ([3], same batch)"
                 if cur is None:
                     fresh.append((m.tag, round(t4, 2), m.name(a), m.name(tgp), m.name(tg), how))
+                    if tg != tgp:
+                        across.append((m.tag, round(t4, 2), m.name(a), m.name(tgp), m.name(tg), how))
                 elif tg != cur:
                     switches.append((m.tag, round(t4, 2), m.name(a), m.name(cur), m.name(tg)))
         per[m.tag] = dict(c)
@@ -1667,20 +1908,26 @@ def score_z2_p6(z2):
     share_ = None if not n2 else round(a2 / n2, 3)
     v = "NULL" if not n2 else ("HELD" if share_ >= P6_SHARE else "FAILED")
     sens_txt = {}
-    for hold, c in sorted(sens.items()):
+    for (label, hold), c in sorted(sens.items(), key=lambda kv: (kv[0][0], kv[0][1])):
         k2, g2, k1 = c["holders >= 2"], c["agree (>= 2 holders)"], c["holders == 1"]
-        sens_txt[f"hold {hold:g} s"] = (f">= 2 holders {g2}/{k2} ({round(g2 / k2, 3) if k2 else None}); "
-                                        f"1-holder windows counted as agreeing {g2 + k1}/{k2 + k1} "
-                                        f"({round((g2 + k1) / (k2 + k1), 3) if k2 + k1 else None})")
+        sens_txt[f"{label}, hold {hold:g} s"] = (
+            f">= 2 holders {g2}/{k2} ({round(g2 / k2, 3) if k2 else None}); "
+            f"1-holder windows counted as agreeing {g2 + k1}/{k2 + k1} "
+            f"({round((g2 + k1) / (k2 + k1), 3) if k2 + k1 else None})")
     text = (f"1-s windows with >= 2 Monks alive n={tot['windows >= 2 alive']}; with >= 2 "
             f"holding a current target n={n2}, of which all holders agree {a2} ({share_}); "
             f"1-holder windows {tot['holders == 1']}, 0-holder {tot['holders == 0']}; per match "
-            f"{per}; SWITCHES (a [4] naming a different target from a still-current one) "
-            f"{len(switches)}; fresh picks after the current target ended {len(fresh)} "
-            f"{dict(collections.Counter(x[5] for x in fresh))}")
+            f"{per}; the Monks' [3] (attack stopped) per match {dict(n_stops)}; SWITCHES (a [4] "
+            f"naming a different target from a still-current one) {len(switches)}; target "
+            f"changes across a [3] (the previous target had ended at the Monk's own [3]; the "
+            f"new [4] names another body) {len(across)}; fresh picks after the current target "
+            f"ended {len(fresh)} {dict(collections.Counter(x[5] for x in fresh))} -- a current "
+            f"target ends at the Monk's own [3], the target's death, the Monk's death / "
+            f"re-create, or {P6_HOLD:g} s without a [4] (FIX 2, SCORER'S RULE, POST-HOC)")
     wf = (f"fewer than {P6_SHARE:.0%} of the >= 2-holder windows with every holder on one "
           f"target -> FAILED")
-    return v, text, wf, {"switches": switches, "fresh": fresh, "per": per, "sens": sens_txt}
+    return v, text, wf, {"switches": switches, "fresh": fresh, "across": across, "per": per,
+                         "sens": sens_txt}
 
 
 def z2_instruments(z2):
@@ -1712,15 +1959,28 @@ def z2_instruments(z2):
         for t, lst in by_t.items():
             if len(lst) >= 2 and any((d["h_after_batch"] or 0) > 0.10 for d in lst):
                 out["end_marks"].append((m.tag, t, [(m.name(d["agent"]), d["h_after_batch"]) for d in lst]))
+        revived = set()
         for a in list(m.opp) + m.party():
             prev = 0
             for (t, w) in m.conn.status.get(a, ()):
                 if (prev & DEAD_BIT) and not (w & DEAD_BIT):
-                    plus = [round(v, 3) for (te, k, v) in m.conn.health_ev.get(a, ())
-                            if k == "delta" and abs(te - t) <= 0.1 and v is not None and v > 0.99]
-                    out["revives"].append((m.tag, m.name(a), round(t, 2), plus,
+                    # FIX 3 (2026-09-29): the revive's health word is the 0x00A2 [55] SETTER
+                    # (1.0), no longer read as a +1.0 delta
+                    setters = [round(v, 4) for (te, ag, v, _i) in m.conn.set55
+                               if ag == a and abs(te - t) <= 0.1]
+                    out["revives"].append((m.tag, m.name(a), round(t, 2), setters,
                                            m.conn.health_at(a, t + 0.3)[0]))
+                    revived.add((a, round(t, 3)))
                 prev = w
+        # FIX 3: every [55] setter word, grouped by instant -- at a revive, or a RESET (the
+        # match-end 300/max words: 'set to 300 points' is a RECONSTRUCTION)
+        by_t = collections.defaultdict(list)
+        for (t, ag, v, _i) in m.conn.set55:
+            at_revive = any(abs(t - tr) <= 0.1 for (a2, tr) in revived if a2 == ag)
+            by_t[round(t, 3)].append((m.name(ag), round(v, 4),
+                                       "revive" if at_revive else f"reset (300/v = {round(300 / v, 1) if v else None})",
+                                       m.conn.health_at(ag, t)[0]))
+        out.setdefault("set55", []).extend((m.tag, t, lst) for t, lst in sorted(by_t.items()))
     return out
 
 
@@ -1760,7 +2020,7 @@ def z2_facts(z2, others, named):
             if r["form"] not in ("A0[60]", "9F[60]"):
                 continue
             n_ann[r["class"]] += 1
-            ws = [round(f32(v[-1]), 3) for t, op, v in m.conn.batch_ops(r["t"])
+            ws = [round(f32(v[-1]), 3) for t, op, v in m.conn.batch_ops(r["t_exact"])
                   if op in (ce.OP_FLOAT, ce.OP_FLOAT_T) and len(v) > 2 and v[1] == PROP_CAST_TIME
                   and v[2] == r["caster"]]
             for s in ws:
@@ -1768,6 +2028,27 @@ def z2_facts(z2, others, named):
                                                       round(s / r["activation"], 3) if r["activation"] else None))
     f["w61"] = {k: (len(v), sorted({x[2] for x in v})) for k, v in sorted(w61.items())}
     f["announces_by_class"] = dict(n_ann)
+    # FIX 5 (2026-09-29, the CASTAI-Z2 judge): the Mage's [61] words PER MATCH beside her
+    # non-signet cast count -- the word is INTERMITTENT on this tape, not 'on every cast as
+    # on the Z1 tape'
+    mage61 = {}
+    for m in z2:
+        mg = m.mage()
+        casts = [r for r in m.rows if r["caster"] == mg and r["form"] in ("A0[60]", "9F[60]")
+                 and r["skill"] != RESURRECTION_SIGNET]
+        words, first = 0, None
+        with_word = 0
+        for r in casts:
+            ws = [t for t, op, v in m.conn.batch_ops(r["t_exact"])
+                  if op in (ce.OP_FLOAT, ce.OP_FLOAT_T) and len(v) > 2 and v[1] == PROP_CAST_TIME
+                  and v[2] == mg]
+            if ws:
+                words += len(ws)
+                with_word += 1
+                first = round(min(ws), 2) if first is None else first
+        mage61[m.tag] = {"non-signet casts": len(casts), "[61] words": words,
+                         "casts with a word": with_word, "first word t": first}
+    f["mage61"] = mage61
     # class visuals: a type-6 completion on a body carrying no live 13 just before it (the
     # VISUAL decides 'clean': after the first run keyed this on the 0x80 bit and counted a
     # body with no 0x00F1 word yet as clean -- Z-Monk#5 in match 2 was created at 215.62
@@ -2100,9 +2381,15 @@ def main(argv=None):
             if (x[5] is None or x[5] > 0.10) and not any(x[3] == e[1] for e in ins["end_marks"]):
                 P(f"      L2 party death NOT <= 0.10 and not an END mark: {x}")
         rv = ins["revives"]
-        P(f"   revives (dead bit clearing) n={len(rv)}; with a +1.0 delta inside 0.1 s "
-          f"{sum(1 for x in rv if x[3])}; reconstruction 0.3 s after: "
-          f"{collections.Counter(x[4] for x in rv)}")
+        P(f"   revives (dead bit clearing) n={len(rv)}; with a 0x00A2 [55] SETTER inside 0.1 s "
+          f"{sum(1 for x in rv if x[3])} (values {collections.Counter(v for x in rv for v in x[3])}); "
+          f"reconstruction 0.3 s after: {collections.Counter(x[4] for x in rv)}")
+        s55 = ins.get("set55", [])
+        resets = [x for x in s55 if any(not k[2].startswith("revive") for k in x[2])]
+        P(f"   0x00A2 [162, 55, agent, f32] SETTER words (FIX 3: a setter, not a heal delta) "
+          f"n={sum(len(x[2]) for x in s55)} at {len(s55)} instants; those NOT at a revive -- the "
+          f"match-end RESETS (tag, t, [(body, value, 300/value, reconstruction just before)]): "
+          f"{resets}")
         r2 = {}
         r2.update(score_z2_p1(z2, named))
         r2["Z2.P2"] = score_z2_p2(z2, named)
@@ -2116,13 +2403,17 @@ def main(argv=None):
         for pid in ("Z2.P1", "Z2.P1b"):
             d = r2[pid][3]
             vs, ns, nb = d["sym"]
-            P(f"      {pid[3:]} POST-HOC (not the verdict): with the bit's CLEAR inside the "
-              f"announce's batch (< {BATCH} s before) also counted as carrying -- the mirror of "
-              f"the registered same-batch rise -- clean targets {ns} (same-batch clears set "
-              f"aside {nb}) -> would read {vs}; the registered verdict above stands")
+            P(f"      {pid[3:]} POST-HOC (not the verdict): with a bit CLEAR inside the batch "
+              f"before the announce (< {BATCH} s, stream order) also counted as carrying -- clean "
+              f"targets {ns} (same-batch clears set aside {nb}) -> would read {vs}; the verdict "
+              f"above stands (FIX 1: the state is read strictly before the announce in stream "
+              f"order, so a same-batch clear the server emitted AFTER the announce never counts)")
+            P(f"      {pid[3:]} LEAD (RECONSTRUCTION, n={len(d['recent'])}): clean-target casts "
+              f"inside 1 s after the bit cleared (stream order) -- a decision on a state that "
+              f"had just changed: {[(x[0], x[1], x[2], x[4], x[8]) for x in d['recent']]}")
             for x in d["clean"]:
                 P(f"      {pid[3:]} onto a CLEAN target (tag, t, caster, form, target, carrying, how, "
-                  f"end, (s since the bit last cleared, s until it next rises)): {x}")
+                  f"end, (s since the bit last cleared, s until it next rises; stream order)): {x}")
             for x in d["anomalies"]:
                 P(f"      {pid[3:]} self-target anomaly: {x}")
             if args.rows:
@@ -2136,27 +2427,27 @@ def main(argv=None):
         for x in d["rows"]:
             P(f"      P2 cast (tag, t, caster, form, target, h, min 1 s before, how, end): {x}")
         d = r2["Z2.P4"][3]
-        # POST-HOC (after the first run): the rule as written gave 272 / 271 HELD on 0
-        # counterexamples with NO informative cast (272: 0, 271: 4, all four cut by the
-        # caster's death before the re-cast) -- a check that could not fail. By Z1.P1's
-        # convention (the informative cast is the floor's unit) those two parts read NULL;
-        # the 251 part is the only one tested. The registered line above stands as written.
-        P(f"      P4 POST-HOC (not the verdict): informative casts (a previous episode would "
-          f"have been live uncut) 272: {len(d[BALTHAZARS_AURA][3])}, of them still live at the "
-          f"announce {sum(1 for x in d[BALTHAZARS_AURA][3] if x[5])}; 271: "
-          f"{len(d[ZEALOTS_FIRE][3])}, still live {sum(1 for x in d[ZEALOTS_FIRE][3] if x[5])} "
-          f"(the rest cut by the caster's death) -- a re-cast could only have overlapped a "
-          f"live episode {sum(1 for x in d[ZEALOTS_FIRE][3] + d[BALTHAZARS_AURA][3] if x[5])} "
-          f"times, so the 272 / 271 parts are VACUOUS and read NULL by Z1.P1's "
-          f"informative-floor convention; the 251 part ({len(d[SCOURGE_HEALING][1])} casts) is "
-          f"the tested one")
+        # FIX 4 (2026-09-29, the CASTAI-Z2 judge). The first run's POST-HOC note here read
+        # the 272 / 271 parts as 'VACUOUS, NULL by Z1.P1's informative-floor convention'
+        # over the unit 'a cast whose previous episode would still have been live uncut'
+        # (272: 0, 271: 4, all cut by a death) -- the wrong unit: it is non-zero only when
+        # the prediction fails or a death intervenes, so a compliant AI can never meet it.
+        # The exposure is the episodes in which the slot came READY while the episode
+        # lived (ench_exposure), and the re-casts declined inside them; it is printed on
+        # the verdict line, with 272's structural null there too.
         for skill in (BALTHAZARS_AURA, ZEALOTS_FIRE):
-            v_, rows_, cx_, inf_, per_, forms_ = d[skill]
+            v_, rows_, cx_, would_, per_, forms_, exp_cut, rc_cut, exp_nat, rc_nat, reason, rech = d[skill]
+            P(f"      P4 {z2n(skill, named)} EXPOSURE (FIX 4): {len(exp_cut)} episodes with the "
+              f"[7, T, 13] cut ({len(exp_nat)} without) in which the caster's slot came ready "
+              f"(completion + {rech if rech is None else f'{rech:g}'} s) while the episode still "
+              f"lived on a living body; re-casts inside them {len(rc_cut)} / {len(rc_nat)}; the "
+              f"first run's unit ('would still have been live uncut') {len(would_)} -- superseded")
+            for x in exp_cut:
+                P(f"      P4 {z2n(skill, named)} exposure (tag, target, caster, completion, ready, end, how the episode ended): {x}")
             for x in cx_:
                 P(f"      P4 {z2n(skill, named)} RE-CAST INSIDE A LIVE EPISODE (tag, t, caster, form, target, live, would-be-live, 0x80): {x}")
-            for x in inf_:
-                if x not in cx_:
-                    P(f"      P4 {z2n(skill, named)} informative, cut before the announce: {x}")
+            for x in rc_nat:
+                P(f"      P4 {z2n(skill, named)} RE-CAST INSIDE AN EXPOSURE (tag, t, caster, target, ready, end): {x}")
         v_, rows_, cx_, flight_, per_ = d[SCOURGE_HEALING]
         for x in cx_:
             P(f"      P4 {z2n(SCOURGE_HEALING, named)} ONTO A HEXED TARGET: {x}")
@@ -2173,10 +2464,14 @@ def main(argv=None):
         for x in d["rows"]:
             P(f"      P5 cast (tag, t, caster, target, enchanted, how, 0x80, recon, s since strip, burst, end): {x}")
         d = r2["Z2.P6"][3]
-        P(f"      P6 POST-HOC sensitivity (a lead, not the verdict; the registered rule is hold "
-          f"{ATTACK_HOLD:g} s over >= 2-holder windows): {d['sens']}")
+        P(f"      P6 POST-HOC sensitivity (a lead, not the verdict; the SCORER'S RULE is the [3] "
+          f"cut with a {P6_HOLD:g} s cap over >= 2-holder windows -- FIX 2, chosen after the first "
+          f"run; the registration fixed only the 1-s window and the {P6_SHARE:.0%} bar; the "
+          f"first run's sticky {ATTACK_HOLD:g} s reading is the last entry): {d['sens']}")
         for x in d["switches"]:
             P(f"      P6 switch (tag, t, monk, from, to): {x}")
+        for x in d["across"]:
+            P(f"      P6 target change across a [3] (tag, t, monk, previous [4] target, new, how the previous ended): {x}")
         for x in d["fresh"]:
             P(f"      P6 fresh pick (tag, t, monk, previous [4] target, new, why the previous ended): {x}")
     if z3:
@@ -2239,6 +2534,12 @@ def main(argv=None):
           f"observer's: {f['observer']}")
         P(f"   Z2 [61] cast-time words in the announce batch, by (class, skill): n and the "
           f"factors vs the table activation {f['w61']}; announces by class {f['announces_by_class']}")
+        m61 = f["mage61"]
+        P(f"   Z2 the Zaishen Mage's [61] words are INTERMITTENT (FIX 5): "
+          f"{sum(x['[61] words'] for x in m61.values())} words on "
+          f"{sum(x['casts with a word'] for x in m61.values())} of her "
+          f"{sum(x['non-signet casts'] for x in m61.values())} non-signet casts; per match "
+          f"{m61} -- a match with 0 words is one where she cast at table speed; cause UNVERIFIED")
         P(f"   Z2 [6] adds in the completion batch of an ENCHANTMENT landing on a body with no "
           f"live 13 before it (class, skill) -> ids: {f['ench_adds_on_clean']}; the same by the "
           f"0x80 bit instead (None = no 0x00F1 word yet, which is NOT clean): "
