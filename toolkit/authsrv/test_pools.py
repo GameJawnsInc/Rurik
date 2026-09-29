@@ -619,6 +619,13 @@ def all_float_rate(pips, max_energy):
     return f32(f32(f32(pools.PIP_ENERGY_PER_SECOND) * pips) / max_energy)
 
 
+def retired_regen_rate(pips, max_energy):
+    """The server's property-43 spelling until 2026-09-29: f32(0.33f) x pips / max
+    with a double intermediate, rounded once. One ulp off retail on (3, 19) and
+    (3, 18); kept as the KNOWN-BAD arm of the checks that name the spelling."""
+    return f32(f32(pools.PIP_ENERGY_PER_SECOND) * pips / max_energy)
+
+
 class MissingRow(KeyError):
     """A skill no stated rule resolves -- never swallowed by a blanket except."""
 
@@ -1415,12 +1422,21 @@ def section_corpus_oracle():
     # happened to be the f32-first value, so the oracle stands and the
     # double-first twin is admitted beside it; which spelling retail uses is
     # now CONTESTED (one witness each way is not a rule).
+    # 2026-09-29 (CASTAI-Z2): the server moved to the per-operation spelling
+    # (2b's ONE-spelling check), which gives this very value for (3, 19); the
+    # 'oracle' JARIN meant is the RETIRED single-rounding spelling, named here
+    # explicitly so the record keeps its meaning, and the server's own rate is
+    # now asserted to BE the wire's.
     twin = {f32(0.33 * p / m) for p, m in CANDIDATE_PIPS}
-    LEDGER.ok(f32(0.33 * 3 / 19) in twin - predicted
-              and any(r["rate"] == f32(0.33 * 3 / 19) for r in regen),
+    retired = {retired_regen_rate(p, m) for p, m in CANDIDATE_PIPS}
+    LEDGER.ok(f32(0.33 * 3 / 19) in twin - retired
+              and any(r["rate"] == f32(0.33 * 3 / 19) for r in regen)
+              and pools.wire_regen_rate(3, 19) == f32(0.33 * 3 / 19),
               "the (3, 19) rate on the wire is the DOUBLE-first spelling, one ulp "
-              "off the oracle's (JARIN; the oracle's spelling is kept for every "
-              "other pair)", f"twin-only {sorted(twin - predicted)}")
+              "off the retired oracle's (JARIN) -- and the server's per-operation "
+              "spelling sends exactly it since 2026-09-29",
+              f"twin-only against the retired spelling {sorted(twin - retired)}; "
+              f"the server's (3, 19) {pools.wire_regen_rate(3, 19)!r}")
     predicted |= twin
     # THE GEAR ROW, pinned on its witness tape (CASTAI-Z1): the signature finds
     # nothing on the corpus as of the pin and exactly the (2, 30) transition on
@@ -1477,9 +1493,11 @@ def section_corpus_oracle():
     # after EACH single-precision operation -- what compiled float code does.
     # The oracle rounds once (a double intermediate), and the rows where it is
     # one ulp off are exactly the pairs where f32(0.33f x 3) differs from
-    # 0.33f x 3 across the division. `pools.wire_regen_rate` keeps the
-    # oracle's spelling: a server change is an ESCALATION (C6), not this
-    # file's edit, and this check will be its known-bad arm the day it moves.
+    # 0.33f x 3 across the division. The lane left `pools.wire_regen_rate` on
+    # the oracle's spelling (a server change was an ESCALATION, C6); the
+    # orchestrator moved it on 2026-09-29, so the server now sends the one
+    # spelling, and the retired single-rounding spelling is kept below as this
+    # check's KNOWN-BAD arm.
     joined = {}
     for r in regen:
         if r["rate"] and r["max"] is not None:
@@ -1490,27 +1508,30 @@ def section_corpus_oracle():
         return sorted(rate for rate, prs in joined.items()
                       if any(fn(p, m) == rate for p, m in prs))
     hits_all = _hits(all_float_rate)
-    hits_oracle = _hits(pools.wire_regen_rate)
+    hits_server = _hits(pools.wire_regen_rate)
+    hits_oracle = _hits(retired_regen_rate)
     hits_dbl = _hits(lambda p, m: f32(0.33 * p / m))
     oracle_misses = [(round(x, 9), sorted(joined[x]))
                      for x in sorted(set(joined) - set(hits_oracle))]
     LEDGER.ok(len(joined) >= 19 and len(hits_all) == len(joined)
+              and hits_server == hits_all
               and len(hits_oracle) < len(joined)
               and len(hits_dbl) < len(hits_oracle),
               f"ONE spelling reproduces EVERY distinct joined rate -- "
               f"f32(f32(0.33f x pips) / max), one rounding per float operation: "
-              f"{len(hits_all)} of {len(joined)}; the oracle's double-"
-              f"intermediate spelling {len(hits_oracle)}, the double-first twin "
-              f"{len(hits_dbl)}",
-              f"the oracle misses {oracle_misses} by one ulp each -- (3, 19) on "
-              f"JARIN's Ranger AND on Z2's boss Warrior, (3, 18) on Z2. Nothing "
-              f"was fitted: the pairs are the join's and the constant is the "
-              f"same 0.33f. JARIN's CONTESTED 'which spelling' is resolved by "
-              f"a third answer, RECONSTRUCTION corroborated {len(hits_all)} of "
-              f"{len(joined)} with the two rivals at {len(hits_oracle)} and "
-              f"{len(hits_dbl)}. ESCALATION, not an edit: pools.wire_regen_rate "
-              f"still sends the oracle's spelling and is one ulp off retail on "
-              f"these pairs (an f32 the client stores and animates from)")
+              f"{len(hits_all)} of {len(joined)}, and pools.wire_regen_rate "
+              f"sends it ({len(hits_server)}); the retired double-intermediate "
+              f"spelling {len(hits_oracle)} (the KNOWN-BAD arm), the "
+              f"double-first twin {len(hits_dbl)}",
+              f"the retired spelling misses {oracle_misses} by one ulp each -- "
+              f"(3, 19) on JARIN's Ranger AND on Z2's boss Warrior, (3, 18) on "
+              f"Z2. Nothing was fitted: the pairs are the join's and the "
+              f"constant is the same 0.33f. JARIN's CONTESTED 'which spelling' "
+              f"is resolved by a third answer, RECONSTRUCTION corroborated "
+              f"{len(hits_all)} of {len(joined)} with the two rivals at "
+              f"{len(hits_oracle)} and {len(hits_dbl)}. The server moved to it "
+              f"on 2026-09-29 (CASTAI-Z2), so a server rate that drifts off "
+              f"retail's reddens this check")
 
     print("\n2c. every discrete spend, against the client's own cost column")
     misses, hits, by_skill = [], 0, {}
