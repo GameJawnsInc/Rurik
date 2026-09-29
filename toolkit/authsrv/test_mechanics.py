@@ -32,7 +32,7 @@ import effects      # noqa: E402
 import combatmath   # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=379)  # 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=383)  # 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -878,6 +878,76 @@ check([v for op, v, _l in sent if op == OP_FLOAT]
       "to f32(-6/64) over the restored 64 (retail's close re-division is witnessed only on "
       "the player's natural regeneration)",
       f"got {[(hex(op), v) for op, v, _l in sent]}")
+
+print("== 16c. a rate back at zero is +0.0 (0x00000000), never -0.0 ==")
+# RANGERPRE-S3 (2026-09-29). OBSERVED, 20260929T150923 :53756 t=1137.703144,
+# agent 27 (max 64), Bleeding's expiry: [0x009F [7, 27, 23], 0x00F1 [27, 0],
+# 0x00A2 [44, 27, 0x00000000]]. Every zero prop-44 word on the live corpus is
+# +0.0: 561 of 561 over 38 captures / 127 connections, none 0x80000000, the
+# observer's own included ([44, 9, 0x00000000] at t=1112.830452). Ours packed
+# -(0 x 2)/64 = -0.0. The [7] is not ours yet (RANGERPRE IMMUNE-2b), so only
+# the float word and its place behind the 0x00F1 are pinned here.
+RETAIL_ZERO_44 = 0x00000000
+
+
+def bleed_close(target, maximum=64.0):
+    """Bleeding opened on `target` (a foe at `maximum`, or the player), then
+    expired through effect_tick. Returns the close as [(opcode, values)]."""
+    state = dw_state(enemy=True)
+    state["agents"][ENEMY].update(max_health=maximum, health=maximum)
+    _pre, noop = collector()
+    ep = authsrv.apply_condition(noop, state, target, BLEEDING, 5.0, 12, 0, by_skill=382)
+    ep["expires_at"] = 0.0
+    sent, send = collector()
+    authsrv.effect_tick(send, state, 0)
+    return [(op, v) for op, v, _l in sent]
+
+
+close = bleed_close(ENEMY)
+check([v for op, v in close if op == OP_FLOAT]
+      == [[agents.GV_CHANGE_HEALTH_REGEN, ENEMY, RETAIL_ZERO_44]]
+      and [op for op, v in close if op in (OP_STATUS, OP_FLOAT)] == [OP_STATUS, OP_FLOAT],
+      "a foe's Bleeding expiry sends 0x00F1 [foe, 0] then 0x00A2 [44, foe, 0x00000000] -- "
+      "retail's +0.0 bit-exact (t=1137.703144); the pre-S3 wire was 0x80000000",
+      f"got {[(hex(op), v) for op, v in close]}")
+close = bleed_close(PLAYER)
+check([v for op, v in close if op == OP_FLOAT]
+      == [[agents.GV_CHANGE_HEALTH_REGEN, PLAYER, RETAIL_ZERO_44]],
+      "and the PLAYER's own Bleeding expiry: [44, me, 0x00000000] -- the same push_regen, "
+      "retail's observer zeros are +0.0 too",
+      f"got {[(hex(op), v) for op, v in close]}")
+_saved_zero = authsrv.REGEN_ZERO_POSITIVE
+try:
+    authsrv.REGEN_ZERO_POSITIVE = False
+    close = bleed_close(ENEMY)
+    check([v for op, v in close if op == OP_FLOAT]
+          == [[agents.GV_CHANGE_HEALTH_REGEN, ENEMY, 0x80000000]],
+          "KNOWN-BAD ARM, --regen-zero-signed: the same expiry sends -0.0 (0x80000000), the "
+          "pre-S3 wire -- the dword above is the flag's, not the fixture's",
+          f"got {[(hex(op), v) for op, v in close]}")
+finally:
+    authsrv.REGEN_ZERO_POSITIVE = _saved_zero
+import serverargs  # noqa: E402
+_ap = serverargs.build_parser(
+    doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+    HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+    GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+    VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+_src = open(authsrv.__file__, encoding="utf-8").read()
+_main = _src.find("\ndef main():")
+_flag = _src.find("    if a.regen_zero_signed:", _main)
+_pr = _src.find("def push_regen(")
+_rate = _src.find("    rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool\n", _pr)
+_guard = _src.find("    if REGEN_ZERO_POSITIVE and not pips:\n        rate = 0.0", _pr)
+_seen = _src.find('    seen = state.setdefault("regen_rate", {})', _pr)
+check(_ap.parse_args([]).regen_zero_signed is False
+      and _ap.parse_args(["--regen-zero-signed"]).regen_zero_signed is True
+      and 0 < _main < _flag
+      and "REGEN_ZERO_POSITIVE = False" in _src[_flag:_flag + 120]
+      and 0 < _pr < _rate < _guard < _seen,
+      "the source: --regen-zero-signed parses (default off), main() flips "
+      "REGEN_ZERO_POSITIVE = False under it, and push_regen's zero guard sits between the "
+      "rate and the change test")
 
 print("== 17. the known-bad arms ==")
 saved_dw, saved_sw = authsrv.DEEP_WOUND, authsrv.STATUS_WORD

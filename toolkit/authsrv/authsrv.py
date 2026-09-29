@@ -25727,6 +25727,16 @@ def agent_pool_max(state, agent_id):
     return float(agent["max_health"]) if agent else None
 
 
+# THE ZERO RATE IS +0.0 (RANGERPRE-S3, 2026-09-29). OBSERVED: every zero prop-44
+# word on the live corpus is 0x00000000 -- 561 of 561 over 38 captures and 127
+# connections, none 0x80000000, while 736 NONZERO rates carry the sign bit
+# (degeneration). The witness is Bleeding's expiry on a foe, 20260929T150923
+# :53756 t=1137.703144: [0x009F [7, 27, 23], 0x00F1 [27, 0], 0x00A2 [44, 27,
+# 0x00000000]]. Ours sent -(0 x 2)/64 = -0.0 (0x80000000), bit-different on every
+# close that returns a rate to zero. --regen-zero-signed is the known-bad arm.
+REGEN_ZERO_POSITIVE = True
+
+
 def push_regen(send, state, agent_id, conn_id):
     """Tell the client this agent's NET health-regeneration rate, if it changed.
 
@@ -25753,6 +25763,8 @@ def push_regen(send, state, agent_id, conn_id):
     live = table.on_agent(agent_id) if table else []
     pips = net_pips(state, agent_id, live)      # conditions + hex rows (B2), one cap
     rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
+    if REGEN_ZERO_POSITIVE and not pips:
+        rate = 0.0                              # retail's +0.0, 561/561 (above)
     seen = state.setdefault("regen_rate", {})
     if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
         return None
@@ -45249,6 +45261,12 @@ def main():
         STATUS_WORD = False
         print("NO STATUS WORD: no 0x00F1 rides an effect apply or close "
               "(--no-status-word, the known-bad arm).", flush=True)
+    if a.regen_zero_signed:
+        global REGEN_ZERO_POSITIVE
+        REGEN_ZERO_POSITIVE = False
+        print("SIGNED REGEN ZERO: a rate back at zero goes out as -0.0 "
+              "(0x80000000), not retail's +0.0 (--regen-zero-signed, the "
+              "known-bad arm).", flush=True)
     if a.no_overheal_number:
         global OVERHEAL_NUMBER
         OVERHEAL_NUMBER = False

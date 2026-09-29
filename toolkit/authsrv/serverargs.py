@@ -2557,6 +2557,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the pre-2026-09-09 wire, where the only status "
                          "messages were death and revive. Retail sends the "
                          "word behind every such apply and close.")
+    ap.add_argument("--regen-zero-signed", action="store_true",
+                    help="RANGERPRE-S3 REVERT: a health-regeneration rate that "
+                         "returns to zero (a condition's expiry) goes out as "
+                         "-0.0 (0x80000000) in the 0x00A2 property-44 word, "
+                         "the pre-2026-09-29 wire. Retail's zero is +0.0, 561 "
+                         "of 561 on the live corpus.")
     ap.add_argument("--no-effects", action="store_true",
                     help="do not open or close effect episodes. The control "
                          "for the 0x0042/0x0044 channel: with it a stance is "
