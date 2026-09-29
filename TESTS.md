@@ -8308,11 +8308,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `toolkit/authsrv/test_skillloadorder.py` (**2026-09-29, RANGERPRE-S4 (SECONDARY-A) — the
   load's skill block sends the bar 0x00DA BEFORE the character library 0x00DB**,
   `studies/presearing/RANGERPRE.md` §4. Retail's order on 126 of 126 live connections
-  carrying both; ours was the reverse from 57e89956 on. §1 RETAIL, vault-gated on capture
-  `20260929T150923` (the live root absent is a declared skip; present without this capture
-  is a FAIL): 11 game connections, origin live, all decoding closed; the first 0x00DA
-  precedes the first 0x00DB on 11 of 11, and it is the OWN agent's bar (the agent of the
-  first 0x00B7) on 11 of 11; POSITIVE CONTROL — the same first-index reader sees 0x001D
+  carrying both; ours was the reverse from 04bafc1f (2026-08-06) on. §1 RETAIL, vault-gated
+  on capture `20260929T150923` (the live root absent is a declared skip; present without
+  this capture is a FAIL): 11 game connections, origin live, all decoding closed; the
+  first 0x00DA precedes the first 0x00DB on 11 of 11, and it is the OWN agent's bar (the
+  agent of the first 0x00B7) on 11 of 11; POSITIVE CONTROL — the same first-index reader sees 0x001D
   before the pair on :59969 and after it on :63359; the literal `RETAIL_PLAYER_BLOCK` is
   :53756's player block at t=998.208 (0x0037 … 0x00EF, 14 opcodes). §2 OURS: the real
   `_handle_request_players` burst with the module defaults (no hero rig) in a town and a

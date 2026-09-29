@@ -277,15 +277,17 @@ state on a change, so nothing here is copied from them.
 ### SECONDARY-F11 — the load sends the bar `0x00DA` before the character library `0x00DB` — OBSERVED
 
 (F9 and F10 are the dialog-granted secondary's, RANGERPRE-S19; this one landed first.)
-The first `0x00DA` precedes the first `0x00DB` on **126 of 126** live connections carrying
-both (the RANGERPRE design lane's census: 127 connections, one set aside by its manifest),
-and on 11 of 11 in `20260929T150923`, where it is the OWN agent's bar every time. :53756's
-player block at t=998.208: `0x0037, 0x00B7, 0x00B6, 0x00DA, 0x009F [41], 0x009F [42],
-0x009C, 0x0041, 0x008B, 0x008A, 0x00B5, 0x00DB, 0x00E9, 0x00EF`. `0x001D` takes no part
-in the order — the same capture carries it before the pair (:59969) and after it (:63359).
-Ours sent `0x001D, 0x00DB, 0x00DA` from 57e89956 on, on the unfounded fear that the client
-gates drawing on unlock state; `studies/skills/FINDINGS.md` §9 had already measured that
-it does not.
+The first `0x00DA` precedes the first `0x00DB` on **126 of 126** live connections that
+carry both (127 decoded; one carries neither, `20260807T133758` :54560, 88 s2c messages
+that never reach a player block; a 128th, `20260928T103123` :65009, is set aside by its
+manifest), and on 11 of 11 in `20260929T150923`, where it is the OWN agent's bar every
+time. :53756's player block at t=998.208: `0x0037, 0x00B7, 0x00B6, 0x00DA, 0x009F [41],
+0x009F [42], 0x009C, 0x0041, 0x008B, 0x008A, 0x00B5, 0x00DB, 0x00E9, 0x00EF`. `0x001D`
+takes no part in the order — the same capture carries it before the pair (:59969) and
+after it (:63359). Ours sent `0x001D, 0x00DB, 0x00DA` from 04bafc1f (2026-08-06) on (57e89956,
+the tree `test_secondary` §7 recorded, is one of them), on the unfounded fear that the
+client gates drawing on unlock state; `studies/skills/FINDINGS.md` §9 had already measured
+that it does not.
 
 ---
 
@@ -401,7 +403,9 @@ constant at `0x0041`, one UNHANDLED per `0x0041`).
 **SECONDARY-B7 — the load order (RANGERPRE-S4, 2026-09-29; B6 is the dialog grant's).**
 F11: `_handle_request_players` sends the character library `0x00DB` right AFTER the
 player's `0x00DA`, so our skill block reads `0x001D, 0x00DA, 0x00DB, 0x00E9, 0x00EF` —
-retail's relative order for every message of the player block we send. The two sites are
+the relative order of :53756's block at t=998.208 for every message of it we send, and of
+120 of 126 corpus player blocks (`0x00DA, 0x00DB, 0x00E9, 0x00EF`; the other 6 send
+`0x00DB` after `0x00EF`, :63359 in this very capture among them). The two sites are
 split on `SKILL_LOAD_RETAIL_ORDER`; `--no-retail-skill-order` is 57e89956's order. The
 library's words, `resolve_library`'s single read above the bar and `0x001D`'s place are
 unchanged. `test_skillloadorder.py` (18 checks) pins retail's order off the tape with a

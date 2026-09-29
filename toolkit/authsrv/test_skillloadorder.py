@@ -14,10 +14,13 @@ WHAT THIS PINS, and what each part rests on:
     same instrument sees 0x001D BEFORE the pair on :59969 and AFTER it on
     :63359, so "first index" can answer either way and the 11 of 11 is the
     tape's, not the reader's. The literal RETAIL_PLAYER_BLOCK is :53756's
-    player block at t=998.208, pinned here against the tape so §2 may use it
-    on a bare machine.
-  * §2 OURS (no vault): the REAL load burst (_handle_request_players, the
-    module's defaults, no hero rig) in a town and a field. The player's
+    player block at t=998.208, pinned here against the tape so §2 needs no
+    capture.
+  * §2 OURS (no capture, but the content overlay's attribute rows): the REAL
+    load burst (_handle_request_players, the module's defaults, no hero rig)
+    in a town and a field -- the burst's attribute_state refuses without the
+    cost rows, so without them §2 declares a skip, the same limit
+    test_secondary's drives have, and a bare machine runs §3 alone. The player's
     0x00DA comes before the 0x00DB, 0x001D before both; restricted to the
     opcodes both player blocks carry, ours runs in RETAIL_PLAYER_BLOCK's order;
     and the burst is the revert's with the one 0x00DB moved to right after the

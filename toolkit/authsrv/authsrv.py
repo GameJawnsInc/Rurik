@@ -12938,8 +12938,9 @@ REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
                                # then 0x0052 · 0x004A close the quest family).
 SKILL_LOAD_RETAIL_ORDER = True # False (--no-retail-skill-order): the load sends
                                # the character library 0x00DB BEFORE the bar
-                               # 0x00DA, as every tree since 57e89956 did.
-                               # Default ON: the bar first, then 0x00DB --
+                               # 0x00DA, as every tree since 04bafc1f
+                               # (2026-08-06) did. Default ON: the bar
+                               # first, then 0x00DB --
                                # retail's order on 126 of 126 live connections
                                # carrying both (OBSERVED, RANGERPRE-S4;
                                # 20260929T150923, 11 of 11). 0x001D does not move.
@@ -37185,20 +37186,22 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # The skill block: THE BAR 0x00DA, THEN THE CHARACTER LIBRARY
     # 0x00DB (RANGERPRE-S4). OBSERVED on the live corpus: the first
     # 0x00DA precedes the first 0x00DB on 126 of 126 connections that
-    # carry both (127 connections, one set aside by its manifest), and
-    # on 11 of 11 in 20260929T150923, where :53756's player block at
-    # t=998.208 runs 0x0037, 0x00B7, 0x00B6, 0x00DA, 0x009F [41],
-    # 0x009F [42], 0x009C, 0x0041, 0x008B, 0x008A, 0x00B5, 0x00DB,
-    # 0x00E9, 0x00EF. 0x001D is NOT part of the pair's order -- the
-    # same capture carries it before (:59969) and after (:63359) --
-    # so it stays where it was. We sent the unlocks first from
-    # 57e89956 on, deliberately: upstream's SendSkillsAndAttributes
-    # sends the bar first but only ever with eight zeros, so its
-    # order was no evidence about a POPULATED bar, and the fear was
-    # that the client gates drawing on unlock state. It does not --
-    # studies/skills/FINDINGS.md §9 (bar contents are the server's,
-    # the bitmap gates only the picker) -- and the tape now answers
-    # the order itself. --no-retail-skill-order is 57e89956's order.
+    # carry both (127 decoded; one carries neither, 20260807T133758
+    # :54560; a 128th, 20260928T103123 :65009, is set aside by its
+    # manifest), and on 11 of 11 in 20260929T150923, where :53756's
+    # player block at t=998.208 runs 0x0037, 0x00B7, 0x00B6, 0x00DA,
+    # 0x009F [41], 0x009F [42], 0x009C, 0x0041, 0x008B, 0x008A,
+    # 0x00B5, 0x00DB, 0x00E9, 0x00EF. 0x001D is NOT part of the pair's
+    # order -- the same capture carries it before (:59969) and after
+    # (:63359) -- so it stays where it was. We sent the unlocks first
+    # from 04bafc1f (2026-08-06) on, deliberately: upstream's
+    # SendSkillsAndAttributes sends the bar first but only ever with
+    # eight zeros, so its order was no evidence about a POPULATED bar,
+    # and the fear was that the client gates drawing on unlock state.
+    # It does not -- studies/skills/FINDINGS.md §9 (bar contents are
+    # the server's, the bitmap gates only the picker) -- and the tape
+    # now answers the order itself. --no-retail-skill-order is that
+    # order, the one 57e89956 (test_secondary §7's recording) sent.
     # THE SKILL LIBRARY IS TWO SETS, and they are retail's two, not ours.
     # Until 2026-09-15 this server sent the SAME flag-built bitmap in both
     # messages, which worked but modelled one library where the game has
@@ -43823,8 +43826,8 @@ def main():
         global SKILL_LOAD_RETAIL_ORDER
         SKILL_LOAD_RETAIL_ORDER = False
         print("[skills] --no-retail-skill-order: the load sends the character "
-              "library 0x00DB BEFORE the bar 0x00DA, as every tree from 57e89956 "
-              "to RANGERPRE-S4 did. KNOWN-BAD against the tape: retail sends the "
+              "library 0x00DB BEFORE the bar 0x00DA, as every tree from 04bafc1f "
+              "(2026-08-06) to RANGERPRE-S4 did. KNOWN-BAD against the tape: retail sends the "
               "bar first on 126 of 126 live connections carrying both.",
               flush=True)
     if a.no_map_travel:
