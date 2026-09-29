@@ -358,6 +358,37 @@ CONDITION_STATUS_BITS = {
 }
 TYPE_STATUS_BITS = {6: STATUS_ENCHANTED, 4: STATUS_HEXED}
 
+# THE CONDITION'S VISUAL (RANGERPRE-S13, 2026-09-29): the id a condition puts on
+# its wearer with 0x009F [6, agent, id] at the apply and takes off with [7,
+# agent, id] at the close, on the channel a hex's [6, T, 1] / [6, T, class] use
+# (authsrv.aura_on); that our 38797 client draws them as retail's does is
+# UNVERIFIED on screen. OBSERVED by joining every 0x0042 condition apply on the
+# live corpus (127 connections; the gapped 20260928T103123 :65009 set aside by
+# capgaps) to the [6, same agent, x] in its batch: EVERY fresh apply carries
+# its id, 54 of 54, the 0x0042 first 54 of 54 and the [6] ahead of the
+# wearer's 0x00F1 on all 48 that carry one (the other 6 moved no bit); one
+# witness each (capture :port t):
+#    478 Bleeding       23   1/1   20260821T152147 :63150  756.045
+#    479 Blind          24  22/22  20260821T152147 :63150  701.901
+#    480 Burning        25   7/9   20260817T231139 :54071  633.819 (a payoff's)
+#    483 Disease        26   1/1   20260821T152147 :63150  490.315
+#    484 Poison         27  11/14  20260821T152147 :63150  676.813
+#    485 Dazed          28   1/1   20260821T152147 :63150  595.985
+#    486 Weakness       29   9/9   20260821T152147 :63150  635.725
+#   2077 Cracked Armor  29   2/2   20260821T155022 :59491  113.768
+# The 5 applies without one (Burning 2, Poison 3) are all re-applications while
+# the same condition was still live: a re-application draws no second visual.
+# On a FOE the 0x0042 is not sent (MANTID) and the [6] still is: the Reforged
+# capture 20260929T150923 :53756 puts [6, T, 23], 0x00F1 [T, 3], [44, T, ...] on
+# three bleeding foes (1113.410, 1132.708, 1140.683), 3 of 3, and [7, 27, 23]
+# ahead of 0x00F1 [27, 0] at the expiry (1137.703). ABSENT ON PURPOSE: Crippled
+# 481 (0 of 7) and Deep Wound 482 (0 of 6) draw none. Weakness and Cracked Armor
+# SHARE 29; that one live copy holds it for the other is the hex base id's
+# reference count extended (RECONSTRUCTION -- no overlap of the two is on tape).
+CONDITION_EFFECT_IDS = {
+    478: 23, 479: 24, 480: 25, 483: 26, 484: 27, 485: 28, 486: 29, 2077: 29,
+}
+
 
 def status_word(episodes, dead=False):
     """The agent's `m_status` word from its live episodes. OBSERVED bits only.

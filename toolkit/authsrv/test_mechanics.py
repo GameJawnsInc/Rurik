@@ -885,8 +885,8 @@ print("== 16c. a rate back at zero is +0.0 (0x00000000), never -0.0 ==")
 # 0x00A2 [44, 27, 0x00000000]]. Every zero prop-44 word on the live corpus is
 # +0.0: 561 of 561 over 38 captures / 127 connections, none 0x80000000, the
 # observer's own included ([44, 9, 0x00000000] at t=1112.830452). Ours packed
-# -(0 x 2)/64 = -0.0. The [7] is not ours yet (RANGERPRE IMMUNE-2b), so only
-# the float word and its place behind the 0x00F1 are pinned here.
+# -(0 x 2)/64 = -0.0. Only the float word and its place behind the 0x00F1 are
+# pinned here; the [7] ahead of them is RANGERPRE-S13's, pinned in test_condwords.
 RETAIL_ZERO_44 = 0x00000000
 
 
@@ -3886,13 +3886,17 @@ try:
     sent, send = collector()
     authsrv.apply_condition(send, st, PLAYER, DAZED_C, 8.0, 12, 0, HAZE, by_agent=10)
     ops = [(op, v[:3]) for op, v, _l in sent]
-    check(ops[:2] == [(authsrv.GAME_SMSG_EFFECT_APPLY, [PLAYER, DAZED_C, 12]), (OP_STATUS, [PLAYER, 0x02])]
-          and ops[2:] == [(INT, [8, PLAYER, 0]), (E5, [PLAYER, ORB_J, 0]),
+    # RANGERPRE-S13: Dazed's visual [6, me, 28] rides between the 0x0042 and the 0x00F1
+    # (retail 1 of 1, 20260821T152147 :63150 t=595.985 -- test_condwords).
+    check(ops[:3] == [(authsrv.GAME_SMSG_EFFECT_APPLY, [PLAYER, DAZED_C, 12]),
+                      (INT, [agents.PROP_AURA_ON, PLAYER, 28]), (OP_STATUS, [PLAYER, 0x02])]
+          and ops[3:] == [(INT, [8, PLAYER, 0]), (E5, [PLAYER, ORB_J, 0]),
                           (INT, [agents.GV_SKILL_STOPPED, PLAYER, 0]),
                           (E2, [PLAYER, ORB_J, 0]), (INT, [agents.GV_INTERRUPTED, PLAYER, 0])]
           and cast["e5_sent"],
-          "apply_condition: Dazed on the casting player -- 0x0042 [me, 485, 12], 0x00F1 0x02, "
-          "THEN the victim run (the page's bug note: interrupts upon application)", f"{ops}")
+          "apply_condition: Dazed on the casting player -- 0x0042 [me, 485, 12], [6, me, 28], "
+          "0x00F1 0x02, THEN the victim run (the page's bug note: interrupts upon application)",
+          f"{ops}")
     st = fresh_state()
     hostile(st, 10, (50.0, 0.0))
     cast = pending_spell(st)
@@ -3904,8 +3908,9 @@ try:
     hostile(st, 10, (50.0, 0.0))
     sent, send = collector()
     authsrv.apply_condition(send, st, PLAYER, DAZED_C, 8.0, 12, 0, HAZE, by_agent=10)
-    check(not stops(sent, PLAYER) and len(sent) == 2,
-          "CONTROL: Dazed on a player casting nothing is the two-message batch alone")
+    check(not stops(sent, PLAYER) and len(sent) == 3,
+          "CONTROL: Dazed on a player casting nothing is the three-message batch alone "
+          "(0x0042, [6, me, 28], 0x00F1 -- RANGERPRE-S13's [6])")
     st = fresh_state()
     casting(10, hostile(st, 10) and st)
     sent, send = collector()
