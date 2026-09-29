@@ -74,10 +74,12 @@ a check:
       0x008219F8 jumps past the UI event. A 207 no slot accepted repaints
       nothing and arms no timer.
   §3b (CASTAI-Z2, 2026-09-29) THE SIGNATURE'S FOURTH KIND, made to refuse on
-      synthetic batches: a gain with no word, after the killing word, in the
-      agent's death batch is `post_mortem` (retail sends the gain and drops the
-      word for a hit landing on an agent already dead in the tick -- 2 of 2 on
-      the Smiting Monks' tape); drop either term and it is `unexplained` again.
+      synthetic batches: a gain with no word of its own, after a killing word,
+      in the agent's death batch is `post_mortem` (retail sends the gain and
+      drops the word for a hit landing on an agent already dead in the tick --
+      2 of 2 on the Smiting Monks' tape); drop any of its three terms (the
+      death flag, a damage word at the agent, the order) and it is
+      `unexplained` again.
 
 Sections 1-3 need no captures and no client; 4-7 and 12 need
 `vault/captures/live/`; 8-11 and 13 need the pinned build-38797 image. The last two groups declare skips, the
@@ -104,17 +106,23 @@ sys.path.insert(0, os.path.join(TOOLKIT, "schema"))
 sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
 import checks  # noqa: E402
 
-# FLOOR 10, and it is the MANDATORY CORE rather than the full count, which is
+# FLOOR 14, and it is the MANDATORY CORE rather than the full count, which is
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
 # machine executes 72 (55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28;
 # 95 since CASTAI-Z2, 2026-09-29: +3 for 3b's synthetic arms, +1 for the
-# Smiting Monks' tape pinned whole -- measured 95 on the green run),
-# and a run with neither the
-# captures nor the pinned image
-# executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
-# also turns §3 RED (3 failures, not a skip) because the content overlay is NOT
+# Smiting Monks' tape pinned whole -- measured 95 on the green run; 96 since
+# the CASTAI-Z2 round-1 review, 2026-09-29: +1 for 3b's wordless-death arm,
+# measured 96), and a run with neither the captures nor the pinned image
+# executes 14 (10 until CASTAI-Z2; 2026-09-29, CASTAI-Z2 + its review: +4 --
+# 3b's synthetic arms run without fixtures, measured 14 with `RURIK_VAULT` at
+# an empty directory, and the floor follows that measurement as the new
+# mandatory core) -- forced by pointing `RURIK_VAULT` at an empty directory,
+# which also turns §3 RED (a failure, not a skip: 3 failures when this was
+# written, 1 on the 2026-09-29 measurement -- the off-grid census over 0 rows;
+# the control and the width check pass on the content overlay alone) because
+# the content overlay is NOT
 # in the skippable half. That is `test_pools`' split and the reason for it: the
 # overlay regenerates from the owner's own install via
 # `skilltable.py --emit-content`, so a machine without it should go red rather
@@ -125,14 +133,14 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 91 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 14 of 96 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
-# fixtures, one section quietly ceasing to run would still clear 10. The guards
+# fixtures, one section quietly ceasing to run would still clear 14. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
 # capture, connection and message counts, so a corpus walk that visited less
 # goes red instead of silent, and §8 prints the image it read and then makes
 # four assertions about it. The floor's job here is the fixture-less run.
-LEDGER = checks.Ledger("the adrenaline wire model", floor=10)
+LEDGER = checks.Ledger("the adrenaline wire model", floor=14)
 
 # ---------------------------------------------------------------------------
 # THE FAMILY. Ours: NOT FOUND in GWCA, OpenTyria, Headquarter, GWLP-R,
@@ -348,11 +356,21 @@ UNRESOLVED_CASTS_AT_PIN = {1870}
 #     0x00CF [7, 16] at t 46.512 on :64557 (75 of 480 is a Smite Hex on this
 #     tape; no visual names its source -- RECONSTRUCTION). A hit landing in
 #     the tick the observer dies in, after the blow that killed, sends its
-#     GAIN and NOT its damage word: 2 of 2, on the 2 of 13 armed deaths in the
-#     corpus where a second hit landed in the death tick. The 13 killing words
-#     themselves are all present, and UNCLAMPED (integrating the observer's
-#     words from spawn: 59.58 % against 29.4 % remaining on RB2; 15.63 %
-#     against 6.67 % on :51090). `_classify_gains` names the kind
+#     GAIN and NOT its damage word: 2 of 2. THE COUNT (OBSERVED, corrected by
+#     the round-1 review; z2adr-probe2.py walks every batch carrying 0x0026
+#     [me, 4] on an ARMED connection): 17 armed observer deaths in the corpus
+#     -- 12 on this tape, 3 on RB2 20260917T090355, 1 on 20260928T103123, 1 on
+#     20260821T152147. 16 carry a damage word at the observer in the death
+#     batch (the killing word); 1 carries NONE (20260821T152147 :63150
+#     t 490.312, a non-damage death -- no word, no gain, no clear), so the
+#     kind's rule REQUIRES a word in the batch. The 2 orphans sit on 2 of
+#     the 16. The killing word is UNCLAMPED -- RECONSTRUCTION, not observed:
+#     integrating the observer's damage words alone from spawn leaves 29.4 %
+#     against RB2's 59.58 % word and 6.67 % against :51090's 15.63 %, but the
+#     observer's regeneration (prop 43 = 0.033 in force from t 0.6, reset to
+#     0 in the death batch) and degeneration (prop 62 = -0.25 at t 36.15) are
+#     NOT integrated, so the remainder is an estimate of the health the word
+#     met, not a reading of it. `_classify_gains` names the kind
 #     `post_mortem` by that rule; a gain off it anywhere is `unexplained`.
 #     OUR SERVER drops both the word and the gain for a hit on a dead player
 #     (`player_dead` guards at the three grant sites) -- a wire-shape
@@ -737,14 +755,19 @@ def section_classifier_arms():
 
     `_classify_gains` gained a fourth kind, and a kind that can only ever be
     assigned is a hole in the signature: every unexplained gain would find a
-    home in it and the check below it could not go red. So four synthetic
-    batches, no captures needed: the rule's two terms -- the agent's death flag
-    in the batch, and the gain AFTER the batch's last damage word at the agent
-    -- are each dropped in turn and the same orphan gain must go back to
-    `unexplained`; and a gain a pooled word fits must still read `damage`,
-    death flag or not, because the pooled rule is tried first.
+    home in it and the check below it could not go red. So five synthetic
+    batches, no captures needed: the rule's three terms -- the agent's death
+    flag in the batch, a damage word at the agent in the batch, and the gain
+    AFTER the last such word -- are each dropped in turn and the same orphan
+    gain must go back to `unexplained`; and a gain a pooled word fits must
+    still read `damage`, death flag or not, because the pooled rule is tried
+    first. The third term was the round-1 review's hole: with no word at the
+    agent `last_word` is -1, so a WORDLESS death batch (the corpus has one,
+    20260821T152147 :63150 t 490.312, a non-damage death) admitted any orphan
+    -- the reviewer planted one under a future stamp and the whole test stayed
+    green. The arm below is that plant.
     """
-    print("\n3b. the post-mortem kind refuses without either of its two terms")
+    print("\n3b. the post-mortem kind refuses without any of its three terms")
     import adrenjoin
     me, t = 7, 1.0
 
@@ -784,11 +807,25 @@ def section_classifier_arms():
               "refuses on its own, so a gain that merely arrives in a busy "
               "batch, or merely on a tape with a death in it, cannot hide in "
               "post_mortem; the corpus check in 4b reddens on it")
+    # The round-1 review's plant, verbatim: a lone orphan gain beside the death
+    # flag in a batch with NO damage word at the agent. Before the word became
+    # a term this read post_mortem (gi > -1) and the whole test stayed green.
+    no_word = kinds([gain(13), death])
+    LEDGER.ok(no_word == {"unexplained": 1},
+              f"KNOWN-BAD ARM (rv1): the orphan WITH the death flag but in a "
+              f"batch carrying NO damage word at the agent reads {no_word}",
+              "expected {'unexplained': 1}. A wordless death batch has no "
+              "killing word for the gain to sit after, so `last_word` is -1 and "
+              "the order term is vacuous; the word itself must be present. The "
+              "corpus has one such batch (20260821T152147 :63150 t 490.312, a "
+              "non-damage death, no gain in it) and a stray gain there must "
+              "redden 4b, not hide")
     control = kinds([gain(6), word(5.625), death])
     LEDGER.ok(control == {"damage": 1},
               f"CONTROL: a gain a pooled word fits reads damage even in a death "
               f"batch: {control}",
-              "expected {'damage': 1}. The 13 killing words in the corpus are "
+              "expected {'damage': 1}. The 16 killing words in the corpus's "
+              "death batches (16 of 17 armed observer deaths carry one) are "
               "present and their gains read this way; the post-mortem kind is "
               "reached only when the pool has nothing left for the gain")
 
@@ -815,14 +852,20 @@ def _classify_gains(agg, stamp, conn, msgs, adrenjoin):
       summed       25 + one pooled word's round(%) -- a strike and a hit taken
                    in one message, JARIN's reading of its three
       post_mortem  (CASTAI-Z2, 2026-09-29) no pooled word fits, the batch
-                   carries the agent's DEATH flag (0x0026 [agent, 4]) and the
-                   gain sits AFTER the batch's last damage word at the agent:
-                   a hit landing in the tick the agent died in, after the blow
+                   carries the agent's DEATH flag (0x0026 [agent, 4]), the
+                   batch carries at least one damage word at the agent (the
+                   killing word), and the gain sits AFTER the last of them: a
+                   hit landing in the tick the agent died in, after the blow
                    that killed. Retail sends its gain and not its word -- 2 of
-                   2 on 20260929T100038, and the 13 killing words in the corpus
-                   are all present. Both terms are load-bearing: section 3b
-                   drops each in turn and the same orphan goes back to
-                   `unexplained`
+                   2 on 20260929T100038. OBSERVED, counted by z2adr-probe2.py
+                   (every batch carrying 0x0026 [me, 4] on an ARMED
+                   connection): the corpus holds 17 armed observer deaths, 16
+                   with a killing word in the death batch and 1 with no damage
+                   word at all (20260821T152147 :63150 t 490.312, a non-damage
+                   death) -- which is why the word is a term: without it
+                   `last_word` is -1 and every gain sits "after" it. All three
+                   terms are load-bearing: section 3b drops each in turn and
+                   the same orphan goes back to `unexplained`
       unexplained  anything else, which is what the check refuses
     """
     batches = collections.defaultdict(list)
@@ -854,7 +897,11 @@ def _classify_gains(agg, stamp, conn, msgs, adrenjoin):
                 elif g - STRIKE_UNITS in pool:
                     pool.remove(g - STRIKE_UNITS)
                     kind = "summed"
-                elif dies and gi > last_word:
+                elif dies and words and gi > last_word:
+                    # `words` is the third term (rv1): with no damage word at
+                    # the agent, `last_word` is -1 and `gi > -1` holds for
+                    # every gain, so a wordless death batch would admit any
+                    # orphan. The corpus has one (20260821T152147 :63150).
                     kind = "post_mortem"
                 else:
                     kind = "unexplained"
@@ -1376,10 +1423,15 @@ def section_populations(agg):
               f"on :51090 -- OBSERVED) and 16 is one Smite Hex at 480 (no visual "
               f"names its source -- RECONSTRUCTION). Retail sends the gain and "
               f"drops the word for a hit that lands on an agent already dead in "
-              f"the same tick; the 13 killing words in the corpus are all "
-              f"present and unclamped. OUR SERVER sends neither for a dead "
-              f"player (`player_dead` at the grant sites) -- escalated, not "
-              f"edited")
+              f"the same tick. OBSERVED (z2adr-probe2.py, every 0x0026 [me, 4] "
+              f"batch on an armed connection): 17 armed observer deaths in the "
+              f"corpus, 16 with a killing word in the death batch and 1 with no "
+              f"damage word at all (20260821T152147 :63150 t 490.312) -- the "
+              f"kind requires the word. The killing word is unclamped: "
+              f"RECONSTRUCTION, health integrated from the damage words alone, "
+              f"regen/degen (props 43, 62) not integrated. OUR SERVER sends "
+              f"neither for a dead player (`player_dead` at the grant sites) -- "
+              f"escalated, not edited")
 
 
 def section_self_scope(agg):
