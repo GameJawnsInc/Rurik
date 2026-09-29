@@ -6411,14 +6411,20 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   **24**. Needs the vault and a free port 6112; ~9 s),
   `toolkit/authsrv/test_dispatch.py` (**2026-09-29, CASTAI-Z2: data only, no check
   changed. `DROPPED_ON_PURPOSE` gains `0x0042` (UNNAMED, n = 2, `[agent_id]`: both sends
-  name the Zaishen Fighter at the timestamp of a TARGET_SELECT of it -- dead at the first,
-  `0x00F1 [9, 0x10]` + `0x0026 [9, 8]`, alive with effects 0x800 at the second; "one input
-  sends both" is a RECONSTRUCTION; the next s2c `0x0022 [9, 0]` follows the first send by
-  37 ms and a second TARGET_SELECT `[9, 0]` by 11 ms, two candidates, neither proven; its
-  evidence on the row) and `retail_c2s.json` is regenerated over 116 connections / 61
-  opcodes; §10's REVERSE guard now reads 61 retail opcodes, 36 handled, 25 dropped on
-  purpose, none undecided. The `0x0044` row gains its thunk (0x00816650, callers
-  0x004E5564 / 0x004ED37A, the same GmView sites). 54 checks unchanged.** **2026-09-28, 0x00A3 named: data only, no check
+  name the Zaishen Fighter at the timestamp of a TARGET_SELECT of it; the PLAYER (agent 7
+  by PLAYER_INFO) was DEAD at the first -- `0x00F1 [7, 0x10]` + `0x0026 [7, 4]` 5.3 s
+  earlier, the Fighter dead too -- and 21 ms revived at the second; "one input sends both"
+  is a RECONSTRUCTION; after the first send came `0x00E6`, a second TARGET_SELECT `[9, 0]`,
+  then in one chunk `0x0021` WORLD_REMOVE_AGENT of agents 1 and 2 and the next `0x0022`,
+  `[9, 0]`, whose RETURN `0x0022 [7, 1]` came at 259.459 with their re-creates and the
+  player's revival -- control handed to the henchman while the player was dead and back
+  when it revived, RECONSTRUCTION at n = 1; the static read of the predicate 0x004E0830
+  (bit 0x10 of a SECOND agent's word, RECONSTRUCTION that it is the death bit) and the
+  restated run -- vary the PLAYER's life state -- are on the row) and `retail_c2s.json` is
+  regenerated over 116 connections / 61 opcodes; §10's REVERSE guard now reads 61 retail
+  opcodes, 36 handled, 25 dropped on purpose, none undecided. The `0x0044` row gains its
+  thunk (0x00816650, callers 0x004E5564 / 0x004ED37A, the same GmView sites). 54 checks
+  unchanged.** **2026-09-28, 0x00A3 named: data only, no check
   changed. `DROPPED_ON_PURPOSE`'s `0x00A3` reason now reads ZAISHEN_CHALLENGE_CANCEL, named
   medium in `overrides.json` by the owner's decision (2d9a7547; n=1 plus GWCA / Py4GW's
   PARTY_CANCEL_ENTER_CHALLENGE, the PARTY_LEAVE precedent). Still dropped: no arena, no
@@ -6498,26 +6504,41 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   longer named alone; untriaged over the live census). Triaged UNNAMED at n = 2 on the
   0x00A3 precedent: both sends name the Zaishen Fighter henchman at the very timestamp
   of a TARGET_SELECT of it ("one input, two messages" is a RECONSTRUCTION; the one
-  loopback arrival has both in ONE frame), the Fighter was DEAD at the first send
-  (`0x00F1 [9, 0x10]` + `0x0026 [9, 8]` since 243.458) and ALIVE at the second (effects
-  0x800), the next s2c after the first send was `0x0022 [9, 0]` (the corpus's only such
-  value) 37 ms later -- but 11 ms after a SECOND TARGET_SELECT `[9, 0]` at 245.268, so
-  it has two candidates and is nobody's proven answer -- no upstream names our 0x0042,
-  and the sender is read to its module (GmView, where the same two call sites also send
-  `0x0044`). Dropped on purpose -- the reason is `test_dispatch.DROPPED_ON_PURPOSE`'s
-  row -- and not armed. +5: §4's decision check (`>= 2`, a later send is confirming
-  evidence), an exact per-tape witness of both sends with their same-timestamp c2s,
-  EVERY message either way within 50 ms after (round 1 kept only s2c there and so hid the
-  competing TARGET_SELECT -- the reviewer's block) and the target's last `0x00F1` /
-  `0x0026` words, a second exact witness of all 11 TARGET_SELECTs of agent 9 on the tape
-  (2 with a 0x0042, one dead and one alive; 9 without, 4 dead) with their state (both
-  scoped to the tape: the same capture planted under a future stamp leaves the run green;
-  a planted third send, the competing TARGET_SELECT dropped from the decode, or the
-  target's death word flipped each reddens one), and two vault-free arms (the row alone
-  triages it; KNOWN-BAD: without the row it is UNTRIAGED, named alone). `--write`
-  regenerated `retail_c2s.json` (116 connections, 31 captures, 14,907 c2s, 61 opcodes):
-  38 rows byte-equal, 22 moved by exactly the new tape's own contribution, 1 new. 50
-  checks with the vault; floor 20 → 22, measured bare (22, 6 declared skips).** **2026-09-28, 0x00A3 named: c2s `0x00A3` is
+  loopback arrival has both in ONE frame); the PLAYER (agent 7 by PLAYER_INFO) was DEAD
+  at the first send (`0x00F1 [7, 0x10]` + `0x0026 [7, 4]` at 239.957, 5.3 s earlier; the
+  Fighter too, since 243.458) and 21 ms out of a death at the second (`0x0026 [7, 5]` at
+  402.778); after the first send came `0x00E6`, a second TARGET_SELECT `[9, 0]`, then in
+  one chunk `0x0021` WORLD_REMOVE_AGENT of agents 1 and 2 and the next `0x0022`, `[9, 0]`
+  (the corpus's only such value), whose RETURN `0x0022 [7, 1]` came at 259.459 with the
+  re-creates of 1 and 2 and the player's revival -- control handed to the henchman while
+  the player was dead and back when it revived (RECONSTRUCTION, n = 1; which of the two
+  c2s 11 and 37 ms before the handoff drew it is not shown); no upstream names our
+  0x0042, and the sender is read to its module (GmView, where the same two call sites
+  also send `0x0044`, and where 0x0042's predicate 0x004E0830 tests bit 0x10 of a SECOND
+  agent's word -- RECONSTRUCTION that it is the death bit). Dropped on purpose -- the
+  reason is `test_dispatch.DROPPED_ON_PURPOSE`'s row -- and not armed. +8: §4's decision
+  check (`>= 2`, a later send is confirming evidence), five exact witnesses all scoped to
+  the tape (the same capture planted under a future stamp leaves the run green): both
+  sends with their same-timestamp c2s, EVERY message either way within 50 ms after (round
+  1 kept only s2c there and so hid the competing TARGET_SELECT -- the reviewer's first
+  block) and the target's AND the player's last `0x00F1` / `0x0026` words (round 2 read
+  only the target's and wrote "neither life-state nor first-select separates them" -- the
+  second block); all 11 TARGET_SELECTs of agent 9 with the target's, the player's and the
+  controlled agent's state (the two with a 0x0042 are the only ones sent while the player
+  was dead or just revived; two of the nine without fall inside that same death, one of
+  them with control already on agent 9); the :62925 control track (the death, the handoff
+  chunk, the return batch, a second death that drew neither); every `0x0022` on the
+  tape's 11 connections (that pair is the only mid-connection control change); every
+  TARGET_SELECT sent while the player was dead (five: four in that death, one of a foe
+  with no 0x0042); and two vault-free arms (the row alone triages it; KNOWN-BAD: without
+  the row it is UNTRIAGED, named alone). Injection: the player's death words at 239.957
+  flipped to alive reddens witnesses 1, 2, 3 and 5; the return `0x0022 [7, 1]` dropped
+  reddens 3 and 4; the :51090 revival moved past the second send reddens 1, 2 and 5; the
+  target's death word flipped reddens 1 and 2; a planted third send reddens 1 alone.
+  `--write` regenerated `retail_c2s.json` (116 connections, 31 captures, 14,907 c2s, 61
+  opcodes): 38 rows byte-equal, 22 moved by exactly the new tape's own contribution, 1
+  new. 53 checks with the vault; floor 20 → 22, measured bare (22, 6 declared
+  skips).** **2026-09-28, 0x00A3 named: c2s `0x00A3` is
   ZAISHEN_CHALLENGE_CANCEL, medium, the owner's decision (2d9a7547; `overrides.json`, n=1
   with GWCA / Py4GW's PARTY_CANCEL_ENTER_CHALLENGE corroborating, the PARTY_LEAVE
   precedent). §4's per-opcode decision checks now want all three new opcodes named medium
