@@ -56,9 +56,11 @@ TWO ROWS THE JOIN MUST NOT COUNT AS THE ANNOUNCED SKILL'S (2026-09-29, CASTAI-Z2
       cause's latest announce ahead of the word, i.e. the skill whose completion the
       payoff rides, so P2 keyed on it read one payoff under five skill ids. A row is
       a payoff when (a) the wire names it (`named` is not None and differs from
-      `skill`), or (b) it is such a word's SIBLING (the same cause, the same batch --
-      the foe beside the observer takes the same trigger and carries no [10] of its
-      own), or (c) the announce named an ALLY of the caster (the same allegiance
+      `skill`), or (b) it is such a word's SIBLING -- the same cause, the same batch,
+      onto a FOE of the caster (the allegiance tokens differ), and the ONLY word from
+      that cause onto that body in the batch: the foe beside the observer takes the
+      same trigger once and carries no [10] of its own -- or (c) the announce named
+      an ALLY of the caster (the same allegiance
       token on the 0x0020 creates; a targetless announce is the caster itself) and
       the word landed on a FOE -- a skill cast at an ally has no target damage of
       its own -- AND the wire has already backed both halves of that reading on the
@@ -70,6 +72,23 @@ TWO ROWS THE JOIN MUST NOT COUNT AS THE ANNOUNCED SKILL'S (2026-09-29, CASTAI-Z2
       reported): a self-targeted nuke's word, or a stray value beside a witnessed
       trigger, stays a value P2 can see. `classify_payoffs` is the rule, applied by
       `events` and again by `score` (an injected row is judged by its shape).
+
+      THE SIBLING'S VALUE (the round-3 review): (b) is a structural rule and sets a
+      word aside whatever its amount, so a sibling whose (target, value) does not
+      recur on its connection among payoff-shaped rows ((a), (b), or ally-cast) is
+      flagged `sibling_unbacked` -- still set aside, because on 20260929T100038 the
+      twelve such rows are the Fighter's 17 and 15 points at a maximum that walks OFF
+      the wire (the henchmen's property 42 never comes; the observer's own maxima
+      walk 480 -> 408 -> 418 -> 427 -> 437 -> 446 in ~10-point steps), and counting
+      them would put two two-hit pairs on the tape for a reader limitation -- but
+      reported by `payoff_census`, and pinned exact per tape by test_skilldamage 12
+      with the whole (connection, target, value) multiset of the class. What a
+      planted stray breaks: a second word from the cause onto the body in the batch
+      (UNIQUE) or a word onto the caster's ally (FOE) is counted, never a sibling. What
+      it does not: a single stray onto a foe in an (a)-batch that carries no other
+      word from that cause onto that foe is set aside and only REPORTED -- on the
+      Zaishen-2 tape 38 of its 114 (a)-batches have no word onto the Fighter and ~112
+      none onto the Archer / the Mage, so the residual is that many slots per tape.
   CONVERTED  a `+0.0` word (bits 0x00000000) with a property-55 heal onto the same
       target in the same batch: Reversal of Fortune took the hit (healjoin P6, the
       RB tape: a fully converted hit's word is +0.0, never -0.0). It carries no
@@ -157,11 +176,14 @@ def events(seq):
     wire names only the observer's damage, so None elsewhere), "ann_target"
     (the announcement's target; the caster itself for the targetless form),
     "ally_cast" (that target shares the cause's allegiance token and this
-    word's target does not), "converted" (a +0.0 word with a property-55 heal
-    onto the same target in the batch), "batch" (its index in the sequence),
-    and from `classify_payoffs`: "payoff", "why" ("named" / "sibling" /
-    "ally-cast" / None) and "ally_cast_unbacked" (the docstring's (c) shape
-    without its witnesses -- NOT set aside)}.
+    word's target does not), "foe" (this word's target and its cause carry
+    different allegiance tokens, both seen), "converted" (a +0.0 word with a
+    property-55 heal onto the same target in the batch), "batch" (its index in
+    the sequence), and from `classify_payoffs`: "payoff", "why" ("named" /
+    "sibling" / "ally-cast" / None), "ally_cast_unbacked" (the docstring's (c)
+    shape without its witnesses -- NOT set aside) and "sibling_unbacked" (a (b)
+    row whose (target, value) is a singleton on the connection -- set aside,
+    flagged, reported)}.
     """
     ann = {}
     maxhp = {}
@@ -219,9 +241,11 @@ def events(seq):
                          "twin": seen[key] > 1,
                          "named": named_now.get(target),
                          "ally_cast": ally_cast,
+                         "foe": (cause in alleg and target in alleg
+                                 and alleg[target] != alleg[cause]),
                          "converted": v[4] == 0 and target in healed,
                          "payoff": False, "why": None, "ally_cast_unbacked": False,
-                         "batch": nb})
+                         "sibling_unbacked": False, "batch": nb})
     # Ticks: a 58-batch value also seen as a no-58 hit nearby.
     bare = collections.defaultdict(list)
     for r in rows:
@@ -244,11 +268,15 @@ def classify_payoffs(rows):
     Decided AFTER the ticks: a word the wire names as another skill's is a payoff
     unless it is the caster's own periodic tick riding the batch (I2r: Fire Storm's
     tick in a Fireball batch is named 197, and stays a tick); its siblings (the same
-    cause, the same batch) ride the same trigger; an ally-cast's word onto a foe is
-    one only where the same connection has ALREADY named that (cause, skill)'s
-    completion as another skill's -- an (a) row -- and named that (target, value) --
-    an (a) or (b) row. `score` applies this again, so a row injected past `events`
-    is judged by its shape, not by the flag it was handed."""
+    cause, the same batch, onto a FOE of the cause, the only word from that cause
+    onto that body in the batch) ride the same trigger -- a sibling whose (target,
+    value) is a singleton on the connection among payoff-shaped rows is flagged
+    `sibling_unbacked` (the docstring: set aside, reported, pinned per tape); an
+    ally-cast's word onto a foe is one only where the same connection has ALREADY
+    named that (cause, skill)'s completion as another skill's -- an (a) row -- and
+    named that (target, value) -- an (a) or (b) row. `score` applies this again, so
+    a row injected past `events` is judged by its shape, not by the flag it was
+    handed."""
     groups = collections.defaultdict(list)
     for r in rows:
         groups[(r.get("capture"), r.get("connection"))].append(r)
@@ -256,17 +284,22 @@ def classify_payoffs(rows):
         live = [r for r in g if r["skill"] is not None and not r["tick"]]
         renamed = {(r["batch"], r["cause"]) for r in live
                    if r["named"] is not None and r["named"] != r["skill"]}
+        words = collections.Counter((r["batch"], r["cause"], r["target"]) for r in live)
         trigger_named, value_named = set(), set()
         for r in g:
-            r["why"], r["payoff"], r["ally_cast_unbacked"] = None, False, False
+            r["why"], r["payoff"] = None, False
+            r["ally_cast_unbacked"], r["sibling_unbacked"] = False, False
         for r in live:
             if r["named"] is not None and r["named"] != r["skill"]:
                 r["why"] = "named"
                 trigger_named.add((r["cause"], r["skill"]))
-            elif (r["batch"], r["cause"]) in renamed:
+            elif ((r["batch"], r["cause"]) in renamed and r["foe"]
+                  and words[(r["batch"], r["cause"], r["target"])] == 1):
                 r["why"] = "sibling"
             if r["why"] is not None:
                 value_named.add((r["target"], r["value"]))
+        pool = collections.Counter((r["target"], r["value"]) for r in live
+                                   if r["why"] is not None or r["ally_cast"])
         for r in live:
             if r["why"] is None and r["ally_cast"]:
                 backed = ((r["cause"], r["skill"]) in trigger_named
@@ -274,6 +307,8 @@ def classify_payoffs(rows):
                 if backed:
                     r["why"] = "ally-cast"
                 r["ally_cast_unbacked"] = not backed
+            elif r["why"] == "sibling":
+                r["sibling_unbacked"] = pool[(r["target"], r["value"])] < 2
             r["payoff"] = r["why"] is not None
     return rows
 
@@ -450,7 +485,9 @@ def payoff_census(rows):
     order, whose completion the payoff rides), "named": {S: n} (the wire's own name,
     observer words), "why": {"named" / "sibling" / "ally-cast": n}, "targets": {agent:
     n}, "unbacked": n (the (c) shape without its witnesses -- NOT set aside; counted
-    here so a tape where the rule could not reach a body is read, not absorbed)}.
+    here so a tape where the rule could not reach a body is read, not absorbed),
+    "sibling_unbacked": n (a (b) row whose (target, value) is a singleton on its
+    connection -- set aside, flagged; the docstring says why it is not counted)}.
     Cast-kind rows only."""
     cast = [r for r in rows if r["kind"] == "cast" and not r["tick"]]
     pay = [r for r in cast if r["payoff"]]
@@ -461,6 +498,7 @@ def payoff_census(rows):
         "why": dict(collections.Counter(r["why"] for r in pay)),
         "targets": dict(collections.Counter(r["target"] for r in pay)),
         "unbacked": sum(1 for r in cast if r["ally_cast_unbacked"]),
+        "sibling_unbacked": sum(1 for r in cast if r["sibling_unbacked"]),
     }
 
 
