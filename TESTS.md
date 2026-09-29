@@ -6410,11 +6410,15 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   each raises the floor from inside its own branch, so a green run here prints
   **24**. Needs the vault and a free port 6112; ~9 s),
   `toolkit/authsrv/test_dispatch.py` (**2026-09-29, CASTAI-Z2: data only, no check
-  changed. `DROPPED_ON_PURPOSE` gains `0x0042` (UNNAMED, n = 2, `[agent_id]`: the Zaishen
-  Fighter clicked at the timestamp of a TARGET_SELECT, its evidence on the row) and
-  `retail_c2s.json` is regenerated over 116 connections / 61 opcodes; §10's REVERSE
-  guard now reads 61 retail opcodes, 36 handled, 25 dropped on purpose, none undecided.
-  54 checks unchanged.** **2026-09-28, 0x00A3 named: data only, no check
+  changed. `DROPPED_ON_PURPOSE` gains `0x0042` (UNNAMED, n = 2, `[agent_id]`: both sends
+  name the Zaishen Fighter at the timestamp of a TARGET_SELECT of it -- dead at the first,
+  `0x00F1 [9, 0x10]` + `0x0026 [9, 8]`, alive with effects 0x800 at the second; "one input
+  sends both" is a RECONSTRUCTION; the next s2c `0x0022 [9, 0]` follows the first send by
+  37 ms and a second TARGET_SELECT `[9, 0]` by 11 ms, two candidates, neither proven; its
+  evidence on the row) and `retail_c2s.json` is regenerated over 116 connections / 61
+  opcodes; §10's REVERSE guard now reads 61 retail opcodes, 36 handled, 25 dropped on
+  purpose, none undecided. The `0x0044` row gains its thunk (0x00816650, callers
+  0x004E5564 / 0x004ED37A, the same GmView sites). 54 checks unchanged.** **2026-09-28, 0x00A3 named: data only, no check
   changed. `DROPPED_ON_PURPOSE`'s `0x00A3` reason now reads ZAISHEN_CHALLENGE_CANCEL, named
   medium in `overrides.json` by the owner's decision (2d9a7547; n=1 plus GWCA / Py4GW's
   PARTY_CANCEL_ENTER_CHALLENGE, the PARTY_LEAVE precedent). Still dropped: no arena, no
@@ -6493,19 +6497,27 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   and 3 of 45 went red as designed (missing from the file; the 0x0009 known-bad no
   longer named alone; untriaged over the live census). Triaged UNNAMED at n = 2 on the
   0x00A3 precedent: both sends name the Zaishen Fighter henchman at the very timestamp
-  of a TARGET_SELECT of it (one input, two messages -- the one loopback arrival has both
-  in ONE frame), one is answered by s2c `0x0022 [9, 0]` (the corpus's only such value),
-  no upstream names our 0x0042, and the sender is read to its module (GmView, where the
-  same two call sites also send `0x0044`). Dropped on purpose -- the reason is
-  `test_dispatch.DROPPED_ON_PURPOSE`'s row -- and not armed. +4: §4's decision check
-  (`>= 2`, a later send is confirming evidence), an exact per-tape witness of both sends
-  with their frame-mates and the reply (scoped to the tape: the same capture planted
-  under a future stamp leaves the run green; a planted third send reddens it), and two
-  vault-free arms (the row alone triages it; KNOWN-BAD: without the row it is UNTRIAGED,
-  named alone). `--write` regenerated `retail_c2s.json` (116 connections, 31 captures,
-  14,907 c2s, 61 opcodes): 38 rows byte-equal, 22 moved by exactly the new tape's own
-  contribution, 1 new. 49 checks with the vault; floor 20 → 22, measured bare (22, 6
-  declared skips).** **2026-09-28, 0x00A3 named: c2s `0x00A3` is
+  of a TARGET_SELECT of it ("one input, two messages" is a RECONSTRUCTION; the one
+  loopback arrival has both in ONE frame), the Fighter was DEAD at the first send
+  (`0x00F1 [9, 0x10]` + `0x0026 [9, 8]` since 243.458) and ALIVE at the second (effects
+  0x800), the next s2c after the first send was `0x0022 [9, 0]` (the corpus's only such
+  value) 37 ms later -- but 11 ms after a SECOND TARGET_SELECT `[9, 0]` at 245.268, so
+  it has two candidates and is nobody's proven answer -- no upstream names our 0x0042,
+  and the sender is read to its module (GmView, where the same two call sites also send
+  `0x0044`). Dropped on purpose -- the reason is `test_dispatch.DROPPED_ON_PURPOSE`'s
+  row -- and not armed. +5: §4's decision check (`>= 2`, a later send is confirming
+  evidence), an exact per-tape witness of both sends with their same-timestamp c2s,
+  EVERY message either way within 50 ms after (round 1 kept only s2c there and so hid the
+  competing TARGET_SELECT -- the reviewer's block) and the target's last `0x00F1` /
+  `0x0026` words, a second exact witness of all 11 TARGET_SELECTs of agent 9 on the tape
+  (2 with a 0x0042, one dead and one alive; 9 without, 4 dead) with their state (both
+  scoped to the tape: the same capture planted under a future stamp leaves the run green;
+  a planted third send, the competing TARGET_SELECT dropped from the decode, or the
+  target's death word flipped each reddens one), and two vault-free arms (the row alone
+  triages it; KNOWN-BAD: without the row it is UNTRIAGED, named alone). `--write`
+  regenerated `retail_c2s.json` (116 connections, 31 captures, 14,907 c2s, 61 opcodes):
+  38 rows byte-equal, 22 moved by exactly the new tape's own contribution, 1 new. 50
+  checks with the vault; floor 20 → 22, measured bare (22, 6 declared skips).** **2026-09-28, 0x00A3 named: c2s `0x00A3` is
   ZAISHEN_CHALLENGE_CANCEL, medium, the owner's decision (2d9a7547; `overrides.json`, n=1
   with GWCA / Py4GW's PARTY_CANCEL_ENTER_CHALLENGE corroborating, the PARTY_LEAVE
   precedent). §4's per-opcode decision checks now want all three new opcodes named medium
