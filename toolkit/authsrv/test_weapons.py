@@ -265,7 +265,7 @@ def section_record_rows():
     print("\n2b. the rows this file carries for a bare machine, against the vault's own")
     skills = agents.WORLD.rows("skills")
     if not full_skills_table(skills):
-        LEDGER.skip("section 2b", "the full skills table (vault/content) is absent -- 1 check")
+        LEDGER.skip("section 2b", "the full skills table (vault/content) is absent -- 2 checks")
     else:
         # RECORD was copied from build 38797's rows (RECORD_BUILD), so it is compared with
         # 38797's rows: the vault's own where the loaded row records 38797, else the 38797

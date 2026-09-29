@@ -28,6 +28,50 @@ move back.
 
 ---
 
+### The content overlay follows build 38888, and c2s 0x00A3 is named -- 2026-09-28 -- **the owner's rulings ("regenerate content from 38888", "name 0x00A3"); the PIN stays 38797; a guard keeps skill 3446 off a 38797 client**
+
+**0x00A3** (`2d9a7547`): named `ZAISHEN_CHALLENGE_CANCEL`, medium, on the PARTY_LEAVE precedent
+(OBSERVED n = 1 on the Zaishen tape, CORROBORATED by two upstreams' PARTY_CANCEL_ENTER_CHALLENGE).
+It is still dropped on purpose: this server serves no arena, so there is no entry to cancel.
+
+**The regeneration** (studies/crossbuild §10). The client-table extractors were re-run with
+`--exe` naming the 38888 snapshot:
+- `skills`: 144 rows moved, and one new id, 3446.
+- `skill_labels`: 831 drops out.
+- attributes, attribute_cost, composite, heroes and effects: rows identical; only the stamp
+  moves.
+- `item_modifiers`: stays 38797's. Its extractor reads labels and templates at 38797 call
+  sites and returns them empty on 38888.
+
+It was staged, never written into the vault before the merge. It was proved on a SHADOW vault:
+every vault directory junctioned in except `content/`, with `RURIK_VAULT` pointed at it.
+
+**The tests.** Seven tests pinned 38797 content numbers or the 38797 table. Each was re-keyed on
+the build of the row that is loaded: the 38797 literals stay exact, and a build with no
+expectation is a named FAIL. Each now passes on BOTH vaults.
+- `test_agentlife`, `test_instantannounce`, `test_mechanics`: lane beh.
+- `test_skilldamage`: hexjoin now predicts each tape from its own build's client table.
+- `test_weaponcensus`, `test_weapons`.
+- `test_skilldesc`: the file on disk is a fresh emit of its own header's exe + archive. The
+  archive is bound to the build by a measured templates digest.
+
+**Rust 204:** the only hand row that copied a moved 38797 number (two independent scans agree).
+It now carries 10 / 85, and the client-vs-wiki contest resolves for the wiki on 38888.
+
+**The guard** (`3af1a3ed`, `0d89fdcc`, `2296ca0d` + the orchestrator's lock). A 38797 client
+has no record of 3446 (its table holds 3,443 records; 38888's holds 3,476).
+- `SKILL_RECORD_COUNT_BY_BUILD` is measured per snapshot.
+- At startup, content rows past the served client's table are dropped and named.
+- Flag bars and content rows that name such an id are refused.
+- The sandbox refuses such a bar and filters its unlocks.
+- Stored character state is bounded at READ time by the served build and never rewritten.
+
+Reviews: lane beh APPROVE; lane tab APPROVE; lane fin BLOCK x2, both repaired; guard BLOCK x3,
+each repaired.
+
+**The swap:** the 38797 files were moved to `vault/research/content-38797-2026-09-28/` and the
+38888 set was copied into `vault/content/` from `main`, after the merge.
+
 ### CASTAI-ZF21: the two interrupters' damage clauses -- 2026-09-28 -- **Distracting Shot 399 deals its row's armour-ignoring amount in place of the weapon's; Savage Shot 426's +13...28 lands only on a target activating a spell; both OBSERVED on the Zaishen tape, both behind their own revert**
 
 **What the tape said** (studies/monsterai §18.2, CASTAI-ZF21; `20260928T103123`, the
