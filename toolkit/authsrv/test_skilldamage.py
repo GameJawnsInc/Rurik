@@ -49,7 +49,7 @@ import vaultpath  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-29 CASTAI-Z2 (the z2-sdmg lane) +7, all vault-only (sec.12: the pin exact under the payoff / converted classes, the second Zaishen tape's census exact, the Zealot's Fire finding, the classify=False arm, the wire's [10]-naming census; sec.12c: G4 exact on the tape with G4r, the removal-by-time arm): MEASURED, a vault run gives 126 (was 119, 6 red); floor unchanged -- a bare run still dies at section 1; 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 # vault/content/skill_labels.toml's label-tier row count per build its header declares,
@@ -1107,15 +1107,25 @@ def main():
         LEDGER.skip("12. the corpus (spellhitjoin)",
                     f"no live corpus to read on this machine: {exc!r}")
         return LEDGER.verdict()
-    unnamed, set_aside, refused_conns = [], [], []
-    rows = spellhitjoin.census(unnamed=unnamed, set_aside=set_aside, refused=refused_conns)
+    unnamed, set_aside, refused_conns, named_census = [], [], [], []
+    rows = spellhitjoin.census(unnamed=unnamed, set_aside=set_aside, refused=refused_conns,
+                               named=named_census)
     sc = spellhitjoin.score(rows)
     # THE ZAISHEN CAPTURE (2026-09-28, CASTAI-Z1): P2 was scored before it on every capture;
     # it is scored so still on every capture BUT that one, whose multi-valued pairs are
     # asserted exactly beside it (the new facts; spellhitjoin P2 FAILED there).
     ZAISHEN = "20260928T103123"
+    # THE SECOND ZAISHEN CAPTURE (2026-09-29, CASTAI-Z2, the Smiting Monks): P2 holds there
+    # once the join stops counting two classes of word as the announced skill's -- a PAYOFF
+    # riding the batch of the skill that triggered it (Zealot's Fire 271, named by the wire's
+    # own [10, obs, 271]) and a CONVERTED +0.0 (Reversal of Fortune) -- spellhitjoin's
+    # docstring. The pin (every capture before it) is asserted to the digit below, the
+    # tape's own census exact, and the classes are shown load-bearing on a known-bad arm.
+    ZAISHEN2 = "20260929T100038"
     sc_rest = spellhitjoin.score([r for r in rows if r["capture"] != ZAISHEN])
     rows_z = [r for r in rows if r["capture"] == ZAISHEN]
+    rows_z2 = [r for r in rows if r["capture"] == ZAISHEN2]
+    rows_pin = [r for r in rows if r["capture"] < ZAISHEN2]
     GAPPED = [(ZAISHEN, "10.0.0.210:65009->98.95.137.136:80")]
     check([x[:2] for x in set_aside] == GAPPED and all(x[2] for x in set_aside)
           and refused_conns == [],
@@ -1238,6 +1248,166 @@ def main():
           "(54 -> 29), not the hero's (54 -> 30); LAKESIDE's 48 -> 29 is the "
           "player's too",
           f"{sorted(sc['onto_player'])}")
+    # CASTAI-Z2 (2026-09-29, 20260929T100038). THE PIN FIRST: P2's census on every capture
+    # before the tape (Z1 set aside as above) reproduces the 2026-09-28 green run to the
+    # digit under the new classes -- 15 pairs over 85 hits, the four multi-valued pairs,
+    # the two penalty splits, the one two-hit pair, the four pairs onto the player -- and
+    # the classes set aside NOTHING there: the old numbers are unmoved by construction.
+    sc_pin = spellhitjoin.score([r for r in rows_pin if r["capture"] != ZAISHEN])
+    PIN_MULTI = {"54 222 29": [-0.24242, -0.2, -0.17143, -0.16429],
+                 "54 222 30": [-0.41803, -0.29286, -0.21311],
+                 "48 222 29": [-0.20168, -0.17143], "117 230 25": [-0.1875, -0.13125]}
+    check(sc_pin["pairs"] == 15 and sc_pin["pair_hits"] == 85 and sc_pin["multi_valued"] == PIN_MULTI
+          and sc_pin["penalty_split"] == {"48 222 29": {140: [-0.17143], 119: [-0.20168]},
+                                          "117 230 25": {480: [-0.13125], 336: [-0.1875]}}
+          and sc_pin["two_hit_two_valued"] == {"10 186 12": [-0.17658, -0.12973]}
+          and sorted(sc_pin["onto_player"]) == ["10 185 11", "117 230 25", "48 222 29", "54 222 29"]
+          and sc_pin["payoff_set_aside"] == 0 and sc_pin["converted_set_aside"] == 0
+          and sc_pin["ticks_set_aside"] == 12,
+          "THE PIN (every capture before 20260929T100038, Z1 set aside): P2's census under the "
+          "2026-09-29 classes reproduces the 2026-09-28 run to the digit -- 15 pairs over 85 "
+          "hits, the four multi-valued pairs, the two penalty splits, the one two-hit pair, the "
+          "four pairs onto the player, 12 ticks -- and the payoff and converted classes set aside "
+          "0 rows there",
+          str({k: sc_pin[k] for k in ("pairs", "pair_hits", "multi_valued", "penalty_split",
+                                      "two_hit_two_valued", "payoff_set_aside",
+                                      "converted_set_aside", "ticks_set_aside")}))
+    # THE TAPE, exact: every word a monk landed in the batch of its Mend Condition 275 /
+    # Reversal of Fortune 307 / Smite Hex 302 / Drain Enchantment 68 (and three under an
+    # announce of 2) is a PAYOFF -- 212 cast rows; the 103 onto the observer are every one
+    # named 271 (Zealot's Fire) by the wire's own [10, obs, 271]; 8 are those words' siblings
+    # (the same cause, the same batch, a body the wire does not name) and 101 stand on the
+    # ally-cast rule alone (the announce named an ally of the caster, the word landed on a
+    # foe); the takers 7 (the observer) / 9 (the Fighter) / 10 (the Mage) / 8 (the Archer).
+    # Ten converted +0.0 words (the Mage's Mind Burn x9 and one Fire Storm tick, Reversal of
+    # Fortune on the monk). With both set aside the tape's P2 is CLEAN: 14 pairs over 74
+    # hits, all Mind Burn, no multi-valued pair, no two-hit pair -- so P2 is scored on it
+    # above with every other capture, and a copy under a FUTURE stamp stays clean too.
+    pc = spellhitjoin.payoff_census(rows_z2)
+    sc_z2 = spellhitjoin.score(rows_z2)
+    conv_z2 = collections.Counter((r["cause"], r["skill"]) for r in rows_z2
+                                  if r["kind"] == "cast" and r["converted"] and not r["tick"]
+                                  and not r["payoff"])
+    zero_noheal = [(r["capture"], r["cause"], r["target"]) for r in rows
+                   if r["kind"] == "cast" and r["value"] == 0.0 and math.copysign(1, r["value"]) > 0
+                   and not r["converted"] and not r["tick"]]
+    future = [dict(r, capture="20270101T000000") for r in rows_z2]
+    sc_future = spellhitjoin.score([r for r in rows if r["capture"] != ZAISHEN] + future)
+    check(pc == {"rows": 212, "by_announced": {302: 24, 68: 18, 275: 114, 307: 53, 2: 3},
+                 "named": {271: 103}, "renamed": 103, "sibling": 8, "ally_cast": 101,
+                 "targets": {7: 103, 9: 98, 10: 9, 8: 2}}
+          and sc_z2["payoff_set_aside"] == 212 and sc_z2["converted_set_aside"] == 10
+          and conv_z2 == {(10, 185): 9, (10, 197): 1} and zero_noheal == []
+          and (sc_z2["pairs"], sc_z2["pair_hits"], sc_z2["skills"]) == (14, 74, [185])
+          and sc_z2["multi_valued"] == {} and sc_z2["two_hit_two_valued"] == {}
+          and set(sc_future["multi_valued"]) - set(sc_future["penalty_split"]) <= PENALTY_SPLIT
+          and sc_future["pairs"] == sc_rest["pairs"] + 14,
+          "on 20260929T100038 (exact, per tape): 212 cast words are a PAYOFF riding the batch "
+          "of the monk's Mend Condition / Reversal of Fortune / Smite Hex / Drain Enchantment "
+          "(275 x114, 307 x53, 302 x24, 68 x18, 2 x3) -- the 103 onto the observer every one "
+          "named 271 Zealot's Fire by the wire's [10, obs, 271], 8 their siblings, 101 on the "
+          "ally-cast rule; 10 converted +0.0 words (Mind Burn x9, a Fire Storm tick), each "
+          "with its heal beside it, and no cast +0.0 anywhere in the corpus without one; with "
+          "both set aside the tape's P2 is CLEAN (14 Mind Burn pairs over 74 hits, no "
+          "multi-valued pair, no two-hit pair), and its copy under a future stamp leaves P2 "
+          "holding",
+          str((pc, sc_z2["converted_set_aside"], dict(conv_z2), zero_noheal,
+               (sc_z2["pairs"], sc_z2["pair_hits"], sc_z2["skills"]), sc_z2["multi_valued"],
+               sc_future["multi_valued"])))
+    # THE FINDING the classes uncover (exact, per tape): Zealot's Fire onto the observer, read
+    # at the first maximum the observer held that makes the word whole (F46, current first), is
+    # SEVERAL values -- 22 x57 and 38 x29 with their doubles 44 x3 / 76 x2 and eight stragglers
+    # -- so P2 re-stated onto the payoff's OWN skill would FAIL here as it did for Z1's Mind
+    # Burn; the cause is UNMEASURED (the observer's armour is off the wire; 38 / 22 = 2^(31/40)
+    # fits neither a bare piece, 2^(40/40), nor Frenzy, 2; Smite Hex's 55 words onto the same
+    # observer show the same 1.72 over the Fighter's 75). A FINDING, not absorbed.
+    held = collections.defaultdict(set)
+    for r in rows_z2:
+        if r["maxhp"] is not None:
+            held[(r["connection"], r["target"])].add(r["maxhp"])
+    zf_pts, zf_unwhole = collections.Counter(), []
+    for r in rows_z2:
+        if r["kind"] == "cast" and r["payoff"] and r["target"] == r["player"]:
+            found = None
+            for m in [r["maxhp"]] + sorted((x for x in held[(r["connection"], r["target"])]
+                                            if x != r["maxhp"]), reverse=True):
+                p = None if m is None else -r["value"] * m
+                if p is not None and abs(p - round(p)) <= spellhitjoin.INTEGER_EPS:
+                    found = int(round(p))
+                    break
+            if found is None:
+                zf_unwhole.append((r["connection"], r["t"], r["cause"], r["value"]))
+            else:
+                zf_pts[(r["named"], found)] += 1
+    check(dict(zf_pts) == {(271, 20): 3, (271, 22): 57, (271, 34): 2, (271, 35): 1, (271, 38): 29,
+                           (271, 39): 1, (271, 40): 1, (271, 44): 3, (271, 67): 3, (271, 69): 1,
+                           (271, 76): 2}
+          and zf_unwhole == [],
+          "and the FINDING (exact, per tape): the 103 Zealot's Fire words onto the observer, "
+          "whole at a maximum it held, are SEVERAL values -- 22 x57, 38 x29, their doubles 44 x3 "
+          "and 76 x2, eight stragglers -- P2 re-stated onto the payoff's own skill FAILS on this "
+          "tape as on Z1's Mind Burn; cause UNMEASURED (the observer's armour is off the wire; "
+          "38 / 22 = 2^(31/40) is neither a bare piece nor Frenzy)",
+          str((dict(sorted(zf_pts.items())), zf_unwhole)))
+    # KNOWN-BAD ARM (exact, per tape): the reader before the classes -- `classify=False` --
+    # counts the same rows as the announced skill's, and on the tape alone P2 shows eleven
+    # multi-valued pairs beyond the penalty rule (eight of them the monks' Zealot's Fire under
+    # 275 / 307 onto the Fighter and the observer, three the Mage's Mind Burn with its +0.0)
+    # and eleven two-hit pairs beyond the named one; and the converted rule is a SIGNATURE,
+    # not "drop every zero": a +0.0 planted WITHOUT its heal stands as a second value.
+    arm = spellhitjoin.score(rows_z2, classify=False)
+    arm_multi = sorted(set(arm["multi_valued"]) - set(arm["penalty_split"]))
+    conv_row = next(r for r in rows_z2 if r["kind"] == "cast" and r["converted"]
+                    and r["skill"] == 185 and not r["payoff"])
+    mates = [r for r in rows_z2 if r["kind"] == "cast" and not r["converted"] and not r["payoff"]
+             and (r["connection"], r["cause"], r["skill"], r["target"])
+             == (conv_row["connection"], conv_row["cause"], conv_row["skill"], conv_row["target"])]
+    planted = spellhitjoin.score([dict(r, capture="SYNTHETIC-INJ") for r in mates[:3]]
+                                 + [dict(conv_row, capture="SYNTHETIC-INJ", converted=False)])
+    check(arm_multi == ["10 185 3", "10 185 5", "10 185 6", "3 275 9", "3 307 7", "3 307 9",
+                        "4 275 9", "4 307 9", "5 275 9", "6 275 9", "6 307 9"]
+          and sorted(arm["two_hit_two_valued"]) == ["3 275 7", "3 307 7", "5 275 7", "5 302 7",
+                                                    "5 307 9", "6 275 7", "6 275 9", "6 307 7",
+                                                    "6 307 9", "6 68 7", "6 68 9"]
+          and arm["payoff_set_aside"] == 212 and arm["converted_set_aside"] == 10
+          and len(mates) >= 3 and len(planted["multi_valued"]) == 1
+          and 0.0 in next(iter(planted["multi_valued"].values())),
+          "KNOWN-BAD ARM (exact, per tape): `classify=False` -- the reader before 2026-09-29 -- "
+          "counts the payoffs and the converted zeros as the announced skill's, and the tape "
+          "alone shows eleven multi-valued pairs past the penalty rule and eleven two-hit pairs "
+          "past the named one; a +0.0 planted WITHOUT its heal beside it is NOT set aside and "
+          "stands as a second value (the class is a signature, not a zero filter)",
+          str((arm_multi, sorted(arm["two_hit_two_valued"]), planted["multi_valued"])))
+    # THE OTHER CHANNEL (exact per tape, pin-exact before it): the wire names the observer's
+    # damage ahead of the word with [10, obs, S], and on this tape the holy words -- Smite
+    # Hex 302 x11, Balthazar's Aura 272 x64, Scourge Healing 251 x6 -- ride property 55 with a
+    # NEGATIVE fraction, never 16 / 17, while Zealot's Fire's fire damage (271 x115) rides 16.
+    # Before the tape the 55 side held four skills (the Blood Magic trio 102 / 133 / 143 --
+    # life stealing -- and the PvE skill 2809), and on the whole corpus no skill named by a
+    # [10] is on both channels: what ignores armour (holy, life stealing) goes out on 55, what
+    # respects it (fire, lightning, a swing) on 16 / 17 -- RECONSTRUCTION; every 55 word here
+    # is holy or a life steal, so holy-vs-armour-ignoring is UNDISCRIMINATED on this corpus.
+    nw_z2, nw_pin, nw_all = collections.Counter(), collections.Counter(), collections.Counter()
+    for stamp, _conn, d in named_census:
+        for k, n in d.items():
+            nw_all[k] += n
+            if stamp == ZAISHEN2:
+                nw_z2[k] += n
+            elif stamp < ZAISHEN2:
+                nw_pin[k] += n
+    on55 = {s for (s, p) in nw_all if p == 55}
+    on16 = {s for (s, p) in nw_all if p in (16, 17)}
+    check(dict(nw_z2) == {(271, 16): 115, (251, 55): 6, (272, 55): 64, (302, 55): 11}
+          and {s: n for (s, p), n in nw_pin.items() if p == 55} == {102: 1, 133: 1, 143: 3, 2809: 8}
+          and len(on16) >= 10 and len(on55) >= 5 and not (on55 & on16),
+          "the wire's own naming, [10, obs, S] ahead of the word: on 20260929T100038 (exact) the "
+          "holy words -- Smite Hex 302 x11, Balthazar's Aura 272 x64, Scourge Healing 251 x6 -- "
+          "ride property 55 with a NEGATIVE fraction and Zealot's Fire's 271 x115 rides 16; at "
+          "the pin the 55 side is exactly {102: 1, 133: 1, 143: 3, 2809: 8}; and corpus-wide no "
+          "named skill is on both channels (>= 10 on 16 / 17, >= 5 on 55) -- what ignores armour "
+          "goes out as a negative health gain (RECONSTRUCTION; this server sends Holy Strike on 16)",
+          str((dict(nw_z2), {s: n for (s, p), n in nw_pin.items() if p == 55}, sorted(on16),
+               sorted(on55))))
     check(sc["swing_pairs"] >= 5 and sc["swing_pairs_3plus"] == sc["swing_pairs"],
           "P3 CONTROL: every swing pair with >= 10 hits shows >= 3 values",
           f"{sc['swing_pairs_3plus']} of {sc['swing_pairs']} (min distinct "
@@ -1307,18 +1477,29 @@ def main():
           "(20260928T103123 :65009) is set aside BY NAME and still refused, none other refused",
           str((hc["set_aside"], hc["declared_not_refused"], hc["refused"])))
     failed_now = {k for k in hexjoin.REGISTERED if hs[k] is False}
-    check(failed_now == set(hexjoin.FAILED_AS_REGISTERED) | set(hexjoin.FAILED_ON_ZAISHEN)
+    # THE SECOND ZAISHEN CAPTURE (2026-09-29, CASTAI-Z2): G4 joins the FAILED set -- the
+    # arena round's end strips the observer's Scourge Healing (hexjoin's docstring) -- with
+    # G4r beside it; the pin for it is the corpus before 20260929T100038 (Z1 included).
+    hcp2 = hexjoin.upto(hc, ZAISHEN2)
+    hsp2 = hexjoin.score(hcp2)
+    hsz2 = hexjoin.score(hexjoin.narrow(hc, ZAISHEN2))
+    FAILED_SET = (set(hexjoin.FAILED_AS_REGISTERED) | set(hexjoin.FAILED_ON_ZAISHEN)
+                  | set(hexjoin.FAILED_ON_ZAISHEN2))
+    check(failed_now == FAILED_SET
           and hs["m3"] is None and all(hrv.values())
           and not hs["c2c"] and all(hs[k] for k in hexjoin.CORRECTED if k != "c2c")
-          and all(hsp[k] for k in hexjoin.FAILED_ON_ZAISHEN),
+          and all(hsp[k] for k in hexjoin.FAILED_ON_ZAISHEN)
+          and all(hsp2[k] for k in hexjoin.FAILED_ON_ZAISHEN2)
+          and hexjoin.FAILED_ON_ZAISHEN2 == ("g4",),
           "on the WHOLE corpus the Zaishen tape FAILS six registered predictions -- I1, I2, I3, "
-          "M1, G2, G3, recorded FAILED as registered beside I4 / M2 / C2 -- and the corrected C2c; "
+          "M1, G2, G3, recorded FAILED as registered beside I4 / M2 / C2 -- and the corrected C2c, "
+          "and the SECOND Zaishen tape a seventh, G4 (held on every capture before it); "
           "every one holds RE-STATED (I1r / M1r the [61] seconds, I2r a word riding the "
-          "caster's own Fire Storm tick, I3r / G2r no 0x00F1 onto a target already hexed, and "
+          "caster's own Fire Storm tick, I3r / G2r no 0x00F1 onto a target already hexed, "
           "since 2026-09-28 G3r effects.interp's rounded scaler on the tape's own build's row, the "
           "build MEASURED, the integerization CORROBORATED once, its rule UNDISCRIMINATED -- "
-          "until then this read 'every one but G3'), and every other corrected reading and "
-          "post-hoc fact holds",
+          "until then this read 'every one but G3' -- and since 2026-09-29 G4r, the round's end "
+          "a second strip), and every other corrected reading and post-hoc fact holds",
           str((sorted(failed_now), hrv)))
     z_i = [x[3:] for x in hsz["i_ct_casts"]]
     z_m = [x[3:] for x in hsz["m_ct_casts"]]
@@ -1434,6 +1615,55 @@ def main():
           "G3r misses too, at 13",
           str((faint, hs["g3r_miss_rows"], faint_pin, hsz_pin["g3_miss_rows"],
                hsz_pin["g3r_miss_rows"], hs_pin["g3r_miss_rows"])))
+    # G4 on the SECOND Zaishen tape (2026-09-29, CASTAI-Z2; hexjoin's docstring): exact per
+    # tape, none at the pin. Seven Scourge Healing 251 (30 s) applies on the observer: one
+    # runs out (+30.006), five end on the observer's death, and :51090's at 442.802 ends at
+    # +12.250 in the batch that closes the arena round -- 0x0181 with every effect on every
+    # body stripped, nobody dead -- which is the ONE row G4 as registered fails on, corpus-
+    # wide; G4r (the death OR the round's end strips) holds on the tape, the pin and the
+    # whole corpus. The whole corpus's G4 misses are the tape's exactly (a miss of a new
+    # shape reddens here). The KNOWN-BAD ARM is the reader before today, `removal` by time:
+    # at :64557 667.396 a 0x0044 [7, 61] sits in the same batch AHEAD of the 0x0042 that
+    # hands buff 61 out again, and the old reader read it as this hex's end -- +0.0, "early",
+    # G4r FAILING; by wire order the hex ends at +0.5 on the observer's death. Under the arm
+    # every hex apply's row at the pin is byte-identical to the new reader's.
+    Z2_G4 = [(ZAISHEN2, "62925", 267.971, 251, 30.006, "scheduled"),
+             (ZAISHEN2, "51090", 394.801, 251, 3.249, "death"),
+             (ZAISHEN2, "51090", 419.558, 251, 4.365, "death"),
+             (ZAISHEN2, "51090", 442.802, 251, 12.25, "round end"),
+             (ZAISHEN2, "57580", 140.238, 251, 4.251, "death"),
+             (ZAISHEN2, "64557", 641.396, 251, 0.249, "death"),
+             (ZAISHEN2, "64557", 667.396, 251, 0.5, "death")]
+    check(hsz2["g4_rows"] == Z2_G4 and hsz2["g4_off"] == [Z2_G4[3]] and hsz2["g4r_off"] == []
+          and not hsz2["g4"] and hsz2["g4r"]
+          and hsp2["g4"] and hsp2["g4r"] and hsp2["g4_off"] == [] and hsp2["g4r_off"] == []
+          and hs["g4r"] and hs["g4_off"] == [Z2_G4[3]] and hs["g4r_off"] == []
+          and hsz2["h_42_per_skill"] == {251: 7} and hsz2["h_42_elsewhere"] == 0
+          and hs["g4r_off"] == [] and not hs["g4"],
+          "G4 FAILED on 20260929T100038 (exact, per tape; none at the pin): the seven Scourge "
+          "Healing 251 applies on the observer end scheduled (+30.006), on the observer's death "
+          "(+3.249 / +4.365 / +4.251 / +0.249 / +0.5) and ONCE at the ROUND'S END (:51090 442.802, "
+          "+12.250, the 0x0181 batch, nobody dead) -- the one G4 miss corpus-wide; G4r (the death "
+          "OR the round's end strips) holds on the tape, the pin and the whole corpus",
+          str((hsz2["g4_rows"], hsz2["g4_off"], hs["g4_off"], hs["g4r_off"])))
+    hexjoin.REMOVAL_BY_ORDER = False
+    try:
+        hsz2_arm = hexjoin.score(hexjoin.narrow(hc, ZAISHEN2))
+        hsp2_arm = hexjoin.score(hcp2)
+    finally:
+        hexjoin.REMOVAL_BY_ORDER = True
+    check(hsz2_arm["g4_rows"][:6] == Z2_G4[:6]
+          and hsz2_arm["g4_rows"][6] == (ZAISHEN2, "64557", 667.396, 251, 0.0, "early")
+          and hsz2_arm["g4r_off"] == [(ZAISHEN2, "64557", 667.396, 251, 0.0, "early")]
+          and not hsz2_arm["g4r"]
+          and hsp2_arm["g4_rows"] == hsp2["g4_rows"] and hsp2_arm["h_residuals"] == hsp2["h_residuals"]
+          and hsp2_arm["g4r"] and hexjoin.REMOVAL_BY_ORDER,
+          "KNOWN-BAD ARM: `removal` by TIME (the reader before 2026-09-29) reads the 0x0044 "
+          "[7, 61] that sits AHEAD of the 0x0042 re-issuing buff 61 at :64557 667.396 as that "
+          "hex's own end -- +0.0, 'early', G4r FAILING on it -- where wire order reads the "
+          "observer's death at +0.5; at the pin the arm's hex rows and residuals are byte-"
+          "identical to the new reader's, so no earlier number moved",
+          str((hsz2_arm["g4_rows"][6], hsz2_arm["g4r_off"], hsp2_arm["g4_rows"] == hsp2["g4_rows"])))
     # The per-build table IS the extractor's: every vault skills row, against the table
     # hexjoin reads for the build that row RECORDS (its provenance.build -- 38797 on today's
     # vault bar the repo's row-level 38888 overrides, 38888 after the regeneration), on the
