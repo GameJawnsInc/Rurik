@@ -44,7 +44,8 @@ is a section's UPPER_CASE families, "moved out" a leaf that took part of it. Fil
   SCALE_MEANS_*, TICK_SECONDS, COLLISION_STEP; e.g. skill_damage, skill_heal; moved out: skillread
 - GAME_SMSG_NPC_UPDATE_PROPERTIES: agent properties, kill rewards, the attribute opcodes; flags
   GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*, KILL_XP_RULE, REFORGED_XP; e.g. accrue_kill_rewards;
-  moved out: attribcolumns, killxp (the per-foe table; kill_experience sits above kill_agent)
+  moved out: attribcolumns; new leaf: killxp (the per-foe table; kill_experience sits above
+  kill_agent)
 - "skills ----" and its three sub-banners: effects, the status word, what a skill costs, the
   adrenaline family, the skill bar, the unlocks; flags EFFECTS, DEEP_WOUND_*, AGENT_ADRENALINE_*,
   SKILLBAR_*; e.g. build_unlock_bitmap; moved out: skillunlock

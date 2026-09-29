@@ -207,7 +207,8 @@ def section_our_frame(authsrv):
 
     sent = _kill(authsrv, _state(1, 1, 146), _foe(1))
     check(level1_ok(sent), "a level-1 foe at player level 1: status, [0, 100], "
-          "flags -- three messages, retail's order",
+          "flags -- three messages (retail's 100-xp frames carry S7's tick lines "
+          "ahead of the award; the tick is not this step)",
           str([(hex(op), v) for op, v in sent]))
     sent = _kill(authsrv, _state(3, 1, 146), _foe(1))
     check(_awards(authsrv, sent) == [[0, 64]],

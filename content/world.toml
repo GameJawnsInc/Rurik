@@ -1080,8 +1080,9 @@ PvE own-kill awards (0x00EE [0, x] in the segment of 0x0026 [foe, 8]) in seven l
 captures, plus 1 of 1 in a PvP arena, with every input re-derived from the same \
 connection -- the foe's 0x0056 level byte, the player's 0x00E9 level, the party as 1 + \
 the 0x01BF and 0x01C2 roster rows, and 0x0041 [own, 0, 3434, 0, 1] on the connection. \
-The wire exercised differences -2..+4, the level-0 row at player level 1, parties of 1, \
-2 and 4, and level 20 against 20; every other entry is the wiki's alone. The +5% has \
+The wire exercised foe-minus-player differences -2, -1, 0, +1 and +4 (never +2 or +3), \
+the level-0 row at player level 1, parties of 1, 2 and 4, and level 20 against 20; \
+every other entry is the wiki's alone. The +5% has \
 its own control: a level-0 foe at player level 1 pays 25 on 17 of 17 kills with no 3434 \
 on the connection (20260913T210901, map 212) and 26 on 5 of 5 with it (20260807T143055, \
 20260810T235916, 20260929T150923). Known-bad arms on the same awards: the old constant \

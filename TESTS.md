@@ -13123,9 +13123,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   rows and scores `killxp.share`, `authsrv.kill_experience` (49/49 with the load's
   effect, 49/49 with `--reforged-xp`'s map-scoped stand-in, 32/49 at the default)
   and three KNOWN-BAD ARMS that must fall short: the constant 26 (5/49), the rule
-  without the +5% (32/49), and the +5% unscoped, which is what the character's
-  Reforged flag would pay (17/49 -- the 17 level-0 kills on map 212 and the 6 on
-  430 are Reforged characters outside the effect's zone, paid 100%). §3 drives
+  without the +5% (32/49), and the +5% on every kill (17/49 -- it misses all 32
+  no-effect kills; among them the 17 level-0 kills on map 212, the 6 on 430 and
+  the 8 on 238 are Reforged-flagged characters, 0x003C bit 2 set, outside the
+  effect's zone and paid 100%; the PvP arena's one award is not flagged). §3 drives
   `kill_agent`: status, `[0, 100]`, flags for a level-1 foe at L1; 64 at L3; the
   worm's 15; a henchman halving it; a zero share sending no `0x00EE`; the no-level
   fixture's 26; the stand-in's scope and the `reforged_effect` seam; the store and
