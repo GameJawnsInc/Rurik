@@ -48,19 +48,28 @@ TWO ROWS THE JOIN MUST NOT COUNT AS THE ANNOUNCED SKILL'S (2026-09-29, CASTAI-Z2
   PAYOFF  a word riding ANOTHER skill's completion batch. The wire names the
       observer's own damage ahead of the word -- `[10, obs, S]` (GV_SKILL_DAMAGE,
       the prefix hexjoin reads on 179's payoff) -- and on the Zaishen-2 tape every
-      word a monk landed on the observer in the batch of its Mend Condition 275 /
-      Reversal of Fortune 307 / Smite Hex 302 / Drain Enchantment 68 is named 271,
-      Zealot's Fire (WIKI: an enchantment on the caster; "whenever you use a skill
-      that targets an ally, all foes adjacent to that target are struck for 5..35
-      fire damage"). The join's `skill` is the cause's latest property-60, i.e. the
-      skill that TRIGGERED the enchantment, so P2 keyed on it read one payoff under
-      five skill ids. A row is a payoff when (a) the wire names it (`named` is not
-      None and differs from `skill`), or (b) it is such a word's SIBLING (the same
-      cause, the same batch -- the foe beside the observer takes the same trigger
-      and carries no [10] of its own), or (c) the announce named an ALLY of the
-      caster (the same allegiance token on the 0x0020 creates) and the word landed
-      on a FOE -- a skill cast at an ally has no target damage of its own. (a) is
-      the wire's word; (b) and (c) reach the bodies the wire never names.
+      word a monk landed on the observer in the completion batch of its Mend
+      Condition 275 / Reversal of Fortune 307 / Smite Hex 302 / Balthazar's Aura 272 /
+      Resurrection Signet 2 is named 271, Zealot's Fire (WIKI: an enchantment on the
+      caster; "whenever you use a skill that targets an ally, all foes adjacent to
+      that target are struck for 5..35 fire damage"). The join's `skill` is the
+      cause's latest announce ahead of the word, i.e. the skill whose completion the
+      payoff rides, so P2 keyed on it read one payoff under five skill ids. A row is
+      a payoff when (a) the wire names it (`named` is not None and differs from
+      `skill`), or (b) it is such a word's SIBLING (the same cause, the same batch --
+      the foe beside the observer takes the same trigger and carries no [10] of its
+      own), or (c) the announce named an ALLY of the caster (the same allegiance
+      token on the 0x0020 creates; a targetless announce is the caster itself) and
+      the word landed on a FOE -- a skill cast at an ally has no target damage of
+      its own -- AND the wire has already backed both halves of that reading on the
+      same connection: the (caster, skill) has an (a) row (its completion was named
+      as another skill's at least once) and the (target, value) has an (a) or (b)
+      row (that amount onto that body was named or sat beside a named word). (a) is
+      the wire's word; (b) and (c) reach the bodies the wire never names, and (c)
+      without its two witnesses is NOT set aside (`ally_cast_unbacked`, counted and
+      reported): a self-targeted nuke's word, or a stray value beside a witnessed
+      trigger, stays a value P2 can see. `classify_payoffs` is the rule, applied by
+      `events` and again by `score` (an injected row is judged by its shape).
   CONVERTED  a `+0.0` word (bits 0x00000000) with a property-55 heal onto the same
       target in the same batch: Reversal of Fortune took the hit (healjoin P6, the
       RB tape: a fully converted hit's word is +0.0, never -0.0). It carries no
@@ -72,6 +81,18 @@ Both are set aside from the pairs the way a DoT tick is (`pairs`), counted in
 is the known-bad arm that counts them as the announced skill's again. At the pin
 (every capture before 20260929T100038) both counts are 0 -- the old numbers are
 unmoved by construction, and test_skilldamage 12 asserts them to the digit.
+
+THE ANNOUNCE IS READ IN WIRE ORDER (2026-09-29, the review of this lane's first cut).
+The first cut collected every announce of a batch BEFORE reading its words, so a
+cast announced later in the batch claimed a word ahead of it (age 0.0), and it did
+not read the targetless `0x009F [60, agent, skill]` form at all (Balthazar's Aura,
+a self-cast Reversal of Fortune), so a 4 s-stale targeted announce claimed the
+word instead: 50 of the tape's 212 payoff rows were keyed to a stale or later
+announce, 18 of them to Drain Enchantment 68, whose own completions carry no word.
+`ANNOUNCE_BY_ORDER` (default True) reads both forms as they come; False is that
+first cut, the known-bad arm. Read in order, every payoff's `age` reproduces its
+trigger's activation (275 at 0.73-0.76 s, 307 at 0.21-0.27, 272 at 0.99-1.05, 302
+at 1.00-1.02, 2 at 3.00-3.02), and at the pin no cast row changes its skill.
 
 Standard library only; reads the vault through `vaultpath`; refuses a tape
 that does not frame whole (`deepwoundjoin.sequence`).
@@ -112,6 +133,8 @@ PROP_DAMAGE = (16, 17)
 ANNOUNCE_WINDOW = 4.0      # s; longer than any activation on the wire
 TICK_WINDOW = 5.0          # s; a DoT's cadence is 1 s
 MIND_BURN = 185
+ANNOUNCE_BY_ORDER = True   # the announce read as it comes, both forms (docstring); False is
+                           # the first cut of 2026-09-29 -- the known-bad arm
 
 
 def _f32(bits):
@@ -123,19 +146,22 @@ def events(seq):
 
     A row: {"t", "prop", "target", "cause", "value", "kind" (swing / cast /
     both / none -- what the cause finished in the batch), "skill" (the
-    cause's latest property-60 skill, None if none inside ANNOUNCE_WINDOW),
-    "age" (seconds since that announcement), "maxhp" (the target's last
-    property 42, None if never seen), "tick" (a 58-batch value that also
+    cause's latest property-60 skill ahead of the word, None if none inside
+    ANNOUNCE_WINDOW), "age" (seconds since that announcement), "form" (which
+    announce: "0x00A0" targeted, "0x009F" targetless), "maxhp" (the target's
+    last property 42, None if never seen), "tick" (a 58-batch value that also
     occurs as a no-58 hit from the same cause onto the same target within
     TICK_WINDOW), "twin" (another identical 16 onto this target from this
     cause in the same batch), "named" (the skill the wire itself names for
     this word -- the nearest `[10, target, S]` ahead of it in the batch; the
     wire names only the observer's damage, so None elsewhere), "ann_target"
-    (the announcement's target), "ally_cast" (that target shares the cause's
-    allegiance token and this word's target does not), "converted" (a +0.0
-    word with a property-55 heal onto the same target in the batch), "payoff"
-    (the docstring's (a) / (b) / (c): named as another skill, or a sibling of
-    such a word, or an ally-cast's word onto a foe)}.
+    (the announcement's target; the caster itself for the targetless form),
+    "ally_cast" (that target shares the cause's allegiance token and this
+    word's target does not), "converted" (a +0.0 word with a property-55 heal
+    onto the same target in the batch), "batch" (its index in the sequence),
+    and from `classify_payoffs`: "payoff", "why" ("named" / "sibling" /
+    "ally-cast" / None) and "ally_cast_unbacked" (the docstring's (c) shape
+    without its witnesses -- NOT set aside)}.
     """
     ann = {}
     maxhp = {}
@@ -145,8 +171,8 @@ def events(seq):
         fin = collections.defaultdict(set)
         healed = set()                       # targets with a positive 55 in the batch
         for _i, t, op, v in batch:
-            if op == OP_INT_TARGET and v[1] == PROP_SKILL_ACTIVATED:
-                ann[v[2]] = (v[4], t, v[3])
+            if op == OP_INT_TARGET and v[1] == PROP_SKILL_ACTIVATED and not ANNOUNCE_BY_ORDER:
+                ann[v[2]] = (v[4], t, v[3], "0x00A0")      # the first cut: read ahead of the words
             elif op == OP_INT and v[1] == PROP_HEALTH_MAX:
                 maxhp[v[2]] = v[3]
             elif op == OP_INT and v[1] in (PROP_MELEE_FINISHED,
@@ -163,6 +189,12 @@ def events(seq):
             if op == OP_INT and v[1] == PROP_SKILL_DAMAGE and len(v) > 3:
                 named_now[v[2]] = v[3]
                 continue
+            if ANNOUNCE_BY_ORDER and len(v) > 3 and v[1] == PROP_SKILL_ACTIVATED:
+                if op == OP_INT_TARGET and len(v) > 4:
+                    ann[v[2]] = (v[4], t, v[3], "0x00A0")
+                elif op == OP_INT:
+                    ann[v[2]] = (v[3], t, v[2], "0x009F")   # targetless: the caster itself
+                continue
             if op != OP_FLOAT_TARGET or v[1] not in PROP_DAMAGE:
                 continue
             prop, target, cause, value = v[1], v[2], v[3], round(_f32(v[4]), 5)
@@ -171,10 +203,10 @@ def events(seq):
                     frozenset({PROP_MELEE_FINISHED}): "swing",
                     frozenset({PROP_SKILL_FINISHED}): "cast"}.get(
                         frozenset(kinds), "both")
-            skill, age, ann_target = None, None, None
+            skill, age, ann_target, form = None, None, None, None
             a = ann.get(cause)
             if a is not None and 0.0 <= t - a[1] <= ANNOUNCE_WINDOW:
-                skill, age, ann_target = a[0], round(t - a[1], 3), a[2]
+                skill, age, ann_target, form = a[0], round(t - a[1], 3), a[2], a[3]
             key = (target, cause, value)
             seen[key] += 1
             ally_cast = (ann_target is not None and cause in alleg and target in alleg
@@ -182,13 +214,14 @@ def events(seq):
                          and alleg[target] != alleg[cause])
             rows.append({"t": round(t, 6), "prop": prop, "target": target,
                          "cause": cause, "value": value, "kind": kind,
-                         "skill": skill, "age": age, "ann_target": ann_target,
+                         "skill": skill, "age": age, "ann_target": ann_target, "form": form,
                          "maxhp": maxhp.get(target), "tick": False,
                          "twin": seen[key] > 1,
                          "named": named_now.get(target),
                          "ally_cast": ally_cast,
                          "converted": v[4] == 0 and target in healed,
-                         "payoff": False, "_batch": nb})
+                         "payoff": False, "why": None, "ally_cast_unbacked": False,
+                         "batch": nb})
     # Ticks: a 58-batch value also seen as a no-58 hit nearby.
     bare = collections.defaultdict(list)
     for r in rows:
@@ -198,19 +231,50 @@ def events(seq):
         if r["kind"] == "cast":
             near = bare.get((r["target"], r["cause"], r["value"]), ())
             r["tick"] = any(abs(t - r["t"]) <= TICK_WINDOW for t in near)
-    # The payoff class, decided AFTER the ticks: a word the wire names as another
-    # skill's is a payoff unless it is the caster's own periodic tick riding the batch
-    # (I2r: Fire Storm's tick in a Fireball batch is named 197, and stays a tick); its
-    # siblings (the same cause, the same batch) ride the same trigger.
-    renamed = {(r["_batch"], r["cause"]) for r in rows
-               if r["named"] is not None and r["skill"] is not None
-               and r["named"] != r["skill"] and not r["tick"]}
+    classify_payoffs(rows)
+    return rows
+
+
+def classify_payoffs(rows):
+    """The docstring's PAYOFF rule, on rows grouped by (capture, connection) -- one
+    connection's `events` rows carry neither key and are one group. Sets `payoff`,
+    `why` and `ally_cast_unbacked` on every row from its shape (`named`, `skill`,
+    `batch`, `ally_cast`, `tick`) and the evidence around it, and returns the rows.
+
+    Decided AFTER the ticks: a word the wire names as another skill's is a payoff
+    unless it is the caster's own periodic tick riding the batch (I2r: Fire Storm's
+    tick in a Fireball batch is named 197, and stays a tick); its siblings (the same
+    cause, the same batch) ride the same trigger; an ally-cast's word onto a foe is
+    one only where the same connection has ALREADY named that (cause, skill)'s
+    completion as another skill's -- an (a) row -- and named that (target, value) --
+    an (a) or (b) row. `score` applies this again, so a row injected past `events`
+    is judged by its shape, not by the flag it was handed."""
+    groups = collections.defaultdict(list)
     for r in rows:
-        r["payoff"] = (r["skill"] is not None and not r["tick"]
-                       and ((r["named"] is not None and r["named"] != r["skill"])
-                            or (r["_batch"], r["cause"]) in renamed
-                            or r["ally_cast"]))
-        del r["_batch"]
+        groups[(r.get("capture"), r.get("connection"))].append(r)
+    for g in groups.values():
+        live = [r for r in g if r["skill"] is not None and not r["tick"]]
+        renamed = {(r["batch"], r["cause"]) for r in live
+                   if r["named"] is not None and r["named"] != r["skill"]}
+        trigger_named, value_named = set(), set()
+        for r in g:
+            r["why"], r["payoff"], r["ally_cast_unbacked"] = None, False, False
+        for r in live:
+            if r["named"] is not None and r["named"] != r["skill"]:
+                r["why"] = "named"
+                trigger_named.add((r["cause"], r["skill"]))
+            elif (r["batch"], r["cause"]) in renamed:
+                r["why"] = "sibling"
+            if r["why"] is not None:
+                value_named.add((r["target"], r["value"]))
+        for r in live:
+            if r["why"] is None and r["ally_cast"]:
+                backed = ((r["cause"], r["skill"]) in trigger_named
+                          and (r["target"], r["value"]) in value_named)
+                if backed:
+                    r["why"] = "ally-cast"
+                r["ally_cast_unbacked"] = not backed
+            r["payoff"] = r["why"] is not None
     return rows
 
 
@@ -299,8 +363,10 @@ def player_of(seq, c2s=()):
     return observer_of(seq, c2s)[0]
 
 
-def census(codec=None, unnamed=None, set_aside=None, refused=None, named=None):
-    """Every live capture, every game connection that frames whole. A
+def census(codec=None, unnamed=None, set_aside=None, refused=None, named=None,
+           stamps=None):
+    """Every live capture (or, with `stamps`, those in that set), every game
+    connection that frames whole. A
     connection whose player `observer_of` cannot name keeps its rows (player
     None) and, when `unnamed` is a list, is appended to it as (capture,
     connection, why). When `named` is a list, each connection's `named_words`
@@ -318,7 +384,7 @@ def census(codec=None, unnamed=None, set_aside=None, refused=None, named=None):
     out = []
     for stamp in sorted(os.listdir(live)):
         cap_dir = os.path.join(live, stamp)
-        if not os.path.isdir(cap_dir):
+        if not os.path.isdir(cap_dir) or (stamps is not None and stamp not in stamps):
             continue
         declared = livewire.declared_gaps(cap_dir)
         for ch in tape.channel_files(cap_dir):
@@ -379,19 +445,22 @@ def pairs(rows, kind="cast", min_hits=3, classify=True):
 
 
 def payoff_census(rows):
-    """What the payoff rule set aside, by shape: {"rows": n, "by_announced": {skill:
-    n}, "named": {S: n} (the wire's own name, observer words), "sibling": n, "ally_cast":
-    n (rows classified by (c) alone), "targets": {agent: n}}. Cast-kind rows only."""
-    pay = [r for r in rows if r["kind"] == "cast" and r["payoff"]]
-    by_named = collections.Counter(r["named"] for r in pay if r["named"] is not None)
+    """What the payoff rule set aside, by shape: {"rows": n, "by_announced": {skill: n}
+    (the JOIN'S attribution -- the cause's latest announce ahead of the word in wire
+    order, whose completion the payoff rides), "named": {S: n} (the wire's own name,
+    observer words), "why": {"named" / "sibling" / "ally-cast": n}, "targets": {agent:
+    n}, "unbacked": n (the (c) shape without its witnesses -- NOT set aside; counted
+    here so a tape where the rule could not reach a body is read, not absorbed)}.
+    Cast-kind rows only."""
+    cast = [r for r in rows if r["kind"] == "cast" and not r["tick"]]
+    pay = [r for r in cast if r["payoff"]]
     return {
         "rows": len(pay),
         "by_announced": dict(collections.Counter(r["skill"] for r in pay)),
-        "named": dict(by_named),
-        "renamed": sum(1 for r in pay if r["named"] is not None and r["named"] != r["skill"]),
-        "sibling": sum(1 for r in pay if r["named"] is None and not r["ally_cast"]),
-        "ally_cast": sum(1 for r in pay if r["named"] is None and r["ally_cast"]),
+        "named": dict(collections.Counter(r["named"] for r in pay if r["named"] is not None)),
+        "why": dict(collections.Counter(r["why"] for r in pay)),
         "targets": dict(collections.Counter(r["target"] for r in pay)),
+        "unbacked": sum(1 for r in cast if r["ally_cast_unbacked"]),
     }
 
 
@@ -444,7 +513,12 @@ def location_buckets(rows, min_hits=5):
 
 def score(rows, classify=True):
     """The numbers P1-P4 are judged on. `classify=False` is the known-bad arm:
-    payoffs and converted words counted as the announced skill's (pre-2026-09-29)."""
+    payoffs and converted words counted as the announced skill's (pre-2026-09-29).
+    With `classify` the payoff rule is applied afresh on copies of the rows
+    (`classify_payoffs`): a row handed in past `events` -- a synthetic capture, an
+    injected value -- is judged by its shape and the witnesses around it."""
+    if classify:
+        rows = classify_payoffs([dict(r) for r in rows])
     cast = [r for r in rows if r["kind"] == "cast"]
     announced = [r for r in cast if r["skill"] is not None]
     cp = pairs(rows, "cast", 3, classify)
