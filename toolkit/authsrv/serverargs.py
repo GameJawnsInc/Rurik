@@ -1004,12 +1004,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the purse's persistence of that credit.")
     ap.add_argument("--no-reward-in-frame", action="store_true",
                     help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
-                         "reward lines (skills, 0x00EE, 0x0140) go AFTER the "
+                         "reward lines (0x00EE, 0x0140, skills) go AFTER the "
                          "closing 0x004A, as SLICE-B5 and D9 pass 1 sent them. "
                          "The default sends them BETWEEN 0x0052 and 0x004A "
                          "(turn_in_quest) -- retail's relative order on 10 of 10 "
                          "hand-ins, where 0x004A is the last quest-family message "
                          "of the batch. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--quest-skills-first", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S5's hand-in SKILL ORDER: a "
+                         "turned-in quest's reward_skills (0x00DC/0x00D9, and "
+                         "0x001C for a skill new to the account) go out BEFORE "
+                         "the experience 0x00EE, as every run before this step. "
+                         "The default sends them after the gold 0x0140 "
+                         "(grant_quest_reward) -- OBSERVED on 4 of 4 retail "
+                         "hand-ins that grant skills (20260929T150923 :55934 "
+                         "293.809 is 0x00EE [0,500], 0x0140 [2,25], then skills "
+                         "394 and 446). KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

@@ -364,11 +364,16 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the DOUBLED
     0x0052, 0x00EE [10, 0] (UNREAD) -- is documented in studies/quests §12.1 and
     stays deferred; nothing here is invented for those or the four chat lines.
-    NOTED, NOT MOVED: on the two retail hand-ins that grant skills
-    (20260807T143055 92.792 s, 20260810T235916 126.917 s) the 0x00DC/0x00D9
-    pairs come AFTER the gold; ours go first (test_mechanics §29 locks skills
-    ahead of the xp, from the tape's kill frame) -- n=2, left for a pass that
-    reads why.
+    THE SKILLS COME LAST (RANGERPRE-S5, QUESTFLOW-H1): on every retail hand-in
+    that grants skills the 0x00DC/0x00D9 pairs follow the gold 0x0140, or the
+    xp and its level-up lines when there is no gold -- OBSERVED 4 of 4 (of 22
+    hand-ins in the live corpus): 20260807T143055 :62994 92.792 s,
+    20260810T235916 :61624 126.917 s, 20260929T150923 :55934 293.809 s (q86:
+    0x00EE [0,500], 0x0140 [2,25], then 394 and 446), and 20260913T210901
+    :60877 736.185 s (q347, no gold). Ours granted them FIRST until then
+    (test_mechanics §29 locked skills ahead of the xp), although that MANTID
+    frame itself has them after the xp and its level-up lines.
+    --quest-skills-first restores the old order as the known-bad arm.
 
     The same consequences the experience has: the wire delta, the death-penalty
     credit (WIKI: 75 XP buys back 1%), and the persisted sheet under --persist.
@@ -376,12 +381,16 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     """
     xp = row.get("reward_experience")
     gold = row.get("reward_gold")
-    # MANTID: a quest may hand over skills -- the tutorial's reward carried the
-    # Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write, in the
-    # same frame as the experience, before the two removes.
-    for sid in row.get("reward_skills") or ():
-        grant_skill(send, state, int(sid), conn_id,
-                    unlocked=int(sid) in state.get("skills_known", set()))
+
+    def _reward_skills():
+        # MANTID: a quest may hand over skills -- the tutorial's reward carried
+        # the Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write,
+        # in the same frame as the experience, before the closing 0x0052.
+        for sid in row.get("reward_skills") or ():
+            grant_skill(send, state, int(sid), conn_id,
+                        unlocked=int(sid) in state.get("skills_known", set()))
+    if not QUEST_SKILLS_AFTER_GOLD:
+        _reward_skills()        # --quest-skills-first: the pre-S5 order, KNOWN-BAD
     xp_paid = 0
     if xp is not None:
         xp_paid = int(xp)
@@ -400,6 +409,10 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     elif gold is not None and not QUEST_GOLD_ENABLED:
         print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
               f"(--no-quest-gold, the pre-DESKWORK-D9 behaviour).", flush=True)
+    # THE SKILLS, after the gold -- the tape's order, 4 of 4 (RANGERPRE-S5).
+    # Before the early return below, so a skills-only row still grants them.
+    if QUEST_SKILLS_AFTER_GOLD:
+        _reward_skills()
     if xp is None and not gold_paid:
         print(f"[c{conn_id}] quest {qid} turned in: no reward_experience"
               + ("" if gold is None else " and no gold paid")
@@ -12921,12 +12934,19 @@ QUEST_GOLD_ENABLED = True      # False (--no-quest-gold): a turned-in quest's
                                # on 6 connections in 4 captures; the specific
                                # amount is the content row's own number).
 REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
-                               # (skills, 0x00EE, 0x0140) go AFTER the closing
+                               # (0x00EE, 0x0140, skills) go AFTER the closing
                                # 0x004A, as every run before the D9 fix pass.
                                # Default ON: turn_in_quest sends them BETWEEN
                                # 0x0052 and 0x004A -- retail's relative order on
                                # 10 of 10 hand-ins (the xp 0x00EE, then the gold,
                                # then 0x0052 · 0x004A close the quest family).
+QUEST_SKILLS_AFTER_GOLD = True  # False (--quest-skills-first): a hand-in's
+                               # reward_skills (0x00DC/0x00D9[/0x001C]) go out
+                               # BEFORE the xp 0x00EE, as every run before
+                               # RANGERPRE-S5. Default ON: grant_quest_reward
+                               # sends them after the gold 0x0140 -- retail's
+                               # order on 4 of 4 skill-granting hand-ins
+                               # (OBSERVED; 20260929T150923 :55934 293.809).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -43787,6 +43807,14 @@ def main():
               "AFTER the closing 0x004A, as SLICE-B5 and DESKWORK-D9 pass 1 sent "
               "them. KNOWN-BAD against the tape: retail puts them between "
               "0x0052 and 0x004A on 10 of 10 hand-ins (turn_in_quest).",
+              flush=True)
+    if a.quest_skills_first:
+        global QUEST_SKILLS_AFTER_GOLD
+        QUEST_SKILLS_AFTER_GOLD = False
+        print("[quests] --quest-skills-first: a hand-in's reward_skills go out "
+              "BEFORE the experience 0x00EE, as every run before RANGERPRE-S5. "
+              "KNOWN-BAD against the tape: retail sends them after the gold "
+              "0x0140 on 4 of 4 skill-granting hand-ins (grant_quest_reward).",
               flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
