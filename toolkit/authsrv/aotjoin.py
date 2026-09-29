@@ -138,12 +138,25 @@ predictions and the first re-statements are NOT re-worded). Its twelve Fire Stor
       fraction; where the cast completes in the same batch a second, smaller [55] from C
       rides its 58 -- Divine Favor's on-cast gain, RECONSTRUCTION from the wiki), and
       the caster's ZERO word `[16 | 17, T, 10, 0.0]`. That is the FULL shape, and on the
-      ten tick batches P6r2 explains every reversed target (twelve) carries the zero alone.
-      Off the ticks the tape sends two more shapes under the same 546 (the review of
-      2026-09-29, counted over every [20, T, S, 546] with its batch: 37 full / 20 / 25 on
-      this tape, 7 full / 3 on 20260916T213125, 1 full on 20260928T103123): the zero
-      BESIDE a nonzero word from S on T (51090 399.033: [16, 5, 10, 0.0] and [16, 5, 10,
-      -0.0973], the gain 0.0973 -- one of two same-value hits reversed, UNVERIFIED), and
+      ten tick batches P6r2 explains every reversed target -- eleven: nine batches with
+      one, 62925 259.977 k = 3 with two -- carries the zero alone; across EVERY tick batch
+      carrying a 546 the count is 12 full and 1 partial (51090 390.030 k = 7), the two
+      390.030 batches (k = 1 full, k = 7 partial) explained by P6 as written through the
+      caster's own 58 there, so not among the ten. Off the ticks the tape sends two more
+      shapes under the same 546 (the review of 2026-09-29, counted over every [20, T, S,
+      546] with its batch: 37 full / 20 / 25 on this tape, 7 full / 3 on
+      20260916T213125, 1 full on 20260928T103123): the zero BESIDE a nonzero word from S
+      on T, which is TWO sub-shapes of ten rows each -- ten where the gain equals the
+      surviving word (nine from S = 10, the Mage: 51090 399.033 [16, 5, 10, 0.0] and
+      [16, 5, 10, -0.0973], the gain 0.0973; 51199 535.440 x2 and 542.441; 57580
+      142.158 x3; 64557 648.428 x2 -- and one from S = 8, 62925 251.171, the gain
+      0.0793 beside a [17, 5, 8, -0.0793]), read as two same-value hits from S on T in
+      one batch with one reversed, UNVERIFIED; and ten, ALL from S = 8 (the Zaishen
+      Archer: 51090 427.884 / 430.302, 51199 565.826 / 568.450, 62925 248.826 /
+      253.638 / 256.121 / 278.727, 64557 647.937 / 666.250), where the zero sits beside
+      a SMALL word (-0.0072 / -0.0081 / -0.0083) and the gain (0.0468 .. 0.1201) equals
+      NO word in the batch, read as one packet of a multi-packet shot reversed while a
+      small second packet lands (a preparation's added damage, say), UNVERIFIED -- and
       NO zero word, a nonzero damage word and a gain that differs from it (57580 139.072:
       three takers of the Mage's Fireball, gains 0.1279 / 0.1207 / 0.1207 against
       -0.0486 / -0.0559 / -0.0559 -- a capped gain with the remainder landing as damage,

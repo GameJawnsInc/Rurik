@@ -13173,25 +13173,30 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the tape's: `shooters()` read a skill event strictly later than the start by TIME and
   `skill_shots()` the last event in wire order, so a [4] start and a [50] announcement in
   ONE instant put the launch in both censuses (two more on 20260928T103123). Both now
-  read `weaponcensus.launch_events` -- the shooter's latest attack event AHEAD of the
-  launch in the wire, 0x00E3 never an event. New §1c (4 bare): the tie wire -- start-
-  then-announce (a skill shot), announce-then-start (a weapon shot), a [60] behind the
-  launch in its own instant (a weapon shot) and ahead of it (a skill shot at 0) -- the
-  four launches partitioned, a fifth launch 3.5 s behind its only start (past SHOT_WINDOW)
-  in NEITHER census (the review's arm for the window clause), and the retired rule coded
-  as the known-bad arm (counts (a) twice, files (c) as a skill shot). §2 +4 (vault): the whole-corpus SIGNATURE (every
-  launch in exactly one census, the weapon rows equal to `shooters()`' own shot count and
-  projectile multiset on every connection -- the review's repair, so the retired time rule
-  put back in `shooters()` reddens it on the corpus; the captures before the tape 927 =
-  675 + 252 exact), the
-  pin's five ties exact (the 20260817T231139 :54071 row that `NONATTACK_BODY_BOW` held
-  as "skill 2 at +0.000" was this class -- Poison Arrow 404 at +1.1384 now, so that
-  literal is [] and the windup signature's 205th row), the tape's two ties exact (the
-  Archer's Power Shot, the Mage's wand shot with a [60] behind it), and the two rows
-  planted under a future stamp moving neither list (C4). Every pin literal reproduces.
-  58 checks with the vault (was 50), 24 bare; floor 20 → 24 (measured). `NONATTACK_BODY_BOW`
-  [] is the one pin literal the scanner change moved (disclosed, the row kept by name in
-  `PIN_TIES`; under the orchestrator's C2 ruling).**
+  read `weaponcensus.launch_events` -- the shooter's LAST attack event in the wire at or
+  before the launch's instant, inside SHOT_WINDOW, 0x00E3 never an event: a same-instant
+  tie ahead of the launch is resolved by wire order, and a same-instant event BEHIND the
+  launch still counts (`skill_shots()`' own reading since WEAPONS-W2c). New §1c (4 bare):
+  the tie wire -- start-then-announce (a skill shot), announce-then-start (a weapon shot),
+  a [60] behind the launch in its own instant (a skill shot at 0) and ahead of it (a skill
+  shot at 0) -- the four launches partitioned, a fifth launch 3.5 s behind its only start
+  (past SHOT_WINDOW) in NEITHER census (the review's arm for the window clause), and the
+  retired rule coded as the known-bad arm (counts (a) twice; agrees on the rest). §2 +4
+  (vault): the whole-corpus SIGNATURE (every launch in exactly one census, the weapon rows
+  equal to `shooters()`' own shot count and projectile multiset on every connection -- the
+  review's repair, so the retired time rule put back in `shooters()` reddens it on the
+  corpus; the captures before the tape 927 = 675 + 252 exact), the pin's five ties exact
+  (among them the 20260817T231139 :54071 row `NONATTACK_BODY_BOW` holds, "skill 2 at
+  +0.000", named with the [60, 8, 2] behind its launch), the tape's two ties exact (the
+  Archer's Power Shot; the Mage's wand launch with a [60, 10, 5, 179] behind it, a skill
+  shot of 179 at 0), and the two rows planted under a future stamp moving neither list
+  (C4). Every pin literal reproduces. 58 checks with the vault (was 50), 24 bare; floor
+  20 → 24 (measured). The lane's first cut of `launch_events` read only the events AHEAD
+  of the launch in the wire, which re-filed the :54071 launch under the Poison Arrow 404
+  one windup ahead of it and emptied `NONATTACK_BODY_BOW` with no new tape; the review
+  blocked that under C2 and the fallback above restores the literal to the digit
+  (checked on a shadow vault of the captures before the tape, main's test against the
+  lane's scanner: green). Which message is that launch's cause stays UNVERIFIED.**
   **2026-09-28, the 38888 content regen: §2's
   "absent BY THE EXTRACTOR'S RULE" reads the rule from the record of EVERY build the skills
   table's rows record, plus the pin's, each from its own pristine image -- not from the pin

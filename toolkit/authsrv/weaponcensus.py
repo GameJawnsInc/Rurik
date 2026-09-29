@@ -257,14 +257,15 @@ def attackers(s2c, min_gaps=3):
 
 
 def launch_events(s2c):
-    """Every 0x00A4 in wire order, with the shooter's latest ATTACK EVENT ahead of it:
-    [(t, v, event)], event = (t_event, kind, skill) or None. The event is the latest of
-    a [4] swing start ('start', None), a body's [50 | 60] announcement ('announce50' /
-    'announce60', skill) or the player's 0x00E4 / 0x00E5 ('E4' / 'E5', skill) that
-    sits BEFORE the launch in the wire and inside SHOT_WINDOW; 0x00E3 is the E5's own
-    tail and is never an event. ONE rule for both censuses, so they partition the
-    launches by construction: a weapon shot is a launch whose event is a start
-    (shooters), a skill shot one whose event is a skill's (skill_shots).
+    """Every 0x00A4 in wire order, with the shooter's latest ATTACK EVENT: [(t, v,
+    event)], event = (t_event, kind, skill) or None. The event is the LAST IN THE WIRE
+    of a [4] swing start ('start', None), a body's [50 | 60] announcement ('announce50'
+    / 'announce60', skill) or the player's 0x00E4 / 0x00E5 ('E4' / 'E5', skill) whose
+    instant is at or before the launch's and inside SHOT_WINDOW (`0.0 <= t - t_event <
+    SHOT_WINDOW`); 0x00E3 is the E5's own tail and is never an event. ONE rule for both
+    censuses, so they partition the launches by construction: a weapon shot is a launch
+    whose event is a start (shooters), a skill shot one whose event is a skill's
+    (skill_shots).
 
     Why WIRE order and not time (CASTAI-Z2, 2026-09-29): the Zaishen Archer's Power
     Shot on 20260929T100038 :62925 306.840 -- its [4, 8, 4, 0] start and its [50, 8,
@@ -272,22 +273,33 @@ def launch_events(s2c):
     censuses, because shooters() asked for a skill event strictly LATER than the
     start (`start < k <= t`) and skill_shots() read the last event in wire order; two
     more on 20260928T103123 (the Mage's Fireball behind a start at :50295 517.085,
-    the observer's wand shot behind an instant E5 at :58544 621.054). And a launch
-    with an announcement BEHIND it in its own batch (the Mage's wand shot at :62925
-    298.464, the [60, 10, 5, 179] after the 0x00A4) is a weapon shot: a message
-    after the launch is not its cause."""
-    latest = {}
-    out = []
+    the observer's wand shot behind an instant E5 at :58544 621.054). A same-instant
+    tie is resolved by wire order, the later message the cause.
+
+    Why an event BEHIND the launch in its own instant still counts (the review of
+    2026-09-29, C2): skill_shots() has read `0.0 <= t - t_event` since WEAPONS-W2c, so
+    a launch followed in its instant by the shooter's [60] is a skill shot of that
+    skill at +0.000 -- the reading test_weaponcensus's NONATTACK_BODY_BOW is pinned on
+    (20260817T231139 :54071 agent 8 726.938, a [60, 8, 2] behind a Poison Arrow's
+    launch). This function's first cut read only the events AHEAD of the launch in
+    the wire, which re-filed that pinned row under the 404 one windup ahead and moved
+    the literal with no new tape; it was withdrawn. The Mage's wand shot at :62925
+    298.464 (the [60, 10, 5, 179] after its 0x00A4) reads the same way: a skill shot
+    of 179 at +0.000. Whether a message after the launch can be its cause is not
+    settled here; the pin's reading is kept until a tape decides it."""
+    events = collections.defaultdict(list)       # agent -> [(t, kind, skill)], wire order
     for t, op, v in s2c:
         if op == PINT_T and len(v) > 4 and v[1] == START:
-            latest[v[2]] = (t, "start", None)
+            events[v[2]].append((t, "start", None))
         elif op == PINT_T and len(v) > 4 and v[1] in ANNOUNCED:
-            latest[v[2]] = (t, f"announce{v[1]}", v[4])
+            events[v[2]].append((t, f"announce{v[1]}", v[4]))
         elif op in (E4, E5) and len(v) > 2:
-            latest[v[1]] = (t, "E4" if op == E4 else "E5", v[2])
-        elif op == LAUNCH and len(v) > 7:
-            e = latest.get(v[1])
-            out.append((t, v, e if e is not None and 0.0 <= t - e[0] < SHOT_WINDOW else None))
+            events[v[1]].append((t, "E4" if op == E4 else "E5", v[2]))
+    out = []
+    for t, op, v in s2c:
+        if op == LAUNCH and len(v) > 7:
+            before = [e for e in events.get(v[1], ()) if 0.0 <= t - e[0] < SHOT_WINDOW]
+            out.append((t, v, before[-1] if before else None))
     return out
 
 

@@ -213,9 +213,12 @@ def tie_wire():
     sorted -- the order inside an instant is the point): (a) a body's [4] start and its
     [50] announcement in ONE instant, the start first, the launch one windup later -- the
     Zaishen Archer's Power Shot; (b) the same pair with the announcement FIRST -- a plain
-    shot; (c) a wand shot with a spell's [60] BEHIND it in its own instant -- the Mage's
-    at :62925 298.464; (d) the same [60] AHEAD of the launch in that instant; (e) the
-    review's arm: a launch 3.5 s behind its only start, past SHOT_WINDOW (3.0) -- no
+    shot; (c) a wand launch with a spell's [60] BEHIND it in its own instant -- the Mage's
+    at :62925 298.464 -- a skill shot of that [60] at 0, the reading skill_shots() has
+    read since WEAPONS-W2c and NONATTACK_BODY_BOW's one row is pinned on (the review of
+    2026-09-29, C2: the first cut read only the events ahead of the launch and moved that
+    literal with no new tape); (d) the same [60] AHEAD of the launch in that instant; (e)
+    the review's arm: a launch 3.5 s behind its only start, past SHOT_WINDOW (3.0) -- no
     event, so in NEITHER census (the window clause of the partition, driven red)."""
     s = [item(NPC_BOW, 28, [word(609, 0), word(587, 1)]),
          item(WAND, 22, [word(617, 0, 2), word(587, 5)]),
@@ -246,8 +249,10 @@ def tie_wire():
 def _retired_rule(s2c):
     """The rule shooters() read until CASTAI-Z2 -- a launch is a weapon shot when a start
     sits inside the window and no skill event lies strictly LATER than that start by
-    TIME (`start < k <= t`) -- beside skill_shots()' rule of the day, the last event by
-    time inside the window whatever its place in the wire. The known-bad arm."""
+    TIME (`start < k <= t`) -- beside skill_shots()' rule, the last event in the wire
+    inside the window (`0.0 <= t - e`), which launch_events keeps. The known-bad arm: it
+    differs from launch_events on ONE shape, a start and a skill's event in one instant
+    with the start first, which it counts in both censuses; on (c) the two agree."""
     starts, skills, launches, _a, _w = wc._events(s2c)
     events = collections.defaultdict(list)
     for t, op, v in s2c:
@@ -273,22 +278,26 @@ def section_ties():
           for t, v, e in wc.launch_events(s2c)]
     check(ev == [(ZARCHER, 11.1375, 680, "announce50", 394, 1.1375),
                  (ZARCHER, 21.1375, 143, "start", None, 1.1375),
-                 (ZMAGE, 30.775, 2, "start", None, 0.775),
+                 (ZMAGE, 30.775, 2, "announce60", 179, 0.0),
                  (ZMAGE, 40.775, 343, "announce60", 186, 0.0),
                  (ZARCHER, 53.5, 143, None)],
-          "launch_events reads the latest attack event AHEAD of each launch in the wire: (a) "
-          "the [50] behind the [4] in its instant is the cause, one windup ahead; (b) the [4] "
-          "behind the [60] is; (c) a [60] behind the launch in ITS instant is not, the start "
-          "is; (d) the same [60] ahead of the launch is, at 0; (e) a start 3.5 s back, past "
-          "SHOT_WINDOW, is no event", str(ev))
+          "launch_events reads the shooter's LAST attack event in the wire at or before each "
+          "launch's instant: (a) the [50] behind the [4] in its instant is the cause, one "
+          "windup ahead; (b) the [4] behind the [60] is; (c) a [60] behind the launch in ITS "
+          "instant is, at 0 (the C2 fallback of the review of 2026-09-29: skill_shots()' own "
+          "reading, the one NONATTACK_BODY_BOW is pinned on -- an ahead-only rule reads the "
+          "start at 0.775 here and moves that literal); (d) the same [60] ahead of the launch "
+          "is, at 0; (e) a start 3.5 s back, past SHOT_WINDOW, is no event", str(ev))
     sho = {(r["agent"], p): n for r in wc.shooters(s2c) for p, n in r["field5"].items()}
     ss = sorted((r["agent"], r["skill"], r["projectile"], round(r["event_to_launch"], 4))
                 for r in wc.skill_shots(s2c))
-    check(sho == {(ZARCHER, 143): 1, (ZMAGE, 2): 1}
-          and ss == [(ZARCHER, 394, 680, 1.1375), (ZMAGE, 186, 343, 0.0)]
+    check(sho == {(ZARCHER, 143): 1}
+          and ss == [(ZARCHER, 394, 680, 1.1375), (ZMAGE, 179, 2, 0.0), (ZMAGE, 186, 343, 0.0)]
           and len(ss) + sum(sho.values()) == 4,
-          "so shooters() holds exactly (b) and (c), skill_shots() exactly (a) and (d): the "
-          "four launches partitioned, the Archer's Power Shot in ONE census with its 680",
+          "so shooters() holds exactly (b), skill_shots() exactly (a), (c) and (d): the four "
+          "launches partitioned, the Archer's Power Shot in ONE census with its 680, the "
+          "Mage's wand launch under the [60] behind it (an ahead-only rule files it as a "
+          "weapon shot of 2)",
           f"{sho} {ss}")
     # the review of 2026-09-29: the window clause, driven red -- without it (e) is a
     # weapon shot behind a 3.5 s old start and the Archer's 143 counts twice
@@ -307,7 +316,8 @@ def section_ties():
                   (ZMAGE, 30.775, 2, False, True), (ZMAGE, 40.775, 343, False, True)],
           "the known-bad arm: the retired rule -- a skill event strictly LATER than the start "
           "by time -- counts (a) in BOTH censuses (the red of 2026-09-29: 680 as a bare bow's "
-          "weapon shot) and files (c) as a skill shot of the [60] that followed its launch",
+          "weapon shot); on (b), (c), (d) and (e) it agrees with launch_events, (c) a skill "
+          "shot of the [60] that followed its launch on both",
           str(old))
 
 
@@ -604,7 +614,7 @@ def _tie_rows(d):
 
 
 PIN_TIES = [
-    ("20260817T231139", "54071", 8, 726.938, "skill", 404, 343, 1.1384, [],
+    ("20260817T231139", "54071", 8, 726.938, "skill", 2, 343, 0.0, [],
      [("announce60", 2)]),
     ("20260914T005758", "56011", 29, 513.233, "weapon", None, 343, 1.1377,
      [("E5", 433), ("start", None)], []),
@@ -616,7 +626,7 @@ PIN_TIES = [
 ]
 Z2_TIES = [
     (Z2, "62925", 8, 306.84, "skill", 394, 680, 1.1354, [("start", None), ("announce50", 394)], []),
-    (Z2, "62925", 10, 298.464, "weapon", None, 4, 0.5069, [], [("announce60", 179)]),
+    (Z2, "62925", 10, 298.464, "skill", 179, 4, 0.0, [], [("announce60", 179)]),
 ]
 
 
@@ -626,10 +636,12 @@ def _partition(d):
     Archer's Power Shot, :62925 305.705 -> 306.840) were read by TIME in shooters() --
     a skill event strictly later than the start -- and by WIRE ORDER in skill_shots(),
     so the launch was in both censuses and its 680 reached the bare-bow signature as a
-    weapon shot. `weaponcensus.launch_events` is now the one rule (the shooter's latest
-    attack event AHEAD of the launch in the wire); this check is the whole-corpus
-    signature (every launch in exactly one census), the pin-exact totals, and the ties
-    themselves, exact per tape."""
+    weapon shot. `weaponcensus.launch_events` is now the one rule (the shooter's last
+    attack event in the wire at or before the launch's instant -- a same-instant event
+    BEHIND the launch counts, skill_shots()' own reading since WEAPONS-W2c, kept under C2
+    on the review of 2026-09-29); this check is the whole-corpus signature (every launch
+    in exactly one census), the pin-exact totals, and the ties themselves, exact per
+    tape."""
     launches = sum(d["launches"].values())
     weapon, skill, orphan = len(d["weapon"]), len(d["skill"]), d.get("orphan", [])
     mismatch = d.get("shooters_mismatch", [])
@@ -644,35 +656,40 @@ def _partition(d):
           f"count and projectile multiset on EVERY connection (the skill rows are re-paired "
           f"to their launches above); the captures before {Z2} hold exactly 927 = "
           f"675 + 252 (the totals AFTER the tie rule: 677 + 252 under the rule it retired, "
-          f"two launches counted twice; the one it filed behind an announcement that FOLLOWED "
-          f"the launch stays a skill shot, under the announcement 1.14 s ahead of it)",
+          f"two launches counted twice; the one skill shot under an announcement that "
+          f"FOLLOWED its launch in the same instant, 20260817T231139 :54071, stays exactly "
+          f"that -- PIN_TIES, NONATTACK_BODY_BOW)",
           f"pin {pin}; orphans {orphan[:4]}; shooters() vs the weapon rows (capture, port, "
           f"shooters, rows, only in shooters, only in rows) {mismatch[:4]}")
     pin_ties, z2_ties = _tie_rows(d)
     check(pin_ties == PIN_TIES,
           f"the ties before {Z2}, exact: five launches whose event shares an instant with "
-          f"another -- three plain shots behind [E5 433 | 60 282 | 50 404] + [4] pairs read by "
-          f"wire order (the start last on two, the Poison Arrow's [50] AHEAD of a [60, 8, 2] "
-          f"behind the launch on 20260817T231139 :54071, filed under skill 2 at +0.000 until "
-          f"today and under 404 at +1.1384 now), and the two the retired rule counted TWICE "
-          f"({ZAISHEN}: the Mage's Fireball behind a start at :50295 517.085, the observer's "
-          f"wand behind an instant E5 at :58544 621.054) -- each in one census",
+          f"another event of the shooter -- two plain shots behind [E5 433 | 60 282] + [4] "
+          f"pairs read by wire order (the start last), the 20260817T231139 :54071 launch with "
+          f"a [60, 8, 2] BEHIND it in its own instant (a skill shot of 2 at +0.000, "
+          f"skill_shots()' reading since WEAPONS-W2c, kept under C2 -- the [50, 8, x, 404] "
+          f"1.1384 s ahead of it is NOT read as its cause; NONATTACK_BODY_BOW), and the two "
+          f"the retired rule counted TWICE ({ZAISHEN}: the Mage's Fireball behind a start at "
+          f":50295 517.085, the observer's wand behind an instant E5 at :58544 621.054) -- "
+          f"each in one census",
           str(pin_ties))
     check(z2_ties == Z2_TIES,
           f"NEW (OBSERVED, {Z2}): the Zaishen Archer's (agent 8) Power Shot at :62925 306.840 "
           f"-- [4, 8, 4, 0] and [50, 8, 5, 394] in ONE instant (305.705), the start first, the "
           f"launch of 680 swing_windup(2.475) later with Kindle Arrows' 344 at its arrival -- a "
           f"SKILL shot (the lead's '680 is a new arrow' refuted: 680 is Power Shot's own +0x88, "
-          f"the Archer's bow item 26 carries no 617); and the Mage's (agent 10) wand shot at "
-          f"298.464 with its [60, 10, 5, 179] BEHIND the launch in the same instant -- a "
-          f"WEAPON shot, never a skill shot at event->launch 0",
+          f"the Archer's bow item 26 carries no 617); and the Mage's (agent 10) wand launch "
+          f"at 298.464 (projectile 4, 0.507 s behind a [4] start) with its [60, 10, 5, 179] "
+          f"BEHIND it in the same instant -- a SKILL shot of 179 at event->launch 0, the "
+          f"pin's :54071 shape read the same way (C2); whether a message after the launch "
+          f"is its cause is UNVERIFIED, the pin's reading kept",
           str(z2_ties))
     # C4: the same rows under a FUTURE stamp move neither exact list
     future = "20991231T000000"
     planted = dict(d, weapon=d["weapon"] + [dict(r, capture=future) for r in d["weapon"]
-                                            if r["capture"] == Z2 and r["behind"]],
+                                            if r["capture"] == Z2 and (r["tie"] or r["behind"])],
                    skill=d["skill"] + [dict(r, capture=future) for r in d["skill"]
-                                       if r["capture"] == Z2 and r["tie"]])
+                                       if r["capture"] == Z2 and (r["tie"] or r["behind"])])
     check(_tie_rows(planted) == (pin_ties, z2_ties)
           and len(planted["weapon"]) + len(planted["skill"]) == weapon + skill + 2,
           "and the two Zaishen rows planted under a future stamp leave both exact lists "
@@ -963,14 +980,17 @@ def _windup_signature(d):
 # not a size pin -- a new id that obeys the rule is confirming evidence (R3) -- but each of
 # these must stay inside the signature's domain.
 ACTIVATED_BOW_ATTACKS = {399, 426, 1197}
-# Body bow "skill shots" whose skill is NOT an attack skill: asserted exactly so a new
-# kind is seen, never absorbed. Until CASTAI-Z2 (2026-09-29) this held ONE row --
-# 20260817T231139 :54071 agent 8, skill 2 (type_code 7, activation 3.0), "launched
-# 0.000 s after its event" -- and that row was the retired rule's: the [60, 8, 2] sat
-# BEHIND the launch in its own instant, and the launch's cause is the [50, 8, x, 404]
-# 1.1384 s ahead of it (Poison Arrow, one bow windup: inside `_windup_signature`'s band
-# now, its 205th row). `PIN_TIES` keeps the row by name.
-NONATTACK_BODY_BOW = []
+# The one body bow "skill shot" whose skill is NOT an attack skill: 20260817T231139
+# :54071 agent 8, skill 2 (type_code 7, activation 3.0), launched 0.000 s after its
+# event -- the [60, 8, 2] sits BEHIND the launch in its own instant, and a [50, 8, x, 404]
+# (Poison Arrow, one bow windup) 1.1384 s ahead of it (the finding-4 class: skill_shots()
+# filing a launch behind a non-attack event). Outside the windup claim by type; asserted
+# exactly for the same reason. CASTAI-Z2 (2026-09-29): `launch_events`' first cut read only
+# the events AHEAD of the launch, re-filed this launch under the 404 and emptied this
+# literal with no new tape; the review blocked it under C2 and the behind-the-launch
+# reading -- skill_shots()' own since WEAPONS-W2c -- is kept. `PIN_TIES` names the row
+# with the [60] behind it; which message is the launch's cause is UNVERIFIED.
+NONATTACK_BODY_BOW = [("20260817T231139", "54071", 8, 2)]
 
 
 def _classes(rowless, other):
@@ -978,9 +998,9 @@ def _classes(rowless, other):
                        for r, _row in other)
     check(not rowless and got_other == NONATTACK_BODY_BOW,
           f"and every body bow skill shot OUTSIDE the attack-skill signatures is classified: "
-          f"none lacks a table row (R8), and the non-attack rows are exactly "
-          f"{NONATTACK_BODY_BOW} (the one there until CASTAI-Z2 was the retired tie rule's -- "
-          f"PIN_TIES) -- exact, no rule claimed, so a new one is seen",
+          f"none lacks a table row (R8), and the only non-attack row is {NONATTACK_BODY_BOW} "
+          f"(the pin's [60, 8, 2] behind its launch -- PIN_TIES) -- exact, no rule claimed, "
+          f"so a new one is seen",
           f"rowless {rowless}; non-attack {got_other}")
 
 
