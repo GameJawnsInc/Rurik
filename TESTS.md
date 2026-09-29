@@ -8300,7 +8300,35 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   reddens which section — the first pass's ten and the fix pass's, including the
   reviewers' nine inversions that had survived). Needs the content overlay's skill and
   attribute rows (this machine's); no client. 152 checks, floor 152, from the green run
-  (108 before the fix pass). ~13 s),
+  (108 before the fix pass). ~13 s. **2026-09-29, RANGERPRE-S4:** §7's three drives pin
+  `SKILL_LOAD_RETAIL_ORDER` False and `_saved` restores it, because `BASE_OPS_*` and the
+  two digests are 57e89956's recording and the default load now sends 0x00DA before
+  0x00DB (`test_skillloadorder.py`); unpinned, ops44 / digest44 / ops0 / digest0 go red
+  (the lists at index 19 / 18). Count unchanged),
+  `toolkit/authsrv/test_skillloadorder.py` (**2026-09-29, RANGERPRE-S4 (SECONDARY-A) — the
+  load's skill block sends the bar 0x00DA BEFORE the character library 0x00DB**,
+  `studies/presearing/RANGERPRE.md` §4. Retail's order on 126 of 126 live connections
+  carrying both; ours was the reverse from 57e89956 on. §1 RETAIL, vault-gated on capture
+  `20260929T150923` (the live root absent is a declared skip; present without this capture
+  is a FAIL): 11 game connections, origin live, all decoding closed; the first 0x00DA
+  precedes the first 0x00DB on 11 of 11, and it is the OWN agent's bar (the agent of the
+  first 0x00B7) on 11 of 11; POSITIVE CONTROL — the same first-index reader sees 0x001D
+  before the pair on :59969 and after it on :63359; the literal `RETAIL_PLAYER_BLOCK` is
+  :53756's player block at t=998.208 (0x0037 … 0x00EF, 14 opcodes). §2 OURS: the real
+  `_handle_request_players` burst with the module defaults (no hero rig) in a town and a
+  field — one player 0x00DA and one 0x00DB, the bar first; 0x001D still ahead of both;
+  restricted to the opcodes both player blocks carry, ours in `RETAIL_PLAYER_BLOCK`'s
+  order; the burst equal, values included, to the revert's with its one 0x00DB moved to
+  right after the player's 0x00DA; KNOWN-BAD ARM `--no-retail-skill-order`: 0x00DB before
+  the bar and the retail-order predicate rejecting it. §3 SOURCE: exactly two 0x00DB
+  sites, the revert's under `not SKILL_LOAD_RETAIL_ORDER` ahead of the SKILLBAR_UPDATE
+  send and the default's under the flag after it; the flag True at module level;
+  `--no-retail-skill-order` parsing through `serverargs.build_parser` (default off) and
+  `main()` setting the global False under it. With the send hunk reverted to 57e89956's
+  order, §2's first, third and fourth checks go red in both regimes and §3's site lock
+  goes red. 18 checks, floor 18, from the green run on this machine; a bare machine runs
+  §3's 3 and declares §1 / §2 skipped (the load needs the overlay's attribute rows, as
+  `test_secondary`'s drives do). Read-only on the vault; no client. ~10 s),
   `toolkit/authsrv/test_recharge.py` (**2026-09-28, CASTAI-Z1: §2 went red on the
   Zaishen tape, 3 of 19 (the six, P3 AS WRITTEN, the six pooled). The pinned numbers are
   scored as of the pin (`rechargeprobe.upto`, stamps before 20260928T103123): the six

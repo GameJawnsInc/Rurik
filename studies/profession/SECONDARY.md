@@ -274,6 +274,19 @@ and dispatches it nowhere; gw-preservation has no such inbound opcode. OpenTyria
 `0x00B7` sender never fills the secondary field. None of them models the old secondary's
 state on a change, so nothing here is copied from them.
 
+### SECONDARY-F11 — the load sends the bar `0x00DA` before the character library `0x00DB` — OBSERVED
+
+(F9 and F10 are the dialog-granted secondary's, RANGERPRE-S19; this one landed first.)
+The first `0x00DA` precedes the first `0x00DB` on **126 of 126** live connections carrying
+both (the RANGERPRE design lane's census: 127 connections, one set aside by its manifest),
+and on 11 of 11 in `20260929T150923`, where it is the OWN agent's bar every time. :53756's
+player block at t=998.208: `0x0037, 0x00B7, 0x00B6, 0x00DA, 0x009F [41], 0x009F [42],
+0x009C, 0x0041, 0x008B, 0x008A, 0x00B5, 0x00DB, 0x00E9, 0x00EF`. `0x001D` takes no part
+in the order — the same capture carries it before the pair (:59969) and after it (:63359).
+Ours sent `0x001D, 0x00DB, 0x00DA` from 57e89956 on, on the unfounded fear that the client
+gates drawing on unlock state; `studies/skills/FINDINGS.md` §9 had already measured that
+it does not.
+
 ---
 
 ## 2. The build — SECONDARY-B1..B5 (landed 2026-09-25)
@@ -384,6 +397,19 @@ digest `85facec2223fa2e9` under the revert alone, and the feature on being that 
 exactly one `0x00B6 [1, 2045]` after the player's `0x00B7` — plus the builders' literals
 (`0x00B7 [1, 1, 0, 0]` / `[200, 7, 0, 0]`, `0x00A6 [1, 1, 0]`, `SECONDARY_BITS 0`, no
 constant at `0x0041`, one UNHANDLED per `0x0041`).
+
+**SECONDARY-B7 — the load order (RANGERPRE-S4, 2026-09-29; B6 is the dialog grant's).**
+F11: `_handle_request_players` sends the character library `0x00DB` right AFTER the
+player's `0x00DA`, so our skill block reads `0x001D, 0x00DA, 0x00DB, 0x00E9, 0x00EF` —
+retail's relative order for every message of the player block we send. The two sites are
+split on `SKILL_LOAD_RETAIL_ORDER`; `--no-retail-skill-order` is 57e89956's order. The
+library's words, `resolve_library`'s single read above the bar and `0x001D`'s place are
+unchanged. `test_skillloadorder.py` (18 checks) pins retail's order off the tape with a
+positive control, ours against it with the revert as the known-bad arm, and the sites;
+`test_secondary` §7's three drives pin the revert because `BASE_OPS_*` are 57e89956's
+recording. Client acceptance is UNVERIFIED until the next loopback run, whose every load
+exercises it (the order is retail's, and the skills study's §9 says the bar does not wait
+on the library).
 
 ---
 

@@ -12936,6 +12936,13 @@ REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
                                # 0x0052 and 0x004A -- retail's relative order on
                                # 10 of 10 hand-ins (the xp 0x00EE, then the gold,
                                # then 0x0052 · 0x004A close the quest family).
+SKILL_LOAD_RETAIL_ORDER = True # False (--no-retail-skill-order): the load sends
+                               # the character library 0x00DB BEFORE the bar
+                               # 0x00DA, as every tree since 57e89956 did.
+                               # Default ON: the bar first, then 0x00DB --
+                               # retail's order on 126 of 126 live connections
+                               # carrying both (OBSERVED, RANGERPRE-S4;
+                               # 20260929T150923, 11 of 11). 0x001D does not move.
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -37175,15 +37182,23 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              f"AGENT_PROFESSION_BITS"
              f"(0x{_offer:04X}) [--secondary-bits at 57e89956's "
              f"site, under --no-secondary-change]")
-    # The skill block. Upstream's SendSkillsAndAttributes
-    # sends the bar (218) BEFORE the unlock list (219); we
-    # send the unlocks first, deliberately. Upstream never
-    # puts a real id on a bar -- it sends eight zeros -- so
-    # its ordering is not evidence about a POPULATED bar,
-    # and if the client gates drawing on unlock state then
-    # having that state already in hand is the ordering that
-    # can work. If the bar draws, try upstream's order too:
-    # a difference there is a real finding either way.
+    # The skill block: THE BAR 0x00DA, THEN THE CHARACTER LIBRARY
+    # 0x00DB (RANGERPRE-S4). OBSERVED on the live corpus: the first
+    # 0x00DA precedes the first 0x00DB on 126 of 126 connections that
+    # carry both (127 connections, one set aside by its manifest), and
+    # on 11 of 11 in 20260929T150923, where :53756's player block at
+    # t=998.208 runs 0x0037, 0x00B7, 0x00B6, 0x00DA, 0x009F [41],
+    # 0x009F [42], 0x009C, 0x0041, 0x008B, 0x008A, 0x00B5, 0x00DB,
+    # 0x00E9, 0x00EF. 0x001D is NOT part of the pair's order -- the
+    # same capture carries it before (:59969) and after (:63359) --
+    # so it stays where it was. We sent the unlocks first from
+    # 57e89956 on, deliberately: upstream's SendSkillsAndAttributes
+    # sends the bar first but only ever with eight zeros, so its
+    # order was no evidence about a POPULATED bar, and the fear was
+    # that the client gates drawing on unlock state. It does not --
+    # studies/skills/FINDINGS.md §9 (bar contents are the server's,
+    # the bitmap gates only the picker) -- and the tape now answers
+    # the order itself. --no-retail-skill-order is 57e89956's order.
     # THE SKILL LIBRARY IS TWO SETS, and they are retail's two, not ours.
     # Until 2026-09-15 this server sent the SAME flag-built bitmap in both
     # messages, which worked but modelled one library where the game has
@@ -37205,8 +37220,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         UNLOCKED, UNLOCK_LABEL, seen=state.setdefault("skills_withheld", set()))
     send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_acct_words],
          f"PVP_UPDATE_UNLOCKED_SKILLS({_acct_label})")
-    send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
-         f"UPDATE_UNLOCKED_SKILLS({_char_label})")
+    if not SKILL_LOAD_RETAIL_ORDER:                     # 57e89956's order
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+             f"UPDATE_UNLOCKED_SKILLS({_char_label}) [--no-retail-skill-order]")
     # The bar the client is about to draw. Under --persist a stored bar wins,
     # so a slot the player dragged last session is still there this one --
     # 0x005C writes it and this reads it back. SKILLBAR is rebound to match so
@@ -37217,6 +37233,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
          [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
           SKILLBAR_TRAILER],
          f"SKILLBAR_UPDATE{skills}")
+    if SKILL_LOAD_RETAIL_ORDER:                         # RANGERPRE-S4, OBSERVED
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+             f"UPDATE_UNLOCKED_SKILLS({_char_label}) [after the bar: retail, "
+             f"126 of 126 live connections]")
     # A BAR SKILL OUTSIDE THE ACCOUNT LIBRARY IS A DELAYED CRASH, and the
     # delay is why this warns rather than trusting the screen. OBSERVED
     # (38797, static): GmSkSlot bit-tests the ACCOUNT container --
@@ -43798,6 +43818,14 @@ def main():
               "AFTER the closing 0x004A, as SLICE-B5 and DESKWORK-D9 pass 1 sent "
               "them. KNOWN-BAD against the tape: retail puts them between "
               "0x0052 and 0x004A on 10 of 10 hand-ins (turn_in_quest).",
+              flush=True)
+    if a.no_retail_skill_order:
+        global SKILL_LOAD_RETAIL_ORDER
+        SKILL_LOAD_RETAIL_ORDER = False
+        print("[skills] --no-retail-skill-order: the load sends the character "
+              "library 0x00DB BEFORE the bar 0x00DA, as every tree from 57e89956 "
+              "to RANGERPRE-S4 did. KNOWN-BAD against the tape: retail sends the "
+              "bar first on 126 of 126 live connections carrying both.",
               flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False

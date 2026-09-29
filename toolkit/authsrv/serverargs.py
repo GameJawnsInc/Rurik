@@ -1010,6 +1010,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(turn_in_quest) -- retail's relative order on 10 of 10 "
                          "hand-ins, where 0x004A is the last quest-family message "
                          "of the batch. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-retail-skill-order", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S4's load order: send the "
+                         "character library 0x00DB BEFORE the bar 0x00DA, as "
+                         "57e89956 did. The default sends the bar first -- "
+                         "retail's order on 126 of 126 live connections carrying "
+                         "both (20260929T150923: 11 of 11). 0x001D does not move "
+                         "either way. KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

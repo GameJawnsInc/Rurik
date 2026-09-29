@@ -212,7 +212,7 @@ _saved = {k: getattr(authsrv, k) for k in
            # the load-drive rig (§7, §9): drive_load's, restored per drive
            "HERO", "HERO_BODY_NPC", "HERO_ACTIVATE", "HERO_PIPELINE_FIRST",
            "HERO_CHAR", "HERO_INVENTORY", "HERO_BAGS", "HERO_RIG_RETAIL",
-           "UNLOCKED")}
+           "UNLOCKED", "SKILL_LOAD_RETAIL_ORDER")}
 _saved_bar = list(authsrv.SKILLBAR)
 _saved_store_dir = charstore.store_dir
 base = tempfile.mkdtemp(prefix="secondary-test-")
@@ -920,9 +920,12 @@ try:
            "REVERT + --secondary-bits 0x44: 0x00B6 with 0x44, as 57e89956 sent it")
     # THE REAL BURST, three regimes, against the export's recording (the fix
     # pass, EV-3/CD-4). drive_load restores the module defaults first, so the
-    # configuration is the recording's.
+    # configuration is the recording's -- and each drive pins
+    # SKILL_LOAD_RETAIL_ORDER False, because the recording predates RANGERPRE-S4's
+    # bar-before-library order (unpinned, the lists differ at index 19 / 18).
     sent44, _st = drive_load(town=True, rig="none",
-                             cfg={"SECONDARY_CHANGE_ENABLED": False, "SECONDARY_BITS": 0x44})
+                             cfg={"SECONDARY_CHANGE_ENABLED": False, "SECONDARY_BITS": 0x44,
+                                  "SKILL_LOAD_RETAIL_ORDER": False})
     prof44 = [(op, vals) for op, vals, _l in sent44 if op in (PROFS, BITS, SETPROF)
               and isinstance(vals, list) and vals and vals[0] == 1]
     led.ok(prof44 == BASE_PROF_BITS_0x44,
@@ -943,7 +946,8 @@ try:
            "...values included (the whole-burst digest is the export's)",
            f"{burst_digest(sent44)} vs {BASE_DIGEST_BITS_0x44}")
     sent0, _st = drive_load(town=True, rig="none",
-                            cfg={"SECONDARY_CHANGE_ENABLED": False, "SECONDARY_BITS": 0})
+                            cfg={"SECONDARY_CHANGE_ENABLED": False, "SECONDARY_BITS": 0,
+                                 "SKILL_LOAD_RETAIL_ORDER": False})
     ops0 = [op for op, _v, _l in sent0]
     led.ok(ops0 == BASE_OPS_BITS_0 and BITS not in ops0,
            f"REVERT alone, the real burst: the export's {len(BASE_OPS_BITS_0)}-send "
@@ -952,7 +956,8 @@ try:
     led.ok(burst_digest(sent0) == BASE_DIGEST_BITS_0,
            "...and its whole-burst digest", f"{burst_digest(sent0)} vs {BASE_DIGEST_BITS_0}")
     senton, _st = drive_load(town=True, rig="none",
-                             cfg={"SECONDARY_CHANGE_ENABLED": True, "SECONDARY_BITS": 0})
+                             cfg={"SECONDARY_CHANGE_ENABLED": True, "SECONDARY_BITS": 0,
+                                  "SKILL_LOAD_RETAIL_ORDER": False})
     opson = [op for op, _v, _l in senton]
     i_on = opson.index(BITS) if BITS in opson else None
     led.ok(i_on is not None and opson.count(BITS) == 1 and opson[i_on - 1] == PROFS
