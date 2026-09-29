@@ -49,7 +49,7 @@ import vaultpath  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-29 CASTAI-Z2 (the z2-sdmg lane) +15, all vault-only (sec.12: the pin exact under the payoff / converted classes with P3's swing pairs, the second Zaishen tape's census exact with the 16 unbacked rows, the Zealot's Fire finding, the classify=False arm, the wire's [10]-naming census; the round-2 review's four: the announce-order arm, the arbitrary-value injection arm, the converted and payoff signatures on synthetic batches through events(); the round-3 review's four: the sibling class pinned with its twelve value singletons, the Fighter's census with its whole-point reading, the sibling-bound arm (ARM 4), the wire-order read's re-keyed rows at the pin; sec.12c: G4 exact on the tape with G4r and the whole-corpus signature, the removal-by-time arm): MEASURED, a vault run gives 134 (was 119, 6 red; 126 after round 1; 130 after round 2); floor unchanged -- a bare run still dies at section 1; 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-29 CASTAI-Z2 (the z2-sdmg lane) +16, all vault-only (sec.12: the pin exact under the payoff / converted classes with P3's swing pairs, the second Zaishen tape's census exact with the 16 unbacked rows, the Zealot's Fire finding, the classify=False arm, the wire's [10]-naming census; the round-2 review's four: the announce-order arm, the arbitrary-value injection arm, the converted and payoff signatures on synthetic batches through events(); the round-3 review's four: the sibling class pinned with its twelve value singletons, the Fighter's census with its whole-point reading, the sibling-bound arm (ARM 4), the wire-order read's re-keyed rows at the pin; the round-4 review's one: the flagged sibling counted at P2's floor, ARM 4 (iv); sec.12c: G4 exact on the tape with G4r and the whole-corpus signature, the removal-by-time arm): MEASURED, a vault run gives 135 (was 119, 6 red; 126 after round 1; 130 after round 2; 134 after round 3); floor unchanged -- a bare run still dies at section 1; 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 # vault/content/skill_labels.toml's label-tier row count per build its header declares,
@@ -1358,18 +1358,33 @@ def main():
     # onto that body in the batch -- and sets a word aside whatever its amount, so the class's
     # (connection, target, value) multiset is pinned exact per tape, and the twelve siblings
     # whose (target, value) is a singleton on their connection (no named / sibling / ally-cast
-    # row repeats it) are flagged `sibling_unbacked` and pinned by row. They STAY set aside:
-    # read in whole points they are the Fighter's 17 and 15 at a maximum that walks off the
-    # wire (the Fighter's check below), and counting them would put two two-hit pairs on the
-    # tape -- '5 307 9' (17 at 483 and at 531) and '3 307 8' -- for a reader limitation, not
-    # a retail fact, reddening the whole-corpus two-hit check above. At the pin the class is
-    # empty (payoff_set_aside 0 above) and so is the flag; corpus-wide the flag is REPORTED.
+    # row repeats it) are flagged `sibling_unbacked` and pinned by row. Read in whole points
+    # they are the Fighter's 17 and 15 at a maximum that walks off the wire (the Fighter's
+    # check below), and counting them everywhere would put two two-hit pairs on the tape --
+    # '5 307 9' (17 at 483 and at 531) and '3 307 8' -- for a reader limitation, not a retail
+    # fact, reddening the whole-corpus two-hit check above. So (the round-4 review) a flagged
+    # sibling is set aside BELOW P2's floor and COUNTED at it (`spellhitjoin.pairs`): the
+    # twelve join no pair of three hits on the tape -- asserted here, so the census check's
+    # 14 pairs / 74 hits above are P2's reading with them counted -- while three strays of
+    # one cause onto one foe reach P2 (ARM 4 (iv) below). On CAST rows the flag is 0 before
+    # the tape; three NONE-kind rows before it carry it (20260817T231139 :54071 x2, Z1 :58544
+    # -- inert, a none-kind row is never a cast pair's), reported; corpus-wide the flag is
+    # REPORTED.
     sib_z2 = collections.Counter((_port(r), r["target"], r["value"]) for r in rows_z2
                                  if r["kind"] == "cast" and r["why"] == "sibling")
     sib_unb_z2 = [(_port(r), r["t"], r["cause"], r["skill"], r["target"], r["value"], r["form"])
                   for r in rows_z2 if r["kind"] == "cast" and r["sibling_unbacked"]]
     sib_unb_corpus = collections.Counter(r["capture"] for r in rows
                                          if r["kind"] == "cast" and r["sibling_unbacked"])
+    sib_unb_noncast = collections.Counter((r["capture"], r["kind"]) for r in rows
+                                          if r["kind"] != "cast" and r["sibling_unbacked"])
+    sib_grp = collections.Counter((r["connection"], r["cause"], r["skill"], r["target"])
+                                  for r in rows_z2 if r["kind"] == "cast"
+                                  and spellhitjoin.counted(r, flagged=True))
+    sib_reach = sorted({(_port(r), r["cause"], r["skill"], r["target"]) for r in rows_z2
+                        if r["kind"] == "cast" and r["sibling_unbacked"]
+                        and sib_grp[(r["connection"], r["cause"], r["skill"], r["target"])]
+                        >= spellhitjoin.P2_MIN_HITS})
     Z2_SIBLINGS = {("51090", 9, -0.0352): 1, ("51090", 9, -0.03448): 3, ("51090", 9, -0.03386): 1,
                    ("51090", 9, -0.0332): 1, ("51090", 9, -0.03202): 1, ("51090", 9, -0.03063): 10,
                    ("51090", 9, -0.03043): 1, ("51090", 9, -0.0293): 1, ("51199", 8, -0.02523): 1,
@@ -1392,14 +1407,18 @@ def main():
                        ("64557", 667.39617, 6, 272, 9, -0.03106, "0x009F")]
     check(dict(sib_z2) == Z2_SIBLINGS and sum(sib_z2.values()) == 79
           and sib_unb_z2 == Z2_SIB_UNBACKED
-          and sum(n for cap, n in sib_unb_corpus.items() if cap < ZAISHEN2) == 0,
+          and sum(n for cap, n in sib_unb_corpus.items() if cap < ZAISHEN2) == 0
+          and sib_reach == [],
           "the SIBLING class on 20260929T100038 (exact, per tape): its 79 rows' (connection, "
           "target, value) multiset -- 76 onto the Fighter 9, 2 onto the Archer 8, 1 onto the "
           "Mage 10 -- and the twelve whose (target, value) is a singleton on the connection, "
-          "flagged `sibling_unbacked` and pinned by row (set aside on the structure, never on "
-          "the amount); none before the tape",
-          f"{dict(sib_z2)}; singletons {sib_unb_z2}; flagged corpus-wide (reported) "
-          f"{dict(sib_unb_corpus)}")
+          "flagged `sibling_unbacked` and pinned by row (set aside below P2's floor, counted "
+          "at it: on the tape none of the twelve joins a pair of three hits, so the tape's P2 "
+          "above reads 14 / 74 with them counted); none on a cast row before the tape",
+          f"{dict(sib_z2)}; singletons {sib_unb_z2}; flagged cast rows corpus-wide (reported) "
+          f"{dict(sib_unb_corpus)}; flagged non-cast rows (reported, inert) "
+          f"{dict(sib_unb_noncast)}; flagged rows in a pair of >= {spellhitjoin.P2_MIN_HITS} "
+          f"on the tape {sib_reach}")
     # THE FINDING the classes uncover (exact, per tape): Zealot's Fire onto the observer, read
     # at the first maximum the observer held that makes the word whole (F46, current first), is
     # SEVERAL values -- 22 x62 and 38 x31 with their doubles 44 x4 / 76 x3 and fourteen
@@ -1648,18 +1667,32 @@ def main():
           "unbacked count grows by exactly five -- rule (c) cannot absorb a stray value",
           str((inj_key, sc_inj["multi_valued"].get(inj_key), sc_inj["payoff_set_aside"],
                sc_future["payoff_set_aside"], inj_pc["unbacked"])))
-    # KNOWN-BAD ARM 4 (the sibling bound, rule (b), the round-3 review): sibling-shaped rows
-    # with ARBITRARY values planted under a future stamp beside the tape's copy. (i) Five
-    # copies of the tape's first sibling (:57580 127.488, cause 4's Smite Hex 302 onto the
-    # Fighter 9, the reviewer's injection) in its own batch: six words from that cause onto
-    # that body in one batch, so none is a sibling (UNIQUE); the real one is re-read as (c) --
-    # its value is witnessed -- and the five planted are not (no witness for -0.01..-0.05):
-    # COUNTED, P2 sees the five-valued pair, the payoff count does not move, the (c)-unbacked
-    # count grows by five. (ii) One copy in each of five OTHER sibling batches of the same
-    # cause onto the same body: the same, and P2 sees a three-valued pair under 275. (iii) One
-    # copy onto the caster's ALLY (a monk the cause announced a cast at) in the first batch:
-    # not a sibling (FOE), not ally-cast-shaped, counted with no flag. Dropping UNIQUE or FOE
-    # from rule (b) goes red here.
+    # KNOWN-BAD ARM 4 (the sibling bound, rule (b), the round-3 and round-4 reviews):
+    # sibling-shaped rows with ARBITRARY values planted under a future stamp beside the tape's
+    # copy. A planted row's `foe` (and with it `ally_cast`) is DERIVED from the tape's own
+    # token reading, never hand-set -- `_foe_of`: events() set `foe` on every row between the
+    # two bodies (the tokens differ symmetrically), and an ally-cast row of the cause names
+    # the ally as its announce's target (the same token); the token computation itself is
+    # exercised by the synthetic events() check below (a word onto the caster's ally beside a
+    # named word). (i) Five copies of the tape's first sibling (:57580 127.488, cause 4's
+    # Smite Hex 302 onto the Fighter 9, the reviewer's injection) in its own batch: six words
+    # from that cause onto that body in one batch, so none is a sibling (UNIQUE); the real one
+    # is re-read as (c) -- its value is witnessed -- and the five planted are not (no witness
+    # for -0.01..-0.05): COUNTED, P2 sees the five-valued pair, the payoff count does not
+    # move, the (c)-unbacked count grows by five. (ii) One copy in each of five OTHER sibling
+    # batches of the same cause onto the same body: the same, and P2 sees a three-valued pair
+    # under 275. (iii) One copy onto the caster's ALLY (a monk the cause announced a cast at)
+    # in the first batch, its `foe` the tape's reading (False): not a sibling (FOE), not
+    # ally-cast-shaped, counted with no flag. Dropping UNIQUE or FOE from rule (b) goes red
+    # here. (iv), the shape (b) DOES read as a sibling, is the next check.
+    def _foe_of(cause, target):
+        seen = {r["foe"] for r in rows_z2 if {r["cause"], r["target"]} == {cause, target}}
+        if len(seen) == 1:
+            return seen.pop()
+        if any(r["ally_cast"] and r["cause"] == cause and r["ann_target"] == target
+               for r in rows_z2):
+            return False
+        return None
     s_row = min((r for r in rows_z2 if r["kind"] == "cast" and r["why"] == "sibling"),
                 key=lambda r: r["t"], default=None)
     inj4 = [dict(s_row, capture="20270101T000000", value=round(-0.01 * (k + 1), 5),
@@ -1687,8 +1720,10 @@ def main():
     ally = next((r["ann_target"] for r in rows_z2 if s_row is not None and r["kind"] == "cast"
                  and r["cause"] == s_row["cause"] and r["ally_cast"]
                  and r["ann_target"] != r["cause"]), None)
-    inj6 = ([dict(s_row, capture="20270101T000000", target=ally, foe=False, ally_cast=False,
-                  value=-0.02)] if s_row is not None and ally is not None else [])
+    foe6 = None if s_row is None or ally is None else _foe_of(s_row["cause"], ally)
+    inj6 = ([dict(s_row, capture="20270101T000000", target=ally, foe=foe6,
+                  ally_cast=s_row["ally_cast"] and bool(foe6), value=-0.02)]
+            if s_row is not None and ally is not None else [])
     sc_inj6 = spellhitjoin.score([r for r in rows if r["capture"] != ZAISHEN] + future + inj6)
     pl6 = [(r["why"], r["payoff"], r["ally_cast_unbacked"], r["sibling_unbacked"])
            for r in spellhitjoin.classify_payoffs([dict(r) for r in future + inj6])
@@ -1702,7 +1737,7 @@ def main():
           and len(others) == 5 and pl5 == [(None, True)] * 5
           and new5 == {"4 275 9": [-0.055, -0.033, -0.022]}
           and sc_inj5["payoff_set_aside"] == sc_future["payoff_set_aside"]
-          and ally is not None and pl6 == [(None, False, False, False)]
+          and ally is not None and foe6 is False and pl6 == [(None, False, False, False)]
           and sc_inj6["payoff_set_aside"] == sc_future["payoff_set_aside"],
           "KNOWN-BAD ARM 4: sibling-shaped rows with arbitrary values planted under a future "
           "stamp beside the tape's copy are COUNTED -- five in the first sibling's own batch "
@@ -1710,11 +1745,71 @@ def main():
           "ally-cast with its witnessed value, the five unbacked; P2 sees the five-valued pair "
           "'4 302 9', the payoff count unmoved, the unbacked count +5), one in each of five other "
           "sibling batches of the same cause onto the same body (P2 sees the three-valued pair "
-          "under 275), and one onto the caster's ALLY (not a sibling, not ally-cast-shaped, no "
-          "flag) -- rule (b) cannot absorb a second word onto a body nor a word onto an ally",
+          "under 275), and one onto the caster's ALLY, its `foe` the tape's own token reading "
+          "(not a sibling, not ally-cast-shaped, no flag) -- rule (b) cannot absorb a second "
+          "word onto a body nor a word onto an ally",
           str((key4, sc_inj4["multi_valued"].get(key4), pl4, real4, sc_inj4["payoff_set_aside"],
                sc_future["payoff_set_aside"], pc4["unbacked"], pc4["sibling_unbacked"],
-               len(others), pl5, new5, ally, pl6)))
+               len(others), pl5, new5, ally, foe6, pl6)))
+    # KNOWN-BAD ARM 4 (iv) (the round-4 review): the shape rule (b) DOES read as a sibling --
+    # a stray onto a foe the cause never otherwise hits, alone in an (a)-batch, its value a
+    # singleton on the connection -- planted THREE times, one per (a)-batch, onto the Archer 8
+    # from cause 4 under Mend Condition 275 on :57580 (the tape's three such batches; cause 4
+    # lands nothing on 8 anywhere on the tape and the (8, value) pool on :57580 is empty; `foe`
+    # is the tape's reading of 8 and 4, True). Rule (b) flags every one `sibling_unbacked`, and
+    # P2 -- counting the flagged at its floor -- SEES the three-valued pair '4 275 8' (the
+    # Archer's maximum is never on the wire, so no penalty split absorbs it): the whole-corpus
+    # P2 check's set would be exactly that pair. The two-hit check does not move, the payoff
+    # count grows by three (they ARE set aside there), the flag by three. TWO of the three are
+    # the residual: set aside below the floor, reported, no pair. Dropping the flagged rows from
+    # `pairs` at P2's floor goes red here.
+    f57 = [r for r in rows_z2 if _port(r) == "57580"]
+    slots7 = sorted((r for r in f57 if r["kind"] == "cast" and r["why"] == "named"
+                     and r["cause"] == 4 and r["skill"] == 275
+                     and not any(x["batch"] == r["batch"] and x["cause"] == 4 and x["target"] == 8
+                                 for x in f57)), key=lambda r: r["t"])
+    foe7 = _foe_of(4, 8)
+    inj7 = [dict(r, capture="20270101T000000", target=8, named=None, foe=foe7,
+                 ally_cast=r["ally_cast"] and bool(foe7), value=round(-0.07 - 0.01 * k, 5),
+                 t=r["t"] + 0.0005) for k, r in enumerate(slots7[:3])]
+    key7 = "4 275 8"
+    sc_inj7 = spellhitjoin.score([r for r in rows if r["capture"] != ZAISHEN] + future + inj7)
+    sc_inj8 = spellhitjoin.score([r for r in rows if r["capture"] != ZAISHEN] + future + inj7[:2])
+    cl7 = spellhitjoin.classify_payoffs([dict(r) for r in future + inj7])
+    pl7 = [(r["why"], r["sibling_unbacked"]) for r in cl7
+           if r["target"] == 8 and r["value"] in {x["value"] for x in inj7}
+           and r["t"] in {x["t"] for x in inj7}]
+    pc7 = spellhitjoin.payoff_census(cl7)
+    pc8 = spellhitjoin.payoff_census(spellhitjoin.classify_payoffs(
+        [dict(r) for r in future + inj7[:2]]))
+    p2_set7 = sorted(set(sc_inj7["multi_valued"]) - set(sc_inj7["penalty_split"]) - PENALTY_SPLIT)
+    check(len(slots7) == 3 and foe7 is True and len({r["batch"] for r in inj7}) == 3
+          and not any(r["cause"] == 4 and r["target"] == 8 for r in rows_z2)
+          and pl7 == [("sibling", True)] * 3
+          and sc_inj7["multi_valued"].get(key7) == [-0.09, -0.08, -0.07]
+          and key7 not in sc_inj7["penalty_split"] and key7 not in sc_future["multi_valued"]
+          and p2_set7 == [key7]
+          and (sc_inj7["pairs"], sc_inj7["pair_hits"])
+          == (sc_future["pairs"] + 1, sc_future["pair_hits"] + 3)
+          and sc_inj7["two_hit_two_valued"] == sc_future["two_hit_two_valued"]
+          and sc_inj7["payoff_set_aside"] == sc_future["payoff_set_aside"] + 3
+          and pc7["sibling_unbacked"] == 12 + 3 and pc7["rows"] == 218 + 3
+          and key7 not in sc_inj8["multi_valued"] and key7 not in sc_inj8["two_hit_two_valued"]
+          and (sc_inj8["pairs"], sc_inj8["pair_hits"]) == (sc_future["pairs"], sc_future["pair_hits"])
+          and pc8["sibling_unbacked"] == 12 + 2,
+          "KNOWN-BAD ARM 4 (iv): three sibling-shaped strays with arbitrary values onto a foe the "
+          "cause never otherwise hits (the Archer 8 from cause 4 under 275 on :57580), one per "
+          "(a)-batch, under a future stamp -- rule (b) reads every one as a sibling and flags it, "
+          "and P2 counts the flagged at its floor: the three-valued pair '4 275 8' is SEEN (the "
+          "whole-corpus P2 set would be exactly it), the two-hit check unmoved, the payoff count "
+          "+3, the flag +3; two of the three are the residual, set aside and reported (+2, no "
+          "pair)",
+          str((len(slots7), foe7, pl7, sc_inj7["multi_valued"].get(key7), p2_set7,
+               (sc_inj7["pairs"] - sc_future["pairs"], sc_inj7["pair_hits"] - sc_future["pair_hits"]),
+               sc_inj7["two_hit_two_valued"] == sc_future["two_hit_two_valued"],
+               sc_inj7["payoff_set_aside"] - sc_future["payoff_set_aside"], pc7["sibling_unbacked"],
+               key7 in sc_inj8["multi_valued"], key7 in sc_inj8["two_hit_two_valued"],
+               pc8["sibling_unbacked"])))
     # THE SIGNATURES ON SYNTHETIC BATCHES, through `events` itself (the review: nothing had
     # exercised the heal half of `converted`, nor the foe clause of `ally_cast`). Batches a
     # second apart (healjoin.batches splits at 50 ms); v[0] is the header the reader skips.

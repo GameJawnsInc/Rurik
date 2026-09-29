@@ -73,22 +73,28 @@ TWO ROWS THE JOIN MUST NOT COUNT AS THE ANNOUNCED SKILL'S (2026-09-29, CASTAI-Z2
       trigger, stays a value P2 can see. `classify_payoffs` is the rule, applied by
       `events` and again by `score` (an injected row is judged by its shape).
 
-      THE SIBLING'S VALUE (the round-3 review): (b) is a structural rule and sets a
-      word aside whatever its amount, so a sibling whose (target, value) does not
-      recur on its connection among payoff-shaped rows ((a), (b), or ally-cast) is
-      flagged `sibling_unbacked` -- still set aside, because on 20260929T100038 the
-      twelve such rows are the Fighter's 17 and 15 points at a maximum that walks OFF
-      the wire (the henchmen's property 42 never comes; the observer's own maxima
-      walk 480 -> 408 -> 418 -> 427 -> 437 -> 446 in ~10-point steps), and counting
-      them would put two two-hit pairs on the tape for a reader limitation -- but
-      reported by `payoff_census`, and pinned exact per tape by test_skilldamage 12
-      with the whole (connection, target, value) multiset of the class. What a
-      planted stray breaks: a second word from the cause onto the body in the batch
-      (UNIQUE) or a word onto the caster's ally (FOE) is counted, never a sibling. What
-      it does not: a single stray onto a foe in an (a)-batch that carries no other
-      word from that cause onto that foe is set aside and only REPORTED -- on the
-      Zaishen-2 tape 38 of its 114 (a)-batches have no word onto the Fighter and ~112
-      none onto the Archer / the Mage, so the residual is that many slots per tape.
+      THE SIBLING'S VALUE (the round-3 and round-4 reviews): (b) is a structural rule
+      and sets a word aside whatever its amount, so a sibling whose (target, value)
+      does not recur on its connection among payoff-shaped rows ((a), (b), or
+      ally-cast) is flagged `sibling_unbacked`. On 20260929T100038 the twelve such
+      rows are the Fighter's 17 and 15 points at a maximum that walks OFF the wire
+      (the henchmen's property 42 never comes; the observer's own maxima walk 480 ->
+      408 -> 418 -> 427 -> 437 -> 446 in ~10-point steps), and counting them
+      everywhere would put two two-hit pairs on the tape ('5 307 9', '3 307 8') for
+      a reader limitation. So a flagged sibling is SET ASIDE BELOW P2's FLOOR and
+      COUNTED AT OR ABOVE IT (`pairs`: a (b) row flagged unbacked is a value for a
+      pair of >= P2_MIN_HITS hits and not for the two-hit check): three strays of one
+      cause onto one foe, each alone in its own (a)-batch, reach P2 as a multi-valued
+      pair, while the tape's twelve form no pair of three (test_skilldamage 12 asserts
+      both). The flag is reported by `payoff_census`, pinned exact per tape by
+      test_skilldamage 12 with the whole (connection, target, value) multiset of the
+      class, and is 0 on CAST rows before the tape (three none-kind rows before it
+      carry it -- 20260817T231139 :54071 x2, 20260928T103123 :58544 -- and a none-kind
+      row is never a cast pair's). What a planted stray breaks: a second word from the
+      cause onto the body in the batch (UNIQUE) or a word onto the caster's ally (FOE)
+      is counted, never a sibling; three or more onto one foe, one per (a)-batch, are
+      flagged and P2 sees them. The RESIDUAL: one or two such strays are set aside
+      below the floor and only REPORTED.
   CONVERTED  a `+0.0` word (bits 0x00000000) with a property-55 heal onto the same
       target in the same batch: Reversal of Fortune took the hit (healjoin P6, the
       RB tape: a fully converted hit's word is +0.0, never -0.0). It carries no
@@ -152,6 +158,8 @@ PROP_DAMAGE = (16, 17)
 ANNOUNCE_WINDOW = 4.0      # s; longer than any activation on the wire
 TICK_WINDOW = 5.0          # s; a DoT's cadence is 1 s
 MIND_BURN = 185
+P2_MIN_HITS = 3            # P2's floor: a pair with this many hits is judged; a flagged
+                           # sibling (docstring) is counted at it and set aside below it
 ANNOUNCE_BY_ORDER = True   # the announce read as it comes, both forms (docstring); False is
                            # the first cut of 2026-09-29 -- the known-bad arm
 
@@ -271,7 +279,8 @@ def classify_payoffs(rows):
     cause, the same batch, onto a FOE of the cause, the only word from that cause
     onto that body in the batch) ride the same trigger -- a sibling whose (target,
     value) is a singleton on the connection among payoff-shaped rows is flagged
-    `sibling_unbacked` (the docstring: set aside, reported, pinned per tape); an
+    `sibling_unbacked` (the docstring: set aside below P2's floor, counted at it,
+    reported, pinned per tape; 0 on cast rows before 20260929T100038); an
     ally-cast's word onto a foe is one only where the same connection has ALREADY
     named that (cause, skill)'s completion as another skill's -- an (a) row -- and
     named that (target, value) -- an (a) or (b) row. `score` applies this again, so
@@ -452,27 +461,35 @@ def census(codec=None, unnamed=None, set_aside=None, refused=None, named=None,
     return out
 
 
-def counted(r, classify=True):
+def counted(r, classify=True, flagged=False):
     """Is this row the announced skill's own hit -- not a tick, and (with
     `classify`, the default, on a CAST row) not a payoff riding the batch nor a
     converted +0.0? A swing row is never set aside here: P3 is the control that
     sees a weapon's range, and a converted swing under Reversal of Fortune (the RB
     tape's) is one more value there, never one fewer. `classify=False` is the
-    known-bad arm: the reader before 2026-09-29."""
+    known-bad arm: the reader before 2026-09-29. With `flagged` a (b) sibling
+    flagged `sibling_unbacked` (the docstring) is counted too -- P2's reading at
+    and above its floor (`pairs`); below it the flagged row stays set aside."""
     if r["tick"]:
         return False
     if r["kind"] != "cast" or not classify:
         return True
+    if flagged and r["sibling_unbacked"]:
+        return True
     return not (r["payoff"] or r["converted"])
 
 
-def pairs(rows, kind="cast", min_hits=3, classify=True):
+def pairs(rows, kind="cast", min_hits=3, classify=True, flagged=None):
     """{(capture, connection, cause, skill, target): [values]} for one kind,
     ticks (and, with `classify`, payoffs and converted words) set aside, pairs
-    under `min_hits` dropped."""
+    under `min_hits` dropped. `flagged` (default None: `min_hits >= P2_MIN_HITS`)
+    counts the siblings flagged `sibling_unbacked` -- the docstring's rule, set
+    aside below P2's floor and counted at or above it, lives here."""
+    if flagged is None:
+        flagged = min_hits >= P2_MIN_HITS
     g = collections.defaultdict(list)
     for r in rows:
-        if r["kind"] != kind or not counted(r, classify):
+        if r["kind"] != kind or not counted(r, classify, flagged):
             continue
         g[(r["capture"], r["connection"], r["cause"], r["skill"],
            r["target"])].append(r["value"])
@@ -487,8 +504,8 @@ def payoff_census(rows):
     n}, "unbacked": n (the (c) shape without its witnesses -- NOT set aside; counted
     here so a tape where the rule could not reach a body is read, not absorbed),
     "sibling_unbacked": n (a (b) row whose (target, value) is a singleton on its
-    connection -- set aside, flagged; the docstring says why it is not counted)}.
-    Cast-kind rows only."""
+    connection -- flagged, set aside below P2's floor and counted at it; the
+    docstring says why)}. Cast-kind rows only."""
     cast = [r for r in rows if r["kind"] == "cast" and not r["tick"]]
     pay = [r for r in cast if r["payoff"]]
     return {
@@ -559,7 +576,9 @@ def score(rows, classify=True):
         rows = classify_payoffs([dict(r) for r in rows])
     cast = [r for r in rows if r["kind"] == "cast"]
     announced = [r for r in cast if r["skill"] is not None]
-    cp = pairs(rows, "cast", 3, classify)
+    # P2 at its floor counts a flagged sibling (`pairs` with min_hits >= P2_MIN_HITS);
+    # the two-hit check below does not (the docstring: THE SIBLING'S VALUE).
+    cp = pairs(rows, "cast", P2_MIN_HITS, classify)
     named = {k: v for k, v in cp.items() if k[3] is not None}
     multi = {k: sorted(set(v)) for k, v in named.items() if len(set(v)) > 1}
     # A multi-valued pair whose fraction moved WITH its target's maximum --
@@ -570,7 +589,7 @@ def score(rows, classify=True):
     # with a hit whose maximum was never seen does not qualify.
     by_max = collections.defaultdict(lambda: collections.defaultdict(set))
     for r in rows:
-        if r["kind"] == "cast" and counted(r, classify) and r["skill"] is not None:
+        if r["kind"] == "cast" and counted(r, classify, flagged=True) and r["skill"] is not None:
             by_max[(r["capture"], r["connection"], r["cause"], r["skill"],
                     r["target"])][r["maxhp"]].add(r["value"])
     penalty_split = {k: {m: sorted(vs) for m, vs in by_max[k].items()}
@@ -580,7 +599,8 @@ def score(rows, classify=True):
     # Two hits, two values: below P2's floor, and named rather than dropped.
     # The corpus's one such pair is a MIXED batch -- Fireball's projectile
     # and Incendiary Bonds' hex-end payoff from the same caster landing on
-    # one target 43 ms apart (studies/skills 43.5) -- not a second bucket.
+    # one target 43 ms apart (studies/skills 43.5) -- not a second bucket. A
+    # flagged sibling is NOT counted here (`pairs` below P2_MIN_HITS).
     two = {k: sorted(set(v)) for k, v in pairs(rows, "cast", 2, classify).items()
            if len(v) == 2 and len(set(v)) == 2 and k[3] is not None}
     sp = pairs(rows, "swing", 10, classify)
