@@ -184,7 +184,10 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
   Z2.P1  every 275 (Mend Condition) by a Monk body -> the target's condition bit
          STRICTLY BEFORE the announce IN STREAM ORDER (Conn.status_before on the
          announce's s2c index -- fix 1, 2026-09-29). Counterexample: the bit clear
-         there -> FAILED; none, with n >= 5 -> HELD; n < 5 -> NULL. This rule used to
+         there -> FAILED; none, with n >= 5 -> HELD; n < 5 -> NULL. POST-HOC via FIX 1
+         (instrument repair): replaced [FAILED] 2 of 92 with [HELD] 0 of 92 (R1,
+         2026-09-29, the round-2 review: the repair also drops a clause, so by the
+         convention above it takes the mark). This rule used to
          read "at the announce (Conn.status_at), OR rising inside the announce's own
          batch (t <= ta + BATCH: a word's order inside one batch is not a time order;
          counted as carrying and printed apart as 'same batch')": that premise was
@@ -201,9 +204,13 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
          an Elementalist hex) DOES hex the monks (their 0x800 bit rises), so 302 (Smite
          Hex) is scored by the same rule against the hexed bit, the 9F self form included
          (target byte 3, the caster is legal), floor 5 (SCORER'S RULE: Mend Condition's).
+         POST-HOC via FIX 1 (instrument repair): replaced [FAILED] 2 of 29 with [FAILED]
+         1 of 29 (398.291 stands; R1, 2026-09-29).
   Z2.P2  every 307 (Reversal of Fortune) by a Monk, both forms (the 9F form's target is
          the caster, L1): the target's reconstructed health JUST BEFORE the announce
-         (Conn.health_at -- the same h_target column Z1.P3 and Z3.P4 read). At-or-below
+         (Conn.health_before, strictly before the announce in stream order -- FIX 1,
+         2026-09-29, named here since R2 of the round-2 review; the same h_target column
+         Z1.P3 and Z3.P4 read, which reads the same way since FIX 1). At-or-below
          = round(h, 3) <= 0.700. One cast above the line -> FAILED (the registration says
          "every"); none, with n >= 10 -> HELD; n < 10 -> NULL. A second column prints the
          MINIMUM reconstruction inside the 1 s before the announce (the AI decides on a
@@ -221,11 +228,13 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
          side removes an enchantment (the party's bars carry no removal; the observer's
          casts are 1 / 2 / 153 / 364 / 2858 / 3443, none a removal). A counterexample is
          an announce of S at T while such an episode of S on T is live -> FAILED; none
-         -> HELD when the tape EXPOSED the rule (fix 4, 2026-09-29): the exposure is the
-         episodes in which the caster's slot came READY (completion + the exe recharge)
-         while the episode still lived on a living body, and the re-casts declined
-         inside them (ench_exposure; printed with and without the [7, T, 13] cut); a
-         re-cast inside one FAILS, no exposure is NULL -- STRUCTURAL for 272, which
+         -> HELD when the tape EXPOSED the rule -- POST-HOC (FIX 4, chosen after the
+         first run, which read 272 HELD and 271 HELD with a vacuity note): the exposure
+         is the episodes in which the caster's slot came READY (completion + the exe
+         recharge) while the episode still lived on a living body, and the re-casts
+         declined inside them (ench_exposure; printed with and without the [7, T, 13]
+         cut); a re-cast inside one FAILS, no exposure is NULL (under the same POST-HOC
+         mark: this rule too was chosen after that first run) -- STRUCTURAL for 272, which
          recharges in 20 s and lives 8 and was self-cast 27 / 27, so no slot is ready
          while its own episode lives, and that null is printed on the verdict line,
          never folded into a HELD. The first run counted 'casts that HAD a live previous
@@ -239,14 +248,18 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
          251 on T is IN FLIGHT (announced, not yet completed) is printed apart and does
          not refute: T carried nothing yet.
   Z2.P5  every 68 (Drain Enchantment) by a Monk -> was the target enchanted at the
-         announce? Observer: a live 0x0042 of an exe type-6 skill (EXACT). Henchman: the
-         class visual [6, T, 13] live (Conn.live6) -- the PRIMARY instrument, OBSERVED
+         announce (strictly before it, in stream order -- FIX 1, 2026-09-29)? Observer:
+         a live 0x0042 of an exe type-6 skill (EXACT, applies_live_before). Henchman: the
+         class visual [6, T, 13] live (Conn.live6_before, stream order, FIX 1; named here
+         since R2 of the round-2 review) -- the PRIMARY instrument, OBSERVED
          rising with the Mage's 180 / 184 completions and falling with a 68's -- with the
          0x80 bit and a RECONSTRUCTION (the type-6 self-casts completed on T and still
          inside the exe's duration0, minus one per 68 completed on T since the oldest of
          them) printed beside it as controls; a visual / bit disagreement marks the row
          CONTESTED. Unenchanted = no live 13 (henchman) / no live type-6 0x0042
          (observer). One 68 at an unenchanted target -> FAILED; none, n >= 1 -> HELD.
+         POST-HOC via FIX 1 (instrument repair): replaced [FAILED] 2 of 43 with [FAILED]
+         1 of 43 (388.551 stands; R1, 2026-09-29).
          Every cast prints the seconds since the last [7, T, 13] and the other Monks'
          68s at the same T inside the 2 s before (a burst that stripped the target
          before this announce): the AI's decision may predate the strip -- a lead the
@@ -256,7 +269,11 @@ THE INSTRUMENTS, as measured on this tape (OBSERVED unless labelled):
          Monk's CURRENT TARGET at t is the target of its latest 0x00A0 [4] at or before t,
          held until its next [4]; it ENDS at the Monk's own 0x009F [3] (attack stopped)
          after that [4], at the target's death, the Monk's own death / re-create, or
-         P6_HOLD = 5 s without a [4] (a safety cap: the 1.33 s swing cadence x several).
+         P6_HOLD = 5 s without a [4] (a safety cap of several swings: the Monks' OWN
+         cadence is MEASURED on this tape and printed beside P6_HOLD -- consecutive
+         [4]->[4] with no [3] between, and [4]->[1] (GV_MELEE_ATTACK_FINISHED) -- R3,
+         2026-09-29; this used to read "the 1.33 s swing cadence x several", and the only
+         1.33 s this tape measures is the OBSERVER's axe, 0x0035 base 1.33: another body).
          FIX 2, 2026-09-29, the judge: the [3] is the wire's own statement that the
          attack ended, and the registration says 'attack targets'. This rule used to
          read "or 30 s without a [4] (castethogram.ATTACK_WINDOW). A [3] attack stopped
@@ -368,6 +385,36 @@ faults; each is applied here and dated at its site; TWO MOVED A VERDICT and say 
   no check was deleted (the first run's 'would still have been live' count still prints,
   labelled superseded; the sticky P6 reading still prints, labelled a lead).
 
+ROUND 2 (2026-09-29: the scorer's own check after the six fixes raised five items; text
+and one measurement, no logic on any verdict path, no count moved, no verdict moved --
+the seven Z2 tokens and the thirteen Z1 / Z3 tokens re-run identical, and the Z1
+--prefix output is byte-identical to the run after the six fixes):
+  R1  POST-HOC marks with the verdict they replaced, by the convention at the top of
+      this section (the Z2.P6 [3] cut carried one; these did not): Z2.P4's EXPOSURE
+      unit and its 'no exposure -> NULL' rule (FIX 4) at the rule, in ench_exposure's
+      docstring and on the printed verdict line -- the first run read 272 HELD and 271
+      HELD with a vacuity note; Z2.P1, P1b and P5 (FIX 1: an instrument repair to the
+      'strictly before' rule that also dropped the same-batch clause) at their rules --
+      [FAILED] 2 of 92 -> [HELD] 0 of 92, [FAILED] 2 of 29 -> 1 of 29, [FAILED] 2 of 43
+      -> 1 of 43.
+  R2  The Z2.P2 / P5 rules name the instruments the code has read since FIX 1
+      (Conn.health_before / Conn.live6_before, stream order), where they still said
+      health_at / live6; P1 / P1b's 'would have gone the other way' text reads 'clear
+      strictly before the announce in stream order', not 'through the announce's batch'.
+  R3  The Monks' OWN swing cadence is MEASURED and printed beside P6_HOLD (verdict line
+      and a detail line): the only 1.33 s this tape measures is the OBSERVER's axe
+      (0x0035 base 1.33), another body, and the docstring had justified the 5 s cap by
+      it. Consecutive [4]->[4] with no [3] between: median 1.709 s over 103 (min 1.31;
+      17 over the cap); [4]->[1] (0x009F [159, 1, monk, 0], GV_MELEE_ATTACK_FINISHED,
+      109 words): median 0.565 s. So P6_HOLD = 5 s is ~2.9 median swings. The verdict
+      does not move: every cap from 2 to 60 s under the [3] cut reads >= 0.945.
+  R4  275's exe neighbour 276 carries the identical triple (5 / 0.75 / 2, target 4),
+      so for 275 corroborate_ids confirms CONSISTENCY, not identity; every other
+      checked id differs from both neighbours (re-read on the 38888 exe). Stated at
+      the id comment and in corroborate_ids; nothing moves.
+  R5  The Z1 --prefix change list under 1 above (ten lines, no verdict) is confirmed
+      and kept; no changed Z1 row is cited in studies/, PLAN.md or PLAN-LOG.md.
+
 Refuses (exit 2) when the capture is missing or holds no Zaishen arena connection.
 Standard library only. Read-only: writes nothing.
 """
@@ -439,6 +486,13 @@ OBSIDIAN_FLAME, HEAL_AREA, EARTH_ATTUNEMENT, WARD_AGAINST_MELEE = 2809, 280, 169
 # the Fighter's 1 / 322 / 327 / 383, the observer's 153 / 2858 / 3443) prints by number
 # unless the repo already names it (364 "Charge!", effects.py; 197 Fire Storm;
 # 179 Incendiary Bonds and 185 Mind Burn, hexjoin; 186 Fireball, aotjoin).
+# R4 (2026-09-29, the round-2 review): 275's exe neighbour 276 carries the IDENTICAL
+# triple (5 / 0.75 / 2, target byte 4; 274 reads 10 / 2.0 / 25), so for 275 the table
+# check confirms CONSISTENCY, not identity -- an off-by-one there would pass it, and the
+# name rests on the WIKI infobox id plus the wire id. Every other checked id differs
+# from both its neighbours in the triple (re-read on the 38888 exe: 68 from 67 / 69,
+# 180 from 179 / 181, 251 from 250 / 252, 271 from 270 / 272, 272 from 271 / 273, 302
+# from 301 / 303, 307 from 306 / 308, 320 from 319 / 321, 404 from 403 / 405).
 BALTHAZARS_AURA, MEND_CONDITION, REVERSAL_OF_FORTUNE, SCOURGE_HEALING = 272, 275, 307, 251
 SMITE_HEX, ZEALOTS_FIRE, DRAIN_ENCHANTMENT, RESURRECTION_SIGNET = 302, 271, 68, 2
 AURA_OF_RESTORATION, POISON_ARROW, HAMSTRING = 180, 404, 320
@@ -461,7 +515,12 @@ ATTACK_HOLD = ce.ATTACK_WINDOW   # 30 s: the first run's sticky hold (build_cast
                                  # another question) -- since FIX 2 (2026-09-29) a LEAD in P6's
                                  # sensitivity line, not the rule
 P6_HOLD = 5.0                    # FIX 2: the safety cap on a current target with no [3] / [4] since
-                                 # (the 1.33 s swing cadence x several) -- SCORER'S RULE, POST-HOC
+                                 # (several swings: the Monks' OWN [4]->[4] / [4]->[1] cadence is
+                                 # MEASURED and printed beside P6's verdict, R3 2026-09-29 -- the
+                                 # 1.33 s this used to cite is the OBSERVER's axe, another body)
+                                 # -- SCORER'S RULE, POST-HOC
+PROP_MELEE_ATTACK_FINISHED = 1   # 0x009F [159, 1, agent, 0]: agents.GV_MELEE_ATTACK_FINISHED (UPSTREAM
+                                 # name; the shape MEASURED on 20260929T100038 -- 109 on the Monks)
 PROP_ATTACK_STOPPED = 3          # 0x009F [159, 3, agent, 0]: agents.GV_ATTACK_STOPPED (UPSTREAM name;
                                  # the shape MEASURED on 20260929T100038 -- 35 on :51090 alone)
 ENCH_DURATION = {272: 8.0, 271: 60.0}   # exe 38888 duration0 = duration15 (checked at run time)
@@ -1393,7 +1452,9 @@ def score_z3(m3):
 def corroborate_ids(build):
     """(named {id: name}, mismatches [(id, wiki triple, exe triple)]): a Z2 id is named
     only when the exe of `build` carries the wiki page's energy / activation / recharge
-    (WIKI_TRIPLES). A check the exe can fail: a mismatch prints the id by number."""
+    (WIKI_TRIPLES). A check the exe can fail: a mismatch prints the id by number. For 275
+    it confirms consistency, not identity: the neighbour 276 carries the same triple (the
+    id comment above WIKI_TRIPLES, R4 2026-09-29)."""
     ex = exe_skill_rows(build) or {}
     named, bad = {}, []
     for sid, (e, a, r) in sorted(WIKI_TRIPLES.items()):
@@ -1504,8 +1565,8 @@ def score_z2_p1(z2, named):
                 f"{dict(forms)}; onto a target carrying the {bname} {n - len(clean)} (of which "
                 f"'same batch' {same_batch}), onto a clean one {len(clean)}; self-target "
                 f"anomalies (table byte 4 says other ally) {len(anomalies)}{extra}")
-        wf = (f"with >= {FLOORS[pid]} casts, any one at a target whose {bname} was clear through "
-              f"the announce's batch -> FAILED")
+        wf = (f"with >= {FLOORS[pid]} casts, any one at a target whose {bname} was clear strictly "
+              f"before the announce in stream order -> FAILED")
         out[pid] = (v, text, wf, {"rows": rows, "clean": clean, "anomalies": anomalies,
                                   "sym": (v_sym, len(sym_clean), len(clean) - len(sym_clean)),
                                   "recent": recent})
@@ -1595,7 +1656,9 @@ def ench_episodes(m, T, skill, marker_cut=True):
 
 
 def ench_exposure(m, skill, marker_cut):
-    """FIX 4 (2026-09-29, the CASTAI-Z2 judge): the EXPOSURE of Z2.P4's 272 / 271 half --
+    """FIX 4 (2026-09-29, the CASTAI-Z2 judge) -- POST-HOC (FIX 4, chosen after the first
+    run, which read 272 HELD and 271 HELD with a vacuity note): the EXPOSURE of Z2.P4's
+    272 / 271 half --
     the episodes (ench_episodes, with or without the [7, T, 13] cut) in which the CASTER's
     slot for the skill became READY (completion + the exe recharge) while the episode still
     lived on a living body (the caster alive at the ready instant), and the re-casts of the
@@ -1717,8 +1780,10 @@ def score_z2_p4(z2, named):
                      f"cut by death / re-create / [7, T, 13]) {len(cx_)}; EXPOSURE (episodes in "
                      f"which the caster's slot came ready -- completion + exe recharge "
                      f"{rech if rech is None else f'{rech:g}'} s -- while the episode still lived "
-                     f"on a living body) {len(exp_cut)} with the [7, T, 13] cut, {len(exp_nat)} "
-                     f"without; re-casts inside them {len(rc_cut)} / {len(rc_nat)} -> {v_}{reason}")
+                     f"on a living body; POST-HOC (FIX 4, chosen after the first run, which read "
+                     f"272 HELD and 271 HELD with a vacuity note)) {len(exp_cut)} with the "
+                     f"[7, T, 13] cut, {len(exp_nat)} without; re-casts inside them {len(rc_cut)} / "
+                     f"{len(rc_nat)} -> {v_}{reason}")
     v_, rows_, cx_, flight_, per_ = res[SCOURGE_HEALING]
     parts.append(f"{z2n(SCOURGE_HEALING, named)} n={len(rows_)} {dict(per_)}: onto a target "
                  f"already hexed at the announce {len(cx_)} -> {v_} (on the observer "
@@ -1874,6 +1939,7 @@ def score_z2_p6(z2):
     # capped reading (SCORER'S RULE, chosen after the data); the 1-s window and the 80 %
     # bar are the registration's, nothing else on this line is.
     sens = collections.defaultdict(collections.Counter)
+    cad41, cad44 = collections.defaultdict(list), collections.defaultdict(list)
     for m in z2:
         monks = list(m.opp)
         starts = {a: [(t, v[3], i) for i, (t, op, v) in enumerate(m.s2c)
@@ -1884,6 +1950,31 @@ def score_z2_p6(z2):
                      if op == ce.OP_INT and len(v) > 3 and v[1] == PROP_ATTACK_STOPPED and v[2] == a]
                  for a in monks}
         n_stops[m.tag] = sum(len(v) for v in stops.values())
+        # R3 (2026-09-29, the round-2 review): the Monks' OWN swing cadence, MEASURED here
+        # and printed beside P6_HOLD -- the 1.33 s the docstring cited was the OBSERVER's
+        # axe (0x0035 base 1.33), another body. Per Monk, in stream order: a [4] -> its
+        # next [1] (melee attack finished) when that is the Monk's next word of the three,
+        # and a [4] -> its next [4] with no [3] between (consecutive swings). A
+        # measurement, printed; no verdict reads it.
+        fins = {a: [(t, i) for i, (t, op, v) in enumerate(m.s2c)
+                    if op == ce.OP_INT and len(v) > 3 and v[1] == PROP_MELEE_ATTACK_FINISHED and v[2] == a]
+                for a in monks}
+        for a in monks:
+            ev = sorted([(i, t, 4) for (t, _tg, i) in starts[a]] + [(i, t, 1) for (t, i) in fins[a]]
+                        + [(i, t, 3) for (t, i) in stops[a]])
+            for k, (_i, t, w) in enumerate(ev):
+                if w != 4:
+                    continue
+                if k + 1 < len(ev) and ev[k + 1][2] == 1:
+                    cad41[m.tag].append(ev[k + 1][1] - t)
+                stopped = False
+                for (_i2, t2, w2) in ev[k + 1:]:
+                    if w2 == 3:
+                        stopped = True
+                    elif w2 == 4:
+                        if not stopped:
+                            cad44[m.tag].append(t2 - t)
+                        break
         rises = {a: m.bit_rises(a, DEAD_BIT) for a in monks + m.party()}
         c = p6_windows(m, monks, starts, stops, rises, P6_HOLD, True)
         for hold in (2.0, P6_HOLD, 10.0, ATTACK_HOLD, 60.0):
@@ -1907,6 +1998,21 @@ def score_z2_p6(z2):
     n2, a2 = tot["holders >= 2"], tot["agree (>= 2 holders)"]
     share_ = None if not n2 else round(a2 / n2, 3)
     v = "NULL" if not n2 else ("HELD" if share_ >= P6_SHARE else "FAILED")
+    all41 = [x for xs in cad41.values() for x in xs]
+    all44 = [x for xs in cad44.values() for x in xs]
+    cadence = {
+        "[4]->[1] (n, median s, min, max)": (len(all41), med(all41),
+                                             round(min(all41), 3) if all41 else None,
+                                             round(max(all41), 3) if all41 else None),
+        "[4]->[4] no [3] between (n, median s, min, max)": (len(all44), med(all44),
+                                                            round(min(all44), 3) if all44 else None,
+                                                            round(max(all44), 3) if all44 else None),
+        f"[4]->[4] no [3] between, over the {P6_HOLD:g} s cap": sum(1 for x in all44 if x > P6_HOLD),
+        "per match [4]->[4] no [3] between (n, median s)": {tag: (len(xs), med(xs))
+                                                             for tag, xs in sorted(cad44.items())},
+        "per match [4]->[1] (n, median s)": {tag: (len(xs), med(xs)) for tag, xs in sorted(cad41.items())},
+    }
+    swings = None if not all44 else round(P6_HOLD / statistics.median(all44), 1)
     sens_txt = {}
     for (label, hold), c in sorted(sens.items(), key=lambda kv: (kv[0][0], kv[0][1])):
         k2, g2, k1 = c["holders >= 2"], c["agree (>= 2 holders)"], c["holders == 1"]
@@ -1923,11 +2029,14 @@ def score_z2_p6(z2):
             f"new [4] names another body) {len(across)}; fresh picks after the current target "
             f"ended {len(fresh)} {dict(collections.Counter(x[5] for x in fresh))} -- a current "
             f"target ends at the Monk's own [3], the target's death, the Monk's death / "
-            f"re-create, or {P6_HOLD:g} s without a [4] (FIX 2, SCORER'S RULE, POST-HOC)")
+            f"re-create, or {P6_HOLD:g} s without a [4] (FIX 2, SCORER'S RULE, POST-HOC; the "
+            f"Monks' OWN swing cadence MEASURED on this tape, R3: consecutive [4]->[4] with no "
+            f"[3] between median {med(all44)} s over {len(all44)}, [4]->[1] median {med(all41)} s "
+            f"over {len(all41)}, so the cap is ~{swings} median swings)")
     wf = (f"fewer than {P6_SHARE:.0%} of the >= 2-holder windows with every holder on one "
           f"target -> FAILED")
     return v, text, wf, {"switches": switches, "fresh": fresh, "across": across, "per": per,
-                         "sens": sens_txt}
+                         "sens": sens_txt, "cadence": cadence}
 
 
 def z2_instruments(z2):
@@ -2468,6 +2577,10 @@ def main(argv=None):
           f"cut with a {P6_HOLD:g} s cap over >= 2-holder windows -- FIX 2, chosen after the first "
           f"run; the registration fixed only the 1-s window and the {P6_SHARE:.0%} bar; the "
           f"first run's sticky {ATTACK_HOLD:g} s reading is the last entry): {d['sens']}")
+        P(f"      P6 the Monks' OWN swing cadence (MEASURED on this tape, R3 2026-09-29, beside "
+          f"P6_HOLD = {P6_HOLD:g} s -- the 1.33 s the docstring used to cite is the OBSERVER's "
+          f"axe, 0x0035 base 1.33, another body; [1] = 0x009F [159, 1, monk, 0], "
+          f"GV_MELEE_ATTACK_FINISHED): {d['cadence']}")
         for x in d["switches"]:
             P(f"      P6 switch (tag, t, monk, from, to): {x}")
         for x in d["across"]:
