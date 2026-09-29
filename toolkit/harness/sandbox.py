@@ -97,6 +97,7 @@ import content      # noqa: E402  (toolkit/content.py)
 import vaultpath    # noqa: E402
 import attribspend  # noqa: E402  (toolkit/authsrv/attribspend.py, a leaf)
 import morale       # noqa: E402  (toolkit/authsrv/morale.py, base_health)
+import skillunlock  # noqa: E402  (toolkit/authsrv/skillunlock.py, a leaf: SKILL_RECORD_COUNT_BY_BUILD)
 
 
 class SpecError(Exception):
@@ -931,10 +932,13 @@ def party_professions(spec, world):
     return profs
 
 
-def unlocks_for(spec, world):
+def unlocks_for(spec, world, rows=None):
     """The ACCOUNT library this run sends as --unlocks (0x001D): the spec's
     top-level `unlocks` (the window's Skills tab), else `player.unlocks`,
-    else every skill of the party's professions; the bars' own ids always."""
+    else every skill of the party's professions; the bars' own ids always.
+    With `rows` (the target client's skill record count) every id at or past
+    it is left out -- unlocks_past_client names them; a BAR's are refused
+    earlier, by compile_spec."""
     player = spec.get("player") or {}
     given = spec.get("unlocks")
     if given is None:
@@ -944,10 +948,65 @@ def unlocks_for(spec, world):
     unlocks |= set(s for s in _ints(player.get("skills")) if s)
     for h in spec.get("heroes") or []:
         unlocks |= set(s for s in _ints(h.get("skills")) if s)
+    if rows is not None:
+        unlocks -= set(skillunlock.ids_past_table(unlocks, rows))
     return sorted(unlocks)
 
 
-def game_args(spec, world):
+# ---------------------------------------------------------------- the client's table
+# THE CLIENT-BUILD GUARD (2026-09-28). The content overlay may come from a
+# NEWER client than the one a run launches: the 38888 player corpus carries
+# skill 3446, and vault/run/slice -- what this module launches -- is build 38797,
+# whose skill table ends at 3442 (skillunlock.SKILL_RECORD_COUNT_BY_BUILD, each
+# row MEASURED). The gamesrv drops such rows and refuses a bar naming one, but
+# only once it is running; this says it before a client is launched. A BAR or
+# a hostile's list naming one is refused -- the operator put it there -- while
+# the UNLOCK library is filtered and each filtered id named: the window's
+# Skills tab ticks every row by default, so refusing it would refuse every run
+# the day the overlay merges, and an unlock the client has no record of is the
+# MEASURED ChCliSkill.cpp:1022 assert (skillunlock.py).
+
+def client_build_of(exe):
+    """(build, None) read from the client's own build getter
+    (clientscan/buildid.py -- what session.py hands the gamesrv as
+    --client-build), or (None, why) when there is no readable client."""
+    if not exe or not os.path.isfile(exe):
+        return None, f"no client at {exe!r}"
+    try:
+        cs = os.path.join(TOOLKIT, "clientscan")
+        if cs not in sys.path:
+            sys.path.insert(0, cs)
+        import buildid                                   # noqa: E402
+        return int(buildid.read(exe)[0]), None
+    except Exception as exc:                             # noqa: BLE001
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def skills_past_client(spec, build, rows):
+    """Every place `spec` puts a skill on a BODY that a client of `build`,
+    whose skill table holds `rows` records, has no record for -- the
+    player's bar, a hero's, a hostile's list -- as reasons, one per id."""
+    player = spec.get("player") or {}
+    where = [("player.skills", _ints(player.get("skills")))]
+    where += [(f"hero {i}", _ints(h.get("skills")))
+              for i, h in enumerate(spec.get("heroes") or [], 1)]
+    for gi, g in enumerate(spec.get("groups") or [], 1):
+        where += [(f"group {gi} member {mi}", _ints(m.get("skills")))
+                  for mi, m in enumerate(g.get("members") or [], 1)]
+    return [f"{w}: skill {sid} is past build {build}'s skill table ({rows:,} "
+            f"records, ids 0..{rows - 1}) -- the client this spec launches has no "
+            f"record for it"
+            for w, ids in where for sid in skillunlock.ids_past_table(ids, rows)]
+
+
+def unlocks_past_client(spec, world, build, rows):
+    """The unlock ids unlocks_for leaves out for this client, as notes."""
+    every = unlocks_for(spec, world)
+    return [f"unlocks: skill {sid} is past build {build}'s skill table ({rows:,} "
+            f"records) -- not sent" for sid in skillunlock.ids_past_table(every, rows)]
+
+
+def game_args(spec, world, rows=None):
     """The gamesrv's flags. `--map` and `--area` are the harness's too
     (session.served_maps, the pre-flight). `--persist` always: the bars and
     ranks are the in-game panels' to set, and the character store is what
@@ -955,7 +1014,7 @@ def game_args(spec, world):
     player = spec.get("player") or {}
     prim = int(player.get("profession", 1))
     sec = int(player.get("secondary", 0))
-    unlocks = unlocks_for(spec, world)
+    unlocks = unlocks_for(spec, world, rows)
     args = ["--map", str(TOWN_MAP), "--party", PARTY_KEY,
             "--area", f"{TOWN_AREA},{AREA_KEY}",
             "--spawn-profession", str(prim)]
@@ -1124,14 +1183,40 @@ def launch_command(args, exe, hold=None, warn=3, replace=True):
     return cmd
 
 
-def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None, store=None):
+def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None, store=None,
+                 client_build=None):
     """Everything a launch needs, or SpecError. Writes nothing.
 
     `store` is a store_state() result to warn against (default: the loopback
-    account's, read now; pass {} for none). Returns {"name", "overlay_dir",
-    "overlay_path", "overlay", "args", "command", "env", "spawn_rows",
-    "party_row", "notes", "store_warnings"}."""
+    account's, read now; pass {} for none). `client_build` is the build the
+    run will serve (default: read from `exe`, else from the slice run
+    directory's client -- the number session.py passes as --client-build);
+    a bar skill past that build's table is refused, an unlock past it left
+    out and named. Returns {"name", "overlay_dir", "overlay_path", "overlay",
+    "args", "command", "env", "spawn_rows", "party_row", "notes",
+    "store_warnings", "client_build"}."""
     problems = validate(spec, world)
+    if client_build is not None:
+        build, unread = int(client_build), None
+    else:
+        target = exe
+        if target is None:
+            try:
+                target = run_paths()[0]
+            except SpecError:
+                target = None
+        build, unread = client_build_of(target)
+    table_rows = None
+    if build is not None:
+        table_rows = skillunlock.SKILL_RECORD_COUNT_BY_BUILD.get(build)
+        if table_rows is None:
+            problems.append(
+                f"the client is build {build}, which has no SKILL_RECORD_COUNT row "
+                f"(registered: {sorted(skillunlock.SKILL_RECORD_COUNT_BY_BUILD)}); "
+                f"the gamesrv refuses --client-build {build} -- add its row "
+                f"(skillunlock.py says how it is measured)")
+        else:
+            problems += skills_past_client(spec, build, table_rows)
     if problems:
         raise SpecError("the spec cannot run:\n  - " + "\n  - ".join(problems))
     rows = spawn_rows(spec, world)
@@ -1140,9 +1225,13 @@ def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None, store=None
         raise SpecError("the population is unsound:\n  - " + "\n  - ".join(pop))
     name = str(spec.get("name") or "sandbox")
     overlay_dir = os.path.join(out_dir, name)
-    args = game_args(spec, world)
+    args = game_args(spec, world, table_rows)
     if exe is None or dat is None:
         exe, dat = run_paths()
+    table_notes = (unlocks_past_client(spec, world, build, table_rows) if table_rows is not None
+                   else [f"the client's build was not read ({unread}): skill ids were "
+                         f"NOT checked against its skill table"] if build is None
+                   else [])
     env = {"RURIK_DAT": dat, "RURIK_CONTENT_EXTRA": overlay_dir}
     try:
         st = store_state() if store is None else store
@@ -1160,8 +1249,9 @@ def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None, store=None
         "notes": ([] if has_skill_table(world) else
                   ["no skills table (vault/content/skills.toml): skill ownership and "
                    "timing were NOT checked; every activation and recharge is 0"])
-                 + store_notes,
+                 + table_notes + store_notes,
         "store_warnings": store_warnings(spec, world, st),
+        "client_build": build,
     }
 
 

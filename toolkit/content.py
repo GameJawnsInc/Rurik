@@ -470,6 +470,63 @@ class World:
             del table[k]
         return gone
 
+    def drop_past(self, kinds, bound, why):
+        """Remove every row of `kinds` whose KEY is an integer id >= `bound`,
+        in place; name each in `dropped` ("<kind> <key>: <why> -- not served")
+        and return those lines in the same order, so the caller can print them.
+
+        The client-build guard (2026-09-28): the content overlay may be
+        extracted from a NEWER client than the one being served -- 38888's
+        corpus carries skill 3446, a 38797 client's table ends at 3442 -- and
+        a row for an id the client has no record of is a record the server
+        must not hand it. `bound` is that client's record count
+        (skillunlock.SKILL_RECORD_COUNT_BY_BUILD); a key that is not an
+        integer is never dropped by this rule."""
+        lines = []
+        for kind in kinds:
+            table = self.tables.get(kind, {})
+            gone = [k for k in table if str(k).lstrip("-").isdigit() and int(k) >= bound]
+            for k in sorted(gone, key=int):
+                del table[k]
+                lines.append(f"{kind} {k}: {why} -- not served")
+        self.dropped.extend(lines)
+        return lines
+
+
+# Every kind KEYED by a skill id -- the client's own table (skills) and the rows
+# that hang a behaviour on one skill. `effect` is NOT one: its key is the
+# s_effect index, a different table (2,077 rows on 38797 and 38888 alike).
+SKILL_KEYED_KINDS = ("skills", "skill_effect", "skill_arrows", "skill_speech",
+                     "skill_visual")
+
+
+def skill_references(world):
+    """Every skill id a content row HANDS a body, as (where, id): the player's
+    content bar ([player.*] `skills`), a party row's `player_skills`, its
+    single-hero `skills` and each `[[party.K.heroes]]` table's `skills`, and a
+    spawn row's `skills` ([id, activation, recharge] triples, or bare ids).
+    `where` names the row and field, e.g. "spawn.sandbox_g1_m1.skills"."""
+    out = []
+
+    def ids(v):
+        for s in v or ():
+            s = s[0] if isinstance(s, (list, tuple)) else s
+            if isinstance(s, (int, float)) and int(s) > 0:
+                yield int(s)
+
+    for kind, fields in (("player", ("skills",)),
+                         ("party", ("player_skills", "skills")),
+                         ("spawn", ("skills",))):
+        for key, row in world.rows(kind).items():
+            for f in fields:
+                out += [(f"{kind}.{key}.{f}", s) for s in ids(row.get(f))]
+            if kind == "party":
+                for i, h in enumerate(row.get("heroes") or (), 1):
+                    if isinstance(h, dict):
+                        out += [(f"party.{key}.heroes[{i}].skills", s)
+                                for s in ids(h.get("skills"))]
+    return out
+
 
 def extra_dirs_from_env(env=None):
     """The directories `RURIK_CONTENT_EXTRA` names, in order, or [].
