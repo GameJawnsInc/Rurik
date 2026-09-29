@@ -608,7 +608,14 @@ def own_routes(merged):
              if op == PLAYER_INFO and len(v) > 2}
     number = next((v[1] for _t, op, v in s2c
                    if op == INSTANCE_LOAD_INFO and len(v) > 1), None)
-    return anchor, pairs.get(number), pairs.get(1)
+    # FIRST is the FIRST PLAYER_INFO numbered 1, as documented (2026-09-29, the
+    # orchestrator, the round-4 reviewer's note): `pairs` keeps the LAST entry
+    # per number, which named 328 on 20260807T143055 :60935 where the first is
+    # 536. The two readings disagree on 4 corpus connections and are wrong on
+    # the same 34.
+    first = next((v[2] for _t, op, v in s2c
+                  if op == PLAYER_INFO and len(v) > 2 and v[1] == 1), None)
+    return anchor, pairs.get(number), first
 
 
 def own_agent(merged):
