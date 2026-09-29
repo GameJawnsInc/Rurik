@@ -197,6 +197,37 @@ re-statement with no free parameter exists -- RE-STATED on the whole corpus (`RE
            == f32 -- a Deep Wound in the batch where the observer's hex 44 ends (203.938) and two
            Poisons riding an attack's 0x00A7 + [20, obs, 6, 743] (:58544 611.458, 620.553): the
            classifier sees neither a hex's END nor an attack's landing. No re-statement: FAILED.
+
+THE SECOND ZAISHEN CAPTURE (2026-09-29, CASTAI-Z2, 20260929T100038 -- the Smiting Monks; the
+predictions above are NOT re-worded). Scourge Healing 251, a 30 s hex, lands on the observer
+seven times, and its 0x0044 comes early on three of them for a reason the registration never
+saw and on one for a reason the READER got wrong:
+  G4       "the removal at apply + f32 within 0.05 s unless stripped" -- the reader's `stripped`
+           was the target's DEATH in the removal's batch. On this tape the ARENA ROUND'S END
+           strips it: :51090's 251 at 442.802 is removed at +12.250 in the batch that carries
+           0x0181 (the mission clock set directly -- studies/newopcodes, 0x0180's family --
+           beside 0x0180 re-armed and 0x01AF), the observer's other effects, the Fighter's and
+           the monks' [7]s all in the same instant, no death bit on anybody: the round is over
+           and every body is wiped. Z1's three rounds ended the same way (0x0181 at :50061
+           229.495, :50295 523.439, :58544 626.139) with no hex live on the observer, so G4
+           could not see it there. G4r: the removal at apply + f32 within REMOVAL_TOL unless
+           the batch it sits in carries the target's death bit OR 0x0181 (`round_end`).
+           G4 AS REGISTERED FAILS on this tape (printed so); G4r holds on the whole corpus.
+           And the reader: `removal` took the first 0x0044 [target, buff] at or after the
+           apply's TIME, and at :64557 667.396 a 0x0044 [7, 61] sits in the SAME batch AHEAD
+           of the 0x0042 that hands buff 61 out again (the id is reused the instant it is
+           freed) -- the reader read the old instance's end as the new one's, residual -30.0.
+           `removal` now takes the first 0x0044 AFTER the apply in WIRE ORDER
+           (`REMOVAL_BY_ORDER`, the module flag; False is the known-bad arm, and
+           test_skilldamage 12c shows it reproduce the -30.0). On the corpus before the
+           tape the change moves exactly ONE number, and it is not one any prediction
+           reads: the Isle tape's Burning on the observer at 20260821T152147 :63150
+           741.941 (C2's residual column), re-applied in the batch where its previous
+           instance ends under the same buff id 125 -- the reader's "-3.0" was that
+           earlier instance's 0x0044, its "+6.021" now the id's next end at +9.021.
+           Every hex apply's residual at the pin is byte-identical (asserted).
+The DAMAGE the monks deal is spellhitjoin's business (its docstring: Zealot's Fire's payoff
+riding the batch of the skill that triggered it, and the holy words on property 55).
 `m_rank_fits` ("the caster's 13 predicts both Burnings") is scored on the WITNESS's hex applies
 -- its own claim's scope (EV-3); the corpus's ranks are printed (`m_ranks_corpus`).
 A connection the capture's OWN manifest declares gapped (`livewire.declared_gaps`) is set
@@ -254,6 +285,11 @@ OP_POINT_EFFECT = 0x00A1
 OP_FLOAT_TARGET = 0x00A3
 OP_ADRENALINE = 0x00CF
 OP_STATUS = 0x00F1
+OP_ROUND_END = 0x0181       # the mission clock set directly (studies/newopcodes, 0x0180's family):
+                            # on both Zaishen tapes the batch that closes an arena round and
+                            # strips every effect on every body -- G4r's second strip
+REMOVAL_BY_ORDER = True     # `Conn.removal`: the first 0x0044 AFTER the apply in wire order;
+                            # False = by time (the reader before 2026-09-29, the known-bad arm)
 OWN_OPS = (0x00E2, 0x00E3, 0x00E4, 0x00E5)
 PROP_ADD_EFFECT = 6
 PROP_REMOVE_EFFECT = 7
@@ -426,9 +462,9 @@ class Conn:
                 self.status[v[1]].append((t, int(v[2])))
             elif op == OP_EFFECT_APPLY and len(v) > 5:
                 self.applies.append({"t": t, "target": v[1], "skill": v[2], "field3": v[3],
-                                     "buff": v[4], "dur": round(_f32(v[5]), 4)})
+                                     "buff": v[4], "dur": round(_f32(v[5]), 4), "i": _i})
             elif op == OP_EFFECT_REMOVE and len(v) > 2:
-                self.removes.append({"t": t, "target": v[1], "buff": v[2]})
+                self.removes.append({"t": t, "target": v[1], "buff": v[2], "i": _i})
 
     def span(self, a, b):
         return self.seq[bisect.bisect_left(self.times, a):bisect.bisect_right(self.times, b)]
@@ -477,11 +513,25 @@ class Conn:
             return None
         return self.alleg[a] != self.alleg[b]
 
-    def removal(self, target, buff, t):
+    def removal(self, target, buff, t, i=None):
+        """The 0x0044 [target, buff] that ends the apply at `t` (wire index `i`): the
+        first one AFTER the apply in wire order (REMOVAL_BY_ORDER) -- a buff id is
+        reused the instant it is freed, and at 20260929T100038 :64557 667.396 the old
+        instance's 0x0044 sits in the same batch ahead of the new 0x0042 -- or, on the
+        known-bad arm (or with no `i`), the first at or after `t`."""
         for r in self.removes:
-            if r["target"] == target and r["buff"] == buff and r["t"] >= t - 1e-6:
+            if r["target"] != target or r["buff"] != buff:
+                continue
+            if REMOVAL_BY_ORDER and i is not None:
+                if r["i"] > i:
+                    return r["t"]
+            elif r["t"] >= t - 1e-6:
                 return r["t"]
         return None
+
+    def round_end_in(self, batch):
+        """Does this batch close the arena round (0x0181, docstring G4r)?"""
+        return any(op == OP_ROUND_END for _i, _t, op, _v in batch)
 
     def status_before(self, agent, t):
         """The agent's last 0x00F1 word before the batch at `t`, or None."""
@@ -617,7 +667,7 @@ def incendiary_rows(conns):
                         if op == OP_INT_TARGET and v[1] == PROP_EFFECT_ON_TARGET and v[2] == tg), None)
             i6 = next((n for n, (op, v) in enumerate(ops)
                        if op == OP_INT and v[1] == PROP_ADD_EFFECT and v[2] == tg), None)
-            rt = c.removal(tg, a["buff"], a["t"])
+            rt = c.removal(tg, a["buff"], a["t"], a["i"])
             prior = c.status_before(tg, a["t"])
             r["hex_apply"] = {"field3": a["field3"], "dur": a["dur"], "buff": a["buff"],
                               "order_58_42_f1": None not in (i58, i42, if1) and i58 < i42 < if1,
@@ -700,8 +750,8 @@ def incendiary_rows(conns):
                 burn = [a for a in c.applies if a["skill"] == BURNING and a["target"] == obs
                         and abs(a["t"] - te) <= BATCH]
                 r["observer_burning"] = [(a["field3"], a["dur"],
-                                          None if c.removal(obs, a["buff"], a["t"]) is None
-                                          else round(c.removal(obs, a["buff"], a["t"]) - a["t"], 3))
+                                          None if c.removal(obs, a["buff"], a["t"], a["i"]) is None
+                                          else round(c.removal(obs, a["buff"], a["t"], a["i"]) - a["t"], 3))
                                          for a in burn]
         rows.append(r)
     return rows
@@ -732,8 +782,8 @@ def mind_burn_rows(conns):
             r["foe_signal"][foe] = (len(ws), "new" if new6 else
                                     "already" if c.effect_live(foe, BURNING_EFFECT_ID, tc) else "none")
         r["observer_burning"] = [(a["field3"], a["dur"],
-                                  None if c.removal(a["target"], a["buff"], a["t"]) is None
-                                  else round(c.removal(a["target"], a["buff"], a["t"]) - a["t"], 3))
+                                  None if c.removal(a["target"], a["buff"], a["t"], a["i"]) is None
+                                  else round(c.removal(a["target"], a["buff"], a["t"], a["i"]) - a["t"], 3))
                                  for a in c.applies if a["skill"] == BURNING
                                  and a["target"] == c.observer and abs(a["t"] - tc) <= BATCH]
         rows.append(r)
@@ -781,7 +831,10 @@ def hex_rows(conns):
             pred = interp(d0, d15, a["field3"])
             # G3r: the client's own two-point scaler (0x005A8920), which ROUNDS
             pred_r = effects.interp(d0, d15, a["field3"])
-            rt = c.removal(a["target"], a["buff"], a["t"])
+            rt = c.removal(a["target"], a["buff"], a["t"], a["i"])
+            # G4r: stripped by the target's death, or by the arena round's end (0x0181)
+            dead_at_end = rt is not None and c.dead_in(a["target"], c.batch(rt))
+            round_end = rt is not None and c.round_end_in(c.batch(rt))
             bb = c.batch(a["t"])
             ops = [(op, v) for _i, _t, op, v in bb]
             i42 = next((n for n, (op, v) in enumerate(ops)
@@ -806,8 +859,14 @@ def hex_rows(conns):
                             "f1_hex_after": (None not in (i42, if1) and if1 > i42
                                              and bool(int(ops[if1][1][2]) & HEX_BIT)),
                             "already_hexed": prior is not None and bool(prior & HEX_BIT),
+                            "removal_at": None if rt is None else round(rt - a["t"], 3),
                             "residual": None if rt is None else round(rt - a["t"] - a["dur"], 3),
-                            "stripped": rt is None or c.dead_in(a["target"], c.batch(rt))})
+                            "stripped": rt is None or dead_at_end,
+                            "round_end": round_end,
+                            "end_why": ("none" if rt is None else "death" if dead_at_end
+                                        else "round end" if round_end
+                                        else "scheduled" if abs(rt - a["t"] - a["dur"]) <= REMOVAL_TOL
+                                        else "early")})
     return casts, applies
 
 
@@ -846,7 +905,7 @@ def condition_rows(conns):
             if a["skill"] not in CONDS:
                 continue
             bb = c.batch(a["t"])
-            rt = c.removal(a["target"], a["buff"], a["t"])
+            rt = c.removal(a["target"], a["buff"], a["t"], a["i"])
             f58 = sorted({v[2] for _i, _t, op, v in bb if op == OP_INT and v[1] == PROP_FINISHED})
             # a 58 in the batch attributes the condition only when that caster's latest
             # announce NAMES this target (an environmental apply can share any agent's instant)
@@ -1160,6 +1219,13 @@ def score(c):
     s["g4"] = len(happlies) >= 1 and all(
         a["stripped"] or (a["residual"] is not None and abs(a["residual"]) <= REMOVAL_TOL)
         for a in happlies)
+    # G4r (docstring, 2026-09-29): stripped by the target's death OR the round's end
+    s["g4_rows"] = [(a["capture"], a["port"], a["t"], a["skill"], a["removal_at"], a["end_why"])
+                    for a in happlies]
+    s["g4_off"] = [x for x, a in zip(s["g4_rows"], happlies)
+                   if not (a["stripped"] or (a["residual"] is not None and abs(a["residual"]) <= REMOVAL_TOL))]
+    s["g4r_off"] = [x for x, a in zip(s["g4_rows"], happlies) if a["end_why"] in ("early", "none")]
+    s["g4r"] = len(happlies) >= 1 and not s["g4r_off"]
     hdone_c = [r for r in hcasts if r["tc"] is not None]                              # corpus
     hdone = [r for r in hdone_c if r["capture"] in L1_WITNESSES]                      # witnesses
     s["l_adds_corpus"] = {f"{k[0]} {list(k[1])}": n for k, n in sorted(collections.Counter(
@@ -1264,7 +1330,11 @@ LOCKED_LATER = ("l1", "l2", "l3", "l4")
 # until 2026-09-28 (the regenerate-from-38888 arc): G3r, the client's own rounded scaler on the
 # tape's OWN build's row, is its re-statement (docstring), and G3 as registered stays FAILED.
 FAILED_ON_ZAISHEN = ("i1", "i2", "i3", "m1", "g2", "g3")
-RESTATED = {"i1": "i1r", "i2": "i2r", "i3": "i3r", "m1": "m1r", "g2": "g2r", "g3": "g3r"}
+# THE SECOND ZAISHEN CAPTURE (2026-09-29, docstring): G4 as registered fails on the round's
+# end; G4r is its re-statement (the death OR the round's end strips)
+FAILED_ON_ZAISHEN2 = ("g4",)
+RESTATED = {"i1": "i1r", "i2": "i2r", "i3": "i3r", "m1": "m1r", "g2": "g2r", "g3": "g3r",
+            "g4": "g4r"}
 CORRECTED_FAILED_ON_ZAISHEN = ("c2c",)
 
 
@@ -1283,8 +1353,9 @@ def verdicts(s):
 def restated_verdicts(s):
     """The whole corpus's verdict since the Zaishen capture: every registered prediction
     holds as registered or through its re-statement, except the three FAILED at
-    registration (I4 / M2 / C2) -- G3 included since 2026-09-28, through G3r; M3
-    untestable; the corrected readings but C2c hold; the post-hoc facts hold."""
+    registration (I4 / M2 / C2) -- G3 included since 2026-09-28, through G3r, and G4
+    since 2026-09-29, through G4r; M3 untestable; the corrected readings but C2c hold;
+    the post-hoc facts hold."""
     skip = FAILED_AS_REGISTERED + UNTESTABLE
     return {
         "registered_or_restated_hold": all(s[k] or (k in RESTATED and s[RESTATED[k]])
@@ -1444,6 +1515,9 @@ def main():
           f"{s['i_hex_already']}; every hex {s['g2_already_hexed']}")
     print(f"[{_v(s['g3r'])}] G3r f32 == the client's ROUNDED scaler on the tape's own build's row: "
           f"G3's misses {s['g3_miss_rows']}, G3r's {s['g3r_miss_rows']}")
+    print(f"[{_v(s['g4r'])}] G4r the removal at + f32 unless the target's death or the round's end "
+          f"(0x0181) strips it: G4's misses {s['g4_off']}, G4r's {s['g4r_off']}; every hex apply "
+          f"(capture, port, t, skill, removal at, why) {s['g4_rows']}")
     print(f"[----] C2c off (no re-statement) "
           f"{s['c_cast_applied_off']} / {s['c_environmental_off']}; the 179 hexes' ranks "
           f"corpus-wide {s['m_ranks_corpus']}")
