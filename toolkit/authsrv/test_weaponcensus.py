@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=23)   # the BARE-MACHINE number: 23 without the vault (section 2 skips), 57 with it; from green runs (2026-09-29, CASTAI-Z2: +3 -- section 1c, the tie wire and the retired rule's arm, measured 23 bare / 57 with the vault (+4 vault-only: the partition signature, the pin's and the second Zaishen tape's ties, the future-stamp plant); WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 50, the windup signature by the table, the activated rule swing_windup(activation) and its two fast-launch witnesses)
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=24)   # the BARE-MACHINE number: 24 without the vault (section 2 skips), 58 with it; from green runs (2026-09-29, CASTAI-Z2, the review's repair: +1 -- section 1c's orphan launch past SHOT_WINDOW in neither census, measured 24 bare / 58 with the vault; the shooters() cross-check per connection rides the partition signature, no new check; 2026-09-29, CASTAI-Z2: +3 -- section 1c, the tie wire and the retired rule's arm, measured 23 bare / 57 with the vault (+4 vault-only: the partition signature, the pin's and the second Zaishen tape's ties, the future-stamp plant); WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 50, the windup signature by the table, the activated rule swing_windup(activation) and its two fast-launch witnesses)
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -214,7 +214,9 @@ def tie_wire():
     [50] announcement in ONE instant, the start first, the launch one windup later -- the
     Zaishen Archer's Power Shot; (b) the same pair with the announcement FIRST -- a plain
     shot; (c) a wand shot with a spell's [60] BEHIND it in its own instant -- the Mage's
-    at :62925 298.464; (d) the same [60] AHEAD of the launch in that instant."""
+    at :62925 298.464; (d) the same [60] AHEAD of the launch in that instant; (e) the
+    review's arm: a launch 3.5 s behind its only start, past SHOT_WINDOW (3.0) -- no
+    event, so in NEITHER census (the window clause of the partition, driven red)."""
     s = [item(NPC_BOW, 28, [word(609, 0), word(587, 1)]),
          item(WAND, 22, [word(617, 0, 2), word(587, 5)]),
          (0.2, wc.HANDS, [wc.HANDS, ZARCHER, NPC_BOW, 0]),
@@ -234,7 +236,10 @@ def tie_wire():
          (40.0, wc.PINT_T, [wc.PINT_T, wc.START, ZMAGE, ME, 0]),                  # (d)
          (40.775, wc.PINT_T, [wc.PINT_T, 60, ZMAGE, ME, 186]),
          (40.775, wc.LAUNCH, [wc.LAUNCH, ZMAGE, (1.0, 2.0), 0, f32(0.2), 343, 1, 0]),
-         (40.975, wc.ARRIVE, [wc.ARRIVE, ZMAGE, 1, 5])]
+         (40.975, wc.ARRIVE, [wc.ARRIVE, ZMAGE, 1, 5]),
+         (50.0, wc.PINT_T, [wc.PINT_T, wc.START, ZARCHER, ME, 0]),                # (e)
+         (53.5, wc.LAUNCH, [wc.LAUNCH, ZARCHER, (1.0, 2.0), 0, f32(0.3), 143, 1, 1]),
+         (53.8, wc.ARRIVE, [wc.ARRIVE, ZARCHER, 1, 1])]
     return s
 
 
@@ -264,15 +269,18 @@ def _retired_rule(s2c):
 def section_ties():
     print("\n1c. CASTAI-Z2: a start and a skill's event in ONE instant -- one census per launch")
     s2c = tie_wire()
-    ev = [(v[1], t, v[5], e[1], e[2], round(t - e[0], 4)) for t, v, e in wc.launch_events(s2c)]
+    ev = [(v[1], t, v[5]) + ((e[1], e[2], round(t - e[0], 4)) if e is not None else (None,))
+          for t, v, e in wc.launch_events(s2c)]
     check(ev == [(ZARCHER, 11.1375, 680, "announce50", 394, 1.1375),
                  (ZARCHER, 21.1375, 143, "start", None, 1.1375),
                  (ZMAGE, 30.775, 2, "start", None, 0.775),
-                 (ZMAGE, 40.775, 343, "announce60", 186, 0.0)],
+                 (ZMAGE, 40.775, 343, "announce60", 186, 0.0),
+                 (ZARCHER, 53.5, 143, None)],
           "launch_events reads the latest attack event AHEAD of each launch in the wire: (a) "
           "the [50] behind the [4] in its instant is the cause, one windup ahead; (b) the [4] "
           "behind the [60] is; (c) a [60] behind the launch in ITS instant is not, the start "
-          "is; (d) the same [60] ahead of the launch is, at 0", str(ev))
+          "is; (d) the same [60] ahead of the launch is, at 0; (e) a start 3.5 s back, past "
+          "SHOT_WINDOW, is no event", str(ev))
     sho = {(r["agent"], p): n for r in wc.shooters(s2c) for p, n in r["field5"].items()}
     ss = sorted((r["agent"], r["skill"], r["projectile"], round(r["event_to_launch"], 4))
                 for r in wc.skill_shots(s2c))
@@ -282,8 +290,20 @@ def section_ties():
           "so shooters() holds exactly (b) and (c), skill_shots() exactly (a) and (d): the "
           "four launches partitioned, the Archer's Power Shot in ONE census with its 680",
           f"{sho} {ss}")
+    # the review of 2026-09-29: the window clause, driven red -- without it (e) is a
+    # weapon shot behind a 3.5 s old start and the Archer's 143 counts twice
+    orphan = [(v[1], t, v[5]) for t, v, e in wc.launch_events(s2c) if e is None]
+    censused = ([r["agent"] for r in wc.shooters(s2c) for _p, n in r["field5"].items()
+                 for _ in range(n)] + [r["agent"] for r in wc.skill_shots(s2c)])
+    check(orphan == [(ZARCHER, 53.5, 143)] and len(censused) == 4 and censused.count(ZARCHER) == 2
+          and sum(1 for _t, op, v in s2c if op == wc.LAUNCH) == 5,
+          "(e) the launch 3.5 s behind its only start -- past SHOT_WINDOW (3.0) -- has no "
+          "event and sits in NEITHER census: five launches on the wire, four censused, the "
+          "Archer holding two of them ((a) and (b)), the orphan named",
+          str((orphan, censused)))
     old = _retired_rule(s2c)
     check(old == [(ZARCHER, 11.1375, 680, True, True), (ZARCHER, 21.1375, 143, True, False),
+                  (ZARCHER, 53.5, 143, False, False),
                   (ZMAGE, 30.775, 2, False, True), (ZMAGE, 40.775, 343, False, True)],
           "the known-bad arm: the retired rule -- a skill event strictly LATER than the start "
           "by time -- counts (a) in BOTH censuses (the red of 2026-09-29: 680 as a bare bow's "
@@ -495,6 +515,7 @@ def _launch_detail():
         # the weapon rows and the skill rows here are the censuses' own partition
         ss = wc.skill_shots(s2c)                                # rows come in launch order
         k = 0
+        wrows = collections.Counter()                           # the weapon rows' projectiles
         for t, v, event in wc.launch_events(s2c):
             agent = v[1]
             if event is None:
@@ -502,6 +523,7 @@ def _launch_detail():
                 continue
             if event[1] == "start":
                 typ, w617 = held(agent, t)
+                wrows[v[5]] += 1
                 out["weapon"].append(dict({"capture": name, "conn": gf, "agent": agent, "t": t,
                                            "projectile": v[5], "type": typ, "w617": w617,
                                            "impacts": arrival(agent, t, wc._f32(v[4])),
@@ -523,6 +545,19 @@ def _launch_detail():
         if k != len(ss):
             raise AssertionError(f"{name} {gf}: {k} of {len(ss)} skill shots re-paired to "
                                  f"their launch -- the join below would score a subset")
+        # and the WEAPON census read directly (the review of 2026-09-29): shooters()' own
+        # shot count and projectile multiset on this connection must equal the weapon
+        # rows this walk filed, else the partition signature below goes red -- so a
+        # shooters() regression (the retired time rule put back) reddens the corpus
+        # check and not only the bare tie wire
+        sh = wc.shooters(s2c)
+        theirs = collections.Counter()
+        for r in sh:
+            theirs.update(r["field5"])
+        if sum(r["shots"] for r in sh) != sum(wrows.values()) or theirs != wrows:
+            out.setdefault("shooters_mismatch", []).append(
+                (name, _port(gf), sum(r["shots"] for r in sh), sum(wrows.values()),
+                 dict(theirs - wrows), dict(wrows - theirs)))
         out.setdefault("launches", collections.Counter())[(name, gf)] = sum(
             1 for _t, op, v in s2c if op == wc.LAUNCH and len(v) > 7)
     return out
@@ -597,18 +632,22 @@ def _partition(d):
     themselves, exact per tape."""
     launches = sum(d["launches"].values())
     weapon, skill, orphan = len(d["weapon"]), len(d["skill"]), d.get("orphan", [])
+    mismatch = d.get("shooters_mismatch", [])
     pin = (sum(n for (cap, _gf), n in d["launches"].items() if cap < Z2),
            sum(1 for r in d["weapon"] if r["capture"] < Z2),
            sum(1 for r in d["skill"] if r["capture"] < Z2))
     check(launches >= 1000 and weapon + skill + len(orphan) == launches and not orphan
-          and pin == (927, 675, 252),
+          and pin == (927, 675, 252) and not mismatch,
           f"SIGNATURE (whole corpus): every one of {launches} launches is in exactly ONE "
           f"census -- {weapon} weapon shots + {skill} skill shots, none without an attack "
-          f"event inside {wc.SHOT_WINDOW} s; the captures before {Z2} hold exactly 927 = "
+          f"event inside {wc.SHOT_WINDOW} s, the weapon rows equal to shooters()' own shot "
+          f"count and projectile multiset on EVERY connection (the skill rows are re-paired "
+          f"to their launches above); the captures before {Z2} hold exactly 927 = "
           f"675 + 252 (the totals AFTER the tie rule: 677 + 252 under the rule it retired, "
           f"two launches counted twice; the one it filed behind an announcement that FOLLOWED "
           f"the launch stays a skill shot, under the announcement 1.14 s ahead of it)",
-          f"pin {pin}; orphans {orphan[:4]}")
+          f"pin {pin}; orphans {orphan[:4]}; shooters() vs the weapon rows (capture, port, "
+          f"shooters, rows, only in shooters, only in rows) {mismatch[:4]}")
     pin_ties, z2_ties = _tie_rows(d)
     check(pin_ties == PIN_TIES,
           f"the ties before {Z2}, exact: five launches whose event shares an instant with "

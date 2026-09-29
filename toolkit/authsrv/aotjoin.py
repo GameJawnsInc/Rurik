@@ -124,10 +124,12 @@ predictions and the first re-statements are NOT re-worded). Its twelve Fire Stor
       (0.100) and outside the reader's tick gate (TICK_TOL 0.05), so its three words (3, 5,
       6 at -0.0559, the pairs' tick values) come out on the stray arm as "tick values
       outside the gate". P5r: a CLEAN group of the caster's words carrying the pairs' tick
-      values within PHASE_LIMIT of completion + k, k = 1..10, is that tick, LATE
-      (`late_ticks`); the k / phase / completion clauses as registered; a group beyond the
-      limit stays a stray (`stray_r`). No tolerance moved: the gate is still TICK_TOL, and
-      the late tick is not among `tick_instants`.
+      values within PHASE_LIMIT AFTER completion + k, k = 1..10, at a k the cast did NOT
+      tick, is that tick, LATE (`late_ticks`); the k / phase / completion clauses as
+      registered; a group beyond the limit, one EARLY (the re-statement is one-sided, on
+      its one witness), or one at a k the cast already ticked (a DUPLICATE) stays a stray
+      (`stray_r`). No tolerance moved: the gate is still TICK_TOL, and the late tick is
+      not among `tick_instants`.
   P6r ten tick batches carry the caster's `[20, T, 10, 546]` that is neither another
       skill's 58 nor a landing: a REVERSAL of the tick's own damage by the taker's
       enchantment -- Reversal of Fortune 307 on the monks (announced [60, C, T, 307], its
@@ -135,7 +137,21 @@ predictions and the first re-statements are NOT re-worded). Its twelve Fire Stor
       `[55, T, C, +f]` gain credited to the enchantment's caster C (f the tick's own
       fraction; where the cast completes in the same batch a second, smaller [55] from C
       rides its 58 -- Divine Favor's on-cast gain, RECONSTRUCTION from the wiki), and
-      the caster's ZERO word `[16 | 17, T, 10, 0.0]`; and one batch (51090 437.870 k = 5)
+      the caster's ZERO word `[16 | 17, T, 10, 0.0]`. That is the FULL shape, and on the
+      ten tick batches P6r2 explains every reversed target (twelve) carries the zero alone.
+      Off the ticks the tape sends two more shapes under the same 546 (the review of
+      2026-09-29, counted over every [20, T, S, 546] with its batch: 37 full / 20 / 25 on
+      this tape, 7 full / 3 on 20260916T213125, 1 full on 20260928T103123): the zero
+      BESIDE a nonzero word from S on T (51090 399.033: [16, 5, 10, 0.0] and [16, 5, 10,
+      -0.0973], the gain 0.0973 -- one of two same-value hits reversed, UNVERIFIED), and
+      NO zero word, a nonzero damage word and a gain that differs from it (57580 139.072:
+      three takers of the Mage's Fireball, gains 0.1279 / 0.1207 / 0.1207 against
+      -0.0486 / -0.0559 / -0.0559 -- a capped gain with the remainder landing as damage,
+      RECONSTRUCTION). The rule reads the zero word and never the absence of another, so
+      the partial shape on a tick would pass as a reversal too (test_weapons 29's
+      `partial` arm); one tick batch carries it (51090 390.030 k = 7, target 5, its
+      reversed hit not the tick's word) and P6 as written already explains that batch
+      through the caster's own 58 there; and one batch (51090 437.870 k = 5)
       carries a bare 0x00A7 [10, 1, 5] with no [20]: the caster's own wand launch (0x00A4
       handle 1, flight 0.83 s) arriving 40 ms ahead of the tick's word with no word of its
       own. P6r2: a [20] on a tick is another skill's 58, its projectile's landing, or a
@@ -824,11 +840,23 @@ def score(c):
           and all(abs(p) <= PHASE_LIMIT for p in phases) and not stray
           and not at_completion)
     # P5r (the re-statement, 2026-09-29): a clean group carrying the pair's tick values
-    # within the REGISTERED phase limit of completion + k, k = 1..10, is that tick, LATE
-    # (the reader's gate is TICK_TOL, narrower); a group beyond the limit stays a stray
-    late = [s for s in stray if 1 <= round(s[3]) <= EXPECT_TICKS_K[-1]
-            and abs(s[3] - round(s[3])) <= PHASE_LIMIT]
-    stray_r = [s for s in stray if s not in late]
+    # within the REGISTERED phase limit AFTER completion + k, k = 1..10, at a k the cast
+    # did NOT tick, is that tick, LATE (the reader's gate is TICK_TOL, narrower). Two
+    # terms the first cut lacked (the review of 2026-09-29): the k must be ABSENT from
+    # that cast's own ticks -- a second group at a k the cast already ticked is a
+    # DUPLICATE, not a late tick -- and the phase is POSITIVE: the re-statement is
+    # one-sided, on its one witness (+0.068); an early group, or one beyond the limit,
+    # stays a stray (`stray_r`), seen and never absorbed.
+    late, stray_r = [], []
+    for r in done:
+        for s in r["stray_tick_values"]:                          # (off, target, value)
+            k = round(s[0])
+            row = (r["capture"], r["port"], r["announce_t"]) + s
+            if (1 <= k <= EXPECT_TICKS_K[-1] and 0.0 < s[0] - k <= PHASE_LIMIT
+                    and k not in r["tick_ks"]):
+                late.append(row)
+            else:
+                stray_r.append(row)
     late_ticks = sorted({(s[0], s[1], round(s[2], 3), s[3], round(s[3])) for s in late})
     p5r = (bool(ticks) and set(ks) <= set(EXPECT_TICKS_K)
            and all(abs(p) <= PHASE_LIMIT for p in phases) and not stray_r
