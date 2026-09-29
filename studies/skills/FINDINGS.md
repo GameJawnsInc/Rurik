@@ -8777,6 +8777,24 @@ names the label, not four words of the sentence. `test_chatdefs`: 52 checks with
 vault, 43 + 2 declared skips bare (it died bare before), floor 40 → 43 (the bare run's
 count); `test_daggers` 105 unchanged under the renamed flag.
 
+**RANGERPRE-S2 (2026-09-29): `#1985` is OBSERVED, and the flag loses the weapon gate.**
+The premise two paragraphs up — "the client very likely never sends the press" — is
+**REFUTED**: it sent it. `20260929T150923` :53756 (map 160, a field), c2s `0x0027 [394, 0,
+22, 0]` at t = 1055.952 — skill 394, `weapon_req` 0x02 (a bow) — with a sword (item 696,
+type 27) and a shield (697, type 24) in hand since the load's `0x006E [9, 696, 697]`,
+answered at 1056.002 in one segment by **`0x005D [0x08C1]` = #1985, `0x005E [1, 7]`,
+`0x00E2 [9, 394, 0]`** and nothing else (no E4, no E3; sword skills 382 and 384, pressed at the
+same target 0.85 s and 2.36 s later, were each accepted with E4). The live corpus, each press of a
+skill with a nonzero `weapon_req` joined to the lead the pressing agent held: #1985
+answers **1 of 1** mismatched presses and **0 of 184** satisfied ones (138 E4, 39 #1960,
+3 #1961, 1 #1934, 3 bare E2 — so none of the 3 bare releases was a weapon mismatch).
+`REFUSAL_OBSERVED = {1934, 1960, 1961, 1985, 1988}`; the weapon gate sends #1985 always,
+as #1960 is, and `--refusal-reasons`' one consumer left is the party-target gate's #1986.
+n = 1 does not isolate the cause (UNVERIFIED), and which of the weapon and resource gates
+retail checks first is NOT OBSERVED. Tests: `test_daggers` §4 re-pinned and §4b new (the
+witness off the tape, then OUR handler fed retail's press values verbatim; 109 checks),
+`test_chatdefs` §6 (five ids), `test_castcycle` §2f (#1985 behind the attack-target gate).
+
 ---
 
 ## 58. SKILLS-MC — Mend Condition (275): remove ONE condition and heal the flat scale once, IF one was removed (2026-09-23)

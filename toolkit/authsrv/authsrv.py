@@ -4034,10 +4034,15 @@ def agent_health_fraction(state, target_id):
 # (daggers F6); the handler and the 0..3 bound are studies/newopcodes'.
 GAME_SMSG_AGENT_COMBO_STATE = 0x005C
 # B4. No profession's attack skills were held to a weapon before this. WHAT
-# RETAIL SENDS on a mismatch is NOT OBSERVED (the client very likely never
-# sends the press): the answer is the bare release, the shape the press
-# handler's own comment prescribes for "a refusal we cannot name a reason
-# for". RECONSTRUCTION. --no-weapon-gate is the control.
+# RETAIL SENDS on a mismatch is OBSERVED 1 of 1 (RANGERPRE-S2, 2026-09-29):
+# the client DOES send the press -- this banner's "very likely never sends
+# it" is REFUTED -- and retail answers #1985, [1, 7], 0x00E2 with no E4
+# (20260929T150923 :53756 t=1056.002, bow skill 394 with a sword in hand);
+# the gate sends exactly that (handle_skill_press). That the refusal is
+# caused by the weapon rather than something else about that press is
+# CORROBORATED, not isolated: 0 of 184 weapon-satisfied corpus presses draw
+# #1985, and sword skills 382 / 384 pressed at the same target 0.85 s and
+# 2.36 s later were accepted. --no-weapon-gate is the control.
 WEAPON_GATE = True
 # B5. --no-chain-state is the control: no 0x005C, and an off-hand or a dual
 # lands whatever it follows (the behaviour before today).
@@ -11860,12 +11865,16 @@ GAME_SMSG_SKILL_REFUSED = 0x00E2
 REFUSAL_SILENT = False
 # Set from --refusal-reasons (DESKWORK-D5 step 7). OFF by default: the table
 # `chatdefs.REFUSAL_REASONS` names the client's whole refusal block by id, but
-# only 1934, 1960, 1961 and 1988 are OBSERVED answering a condition (the fix
-# pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988 x1);
-# every other row is RECONSTRUCTION from the sentence's own statement, and a
-# reconstructed sentence on the warning panel is invented traffic until a tape
-# shows it. The two OBSERVED resource refusals are sent regardless of this
-# flag. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
+# only 1934, 1960, 1961, 1985 and 1988 are OBSERVED answering a condition (the
+# fix pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988
+# x1; RANGERPRE-S2 added the weapon gate's 1985 x1, 20260929T150923 :53756
+# t=1056.002); every other row is RECONSTRUCTION from the sentence's own
+# statement, and a reconstructed sentence on the warning panel is invented
+# traffic until a tape shows it. Every OBSERVED id this server sends (1934,
+# 1960, 1961, 1985; nothing here sends 1988) goes out regardless of this flag
+# -- the weapon gate's #1985 since 2026-09-29, when it stopped riding the flag
+# -- so its one consumer left is the party-target gate's #1986 on a foe
+# spell. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
 REFUSAL_REASON_IDS = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
@@ -23068,20 +23077,22 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
 
     # ---- DAGGERS-B4: THE WEAPON GATE, ahead of the resource gate ---------
     # The skill record's own mask against what the character holds: a dagger
-    # attack with a sword in hand begins nothing and costs nothing. The bare
-    # release, no chat line -- the refusal's sentence is not observed (see
-    # WEAPON_GATE). DESKWORK-D5 step 7: under --refusal-reasons the release
-    # carries #1985 (chatdefs.REFUSE_WEAPON_TYPE, the label
-    # skill_needs_different_weapon_type -- RECONSTRUCTION from the sentence's
-    # own condition, no tape shows it).
+    # attack with a sword in hand begins nothing and costs nothing. The
+    # answer is retail's, OBSERVED 1 of 1 (RANGERPRE-S2, 2026-09-29):
+    # 20260929T150923 :53756, c2s 0x0027 [394, 0, 22, 0] at t=1055.952 -- a
+    # bow skill pressed with a sword and a shield in hand -- answered at
+    # 1056.002 by 0x005D #1985 ([0x08C1]), 0x005E [1, 7], 0x00E2 [9, 394, 0]
+    # and nothing else: no E4, no E3. #1985 is chatdefs.REFUSE_WEAPON_TYPE
+    # (skill_needs_different_weapon_type) and answers 0 of the corpus's 184
+    # weapon-satisfied presses, so it is sent always, as #1960 is; until
+    # today it rode --refusal-reasons and the default was the bare release.
     if WEAPON_GATE and not weapon_satisfies(skill_id):
         print(f"[c{conn_id}] REFUSED skill {skill_id}: its weapon_req "
               f"{skill_chain_fields(skill_id)[2]:#04x} is not what the player "
               f"holds (item_type "
               f"{(agents.PLAYER_WEAPON or {}).get('item_type') if EQUIP_WEAPON else None}) "
               f"[DAGGERS-B4]", flush=True)
-        refuse_press(send, skill_id, copy, conn_id,
-                     chatdefs.REFUSE_WEAPON_TYPE if REFUSAL_REASON_IDS else None)
+        refuse_press(send, skill_id, copy, conn_id, chatdefs.REFUSE_WEAPON_TYPE)
         return
 
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
@@ -45336,9 +45347,9 @@ def main():
         global REFUSAL_REASON_IDS
         REFUSAL_REASON_IDS = True
         print("REFUSAL REASONS: RECONSTRUCTED reason ids from the client's refusal "
-              "block go out with the release (today: the weapon gate's #1985 and "
-              "the party-target gate's #1986 on a foe spell). The OBSERVED "
-              "1934/1960/1961 are sent either way.", flush=True)
+              "block go out with the release (today: the party-target gate's "
+              "#1986 on a foe spell). The OBSERVED 1934/1960/1961/1985 are "
+              "sent either way.", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION

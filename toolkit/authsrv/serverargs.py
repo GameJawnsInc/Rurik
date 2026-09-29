@@ -2715,13 +2715,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "only RECONSTRUCT from the client's own refusal block "
                          "(chatdefs.REFUSAL_REASONS, string ids 1934-1993; "
                          "DESKWORK-D5 step 7). Today its one consumer is the "
-                         "weapon gate (DAGGERS-B4), which sends #1985 with the "
-                         "0x00E2 release instead of the bare release. DEFAULT "
-                         "OFF: what retail sends on a weapon mismatch is NOT "
-                         "OBSERVED (the client very likely never sends the "
-                         "press), so the bare release -- retail's own shape "
+                         "party-target gate, which sends #1986 with the 0x00E2 "
+                         "release on a foe spell at a party body instead of "
+                         "the bare release. DEFAULT OFF: #1986 is on no wire "
+                         "we hold, so the bare release -- retail's own shape "
                          "for 3 of 43 refusals -- stays the default. The "
-                         "OBSERVED ids 1960 and 1961 are sent either way.")
+                         "OBSERVED ids 1934, 1960, 1961 and 1985 are sent "
+                         "either way; the weapon gate's #1985 (DAGGERS-B4) "
+                         "rode this flag until RANGERPRE-S2 (2026-09-29) "
+                         "observed it on retail's wire, 20260929T150923.")
     ap.add_argument("--no-skill-labels", action="store_true",
                     help="drop the LABEL tier at startup: every skill_effect "
                          "row carrying tier = \"label\" (vault/content/"
