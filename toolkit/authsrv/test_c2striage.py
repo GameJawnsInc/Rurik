@@ -36,20 +36,28 @@ WHAT THIS PINS.
     Zaishen tape's three new opcodes (0x009A, 0x00A3, 0x00A6) carry their
     decision (all three named medium, 0x00A3 by the owner's decision of
     2026-09-28; dropped, not armed) and ONE exact
-    per-tape witness of the evidence behind it.
+    per-tape witness of the evidence behind it. SINCE 2026-09-29 (CASTAI-Z2)
+    the second Zaishen tape's one new opcode, 0x0042 [agent_id], carries its
+    decision too (UNNAMED at n=2, dropped, not armed -- the reason is
+    test_dispatch's row), two vault-free arms show that row alone triages it,
+    and its own per-tape witness (20260929T100038) pins both sends, their
+    frame-mates and the one 0x0022 reply.
   * §5 REFUSALS: a root with no live capture makes `main()` exit 2 rather than
     print a clean table, and a dispatch chain that cannot be located refuses.
   * §6 STATIC hints: on a machine with the pinned client the send-site census
     joins -- 0x001F's wrapper is 0x0091FF30 on 38797 -- else a skip.
 
-Floor 20 -- the MANDATORY CORE, measured on 2026-09-23 with RURIK_VAULT pointed
-at an empty directory (§1, §3's file half, §4's file half, §5: the checks that
-need no vault and no client). With the vault and the pinned client present the
-same run executes 34 (42 since 2026-09-28: the declared-gap pin and its
-known-bad arm, three Zaishen decisions, the Zaishen witness); §2, §3's live
-half, §4's live half, the witness and §6 declare skips
-without them. The first cut set the floor at 34 and so failed a vault-free run
-by construction (checks.py: the floor is the core, not the fullest run).
+Floor 22 -- the MANDATORY CORE, measured with RURIK_VAULT pointed at an empty
+directory (§1, §3's file half, §4's file half, §5: the checks that need no
+vault and no client): 20 on 2026-09-23, 22 since 2026-09-29 (CASTAI-Z2: the
+two vault-free 0x0042 arms; 6 declared skips). With the vault and the pinned
+client present the same run executes 34 (42 since 2026-09-28: the declared-gap
+pin and its known-bad arm, three Zaishen decisions, the Zaishen witness; 45
+after the ENTER field-2 pins; 49 since 2026-09-29: the 0x0042 decision, its
+witness and the two arms); §2, §3's live half, §4's live half, the two
+witnesses and §6 declare skips without them. The first cut set the floor at 34
+and so failed a vault-free run by construction (checks.py: the floor is the
+core, not the fullest run).
 """
 import contextlib
 import io
@@ -68,7 +76,10 @@ import c2striage                                             # noqa: E402
 import livewire                                              # noqa: E402
 import test_dispatch as dispatchmod                          # noqa: E402
 
-led = checks.Ledger("retail c2s triage (DESKWORK-D1 step 3)", floor=20)
+# Floor 20 measured bare 2026-09-23; 22 since 2026-09-29 (CASTAI-Z2: +2 -- the
+# two vault-free 0x0042 arms in §4, measured 22 with RURIK_VAULT at an empty
+# directory, 6 declared skips).
+led = checks.Ledger("retail c2s triage (DESKWORK-D1 step 3)", floor=22)
 
 # ---- §1 the walk, on a synthetic stream -------------------------------------
 # t, dir, opcode, values -- sorted by (t, c2s first on a tie) like livewire's.
@@ -320,6 +331,22 @@ if live is not None:
                f"(CASTAI-Z1)",
                f"name {named.get(op)}, dropped {op in dropped}, "
                f"seen {op in live[0]}, handled {op in (handled or {})}")
+    # CASTAI-Z2 (2026-09-29): the second Zaishen tape brought ONE c2s no
+    # earlier tape carried -- 0x0042 [agent_id], n=2, both naming the Zaishen
+    # Fighter henchman at the instant of a TARGET_SELECT of it. UNNAMED on the
+    # 0x00A3 precedent: no upstream names it and its sender is read only to
+    # its module (GmView), so the house bar for a name is not met; the reason
+    # is test_dispatch.DROPPED_ON_PURPOSE's row, and the server has nothing
+    # to answer it with. `>= 2`, not `== 2`: a third send on a later tape is
+    # confirming evidence, and the exact rows are the per-tape witness below.
+    z2 = live[0].get(0x0042)
+    led.ok(named.get(0x0042) is None and 0x0042 in dropped and z2 is not None
+           and z2["count"] >= 2 and 0x0042 not in (handled or {}),
+           "0x0042 is UNNAMED (n >= 2), on retail's wire, NOT armed and on the "
+           "allowlist with its reason (CASTAI-Z2)",
+           f"name {named.get(0x0042)}, dropped {0x0042 in dropped}, count "
+           f"{None if z2 is None else z2['count']}, handled "
+           f"{0x0042 in (handled or {})}")
 else:
     led.skip("§4 the live half", "no live captures")
 
@@ -496,6 +523,61 @@ if os.path.isdir(zdir):
            f"matches {zm}; aside {zmaside}")
 else:
     led.skip("the Zaishen witness", "capture 20260928T103123 (CASTAI-Z1) missing")
+
+
+# CASTAI-Z2's evidence as ONE exact per-tape witness: every c2s 0x0042 on
+# 20260929T100038 -- (client port, t, payload, every OTHER c2s at the same
+# timestamp as (opcode, payload), the non-clock s2c within 50 ms as (opcode,
+# fields 1-2)). Scoped to that capture, so a later tape adds evidence and
+# never reddens it. What it pins: n=2, both [9] (the Zaishen Fighter), each
+# sharing its timestamp with a TARGET_SELECT [9, x] -- one input, two
+# messages; the first answered within 50 ms by 0x0022 [9, 0] behind an
+# 0x00E6 and two 0x0021, the second by nothing at all.
+def sends_0042(capdir):
+    """(sends, aside) as above; aside = {connection: its 0x0042 count} for a
+    connection the capture's manifest declares gapped -- set aside BY NAME and
+    printed, never dropped silently (this tape declares none)."""
+    gaps = livewire.declared_gaps(capdir)
+    out, aside = [], {}
+    for gf in livewire.connections(capdir):
+        name = livewire.conn_name(gf)
+        _conn, merged, _ok = livewire.decode_conn(capdir, gf)
+        if name in gaps:
+            aside[name] = sum(1 for _t, d, op, _v in merged
+                              if d == "c2s" and op == 0x0042)
+            print(f"      [aside] {name}: declared gapped by its manifest "
+                  f"({gaps[name]}); {aside[name]} x 0x0042 on its c2s")
+            continue
+        port = int(name.split("->")[0].rsplit(":", 1)[1])
+        for i, (t, d, op, v) in enumerate(merged):
+            if d != "c2s" or op != 0x0042:
+                continue
+            mates = tuple((op2, tuple(v2[1:])) for t2, d2, op2, v2 in merged
+                          if d2 == "c2s" and op2 != 0x0042 and abs(t2 - t) < 0.001)
+            ans = tuple((op2, tuple(v2[1:3])) for t2, d2, op2, v2 in merged[i + 1:]
+                        if d2 == "s2c" and t2 - t <= 0.050 and op2 != c2striage.TICK)
+            out.append((port, round(t, 3), tuple(v[1:]), mates, ans))
+    return sorted(out, key=lambda r: r[1]), aside
+
+
+Z2_0042_WITNESS = [
+    (62925, 245.242, (9,), ((0x00C1, (9, 3)),),
+     ((0x00E6, (7, 364)), (0x0021, (1,)), (0x0021, (2,)), (0x0022, (9, 0)))),
+    (51090, 402.799, (9,), ((0x00C1, (9, 0)),), ()),
+]
+z2dir = os.path.join(livewire.captures_root(), "20260929T100038")
+if os.path.isdir(z2dir):
+    z2s, z2aside = sends_0042(z2dir)
+    led.ok(z2s == Z2_0042_WITNESS and z2aside == {},
+           "WITNESS (20260929T100038, exact): 0x0042 [9] x2, each at the "
+           "timestamp of a TARGET_SELECT [9, x]; the first answered by 0x0022 "
+           "[9, 0] within 50 ms (behind 0x00E6 and 0x0021 x2), the second by "
+           "nothing; no connection set aside",
+           "\n      " + "\n      ".join(repr(r) for r in z2s)
+           + f"\n      aside {z2aside}")
+else:
+    led.skip("the CASTAI-Z2 0x0042 witness",
+             "capture 20260929T100038 (CASTAI-Z2) missing")
 # The status vocabulary, and the reverse predicate's known-bad arm.
 led.ok(c2striage.status_of(0x0009, handled or {}, named, dropped) == "handled"
        and c2striage.status_of(0x0008, handled or {}, named, dropped) == "dropped"
@@ -509,6 +591,21 @@ led.ok(c2striage.untriaged(cops, handled or {}, named, without_8) == [0x0008],
 led.ok(c2striage.untriaged({0x00FE: {}, 0x0009: {}}, handled or {}, named,
                            dropped) == [0x00FE],
        "KNOWN-BAD: a census with an undecided opcode names it, and only it")
+# CASTAI-Z2 (2026-09-29): 0x0042's decision is its DROPPED_ON_PURPOSE row and
+# nothing else -- vault-free, over a literal census, so a bare machine checks
+# the decision too: dropped with the row, UNTRIAGED and named alone without it.
+led.ok(c2striage.status_of(0x0042, handled or {}, named, dropped) == "dropped"
+       and c2striage.untriaged({0x0042: {}}, handled or {}, named, dropped) == [],
+       "0x0042 is triaged by its allowlist row alone: status dropped, and a "
+       "census of just it has nothing untriaged (CASTAI-Z2)",
+       f"status {c2striage.status_of(0x0042, handled or {}, named, dropped)}, "
+       f"named {named.get(0x0042)}")
+without_42 = {k: v for k, v in dropped.items() if k != 0x0042}
+led.ok(c2striage.status_of(0x0042, handled or {}, named, without_42) == "UNTRIAGED"
+       and c2striage.untriaged({0x0042: {}, 0x0009: {}}, handled or {}, named,
+                               without_42) == [0x0042],
+       "KNOWN-BAD: remove the 0x0042 row and it is UNTRIAGED, named alone",
+       f"status {c2striage.status_of(0x0042, handled or {}, named, without_42)}")
 led.ok(c2striage.untriaged({}, handled or {}, named, dropped) == [],
        "an empty census is vacuously clean -- which is why the floors above "
        "exist")

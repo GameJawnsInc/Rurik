@@ -344,6 +344,42 @@ DROPPED_ON_PURPOSE = {
             "answered the hold without the transfer would strand the party in "
             "a countdown, and one that transferred would send the client to a "
             "map with no content row. Armed with the arena, not before.",
+# ---- CASTAI-Z2, 2026-09-29: the second Zaishen Challenge tape ----------------
+# vault/captures/live/20260929T100038 (build 38888, five matches vs the Smiting
+# Monks) carried ONE c2s no earlier live tape had. Triaged from the tape, the
+# loopback corpus and the pinned build, the way CASTAI-Z1 did its three; left
+# UNNAMED on the 0x00A3 precedent (no upstream name, the sender read only to
+# its module), and the naming decision is the owner's when the evidence grows.
+    0x0042: "UNNAMED -- [agent_id], n=2 on retail's wire, both on 20260929T100038 "
+            "and both [9]: t=245.242 on the match-2 connection :62925 and "
+            "t=402.799 on the match-3 connection :51090, agent 9 being the "
+            "Zaishen Fighter henchman on each (an ALLY: profession 1/0, "
+            "WORLD_CREATE_AGENT type 0x20000018; the player is agent 7). Each "
+            "send shares its timestamp with a 0x00C1 TARGET_SELECT of that agent "
+            "([9, 3] / [9, 0]): one input on a party agent sends both. The one "
+            "loopback arrival agrees (authsrv-20260913T102944-c1, a hand-played "
+            "session, 1 of 1,740 gamesrv logs): TARGET_SELECT [200, 90] and "
+            "0x0042 [200] in ONE 16-byte frame, agent 200 the hero body. Retail's "
+            "reply, 1 of 2: s2c 0x0022 [9, 0] 37 ms after the :62925 send "
+            "(UPSTREAM name WORLD_UPDATE_CONTROLLED_AGENT, Headquarter / "
+            "OpenTyria) -- the live corpus's only 0x0022 whose third field is 0 "
+            "(110 x [own agent, 3] at instance load, 9 x [x, 1]); after the "
+            ":51090 send nothing but the ambient stream within 1.5 s. Static "
+            "(38797): wrapper 0x00920850 (CharMsg, 8 B), reached only by the "
+            "thunk 0x00816630, whose two callers 0x004E5579 / 0x004ED394 are in "
+            "GmView (asserts GmView:7684/7723/7755 and GmView:3737/3811); each "
+            "site sends 0x0042 [agent] on one predicate of the agent and 0x0044 "
+            "[dword] (thunk 0x00816650 -> 0x009208B0, the row above) on another, "
+            "behind one global flag bit ([0xC078D4] & 0x10000) -- the two are "
+            "one action on two classes of agent (RECONSTRUCTION). No upstream "
+            "names our 0x0042: GWCA has nothing at 0x0040, Headquarter, "
+            "OpenTyria and Py4GW nothing at 0x0042, GWLP-R calls it "
+            "P066_Unknown; the [agent_id] layout is OpenTyria's msgdefs.c "
+            "(UPSTREAM, field-for-field with 38797's own tables). Nothing is "
+            "answered: a 0x0022 for an action this server cannot read would be "
+            "a guess, and the one retail reply is n=1. A labelled run (what the "
+            "owner clicked) or the GmView read names it. test_c2striage pins "
+            "both sends, their frame-mates and the reply in a per-tape witness.",
 # 0x009F HENCHMAN_ADD came off this allowlist on 2026-09-23 when its arm
 # landed (DESKWORK-D1 step 5): handle_henchman_add answers the party window's
 # Add Henchman click with 0x00B0 + 0x01BF, and the standing henchmen carry

@@ -6409,7 +6409,12 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Floor **22**, the mandatory core; the pipe guard and the negative control are conditional and
   each raises the floor from inside its own branch, so a green run here prints
   **24**. Needs the vault and a free port 6112; ~9 s),
-  `toolkit/authsrv/test_dispatch.py` (**2026-09-28, 0x00A3 named: data only, no check
+  `toolkit/authsrv/test_dispatch.py` (**2026-09-29, CASTAI-Z2: data only, no check
+  changed. `DROPPED_ON_PURPOSE` gains `0x0042` (UNNAMED, n = 2, `[agent_id]`: the Zaishen
+  Fighter clicked at the timestamp of a TARGET_SELECT, its evidence on the row) and
+  `retail_c2s.json` is regenerated over 116 connections / 61 opcodes; §10's REVERSE
+  guard now reads 61 retail opcodes, 36 handled, 25 dropped on purpose, none undecided.
+  54 checks unchanged.** **2026-09-28, 0x00A3 named: data only, no check
   changed. `DROPPED_ON_PURPOSE`'s `0x00A3` reason now reads ZAISHEN_CHALLENGE_CANCEL, named
   medium in `overrides.json` by the owner's decision (2d9a7547; n=1 plus GWCA / Py4GW's
   PARTY_CANCEL_ENTER_CHALLENGE, the PARTY_LEAVE precedent). Still dropped: no arena, no
@@ -6483,7 +6488,24 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   undecided `0x00FE`, which the predicate must name alone, and the `0x0008` row
   deleted, which must name `0x0008` alone. `test_c2striage.py` is what keeps the
   file honest against the vault. 54 checks, ~1 s),
-  `toolkit/authsrv/test_c2striage.py` (**2026-09-28, 0x00A3 named: c2s `0x00A3` is
+  `toolkit/authsrv/test_c2striage.py` (**2026-09-29, CASTAI-Z2: the second Zaishen
+  tape (20260929T100038) carried ONE c2s no earlier live tape had, `0x0042` `[agent_id]`,
+  and 3 of 45 went red as designed (missing from the file; the 0x0009 known-bad no
+  longer named alone; untriaged over the live census). Triaged UNNAMED at n = 2 on the
+  0x00A3 precedent: both sends name the Zaishen Fighter henchman at the very timestamp
+  of a TARGET_SELECT of it (one input, two messages -- the one loopback arrival has both
+  in ONE frame), one is answered by s2c `0x0022 [9, 0]` (the corpus's only such value),
+  no upstream names our 0x0042, and the sender is read to its module (GmView, where the
+  same two call sites also send `0x0044`). Dropped on purpose -- the reason is
+  `test_dispatch.DROPPED_ON_PURPOSE`'s row -- and not armed. +4: §4's decision check
+  (`>= 2`, a later send is confirming evidence), an exact per-tape witness of both sends
+  with their frame-mates and the reply (scoped to the tape: the same capture planted
+  under a future stamp leaves the run green; a planted third send reddens it), and two
+  vault-free arms (the row alone triages it; KNOWN-BAD: without the row it is UNTRIAGED,
+  named alone). `--write` regenerated `retail_c2s.json` (116 connections, 31 captures,
+  14,907 c2s, 61 opcodes): 38 rows byte-equal, 22 moved by exactly the new tape's own
+  contribution, 1 new. 49 checks with the vault; floor 20 → 22, measured bare (22, 6
+  declared skips).** **2026-09-28, 0x00A3 named: c2s `0x00A3` is
   ZAISHEN_CHALLENGE_CANCEL, medium, the owner's decision (2d9a7547; `overrides.json`, n=1
   with GWCA / Py4GW's PARTY_CANCEL_ENTER_CHALLENGE corroborating, the PARTY_LEAVE
   precedent). §4's per-opcode decision checks now want all three new opcodes named medium
