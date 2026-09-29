@@ -3062,3 +3062,7 @@ Three close or correct this plan:
   - Two modifier-1.0 shots sit outside the 1.10..1.16 band (1.0948 s at :50061 217.821,
     1.2242 s at :50295 476.727), cause UNVERIFIED; the windup signature holds them as its
     exact out-of-band set.
+- **Rust (204), §43.1's CONTESTED 10..70 vs the wiki's 10..85, resolves on 38888 for the
+  wiki** (2026-09-28, studies/crossbuild §10.5): the 38888 client table reads bonus 10..85,
+  and `skill_effect.204` now carries 10 / 85, build 38888 (rank 12: 70). The content overlay
+  follows 38888 from that day; the pin stays 38797.

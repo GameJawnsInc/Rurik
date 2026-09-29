@@ -9835,8 +9835,13 @@ section records what changes HERE.
 
 - **Faintheartedness (135) was re-balanced in 38888: 3..16 → 4..18** (CASTAI-ZF7,
   CORROBORATED by the client tables, the wire's 14.0 at rank 11, and WIKI rev 2739052).
-  `vault/content/skills.toml` is still the 38797 extraction, so our server gives a 38888
-  client the old curve. Whether content should be regenerated is open (`PLAN.md` §8).
+  `vault/content/skills.toml` was still the 38797 extraction. **Regenerated from 38888 on
+  2026-09-28** (the owner's ruling; studies/crossbuild §10): 144 rows moved, among them
+  Banish 252 (scale15 56 -> 65), Frenzy 346 (linked to Strength, attribute 51 -> 17),
+  Orison of Healing 281 (20..70 -> 30..80, the wiki's number) and **Rust 204, whose bonus
+  reads 10..85 on 38888 -- the CONTESTED client-70-vs-wiki-85 resolved for the wiki**; its
+  hand row now carries 10 / 85. The owner's 38797 loopback client still DISPLAYS its own
+  table's numbers.
 - **Deep Wound (482) re-applied while live is a SECOND concurrent effect** (CASTAI-ZF18,
   n = 1): a new buff id, the first effect not removed, and no prop-42 at the re-apply or at
   the first effect's expiry; the last close restores the maximum. `apply_condition`
