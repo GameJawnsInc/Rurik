@@ -891,3 +891,32 @@ is studies/weapons/PLAN.md section 31 -- a 20 % roll at each spell's completion,
 retail-made staff in the corpus carries 20 with arg2 1 (the two at (20, 0) are the \
 no-requirement shape); the number is the wiki's maximum, chosen so a harness run shows the \
 halving in a few casts."""
+
+# ---- RANGERPRE-S15 (2026-09-30, LOOT slice 1): the gold a kill drops ----------
+[item.gold_coins]
+name = "gold (the kill-drop record, retail wire; value and quantity are set per drop)"
+file_id = 97552
+item_type = 20                 # the gold type: 9 of 9 corpus 0x0162, 0 of any 0x0161
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20080001
+value = 0                      # OVERWRITTEN per drop (loot.gold_record): the amount
+model_id = 2511
+quantity = 0                   # OVERWRITTEN per drop: the amount again
+enc_name = [0x2520, 0xA92A, 0xCDF4, 0x3A6A]
+modifiers = []
+
+[item.gold_coins.provenance]
+source = "capture"
+capture = "20260929T150923"
+origin = "live"
+verified = """OBSERVED: 0x0162 at :55934 383.5733 (plaintext offset 29833) is \
+[472, 97552, 20, 0,0,0,0, 0x20080001, 6, 2511, 6, name, []] -- this row with the item id \
+472 and the amount 6 -- and re-encoded it is the same 44 bytes (test_loot section 6). \
+Corpus 9 of 9 identical in file / type / model / flags / name (20260913T210901 x2, \
+20260914T005758 x3, 20260929T150923 x4); value == quantity == the amount every time, and \
+the pickup's 0x0140 credits it (2 of 2: [2, 6] at 395.546, [2, 7] at 1125.5645). 0x0161 \
+with type 20: 0 of the corpus."""
+note = "value and quantity are the drop's amount, written per drop by loot.gold_record. The name's three trailing words are its key -- the same class of value as starter_hammer's enc_name: ids, resolved at run time, never text."

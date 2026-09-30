@@ -1178,7 +1178,10 @@ def template_choices(world, fm=None, bodies_only=True):
 
 
 def weapon_keys(world):
-    armour = ("_body", "_boots", "_legs", "_gloves", "_head", "backpack", "costume")
+    # not a weapon either: the armour pieces, and the gold a kill drops
+    # (RANGERPRE-S15's [item.gold_coins], a record no hand can hold)
+    armour = ("_body", "_boots", "_legs", "_gloves", "_head", "backpack", "costume",
+              "gold_coins")
     return [k for k in sorted(world.rows("item")) if not any(w in k for w in armour)]
 
 

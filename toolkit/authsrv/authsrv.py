@@ -1356,6 +1356,14 @@ GAME_SMSG_ITEM_CHANGE_LOCATION = 0x014B
 GAME_SMSG_ITEM_SWAP_LOCATIONS = 0x0152
 GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT = 0x006F
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
+# RANGERPRE-S15 (LOOT slice 1), a kill's gold drop and its pickup (loot.py):
+# 0x0162 declares the GOLD -- named_item()'s layout, 9 of 9 corpus gold records
+# on it and 0 on 0x0161 (the schema carries no name; ITEM_GOLD_DECLARE is OURS);
+# 0x0168 [ground agent, source agent] (ITEM_AGENT_DROP_SOURCE); 0x0159
+# [item, picker] (ITEM_PICKED_UP).
+GAME_SMSG_ITEM_GOLD_DECLARE = 0x0162
+GAME_SMSG_ITEM_DROP_SOURCE = 0x0168
+GAME_SMSG_ITEM_PICKED_UP = 0x0159
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
 GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
 # [agent_id, dword]. Grows the char client's char-by-id table ([charctx+0x7CC],
@@ -6061,6 +6069,9 @@ import henchparty                                              # noqa: E402
 # builder; read by player_purse, the load burst, grant_quest_reward and the
 # merchant wrappers (persist_purse), and by test_purse.py.
 import purse                                                   # noqa: E402
+# RANGERPRE-S15 (LOOT slice 1): the ground drop's values (a stdlib leaf); the
+# sends are loot_on_kill / handle_pickup / serve_pickup / ground_items_tick here.
+import loot                                                    # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -11883,6 +11894,12 @@ GAME_CMSG_UNNAMED_ACK_0079 = 0x0079
 #   is 0 in 363 of 363 with 0 collisions. Nothing was arranged to make that come
 #   out; the messages were being decoded and discarded the entire time.
 GAME_CMSG_TARGET_SELECT = 0x00C1
+# 0x003F PICKUP -- [ground agent, u8 0], arm 3 of the client's world-action switch
+#   (schema/overrides.json GAME_CMSG 63). OBSERVED 3 of 3 on 20260929T150923, each
+#   in one segment with its 0x00C1 [agent, x]; answered since RANGERPRE-S15 by
+#   handle_pickup (a straight 0x002A walk, then the arrival frame). It was
+#   test_dispatch's DROPPED_ON_PURPOSE row "the day a drop exists" -- it exists.
+GAME_CMSG_PICKUP = 0x003F
 # 0x0040 ROTATE_PLAYER -- [angle, turn_amount], and THE TRAP IS THE TYPING. Both
 #   payload fields are marshalled `dword` and hold IEEE-754 float32 VALUES; the
 #   client's own SEND table says u32, so the catalog is correct and must not be
@@ -19562,8 +19579,13 @@ def _approach_abandon(state):
 
 
 def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
-                   rec=None):
-    """Send the follow and arm the leg it starts. See approach_tick."""
+                   rec=None, stop_at=None):
+    """Send the follow and arm the leg it starts. See approach_tick.
+
+    `stop_at` (RANGERPRE-S15) overrides where the leg ends, centre to centre:
+    None is approach_stop's (the melee disc or the held weapon's range), and a
+    pickup walks to the item itself (0.0). The wire is the same 0x002A either
+    way -- the target's own point and its id."""
     plane = int(state.get("plane", 0))
     # MOVECODE-1z-v: the 0x002A follow is a movement order of its own, so
     # a live router chain must not keep granting legs behind it (the
@@ -19652,7 +19674,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     px, py = _reach_frame(state, now)
     px, py = float(px), float(py)
     dist = math.hypot(tx - px, ty - py)
-    stop = approach_stop(agent)                       # WEAPONS-W2b: the range for a bow
+    stop = (approach_stop(agent) if stop_at is None   # WEAPONS-W2b: the range for a bow
+            else float(stop_at))                      # RANGERPRE-S15: a pickup, 0.0
     run = max(dist - stop, 0.0)
     f = run / dist if dist > 0.0 else 0.0
     stop_point = (px + (tx - px) * f, py + (ty - py) * f)
@@ -20432,6 +20455,12 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
         send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
              f"flags {AGENT_FLAGS_KILLED} on the dying party agent {target_id}")
         return
+    # RANGERPRE-S15 (LOOT slice 1): THE DROP, when a table applies -- in the
+    # death's own frame, AFTER the status word and AHEAD of the reward block's
+    # first send (the 75-XP tick below). OBSERVED 4 of 4 retail drops
+    # (20260929T150923 :55934 383.5733: 0x00F1 [46, 16], 0x0162, 0x0168,
+    # 0x0020, then 0x009C [31, 100]). A party body's death (above) never drops.
+    loot_on_kill(send, state, target_id, agent, conn_id)
     # A SINGLE [0, 26], and the single is the finding. The pair
     # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
     # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
@@ -20486,6 +20515,296 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # is the tick ahead of the award now.)
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
+
+
+# ---------------------------------------------- RANGERPRE-S15: ground drops --
+#
+# LOOT slice 1: a GOLD drop on a kill, the pickup's walk and arrival, the purse
+# credit, and the view range that removes and re-creates an unpicked drop. Every
+# retail value and its witness is in loot.py's docstring (20260929T150923, build
+# 38888); the gold record is content ([item.gold_coins], a capture row) and the
+# drop TABLES are content (content/drops.toml -- INVENTED, every row).
+#
+# OFF BY DEFAULT: no kill rolls on any table unless the server is started with
+# --drop-table KEY, and then every HOSTILE kill rolls on that one row (a party
+# body's death never drops -- kill_agent returns before the call). The default
+# server's bytes are the pre-S15 bytes; the 0x003F arm answers a pickup of a
+# ground agent that does not exist with nothing, as the unhandled drop did.
+# --no-drops (LOOT_ENABLED False) is the known-bad arm under --drop-table: the
+# kill frame carries no drop, as every kill did until 2026-09-30, where retail's
+# drop 4 of 12 kills on the same tape. Slice 2 (an item drop: 0x0161, the 0x0135
+# reservation, the drop line, into the backpack) is DEFERRED.
+LOOT_ENABLED = True
+DROP_TABLE = None           # --drop-table KEY: the content `drop` row kills roll on
+
+
+def drop_table_row(key):
+    """The content `drop` row `key`, validated -- raises content.ContentError for
+    a key the store does not carry and loot.LootError for a row this slice
+    cannot serve. main() calls it at startup so a bad --drop-table never starts."""
+    return loot.validate_table(key, agents.WORLD.get("drop", key))
+
+
+def loot_on_kill(send, state, target_id, agent, conn_id, rng=None):
+    """Roll DROP_TABLE for a hostile's death and, on a hit, put the gold on the
+    ground: 0x0162 (the declare), 0x0168 [ground agent, the dying agent] and the
+    ground agent's 0x0020 -- retail's order at :55934 383.5733, 4 of 4. Called by
+    kill_agent between the death's status word and its reward block. -> the
+    ground agent id, or None (off, no table, or the roll missed).
+
+    WHERE IT FALLS: DROP_SCATTER from the corpse at a uniform angle, moved onto
+    the navmesh by population.place_on_mesh (the corpse's own point when nothing
+    near is ground). RECONSTRUCTION (loot.DROP_SCATTER). `rng` is the random
+    module unless a test hands a stub."""
+    if not LOOT_ENABLED or not DROP_TABLE:
+        return None
+    rng = random if rng is None else rng
+    row = drop_table_row(DROP_TABLE)
+    got = loot.roll(row, rng)
+    if got is None:
+        print(f"[c{conn_id}] DROP: agent {target_id} ({agent.get('name', '?')}) "
+              f"drops nothing (table {DROP_TABLE!r}, chance {row['chance']}, "
+              f"INVENTED) [RANGERPRE-S15]", flush=True)
+        return None
+    _kind, amount = got
+    ground = state.setdefault("ground_items", {})
+    item = loot.mint_item_id(state, merchant.PURCHASED_ITEM_ID_BASE)
+    # the party side's reserved ids (area_population's list: the player, the
+    # henchman, up to seven heroes) and every live body and ground item
+    taken = (set(state.get("agents") or {}) | set(ground)
+             | {PLAYER_AGENT_ID, HENCHMAN_AGENT_ID}
+             | {HERO_AGENT_ID + i for i in range(7)})
+    drop = loot.next_drop_agent(taken)
+    cx, cy = float(agent["pos"][0]), float(agent["pos"][1])
+    sx, sy = loot.scatter(cx, cy, rng)
+    placed = population.place_on_mesh(state.get("pathmap"), sx, sy,
+                                      f"the drop from agent {target_id}")
+    x, y = (float(placed[0]), float(placed[1])) if placed is not None else (cx, cy)
+    plane = int(agent.get("plane", state.get("plane", 0)))
+    gold = loot.gold_record(agents.item_template("gold_coins"), amount)
+    send(GAME_SMSG_ITEM_GOLD_DECLARE, agents.named_item(item, gold),
+         f"ITEM_GOLD_DECLARE(item {item}: {amount} gold) [RANGERPRE-S15]")
+    send(GAME_SMSG_ITEM_DROP_SOURCE, loot.drop_source(drop, target_id),
+         f"ITEM_AGENT_DROP_SOURCE(ground agent {drop} from agent {target_id}) "
+         f"[RANGERPRE-S15]")
+    send(GAME_SMSG_WORLD_CREATE_AGENT,
+         loot.ground_item_create(drop, item, x, y, plane),
+         f"WORLD_CREATE_AGENT(ground item {drop}: item {item} at "
+         f"({x:.0f},{y:.0f}) plane {plane}) [RANGERPRE-S15]")
+    ground[drop] = {"item": item, "gold": int(amount), "pos": (x, y),
+                    "plane": plane, "source": target_id, "shown": True}
+    print(f"[c{conn_id}] DROP: agent {target_id} ({agent.get('name', '?')}) "
+          f"dropped {amount} gold -- ground agent {drop}, item {item}, at "
+          f"({x:.0f},{y:.0f}) plane {plane}, "
+          f"{math.hypot(x - cx, y - cy):.0f} u from the corpse (table "
+          f"{DROP_TABLE!r}, INVENTED; the frame is retail's) [RANGERPRE-S15]",
+          flush=True)
+    return drop
+
+
+def handle_pickup(values, send, state, conn_id, rec=None):
+    """GAME_CMSG 0x003F PICKUP [ground agent, u8] -- walk to it, serve on arrival.
+
+    RETAIL (3 of 3 on 20260929T150923): the reply is a STRAIGHT 0x002A [player,
+    the item's own point, plane, plane, ground agent] within ~40 ms, no client
+    report during the walk, and the arrival frame about the straight-line walk
+    time later. So the walk is `_approach_send` with the stop AT the item
+    (stop_at=0.0): the same message, the same leg record, the same integrator.
+    Its record is MOVED OUT of state["approach"] into state["pickup"], because
+    attack_tick abandons an approach every tick it holds no attack target;
+    pickup_tick owns it from here. A body already within loot.PICKUP_REACH is
+    served at once (RECONSTRUCTION: n = 0 on tape).
+
+    The press is a move order: it ends a keyboard lead and a click leg in the
+    0x0026 arm's own order, and forgets the attack target. RECONSTRUCTION --
+    what retail does with a pickup pressed mid-attack or mid-cast is n = 0; a
+    cast in flight is left alone, as the interact arm leaves it.
+
+    REFUSED LOUDLY, with nothing sent: an agent that is no ground item in view
+    (this server's pre-S15 answer to every 0x003F), a dead player, and a second
+    press on the item already being walked to."""
+    drop = int(values[1])
+    now = time.time()
+    g = (state.get("ground_items") or {}).get(drop)
+    if g is None or not g.get("shown", True):
+        print(f"[c{conn_id}] PICKUP of agent {drop} REFUSED: no ground item in view "
+              f"under that id -- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    if state.get("player_dead"):
+        print(f"[c{conn_id}] PICKUP of ground agent {drop} REFUSED: the player is "
+              f"dead -- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    pk = state.get("pickup")
+    if pk is not None and pk.get("agent") == drop:
+        print(f"[c{conn_id}] PICKUP of ground agent {drop}: already walking to it "
+              f"-- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    _kbd_lead_kill(send, state, conn_id, rec, "pickup")
+    _press_supersedes(send, state, conn_id, drop, rec=rec)
+    state["attacking"] = None
+    state["pickup"] = None
+    px, py = _reach_frame(state, now)
+    gap = math.hypot(float(g["pos"][0]) - px, float(g["pos"][1]) - py)
+    if gap <= loot.PICKUP_REACH:
+        state["pickup"] = {"agent": drop, "t0": None, "eta": now, "dest": None}
+        print(f"[c{conn_id}] PICKUP of ground agent {drop}: {gap:.1f} u, in reach "
+              f"-- served now [RANGERPRE-S15]", flush=True)
+        serve_pickup(send, state, conn_id, now)
+        return True
+    _approach_send(send, state, conn_id, drop,
+                   {"pos": g["pos"], "name": f"ground item {drop}"}, now,
+                   rec=rec, stop_at=0.0)
+    ap = state.get("approach") or {}
+    state["approach"] = None
+    state["pickup"] = {"agent": drop, "t0": ap.get("t0"), "eta": ap.get("eta", now),
+                       "dest": state.get("dest")}
+    print(f"[c{conn_id}] PICKUP of ground agent {drop} (item {g['item']}, "
+          f"{g['gold']} gold) at {gap:.0f} u: a STRAIGHT 0x002A to the item's own "
+          f"point (retail's reply, 3 of 3); the arrival frame at the leg's eta, "
+          f"{ap.get('eta', now) - now:.2f} s (our straight-line model) "
+          f"[RANGERPRE-S15]", flush=True)
+    return True
+
+
+def serve_pickup(send, state, conn_id, now=None):
+    """The arrival frame, in retail's order (:55934 395.546 and :53756 1125.5645,
+    2 of 2 gold, byte-identical with the ids substituted): the hold 0x009F
+    [8, me, 1], 0x009F [39, me, 0], 0x0159 [item, me], the purse credit 0x0140
+    [key, n], the gold line 0x005D + 0x005E [1, 10], 0x0028 [me], 0x0021 [ground
+    agent]. The purse moves through purse.py and persists under --persist, as a
+    quest's gold does. The hold's release is pickup_tick's, 1.0 s on.
+
+    The 0x0028 [me] is the fourth player-directed 0x0028 site (test_cancelwalk's
+    census): retail's arrival carries it 5 of 6 across the corpus, and the client
+    sends no report in that window, so it halts a body that has already arrived
+    rather than cutting a walk short. -> True when a pickup was served."""
+    now = time.time() if now is None else now
+    pk = state.pop("pickup", None)
+    if not pk:
+        return False
+    drop = pk["agent"]
+    g = (state.get("ground_items") or {}).pop(drop, None)
+    if g is None:
+        return False
+    n = int(g["gold"])
+    action_hold(send, state, 1, "the pickup [RANGERPRE-S15]")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.GV_PICKUP, PLAYER_AGENT_ID, 0],
+         "PICKUP property 39 [me, 0 for gold] (the name ours) [RANGERPRE-S15]")
+    send(GAME_SMSG_ITEM_PICKED_UP, loot.picked_up(g["item"], PLAYER_AGENT_ID),
+         f"ITEM_PICKED_UP(item {g['item']}) [RANGERPRE-S15]")
+    send(merchant.GAME_SMSG_GOLD_CREDIT, [PLAYER_INVENTORY_KEY, n],
+         f"GOLD_CREDIT(+{n}, a picked-up drop) [RANGERPRE-S15]")
+    before = player_purse(state)
+    state["purse"] = purse.after_credit(before, n)
+    persist_purse(state)
+    send(GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.gold_pickup_body(n)],
+         f"CHAT_MESSAGE_CORE[the gold pickup line: {n}] [RANGERPRE-S15]")
+    send(GAME_SMSG_CHAT_MESSAGE_SERVER, [PLAYER_NUMBER, chatdefs.CHANNEL_NOTIFY],
+         f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, channel "
+         f"{chatdefs.CHANNEL_NOTIFY})")
+    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+         "AGENT_STOP_MOVING(player): the pickup's arrival (retail 5 of 6) "
+         "[RANGERPRE-S15]")
+    send(GAME_SMSG_WORLD_REMOVE_AGENT, [drop],
+         f"WORLD_REMOVE_AGENT({drop}) -- the ground item is picked up "
+         f"[RANGERPRE-S15]")
+    # The body stands at the item: the server's copy lands there with the
+    # client's (retail's report after the arrival, 1.6 u off), and the walk the
+    # integrator was running is over.
+    state["pos"] = (float(g["pos"][0]), float(g["pos"][1]))
+    state["dest"] = None
+    state["pickup_release_at"] = now + loot.PICKUP_HOLD_SECONDS
+    print(f"[c{conn_id}] PICKUP SERVED: ground agent {drop}, item {g['item']}, "
+          f"+{n} gold -- purse {before} -> {state['purse']} (0x0140 [key, {n}]); "
+          f"the hold releases in {loot.PICKUP_HOLD_SECONDS:.1f} s [RANGERPRE-S15]",
+          flush=True)
+    return True
+
+
+def pickup_tick(send, state, conn_id, now=None):
+    """The world tick's half of a pickup: serve it on arrival, cancel it when
+    something replaced the walk, and release the arrival's hold 1.0 s on.
+
+    ARRIVAL is the leg's eta while the server's copy still walks the pickup's
+    own `dest`, or -- once that dest is gone (the integrator arrived, or a report
+    placed the body) -- the copy standing within loot.PICKUP_REACH of the item.
+    CANCELLED, with nothing sent, when: the item is gone or out of view, the
+    player died, an attack order was taken, the click latch was re-stamped (a
+    click, an interact walk, another approach), the copy was given another
+    destination, or the walk ended short of the item. What retail does in each
+    is n = 0 (RECONSTRUCTION); the walk itself is the client's to stop."""
+    now = time.time() if now is None else now
+    rel = state.get("pickup_release_at")
+    if rel is not None and now >= rel:
+        state["pickup_release_at"] = None
+        action_hold(send, state, 0, "the pickup's hold ends, 1.0 s after the "
+                    "arrival (retail 6 of 6) [RANGERPRE-S15]")
+    pk = state.get("pickup")
+    if not pk:
+        return None
+    g = (state.get("ground_items") or {}).get(pk["agent"])
+    latch, dest = state.get("click_moving_at"), state.get("dest")
+    why = None
+    if g is None or not g.get("shown", True):
+        why = "the item is gone or out of view"
+    elif state.get("player_dead"):
+        why = "the player died"
+    elif state.get("attacking"):
+        why = "an attack order replaced the walk"
+    elif pk.get("t0") is not None and latch is not None and latch != pk["t0"]:
+        why = "a newer move order (the click latch was re-stamped)"
+    elif dest is not None and dest != pk.get("dest"):
+        why = "the body was given another destination"
+    if why is None:
+        if dest is None:
+            px, py = state.get("pos", (0.0, 0.0))
+            if math.hypot(float(g["pos"][0]) - float(px),
+                          float(g["pos"][1]) - float(py)) <= loot.PICKUP_REACH:
+                return serve_pickup(send, state, conn_id, now)
+            why = "the walk ended short of the item"
+        elif now >= pk["eta"]:
+            return serve_pickup(send, state, conn_id, now)
+        else:
+            return None
+    state["pickup"] = None
+    print(f"[c{conn_id}] PICKUP of ground agent {pk['agent']} CANCELLED: {why} "
+          f"-- nothing sent [RANGERPRE-S15]", flush=True)
+    return False
+
+
+def ground_items_tick(send, state, conn_id):
+    """The view range: an unpicked ground item leaves by a bare 0x0021 once the
+    server's copy of the player stands past loot.DROP_VIEW_RANGE from it, and
+    comes back by a bare 0x0020 once it is inside again -- retail's shape, 11 of
+    11 removals and 4 of 4 re-creates on 20260929T150923 (loot.py). No timer."""
+    ground = state.get("ground_items")
+    pos = state.get("pos")
+    if not ground or pos is None:
+        return 0
+    moved = 0
+    for aid, g in list(ground.items()):
+        seen = loot.in_view(pos, g["pos"])
+        if g.get("shown", True) and not seen:
+            send(GAME_SMSG_WORLD_REMOVE_AGENT, [aid],
+                 f"WORLD_REMOVE_AGENT({aid}) -- the ground item is out of view "
+                 f"range [RANGERPRE-S15]")
+            g["shown"] = False
+            moved += 1
+            print(f"[c{conn_id}] DROP VIEW: ground agent {aid} (item {g['item']}) "
+                  f"leaves -- the player is past {loot.DROP_VIEW_RANGE:.0f} u "
+                  f"[RANGERPRE-S15]", flush=True)
+        elif not g.get("shown", True) and seen:
+            send(GAME_SMSG_WORLD_CREATE_AGENT,
+                 loot.ground_item_create(aid, g["item"], g["pos"][0], g["pos"][1],
+                                         g["plane"]),
+                 f"WORLD_CREATE_AGENT(ground item {aid} back in view) "
+                 f"[RANGERPRE-S15]")
+            g["shown"] = True
+            moved += 1
+            print(f"[c{conn_id}] DROP VIEW: ground agent {aid} (item {g['item']}) "
+                  f"re-created -- the player is back inside "
+                  f"{loot.DROP_VIEW_RANGE:.0f} u [RANGERPRE-S15]", flush=True)
+    return moved
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
@@ -39052,6 +39371,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reported arrival, so it should be served on the first
                         # tick after that report rather than one interval later.
                         interact_pending_tick(send, state, conn_id)
+                        # RANGERPRE-S15: a pickup's arrival (or its cancel) and
+                        # its hold's release, then the ground items' view range
+                        # -- polled for the interact's reason: the client sends
+                        # nothing on the way (3 of 3 retail pickups).
+                        pickup_tick(send, state, conn_id)
+                        ground_items_tick(send, state, conn_id)
                         # A click held back by the grant floor. Polled here for
                         # the same reason the interact above is -- the client
                         # sends NOTHING while click-walking (measured silences
@@ -39909,6 +40234,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Nothing here reads it: the press carries its target.
                         state["target"] = values[1]
                         state["target_auto"] = values[2]
+                    elif opcode == GAME_CMSG_PICKUP:
+                        # RANGERPRE-S15 (LOOT slice 1): walk to a ground item
+                        # and pick it up -- the straight 0x002A now, the arrival
+                        # frame at the leg's end (pickup_tick). An id that is no
+                        # ground item in view is refused with nothing sent, the
+                        # dead-player guard included (handle_pickup).
+                        handle_pickup(values, send, state, conn_id, rec=rec)
                     elif opcode == GAME_CMSG_ROTATE_PLAYER:
                         # THE DWORD/FLOAT TRAP -- read the constant before
                         # touching this. values[1] and values[2] are integers
@@ -44296,6 +44628,28 @@ def main():
               "paid (the print names it) and the offer screen draws no gold "
               "line -- the pre-DESKWORK-D9 behaviour. Default pays 0x0140 "
               "[key, gold] after the experience 0x00EE.", flush=True)
+    if a.drop_table is not None:
+        # RANGERPRE-S15: resolve and validate the table NOW, so a bad name or a
+        # row this slice cannot serve never starts a server (a kill mid-run
+        # would otherwise raise inside the world tick).
+        try:
+            _dt_row = drop_table_row(a.drop_table)
+        except (agents.content.ContentError, loot.LootError) as exc:
+            raise SystemExit(f"--drop-table {a.drop_table}: {exc}") from None
+        global DROP_TABLE
+        DROP_TABLE = a.drop_table
+        print(f"[loot] --drop-table {a.drop_table}: every HOSTILE kill rolls on "
+              f"it -- chance {_dt_row['chance']}, gold {list(_dt_row['gold'])} "
+              f"(content/drops.toml, INVENTED); the drop's frame, pickup and "
+              f"view range are retail's (loot.py) [RANGERPRE-S15]", flush=True)
+    if a.no_drops:
+        global LOOT_ENABLED
+        LOOT_ENABLED = False
+        print("[loot] --no-drops: no kill drops anything, even under "
+              "--drop-table -- this server's bytes until 2026-09-30. KNOWN-BAD "
+              "against retail's kill frame, which carries the drop (0x0162, "
+              "0x0168, 0x0020) ahead of the reward on 4 of 12 kills of "
+              "20260929T150923 [RANGERPRE-S15 revert]", flush=True)
     if a.no_reward_in_frame:
         global REWARD_IN_FRAME
         REWARD_IN_FRAME = False

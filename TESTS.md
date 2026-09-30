@@ -3414,6 +3414,51 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
+  `toolkit/authsrv/test_loot.py` (**2026-09-30, RANGERPRE-S15 (LOOT slice 1): a kill's GOLD
+  drop, the pickup walk and its arrival, the purse credit, the view range.** Retail
+  (20260929T150923, build 38888): a drop rides the death's own frame between the `0x00F1`
+  status word and the reward block -- `0x0162` (the gold declare), `0x0168 [ground agent,
+  dying agent]`, the ground agent's `0x0020` (field 3 = 4, kind 0, speed 0, `0x34000000`,
+  token 0) -- 4 of 4; the pickup `0x00C1` + `0x003F` is answered by a straight `0x002A` to
+  the item's own point and, at the walk's end, `0x009F [8, me, 1]`, `[39, me, 0]`, `0x0159`,
+  `0x0140 [key, n]`, the gold line + `0x005E [1, 10]`, `0x0028 [me]`, `0x0021`; the hold
+  released 1.0 s on; an unpicked drop leaves by a bare `0x0021` past ~5,000 u and returns by
+  a bare `0x0020`. Ours dropped nothing and dropped `0x003F`. §1 the leaf (`loot.py`) and
+  the builders against retail's literals: the ground create, the gold declare, the gold
+  line for 6 and 7, the encoded widths 44 / 6 / 99, the KNOWN-BAD living builder
+  (`create_agent` differs in fields 2 / 8 / 10 / 11), `validate_table`'s seven refusals
+  (slice 2's `items` among them), `roll`, `scatter`, the merchant's item-id counter, the
+  5,000 u radius, and the tracked rows' provenance (`[item.gold_coins]` a capture row;
+  every `content/drops.toml` row `invented`). §2 OUR `kill_agent` under `--drop-table
+  probe_gold`: the drop right behind the status word and AHEAD of the 75-XP tick
+  (headline), its payloads, fresh ids per kill; the DEFAULT (no table) is the pre-S15
+  frame and the KNOWN-BAD arm `--no-drops` sends that same frame; a party body never drops;
+  the invented 0.33 table's miss and hit; the scatter point moved onto the mesh, the corpse's
+  point where nothing near is ground. §3 `handle_pickup` / `pickup_tick` / `serve_pickup`:
+  one `0x002A`; `attack_tick` leaves the walk alone (it abandons an approach record, which
+  is why the pickup's is moved out); nothing before the eta, exactly retail's eight at it
+  (purse 0 -> 6) and a MUTANT order that fails; the hold released once at +1.0 s; refusals
+  (a second press, an unknown agent, a dead player) and cancels (a click, another dest, an
+  attack order, a stop short) send nothing; the integrator's arrival and an in-reach press
+  serve too. §4 the view range: out past 5,000 u by one bare `0x0021`, back by a bare
+  `0x0020`, a hidden item refused, a pickup whose item leaves view cancelled. §5 the source:
+  `loot_on_kill` called once in `kill_agent` after the status word and AHEAD of the
+  `morale_experience(` tick (the critic's C1, stronger than ahead-of-the-reward); the world
+  tick's two polls; the `0x003F` arm through `test_dispatch.dispatch_arms` with its
+  DROPPED_ON_PURPOSE row gone; the two flags and `main()`'s validation. §6 THE TAPE (skips
+  ONLY when `captures/live/20260929T150923` is absent): 12 death frames, 4 drops, 3 c2s
+  `0x003F`; all 4 drop frames and ours pass one order predicate; OURS == RETAIL byte for
+  byte -- the kill trio at :55934 offsets 29833 / 29877 / 29889 (item 472, agent 57, foe 46),
+  both gold arrivals with the ids substituted (395.546, 1125.5645), and both straight
+  `0x002A`s -- a SABOTAGED arrival (0x0159 / 0x0140 swapped) fails the same comparator;
+  every `0x0162` (4) is the gold row with value == quantity; property 39 only in the three
+  arrivals; the hold's release +0.9985 / +0.9940; 11 bare removals and 4 bare re-creates.
+  Proved red: the kill-frame call removed, 7 (2a, 2b, 2c, 2g, 5a, 6b, 6c -- 2d, the
+  known-bad arm, stays green, being that server); the call moved between the tick and the
+  award (the C1 case), 3 (2a, 5a, 6b); `serve_pickup`'s credit ahead of `0x0159`, 4 (3d,
+  3e, 3i, 6d); the walk left in `state['approach']`, 5 (3a-3d, 3f); HEAD's `authsrv.py`
+  raises. Floor 35 from the bare green run (the tape adds 9: 44 vaulted). No socket, no
+  client. ~20 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
   quest-complete visual -- the message right after a hand-in's closing `0x004A` is `0x009F
   [20, own agent, 7]`, OBSERVED on 22 of 22 live hand-ins; what 7 draws is UNREAD. The
@@ -12981,7 +13026,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   other-agent machine (60/50 opens, 58 finish, 59 cancel, reopen, censor,
   timeout sweep), 0x00F1 recorded as a mark and never a close, and the
   property census keeping unknown ids; the batch clustering (eps=0 exact for live tapes, 5 ms for gamesrv logs whose sends stamp their own clocks); and scan_ours itself over a synthetic RURIK_VAULT -- hand-packed 0x009F rows the codec must frame, the tape-replay exclusion by label, and the era filter that makes the pre-castmech known-bad control possible. Floor 41),
-  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-26, MONSTERAI-S: the 0x0028 census re-aimed, not bumped -- SIX send sites, every one from the builder; still exactly THREE name the player (the safety count, unchanged); the third non-player site is `_scatter_halt` (a scatter ceaser, or a hold engaging while the copy still walks, stops where it stands; the body's own agent_id, only under SCATTER). 124 checks.** **2026-09-27: the cast-stop burst's ATTACK arm
+  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-30, RANGERPRE-S15 (LOOT slice 1): the 0x0028 census is SEVEN send sites and FOUR name the player -- the fourth is `serve_pickup`'s arrival halt, retail's own (the pickup's arrival frame carries `0x0028 [picker]` in 5 of 6 corpus pickups, 20260929T150923 :55934 395.546 and :53756 1125.5645 among them; the client sends no report between the `0x002A` and the arrival, 3 of 3), so it halts a body that has arrived and is not a stop-window send; a FIFTH player site is still the red the lock exists for. Every figure below that says SIX / THREE (or, in the 2026-09-03 history, THREE / TWO) is that day's count. 124 checks, unchanged.** **2026-09-26, MONSTERAI-S: the 0x0028 census re-aimed, not bumped -- SIX send sites, every one from the builder; still exactly THREE name the player (the safety count, unchanged); the third non-player site is `_scatter_halt` (a scatter ceaser, or a hold engaging while the copy still walks, stops where it stands; the body's own agent_id, only under SCATTER). 124 checks.** **2026-09-27: the cast-stop burst's ATTACK arm
   presses at agent 40 (no row, so no approach walk) instead of target 0 — the attack-target
   gate refuses an attack skill at 0, and the SLICE-F20 retail presses that arm models named
   their foe; the spell arms stay at 0; the count is unchanged at 124.**

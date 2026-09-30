@@ -1021,6 +1021,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(6 connections, 4 captures; amounts 10/25/50); the "
                          "amount is the content row's own number. Also reverts "
                          "the purse's persistence of that credit.")
+    ap.add_argument("--drop-table", default=None, metavar="KEY",
+                    help="RANGERPRE-S15 (LOOT slice 1): every HOSTILE kill rolls on "
+                         "the content/drops.toml row KEY (INVENTED, every row) and, "
+                         "on a hit, drops gold in retail's frame -- 0x0162, 0x0168 "
+                         "and the ground agent's 0x0020 between the death's status "
+                         "word and its reward (20260929T150923, 4 of 4 drops); a "
+                         "click on it walks the body there on a straight 0x002A and "
+                         "the arrival credits the purse. probe_gold drops 6 on every "
+                         "kill. DEFAULT none: no kill drops (the owner's default for "
+                         "the pre-Searing areas). A key the store lacks, or a row "
+                         "naming items (slice 2), refuses to start.")
+    ap.add_argument("--no-drops", action="store_true",
+                    help="RANGERPRE-S15 REVERT: no kill drops anything, even under "
+                         "--drop-table -- this server's bytes until 2026-09-30, where "
+                         "retail's kill frame carries the drop on 4 of 12 kills "
+                         "(20260929T150923). KNOWN-BAD arm.")
     ap.add_argument("--no-reward-in-frame", action="store_true",
                     help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
                          "reward lines (0x00EE, 0x0140, skills) go AFTER the "
