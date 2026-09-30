@@ -138,6 +138,14 @@ def death_is_free(now, revived_at):
 def experience_credit(value, bank, gained):
     """(morale, bank, recovered) after earning `gained` experience.
 
+    SUPERSEDED 2026-09-29 (RANGERPRE-S7, KILLXP-b) by `recover` over a counter
+    the server keeps: kept as the KNOWN-BAD ARM `test_killxp.py` scores. Retail's
+    tick is not this bank -- it fires on 43 of the corpus's 68 PvE awards, at
+    neutral morale too, where this sends nothing (20 of 68 fit), and it counts
+    from the instance's load, not from the death (20260913T210901 :60877: the
+    first +1 lands on the first kill after the death, 634.715; this bank's on
+    the third).
+
     WIKI (GWW, "Death Penalty", section Counters): "In PvE, gaining 75 experience
     will remove 1% DP". So experience buys death penalty back a percent at a
     time, and the remainder banks -- a kill worth 26 XP is not a third of a
@@ -162,6 +170,35 @@ def experience_credit(value, bank, gained):
     if healed >= BASELINE:
         bank = 0                    # at neutral again: nothing hoards for later
     return healed, bank, healed - value
+
+
+def crossings(before, gained):
+    """How many multiples of XP_PER_PERCENT a counter at `before` passes when it
+    gains `gained` -- the number of 75-XP ticks one award carries.
+
+    RANGERPRE-S7 (KILLXP-b). The counter is the player's experience since THIS
+    instance loaded: from 0, fed by every award paid, not reset by a death, not
+    carried from the last instance. RECONSTRUCTION -- the shape that fits 68 of
+    68 PvE awards in the live corpus (the total-experience counter fits 58, this
+    module's old bank 20); the wire shows the ticks, not the counter."""
+    before, gained = int(before), max(0, int(gained))
+    return (before + gained) // XP_PER_PERCENT - before // XP_PER_PERCENT
+
+
+def recover(value, crossings):
+    """Morale after `crossings` 75-XP ticks: +1 each, never past neutral.
+
+    WIKI (GWW, "Death Penalty", Counters): 75 experience removes 1% DP and
+    "will not provide or increase your Morale Boost". OBSERVED on the wire:
+    +1 on six ticks, and +10 on 20260913T210901 :60877 736.185 (a 2000-XP
+    hand-in from 90: 27 crossings, capped at 100). A value at or above neutral
+    is returned unchanged -- the tick still goes out (0x00EE [10, 0]) and
+    changes nothing, which is what 36 of the corpus's neutral ticks show; a
+    boost above 100 riding the same no-op is RECONSTRUCTION (no witness)."""
+    value = int(value)
+    if value >= BASELINE:
+        return value
+    return min(BASELINE, value + max(0, int(crossings)))
 
 
 def regen_fraction(fraction_at, pool_at, pool_now):

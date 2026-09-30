@@ -43,7 +43,9 @@ is a section's UPPER_CASE families, "moved out" a leaf that took part of it. Fil
 - SCALE_MEANS_DAMAGE: what a skill's scale means, and the simulation's own constants; flags
   SCALE_MEANS_*, TICK_SECONDS, COLLISION_STEP; e.g. skill_damage, skill_heal; moved out: skillread
 - GAME_SMSG_NPC_UPDATE_PROPERTIES: agent properties, kill rewards, the attribute opcodes; flags
-  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*; e.g. accrue_kill_rewards; moved out: attribcolumns
+  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*, KILL_XP_RULE, REFORGED_XP; e.g. accrue_kill_rewards;
+  moved out: attribcolumns; new leaf: killxp (the per-foe table; kill_experience sits above
+  kill_agent)
 - "skills ----" and its three sub-banners: effects, the status word, what a skill costs, the
   adrenaline family, the skill bar, the unlocks; flags EFFECTS, DEEP_WOUND_*, AGENT_ADRENALINE_*,
   SKILLBAR_*; e.g. build_unlock_bitmap; moved out: skillunlock
@@ -133,6 +135,7 @@ import pools  # noqa: E402
 import chain  # noqa: E402
 import wearmap  # noqa: E402
 import morale  # noqa: E402
+import killxp  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -362,13 +365,19 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     0x0052 · 0x004A on 10 of 10, and turn_in_quest does the same (the D9 fix
     pass; --no-reward-in-frame puts them after 0x004A as pass 1 did). The
     fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the DOUBLED
-    0x0052, 0x00EE [10, 0] (UNREAD) -- is documented in studies/quests §12.1 and
-    stays deferred; nothing here is invented for those or the four chat lines.
-    NOTED, NOT MOVED: on the two retail hand-ins that grant skills
-    (20260807T143055 92.792 s, 20260810T235916 126.917 s) the 0x00DC/0x00D9
-    pairs come AFTER the gold; ours go first (test_mechanics §29 locks skills
-    ahead of the xp, from the tape's kill frame) -- n=2, left for a pass that
-    reads why.
+    0x0052 -- is documented in studies/quests §12.1 and stays deferred; nothing
+    here is invented for those or the four chat lines. Its 0x00EE [10, 0], UNREAD
+    there, is the 75-XP tick and IS sent since RANGERPRE-S7 (below).
+    THE SKILLS COME LAST (RANGERPRE-S5, QUESTFLOW-H1): on every retail hand-in
+    that grants skills the 0x00DC/0x00D9 pairs follow the gold 0x0140, or the
+    xp and its level-up lines when there is no gold -- OBSERVED 4 of 4 (of 22
+    hand-ins in the live corpus): 20260807T143055 :62994 92.792 s,
+    20260810T235916 :61624 126.917 s, 20260929T150923 :55934 293.809 s (q86:
+    0x00EE [0,500], 0x0140 [2,25], then 394 and 446), and 20260913T210901
+    :60877 736.185 s (q347, no gold). Ours granted them FIRST until then
+    (test_mechanics §29 locked skills ahead of the xp), although that MANTID
+    frame itself has them after the xp and its level-up lines.
+    --quest-skills-first restores the old order as the known-bad arm.
 
     The same consequences the experience has: the wire delta, the death-penalty
     credit (WIKI: 75 XP buys back 1%), and the persisted sheet under --persist.
@@ -376,18 +385,29 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     """
     xp = row.get("reward_experience")
     gold = row.get("reward_gold")
-    # MANTID: a quest may hand over skills -- the tutorial's reward carried the
-    # Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write, in the
-    # same frame as the experience, before the two removes.
-    for sid in row.get("reward_skills") or ():
-        grant_skill(send, state, int(sid), conn_id,
-                    unlocked=int(sid) in state.get("skills_known", set()))
+
+    def _reward_skills():
+        # MANTID: a quest may hand over skills -- the tutorial's reward carried
+        # the Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write,
+        # in the same frame as the experience, before the closing 0x0052.
+        for sid in row.get("reward_skills") or ():
+            grant_skill(send, state, int(sid), conn_id,
+                        unlocked=int(sid) in state.get("skills_known", set()))
+    if not QUEST_SKILLS_AFTER_GOLD:
+        _reward_skills()        # --quest-skills-first: the pre-S5 order, KNOWN-BAD
     xp_paid = 0
     if xp is not None:
         xp_paid = int(xp)
+        # THE 75-XP TICK FIRST (RANGERPRE-S7): 0x009C < 0x00EE [10] < 0x00EE
+        # [0, xp] on 20 of 20 retail hand-ins -- every quest award on tape is
+        # 100 or more, so each crosses (20260913T210901 :60877 736.185: 0x009C
+        # [9 = the player, 100], [10, 10] from 90, the maxima, then [0,
+        # 2000]). The heroes' ticks after the award, as on a kill
+        # (RECONSTRUCTION for a hand-in).
+        morale_experience(send, state, conn_id, xp_paid)
         send(GAME_SMSG_AGENT_KILL_REWARD, [KILL_REWARD_ATTR, xp_paid],
              f"quest {qid} reward: experience +{xp_paid} (SLICE-B5, ours)")
-        morale_experience(send, state, conn_id, xp_paid)
+        hero_morale_experience(send, state, conn_id, xp_paid)
     # THE GOLD, after the experience -- the tape's order (DESKWORK-D9).
     gold_paid = 0
     if gold is not None and QUEST_GOLD_ENABLED:
@@ -400,6 +420,10 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     elif gold is not None and not QUEST_GOLD_ENABLED:
         print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
               f"(--no-quest-gold, the pre-DESKWORK-D9 behaviour).", flush=True)
+    # THE SKILLS, after the gold -- the tape's order, 4 of 4 (RANGERPRE-S5).
+    # Before the early return below, so a skills-only row still grants them.
+    if QUEST_SKILLS_AFTER_GOLD:
+        _reward_skills()
     if xp is None and not gold_paid:
         print(f"[c{conn_id}] quest {qid} turned in: no reward_experience"
               + ("" if gold is None else " and no gold paid")
@@ -449,6 +473,12 @@ def turn_in_quest(send, state, qid, row, conn_id):
     hand-in-adjacent order NOT witnessed); --no-reward-in-frame restores that
     for an A/B. What is still not sent, and why, is grant_quest_reward's
     docstring.
+
+    THEN THE QUEST-COMPLETE VISUAL (RANGERPRE-S8, QUESTFLOW-H3): 0x009F [20,
+    own agent, 7] immediately after the 0x004A, on 22 of 22 retail hand-ins
+    (QUEST_COMPLETE_VISUAL_ID; what it draws is UNREAD). It follows the 0x004A
+    under either --no-reward-in-frame arm, so pass 1's order keeps it there too;
+    --no-quest-complete-visual drops it, as every run before S8.
     """
     send(GAME_SMSG_QUEST_REMOVE, [qid],
          f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
@@ -458,6 +488,12 @@ def turn_in_quest(send, state, qid, row, conn_id):
         grant_quest_reward(send, state, qid, row, conn_id)
     send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
          f"QUEST_REMOVE_AND_UNLIST[{qid}]")
+    if QUEST_COMPLETE_VISUAL:
+        send(GAME_SMSG_AGENT_GENERIC_VALUE,
+             [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID,
+              QUEST_COMPLETE_VISUAL_ID],
+             f"quest {qid} complete: visual {QUEST_COMPLETE_VISUAL_ID} on the "
+             f"player (RANGERPRE-S8, OBSERVED 22 of 22; its look UNREAD)")
     if not REWARD_IN_FRAME:
         grant_quest_reward(send, state, qid, row, conn_id)
 
@@ -5075,9 +5111,29 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 # attr_id 0 = experience is UPSTREAM and UNVERIFIED; 26 is copied from the wire,
 # not derived. Whether it varies by creature is UNMEASURED: three different
 # creatures gave 26, which is evidence that it does NOT vary, at n=3.
+#
+# REFUTED 2026-09-29 (RANGERPRE-S6, KILLXP-a): the last sentence above. The value
+# is per foe -- 20, 25, 26, 30, 32, 84, 105, 126 and 176 are all on ArenaNet's
+# wire -- and all 49 own-kill awards in the live corpus are the wiki's
+# level-difference table, split by the party and times the Reforged effect's
+# +5% (CORROBORATED, zero free parameters; `killxp.py`, content/world.toml
+# [player.experience]). The three 26s were level-0 foes at player level 1 under
+# that effect: floor(25 x 1.05). The 20260929T150923 kill at wire t 477.1186 on
+# :55934 pays [0, 176] for a level-5 foe at player level 1. attr 0 = experience
+# is CORROBORATED by the same fit: the values are the wiki's experience table.
+# KILL_REWARD_VALUE stays as the PRE-KILLXP constant: what a body with no level on
+# its row is paid (a test fixture -- every spawn path sets `npc.level`), and every
+# kill under --kill-xp-constant.
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
+KILL_XP_RULE = True     # False (--kill-xp-constant): every kill pays KILL_REWARD_VALUE
+# The Reforged Mode effect's +5%, which retail pays only where it sends the
+# effect (0x0041 [own, 0, 3434, 0, 1] at a Prophecies explorable load) and this
+# server never sends. OFF by default; --reforged-xp pays it on the row's
+# reforged_effect_maps as a stand-in until the effect itself is served, and a
+# state["reforged_effect"] that load sets overrides both (reforged_effect).
+REFORGED_XP = False
 
 # THE SAME OPCODE, the other attribute. `0x00EE` is `[attr_id, delta]` over the
 # 15 player attributes, so the kill reward above (attr 0, experience) and the
@@ -5098,6 +5154,9 @@ PLAYER_ATTR_MORALE_ID = 10
 # study found still stands: the `[10,0]`+`[0,X]` pair marked by this opcode is a
 # broadcast burst rather than a kill shape. What changes is that attr 10 has a
 # name -- `[10, 0]` is a morale no-op riding an experience award.
+# REFUTED 2026-09-29 (RANGERPRE-S7): "broadcast burst rather than a kill
+# shape". The pair is the 75-XP tick on ANY award whose experience crosses a
+# multiple of 75 since the load, kills included (morale_experience).
 GAME_SMSG_AGENT_MORALE = 0x009C
 def balthazar_rate(map_id):
     """Balthazar-per-kill for THIS map, from its content row -- 0 by default.
@@ -5118,10 +5177,14 @@ def balthazar_rate(map_id):
     return int(row.get("balthazar_per_kill", 0))
 
 
-def accrue_kill_rewards(send, state, conn_id):
+def accrue_kill_rewards(send, state, conn_id, xp=KILL_REWARD_VALUE):
     """Make the kill reward ACCRUE instead of evaporating.
 
-    The [0, 26] xp delta hit_enemy sends is ArenaNet's own kill shape and the
+    `xp` is what kill_agent just paid on the wire (kill_experience, RANGERPRE-S6):
+    the store gains the number the client added, not a constant beside it. The
+    default is the pre-KILLXP constant, for callers that name no kill.
+
+    The [0, xp] delta hit_enemy sends is ArenaNet's own kill shape and the
     client applies it += to the sheet -- but nothing on our side remembered
     it, so the next 0x00E9 (or the next session) snapped the sheet back to
     the store's old numbers. With --persist armed and the burst having found
@@ -5142,7 +5205,7 @@ def accrue_kill_rewards(send, state, conn_id):
     row = store.character_by_uuid(state.get("char_uuid", ""))
     if row is None:
         return
-    row["xp"] += KILL_REWARD_VALUE
+    row["xp"] += int(xp)
     balth = store.account()["factions"].get("balthazar")
     rate = balthazar_rate(state.get("map_id", -1))
     if balth is not None and rate > 0:
@@ -11599,6 +11662,16 @@ NO_MARKER_POS = (float("inf"), float("inf"))
 
 GAME_SMSG_QUEST_REMOVE = 0x0052
 GAME_SMSG_QUEST_REMOVE_AND_UNLIST = 0x004A
+# THE QUEST-COMPLETE VISUAL (RANGERPRE-S8, QUESTFLOW-H3). The message right after
+# a hand-in's closing 0x004A is 0x009F [GV_EFFECT_ON_TARGET = 20, the player's own
+# agent, 7] -- OBSERVED on 22 of 22 hand-ins in the live corpus, the agent equal to
+# the batch's own 0x009C agent on all 20 that carry one; 9 of 9 in 20260929T150923
+# (:55934 293.809, q86: 0x0052, 0x004A, 0x009F [20, 31, 7]). WHAT 7 DRAWS IS
+# UNREAD. On that tape the other two [20, x, 7] land on OTHER players' agents
+# (:59427 1251.088 on 265, 1278.037 on 285) and none reaches the own agent outside
+# a hand-in, which reads as a visual everyone nearby sees -- UNVERIFIED on our
+# client. A wire constant, the same on every quest, so not a content column.
+QUEST_COMPLETE_VISUAL_ID = 7
 
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
@@ -12937,7 +13010,7 @@ QUEST_GOLD_ENABLED = True      # False (--no-quest-gold): a turned-in quest's
                                # on 6 connections in 4 captures; the specific
                                # amount is the content row's own number).
 REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
-                               # (skills, 0x00EE, 0x0140) go AFTER the closing
+                               # (0x00EE, 0x0140, skills) go AFTER the closing
                                # 0x004A, as every run before the D9 fix pass.
                                # Default ON: turn_in_quest sends them BETWEEN
                                # 0x0052 and 0x004A -- retail's relative order on
@@ -12951,6 +13024,19 @@ SKILL_LOAD_RETAIL_ORDER = True # False (--no-retail-skill-order): the load sends
                                # retail's order on 126 of 126 live connections
                                # carrying both (OBSERVED, RANGERPRE-S4;
                                # 20260929T150923, 11 of 11). 0x001D does not move.
+QUEST_SKILLS_AFTER_GOLD = True  # False (--quest-skills-first): a hand-in's
+                               # reward_skills (0x00DC/0x00D9[/0x001C]) go out
+                               # BEFORE the xp 0x00EE, as every run before
+                               # RANGERPRE-S5. Default ON: grant_quest_reward
+                               # sends them after the gold 0x0140 -- retail's
+                               # order on 4 of 4 skill-granting hand-ins
+                               # (OBSERVED; 20260929T150923 :55934 293.809).
+QUEST_COMPLETE_VISUAL = True   # False (--no-quest-complete-visual): a hand-in
+                               # sends no 0x009F [20, own, 7] after its 0x004A,
+                               # as every run before RANGERPRE-S8. Default ON:
+                               # turn_in_quest sends it right after the 0x004A
+                               # -- retail's next message on 22 of 22 hand-ins
+                               # (OBSERVED; QUEST_COMPLETE_VISUAL_ID).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -20166,6 +20252,39 @@ def attack_tick(send, state, conn_id, rec=None):
 
 
 
+def reforged_effect(state):
+    """Is the Reforged Mode effect (skill 3434) on in this instance?
+
+    Retail's answer is the zone's, not the character's: 0x0041 [own, 0, 3434,
+    0, 1] arrives once per load on 15 of 15 pre-Searing explorable connections
+    and 0 of 112 others, and a Reforged-flagged character on a Factions or
+    Nightfall map is paid 100% (content/world.toml [player.experience], note).
+    So the character flag (0x003C bit 2, the summary's bit 16) is NOT read
+    here. `state["reforged_effect"]`, when a load has set it, is the answer;
+    until one does, --reforged-xp stands in on the row's observed maps."""
+    if "reforged_effect" in state:
+        return bool(state["reforged_effect"])
+    return bool(REFORGED_XP) and killxp.reforged_map(state.get("map_id"))
+
+
+def kill_experience(state, agent):
+    """What this hostile's death pays the player: 0x00EE [0, x]'s x.
+
+    RANGERPRE-S6 (KILLXP-a): killxp.share over the foe's row level, the
+    player's level, the party (party_member_count -- the roster, the player
+    included; the wiki's "nearby" is UNVERIFIED) and the Reforged effect.
+    CORROBORATED on 49 of 49 live awards. A body with no level on its row
+    is paid the pre-KILLXP constant; so is every kill under
+    --kill-xp-constant, the revert arm."""
+    if not KILL_XP_RULE:
+        return KILL_REWARD_VALUE
+    lvl = (agent.get("npc") or {}).get("level")
+    if lvl is None:
+        return KILL_REWARD_VALUE
+    return killxp.share(int(lvl), player_level_of(state),
+                        party_member_count(state), reforged_effect(state))
+
+
 def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     """Put an agent down. ONE place since SKILLS-DW (2026-09-09).
 
@@ -20256,9 +20375,33 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # coincidence -- and that tick carries the 0x009C marker too, which is
     # what gives the coincidence away. The three CLEAN kills carry one
     # message and no 0x009C. studies/combat/PLAN.md 13.
-    send(GAME_SMSG_AGENT_KILL_REWARD,
-         [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
-         f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+    #
+    # RANGERPRE-S6 (KILLXP-a): the VALUE is per foe (kill_experience; 26 was
+    # one row of the wiki's table), so "[0, 26]" above is REFUTED as a
+    # constant. A share of 0 (a foe six or more levels below) sends
+    # nothing: whether retail sends [0, 0] is UNVERIFIED, and the corpus's
+    # two unpaid deaths carry no 0x00EE at all.
+    #
+    # RANGERPRE-S7 (KILLXP-b): and the PAIR paragraph is REFUTED. 0x009C
+    # [player, m] + 0x00EE [10, d] is the 75-XP death-penalty tick
+    # (morale_experience): it rides the award whose experience crosses a
+    # multiple of 75 since the instance loaded, at neutral morale too, where
+    # it is [player, 100] + [10, 0]. The "three clean kills" were 26s that
+    # crossed nothing, the Wolf's was a 126 that crossed 75, and the "burst"
+    # was six quest hand-ins (100 / 250 / 500, each crossing). OBSERVED
+    # order: the tick, the award, the flags on 23 of 23 ticking kill frames
+    # (20260929T150923 :55934 477.1186: 0x009C [31, 100], 0x00EE [10, 0],
+    # 0x00EE [0, 176], ..., 0x0026); the status ahead of them all; a drop
+    # ahead of the tick (383.5733 -- LOOT's slot, between the status and this
+    # block); the heroes' ticks right behind the award (20260914T005758
+    # :56011 238.177 and 410.841).
+    _xp = kill_experience(state, agent)
+    if _xp:
+        morale_experience(send, state, conn_id, _xp)   # the tick FIRST, 23/23
+        send(GAME_SMSG_AGENT_KILL_REWARD,
+             [KILL_REWARD_ATTR, _xp],
+             f"kill reward [{KILL_REWARD_ATTR}, {_xp}]")
+        hero_morale_experience(send, state, conn_id, _xp)   # after the award
     _strip_and_step_down()             # between the reward and the flags: 631.935
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
          f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
@@ -20266,19 +20409,16 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     hero_locks_release(send, state, target_id, conn_id)
     # AFTER the measured three-message template, never inside it: the
     # status/reward/flags order is ArenaNet's own tick shape, and the
-    # accrual only appends to it (and only under --persist).
-    accrue_kill_rewards(send, state, conn_id)
+    # accrual only appends to it (and only under --persist). The same _xp the
+    # wire just carried: the store must gain what the client added.
+    accrue_kill_rewards(send, state, conn_id, _xp)
     # SLICE-B4: and a kill can meet a quest objective. Same rule about where it
     # sits -- the three-message template is ArenaNet's shape and nothing of ours
     # goes inside it.
     kill_completes_objective(send, state, target_id, conn_id)
-    # ...and so does the other half of the death penalty. WIKI (GWW, "Death
-    # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
-    # so the kill reward that just went out is also the way back up. Sends
-    # nothing at all while morale is neutral, which is every session in
-    # which nothing has died -- and nothing on the first two kills after a
-    # death either, because 26 XP is not a percent yet.
-    morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
+    # (The death penalty's other half -- WIKI "gaining 75 experience will
+    # remove 1% DP" -- was sent HERE, after the flags, until RANGERPRE-S7; it
+    # is the tick ahead of the award now.)
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -27091,7 +27231,8 @@ def player_pools(state):
     gap that made "you cannot die" a property of the code rather than a decision.
     """
     state.setdefault("morale", morale.BASELINE)
-    state.setdefault("morale_xp_bank", 0)
+    # (No experience bank: RANGERPRE-S7's counter, state["xp_since_load"],
+    # starts at 0 with the instance -- morale_experience.)
     # When the player last stood up. 0.0 means never -- and `death_is_free`
     # answers the falsy case FIRST, so the first death of a session can never
     # fall inside a grace window that has not happened yet.
@@ -27276,7 +27417,7 @@ def map_death_penalty(map_id):
     return bool(row.get("death_penalty", False))
 
 
-def push_morale(send, state, conn_id, new_value, why, between=None):
+def push_morale(send, state, conn_id, new_value, why, between=None, tick=False):
     """Move the player's morale and put ArenaNet's own tick on the wire.
 
     THE SHAPE IS OBSERVED, off the one player death in the live corpus
@@ -27302,11 +27443,21 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     FRACTION of maximum energy per second, so a pool that shrinks 15% while this
     stands still is a 15% slower regeneration nobody asked for. Retail resent it;
     so do we.
+
+    `tick=True` IS THE 75-XP TICK (RANGERPRE-S7, KILLXP-b; morale_experience):
+    it goes out even when the value does not move -- 0x009C [player, 100] +
+    0x00EE [10, 0] and nothing else, 36 of 36 neutral ticks in the live corpus
+    -- and each maximum rides it only when it CHANGED: 0x009F 42 on 7 of 7
+    recoveries, 41 + 0x00A2 43 on the 2 of 7 whose energy maximum moved
+    (20260913T210901 :60877 675.898, 27 -> 28; 736.185, 28 -> 30). The death
+    path passes no tick and is unchanged.
     """
     old = player_morale(state)
     new_value = morale.clamp(new_value)
-    if new_value == old:
+    if new_value == old and not tick:
         return old
+    old_energy = player_max_energy(state)
+    old_health = int(player_max_health(state))
     state["morale"] = new_value
     max_energy = player_max_energy(state)
     max_health = int(player_max_health(state))
@@ -27321,15 +27472,20 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     # nothing.
     if between is not None:
         between()
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
-         f"maximum energy {max_energy} at morale {morale.display(new_value)}")
+    # THE 75-XP TICK sends a maximum only when it moved (the docstring); every
+    # other caller sends both, as before.
+    _energy_moved = not tick or max_energy != old_energy
+    _health_moved = not tick or max_health != old_health
+    if _energy_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
+             f"maximum energy {max_energy} at morale {morale.display(new_value)}")
     # THE POOL'S OWN BOOK RESIZES WITH THE WIRE (energy-arc merge,
     # 2026-08-20): set_maximum recomputes the stored rate the way retail's
     # numbers show (0.0528 at 25 -> 0.06 at 22, the same four pips), so the
     # RESURRECT resend in restore_player_energy is already rescaled with no
     # second computation to drift.
-    if ENERGY:
+    if ENERGY and _energy_moved:
         player_energy(state).set_maximum(max_energy)
     # THE CHANNEL IS 0x00A2 AND THE DEATH VALUE IS ZERO -- both are the
     # capture's, not a choice: the only death-with-morale batch in the corpus
@@ -27345,17 +27501,19 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     # there is RECONSTRUCTION (the fraction must track the pool or the
     # absolute rate silently changes -- the docstring's argument).
     _dead = bool(state.get("player_dead"))
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
-         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
-          _f32(0.0 if _dead else
-               morale.regen_fraction(agents.PLAYER_FLOAT_43,
-                                     agents.PLAYER_ENERGY, max_energy))],
-         "energy regeneration stops: the player is dead" if _dead else
-         "energy regeneration, rescaled to the new pool")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
-         f"maximum health {max_health} at morale {morale.display(new_value)}")
-    state["player_max_declared"] = int(max_health)      # 3(a): the tracker
+    if _energy_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+              _f32(0.0 if _dead else
+                   morale.regen_fraction(agents.PLAYER_FLOAT_43,
+                                         agents.PLAYER_ENERGY, max_energy))],
+             "energy regeneration stops: the player is dead" if _dead else
+             "energy regeneration, rescaled to the new pool")
+    if _health_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
+             f"maximum health {max_health} at morale {morale.display(new_value)}")
+        state["player_max_declared"] = int(max_health)  # 3(a): the tracker
     # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
     # to notice: our own bookkeeping is what decides when the player dies, so a
     # current health left above the new maximum would make the next fraction we
@@ -27404,21 +27562,36 @@ def death_penalty_due(send, state, conn_id, between=None):
 
 
 def morale_experience(send, state, conn_id, gained):
-    """Experience buys death penalty back, 1% per 75 XP.
+    """Experience buys death penalty back, 1% per 75 XP -- and the 75-XP tick.
 
-    WIKI (GWW, "Death Penalty", section Counters). The bank is what makes this
-    honest at our kill sizes: a 26-XP kill is not a third of a percent on the
-    wire, it is nothing at all until the third one.
+    WIKI (GWW, "Death Penalty", section Counters): 75 experience removes 1%.
+
+    RANGERPRE-S7 (KILLXP-b): WHAT RETAIL SENDS is a tick each time the
+    player's experience SINCE THIS INSTANCE LOADED crosses a multiple of 75 --
+    0x009C [player, m] + 0x00EE [10, d], ahead of the award's own 0x00EE
+    [0, xp], at neutral morale too, where it is [player, 100] + [10, 0] and
+    moves nothing. OBSERVED on 43 of the live corpus's 68 PvE awards, and the
+    since-load counter predicts all 68 (tick or no tick): 20260929T150923
+    :55934 477.119 carries 0x009C [31, 100], 0x00EE [10, 0], 0x00EE [0, 176];
+    the 26 at 264.333 (250 -> 276) carries none; the 26 at 383.573 (881 ->
+    907) does. The counter is RECONSTRUCTION: from 0 at the load, fed by every
+    award paid (kills after the party split, quest rewards), NOT reset by a
+    death, NOT carried from the last instance (zone_carry_store carries none);
+    the known-bad arms are the character's total experience (58 of 68) and
+    the pre-S7 bank that started at the death and was silent at neutral
+    (morale.experience_credit, 20 of 68). The CALLER puts this ahead of its
+    0x00EE [0, xp] and the heroes' ticks after it (hero_morale_experience).
     """
-    hero_morale_experience(send, state, conn_id, gained)     # JARIN: per hero
-    before = player_morale(state)
-    after, bank, recovered = morale.experience_credit(
-        before, int(state.get("morale_xp_bank", 0)), gained)
-    state["morale_xp_bank"] = bank
-    if not recovered:
-        return before
-    return push_morale(send, state, conn_id, after,
-                       f"{recovered}% back from experience")
+    before = int(state.get("xp_since_load", 0))
+    state["xp_since_load"] = before + max(0, int(gained))
+    n = morale.crossings(before, gained)
+    old = player_morale(state)
+    if n <= 0:
+        return old
+    new = morale.recover(old, n)
+    return push_morale(send, state, conn_id, new,
+                       f"{new - old}% back from experience" if new != old
+                       else "the 75-XP tick, a no-op at this morale", tick=True)
 
 
 # CASTAI (2026-09-27; DESKWORK-D8 step 6, studies/deskwork/PLAN.md; owner's ruling PLAN.md
@@ -29235,23 +29408,38 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
 
 def hero_morale_experience(send, state, conn_id, gained):
     """The kill's experience buys a hero's penalty back too (410.84 s: [29,
-    86] and [30, 86], each with its prop 42), per hero, its own bank."""
+    86] and [30, 86], each with its prop 42), per hero, its own counter.
+
+    RANGERPRE-S7 (KILLXP-b): the hero takes the player's 75-XP tick on its
+    OWN since-load counter, AFTER the award line -- 0x009C [hero, m] always,
+    0x009F [42, hero, max] only when m moved: 20260914T005758 :56011 238.177
+    ([30, 100] alone, at neutral), 410.841 ([30, 86] + its 42). A henchman
+    never ticks (0 on 20260819T132414's three). Feeding the hero the player's
+    share is RECONSTRUCTION, and it does not reproduce the third witness:
+    :56011 534.478 ticks the hero ([30, 87]) and not the player (192, short of
+    225), so the hero's counter was ahead by something the tape does not show
+    (NOT FOUND; the death at 443.855 that paid the player nothing is the
+    candidate)."""
+    counters = state.setdefault("hero_xp_since_load", {})
     for aid, row in party_bodies(state):
         if hero_body_id(row) is None:
             continue
-        bank = state.setdefault("hero_morale_bank", {})
-        after, b, rec = morale.experience_credit(
-            hero_morale(state, aid), int(bank.get(aid, 0)), gained)
-        bank[aid] = b
-        if not rec:
+        before = int(counters.get(aid, 0))
+        counters[aid] = before + max(0, int(gained))
+        n = morale.crossings(before, gained)
+        if n <= 0:
             continue
-        _e, h_max = hero_morale_apply(state, aid, row, after)
-        send(GAME_SMSG_AGENT_MORALE, [aid, after],
-             f"morale {morale.display(after)} on hero agent {aid} "
-             f"({rec}% back from experience) [JARIN]")
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, aid, h_max],
-             f"hero agent {aid} health max {h_max} at morale {after}")
+        old = hero_morale(state, aid)
+        new = morale.recover(old, n)
+        send(GAME_SMSG_AGENT_MORALE, [aid, new],
+             f"morale {morale.display(new)} on hero agent {aid} "
+             + (f"({new - old}% back from experience) [JARIN]" if new != old
+                else "(the 75-XP tick, a no-op at this morale) [RANGERPRE-S7]"))
+        if new != old:
+            _e, h_max = hero_morale_apply(state, aid, row, new)
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.PROP_HEALTH_MAX, aid, h_max],
+                 f"hero agent {aid} health max {h_max} at morale {new}")
 
 
 def hero_locks_release(send, state, target_id, conn_id):
@@ -29479,9 +29667,10 @@ def zone_carry_store(state):
     key = state.get("char_uuid")
     if not key:
         return
+    # No experience counter rides the carry: retail's 75-XP tick counts from
+    # each instance's load (RANGERPRE-S7; morale_experience).
     ZONE_CARRY[key] = {
         "morale": player_morale(state),
-        "morale_xp_bank": int(state.get("morale_xp_bank", 0)),
         "hero_ai_mode": {aid: int(c.get("ai_mode", AI_MODE_FIGHT))
                          for aid, c in (state.get("hero_cmd") or {}).items()},
         "hero_morale": dict(state.get("hero_morale") or {}),
@@ -29501,7 +29690,6 @@ def zone_carry_apply(state, conn_id):
         hero_command(state, aid)["ai_mode"] = int(m)
     if party_bodies_here(state):
         state["morale"] = int(got["morale"])
-        state["morale_xp_bank"] = int(got["morale_xp_bank"])
         state["hero_morale"] = dict(got["hero_morale"])
         print(f"[c{conn_id}] ZONE: morale {got['morale']} and the hero stances "
               f"carried into the field [JARIN]", flush=True)
@@ -39476,7 +39664,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # reward lines, then 0x004A -- retail's relative
                                 # order on 10 of 10 hand-ins (DESKWORK-D9 fix
                                 # pass; --no-reward-in-frame puts the reward
-                                # after 0x004A as SLICE-B5 and D9 pass 1 did).
+                                # after 0x004A as SLICE-B5 and D9 pass 1 did),
+                                # then 0x009F [20, own, 7] right after the
+                                # 0x004A (RANGERPRE-S8, 22 of 22).
                                 # The completion family (0x004E, 0x006C, 0x0096,
                                 # 0x0097, 0x00FB) is still 0 of the corpus and a
                                 # live hand-in uses none of it; the reward is the
@@ -43975,6 +44165,22 @@ def main():
               "(2026-08-06) to RANGERPRE-S4 did. KNOWN-BAD against the tape: retail sends the "
               "bar first on 126 of 126 live connections carrying both.",
               flush=True)
+    if a.quest_skills_first:
+        global QUEST_SKILLS_AFTER_GOLD
+        QUEST_SKILLS_AFTER_GOLD = False
+        print("[quests] --quest-skills-first: a hand-in's reward_skills go out "
+              "BEFORE the experience 0x00EE, as every run before RANGERPRE-S5. "
+              "KNOWN-BAD against the tape: retail sends them after the gold "
+              "0x0140 on 4 of 4 skill-granting hand-ins (grant_quest_reward).",
+              flush=True)
+    if a.no_quest_complete_visual:
+        global QUEST_COMPLETE_VISUAL
+        QUEST_COMPLETE_VISUAL = False
+        print("[quests] --no-quest-complete-visual: a hand-in sends no 0x009F "
+              "[20, player, 7] after its 0x004A, as every run before "
+              "RANGERPRE-S8. KNOWN-BAD against the tape: retail sends it right "
+              "after the 0x004A on 22 of 22 hand-ins (turn_in_quest).",
+              flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
@@ -45992,6 +46198,26 @@ def main():
               f"{morale.display(morale.FLOOR)}). Retail charges nothing in "
               f"pre-Searing, which is every map this server ships -- so this "
               f"is a deliberate experiment, not the world.")
+    if a.kill_xp_constant and a.reforged_xp:
+        raise SystemExit("--reforged-xp scales the per-foe award and "
+                         "--kill-xp-constant replaces it with the constant: "
+                         "together the first does nothing. Pick one.")
+    if a.kill_xp_constant:
+        global KILL_XP_RULE
+        KILL_XP_RULE = False
+        print(f"[map] --kill-xp-constant: every kill pays [0, "
+              f"{KILL_REWARD_VALUE}] -- the pre-RANGERPRE-S6 constant; retail "
+              f"pays the wiki's per-foe table (killxp.py) [KILLXP revert]",
+              flush=True)
+    if a.reforged_xp:
+        global REFORGED_XP
+        REFORGED_XP = True
+        print(f"[map] --reforged-xp: kills pay the Reforged Mode effect's "
+              f"{killxp.REFORGED_PERCENT - 100}% on maps "
+              f"{sorted(killxp.REFORGED_EFFECT_MAPS)} (content/world.toml "
+              f"[player.experience]) -- a stand-in: retail pays it where it "
+              f"sends 0x0041 skill 3434, which this server does not yet",
+              flush=True)
     if a.secondary_bits is not None:
         spec = a.secondary_bits.strip()
         try:

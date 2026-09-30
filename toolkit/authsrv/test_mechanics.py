@@ -2221,12 +2221,14 @@ try:
     authsrv.grant_quest_reward(send, state, "q", {"reward_experience": 100,
                                                   "reward_skills": [ETHER_FEAST]}, 0)
     ops = [op for op, _v, _l in sent]
+    # RANGERPRE-S5: AFTER the experience (and the gold) -- retail's order on 4
+    # of 4 skill-granting hand-ins, the MANTID one included (test_questflow).
     check(authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL in ops
           and ops.index(authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL)
-          < ops.index(authsrv.GAME_SMSG_AGENT_KILL_REWARD)
+          > ops.index(authsrv.GAME_SMSG_AGENT_KILL_REWARD)
           and authsrv.SKILLBAR[2] == ETHER_FEAST,
-          "a quest row's reward_skills are granted in the reward frame, ahead "
-          "of the experience", f"{[hex(o) for o in ops]}")
+          "a quest row's reward_skills are granted in the reward frame, after "
+          "the experience", f"{[hex(o) for o in ops]}")
 except agents.content.ContentError as exc:
     LEDGER.skip("section 29 (needs the vault's skill rows)", str(exc))
 finally:

@@ -204,6 +204,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "watched anyway -- the --explorable idiom, a switch "
                          "rather than a lie in content/maps.toml. "
                          "studies/morale/FINDINGS.md.")
+    ap.add_argument("--kill-xp-constant", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S6 (KILLXP-a): every "
+                         "hostile death pays 0x00EE [0, 26], the constant this "
+                         "server paid until 2026-09-29. The default pays the "
+                         "wiki's per-foe table by foe level minus player level, "
+                         "split by the party (killxp.py, content/world.toml "
+                         "[player.experience]) -- 49 of 49 live awards, where "
+                         "the constant fits 5.")
+    ap.add_argument("--reforged-xp", action="store_true",
+                    help="Pay the Reforged Mode effect's +5%% kill experience "
+                         "on the maps the effect was observed on "
+                         "([player.experience] reforged_effect_maps: the "
+                         "pre-Searing explorables). OFF by default: retail pays "
+                         "it only where it sends the effect, 0x0041 [own, 0, "
+                         "3434, 0, 1] at a Prophecies explorable load, and this "
+                         "server does not send it yet -- a stand-in until it "
+                         "does. The character's Reforged flag never drives it: "
+                         "a Factions or Nightfall character carries the flag "
+                         "and is paid 100%%.")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
                     help="OVERRIDE the mask GAME_SMSG 0x00B6 carries in the spawn "
                          "burst: which professions the character may take as a "
@@ -1004,7 +1023,7 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the purse's persistence of that credit.")
     ap.add_argument("--no-reward-in-frame", action="store_true",
                     help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
-                         "reward lines (skills, 0x00EE, 0x0140) go AFTER the "
+                         "reward lines (0x00EE, 0x0140, skills) go AFTER the "
                          "closing 0x004A, as SLICE-B5 and D9 pass 1 sent them. "
                          "The default sends them BETWEEN 0x0052 and 0x004A "
                          "(turn_in_quest) -- retail's relative order on 10 of 10 "
@@ -1017,6 +1036,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "retail's order on 126 of 126 live connections carrying "
                          "both (20260929T150923: 11 of 11). 0x001D does not move "
                          "either way. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--quest-skills-first", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S5's hand-in SKILL ORDER: a "
+                         "turned-in quest's reward_skills (0x00DC/0x00D9, and "
+                         "0x001C for a skill new to the account) go out BEFORE "
+                         "the experience 0x00EE, as every run before this step. "
+                         "The default sends them after the gold 0x0140 "
+                         "(grant_quest_reward) -- OBSERVED on 4 of 4 retail "
+                         "hand-ins that grant skills (20260929T150923 :55934 "
+                         "293.809 is 0x00EE [0,500], 0x0140 [2,25], then skills "
+                         "394 and 446). KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-quest-complete-visual", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S8's quest-complete "
+                         "visual: a hand-in sends no 0x009F [20, player, 7] "
+                         "after its closing 0x004A, as every run before this "
+                         "step. The default sends it right after the 0x004A "
+                         "(turn_in_quest) -- OBSERVED on 22 of 22 retail "
+                         "hand-ins, e.g. 20260929T150923 :55934 293.809 "
+                         "0x004A then 0x009F [20, 31, 7]; what visual 7 draws "
+                         "is UNREAD. KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "
