@@ -208,6 +208,12 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   per-connection scan of the live corpus); all three are red on `main` too, re-run
   there at `75d6a1e3` with the same failures. test_routerbench and test_weaponcensus are
   unclassified, whether this tape is their cause is UNVERIFIED, and all three stay open.
+  **2026-09-30, later: all three classified per tape and repaired on `main`** (PLAN-LOG
+  "RANGERPRE's corpus reds, the other three"). All three come from this tape, all three are
+  the tests: wearmap's 34 are declared by `0x015F`, which the census did not read.
+  weaponcensus's off-mode bows are three HOSTILES (`0x006D`), WEAPONS-C5, while the tape's two
+  PLAYER bows read 2.478 / 2.479. Routerbench's click was sent inside the player's action hold
+  after a pickup and superseded before the release (animref FINDINGS 30.4's law).
 - **RANGERPRE-S19** (SECONDARY-B) is not built. It waits on the owner's `0x00B6` ruling: the
   secondary-unlock mask, which we never send ([studies/profession/RUNS.md](../profession/RUNS.md)
   §13).

@@ -9264,7 +9264,16 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   record types must land on two distinct components through the exe's own
   `s_components` — the shape a type→record function could never express. §3 is the
   wire census: ≥6,445 declares / ≥5,709 worn joins with every worn item declared
-  first, every body-slot (slot, type) pair inside `WORN_TYPES` (the table IS the
+  first, by any of FOUR declares, and "first" is READ (**2026-09-30, RANGERPRE's
+  corpus reds**: the census read only the CREATE pair `0x015E` / `0x0161`, and the
+  tape 20260929T150923 :53880, an outpost, declared 34 other players' pieces by
+  `0x015F` alone, the short record's REPLACE half, each before its wear. That is
+  undeclared=34, all of them on that one connection. `0x015F` and `0x0162` now
+  count; the CREATE pair's claim stays exact on the captures before that tape, and
+  the 34 are pinned on it. The check had tested only that a worn id was declared
+  somewhere on its connection; it now tests the declare came first, 0 of 12,854
+  late. The 34 pass every §3–§4 join too),
+  every body-slot (slot, type) pair inside `WORN_TYPES` (the table IS the
   corpus), every hand wear an attachable type — the classifier read from the exe
   holding against wire it never saw — slots 2–5 composite in 100% of wears, the head
   slot splitting ≥658 composite / ≥132 attach under ONE wire type (the flag
@@ -9294,7 +9303,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   pre-registered positive control, which printed "not measuring the thing" rather
   than a census of nothing), then scored "run" as membership of a section-1 LIST
   CELL, which every record is in. Needs `vault/captures/live/` for §§3–5 and the
-  study archive for §§4–5, skips declared; a whole green run is 40 and the floor is
+  study archive for §§4–5, skips declared; a whole green run is 42 (40 before
+  2026-09-30) and the floor is
   **16**, its MANDATORY CORE (2026-09-30: it was 20, which counted §2's four checks
   as core, but §2 needs the pinned client and the pinned client lives in the vault, so a
   bare run failed "ONLY 16 OF A DECLARED FLOOR OF 20" with both skips declared; 16 bare
@@ -13793,7 +13803,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   removed, 1f, 1i, 1p, 1r; the pre-existing target-gone `action_hold(0)` removed, 1r; and
   3i with the first commit's claim (339.4568 a keyboard end) as its table, red. Floor 21
   from the bare green run (the tapes add 9: 30 vaulted). No socket, no client, ~2 s),
-  `toolkit/authsrv/test_weaponcensus.py` (**2026-09-29, CASTAI-Z2 (the z2-wpn lane): the
+  `toolkit/authsrv/test_weaponcensus.py` (**2026-09-30, RANGERPRE's corpus reds: WEAPONS-Q8
+  red on "both bow attackers 2.476", the RANGERPRE tape 20260929T150923 adding five bow
+  rows. The two PLAYER bows (`0x006E`, 2.478, 2.479) confirm the claim. The three
+  HOSTILE ones (`0x006D`, 609 class 1, shooting the player, 2.714 / 2.717 / 2.626) are
+  WEAPONS-C5, the AI's pacing: every hostile is still told 2.475 by `0x0035`. The pinned
+  "both" was itself a player and a hostile, whose mode read 2.476 on 5 of its 10 gaps.
+  `attackers()` rows now carry `player` (a `0x006E` named the hands). Q8 splits into the
+  literal, exact on the captures before PIN (two bows, both 2.476, and the sword players
+  are `player`), and a whole-corpus signature over PLAYER bows only (>= 3, all 2.476 ± 0.01;
+  hostiles reported, not scored). §1 +1: the synthetic wire's `player` flag. 60 checks
+  with the vault (was 58), 25 bare; floor 24 → 25 (measured).**
+  **2026-09-29, CASTAI-Z2 (the z2-wpn lane): the
   second Zaishen tape (20260929T100038) turned the bare-bow arrow signature red on the
   Zaishen Archer's Power Shot (680 with Kindle Arrows' 344) -- the SCANNER's defect, not
   the tape's: `shooters()` read a skill event strictly later than the start by TIME and
@@ -14781,7 +14802,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   disagreeing). Sections 2–4 need the vault + `dat_study` and skip loudly
   without them. Section 2 is the FIDELITY GATE: census() must reproduce the
   committed QB numbers from the same tapes — ≥29 clicks all answered within
-  one RTT, ≥16 verbatim / ≥13 part-way, zero surviving "unanswered", ≥8
+  one RTT (since 2026-09-30: every click OUTSIDE the player's action hold; see
+  the end of this entry), ≥16 verbatim / ≥13 part-way, zero surviving "unanswered"
+  outside a hold, ≥8
   superseded, and the 63805 anchor bit-exact (nine grants, first answer
   ≤0.065 s, along-fraction monotone, terminal == click to the float).
   Section 3 locks the heading-clip mesh-identity numbers on the two
@@ -14796,7 +14819,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   return paths), and ALL 13 scoreable retail-verbatim clicks
   reproduced as our one-leg case bit-identically (corpus-level counts are
   ≥-floors because the live corpus grows; bit-exact locks stay on the
-  anchor files). 2026-09-16: section 2 also pins the TWO-CONTROLLED-AGENTS click (20260914T180058 conn 55087) -- its connection votes 206:6 vs 538:4 but 206 does not move until t=82s and the lone click at t=42.4 is answered bit-exact by 538 at +46ms; answering_agent() attributes a click the connection player never answered to the agent the server answered it with, when exactly one agent lands the clicked point within one RTT. That was the corpus's lone false no-answer. Floor 48 -> 50 from the green run. ~15 s warm),
+  anchor files). 2026-09-16: section 2 also pins the TWO-CONTROLLED-AGENTS click (20260914T180058 conn 55087) -- its connection votes 206:6 vs 538:4 but 206 does not move until t=82s and the lone click at t=42.4 is answered bit-exact by 538 at +46ms; answering_agent() attributes a click the connection player never answered to the agent the server answered it with, when exactly one agent lands the clicked point within one RTT. That was the corpus's lone false no-answer. Floor 48 -> 50 from the green run. 2026-09-30 (RANGERPRE's corpus reds): two checks red on the live tape 20260929T150923 :53756, where a click at t=1126.006 was never answered. It was sent 0.44 s into the player's action hold after a pickup's arrival (`0x009F [8, 9, 1]`), and a second click superseded it at +0.482 before the release at +0.552. animref FINDINGS 30.4 had already measured the law: under property 8 retail grants nothing, and the release and the grant are one event. The corpus holds four held clicks, and all three answered ones were answered AT the release to the microsecond, inside one RTT only because they came late in their holds. `routerbench.click_row()` (census()'s row, factored out) now carries `held` / `release_dt` / `next_input_dt`, and `hold_verdict()` names four outcomes: free / answered-at-release / superseded-in-hold / held-other. The RTT check is re-scoped to FREE clicks (145/145), with the old claim exact before the tape (129/129). A held click must be answered at the release or superseded before it (3 + 1, and held-other absent). Every no-answer must be superseded-in-hold, and the witness plus the click that superseded it are pinned. Section 1 +5: the four outcomes on a synthetic wire, the known-bad arm (a grant INSIDE a hold) reading held-other. The census row also returns `terminal_exact`, which its docstring promised and the dict never held. Floor 50 -> 58 from the green run. ~15 s warm),
   `toolkit/authsrv/test_router.py` (ROUTER-B2, the router click policy — **the
   DEFAULT since 2026-09-03, MOVECODE-1z-v; `--no-router` reverts** —
   the wiring's own checks, bare-machine (no vault, no client, no sockets;

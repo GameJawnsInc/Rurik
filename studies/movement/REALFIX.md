@@ -1504,7 +1504,9 @@ specific locations, `pathmap.py`'s own 189/198 caveat made concrete.)
 
 **RETHINK-QB (waypoint sequences) — run, and the skeptic's re-derivation
 UNIFIED it into the campaign's biggest retail-contract correction:**
-- **Every one of 29 live clicks was answered within 0.007–0.065 s** — 16
+- **Every one of 29 live clicks was answered within 0.007–0.065 s** (2026-09-30: every
+  click OUTSIDE the player's action hold; a click inside one is answered at the
+  release, [animref FINDINGS](../animref/FINDINGS.md) §30.4) — 16
   with the verbatim point, **13 with a PART-WAY FIRST WAYPOINT**. The
   "unanswered click" class dissolves: all 8 had instant part-way grants
   whose chains were SUPERSEDED (re-clicks, keyboard resume, an

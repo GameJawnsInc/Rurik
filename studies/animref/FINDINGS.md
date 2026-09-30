@@ -2107,6 +2107,17 @@ From the 21-capture corpus (61 connections, 61 of 61 framed to the last byte):
   cover d units in less than d/288 s. Largest: hold 2.253 s, bracket 753.6 u
   needing ≥2.617 s of running with only 0.481 s outside the hold, so ≥2.136 s of
   motion inside a 2.253 s hold (94.8 %), turn 0.0000 rad.
+* **A CLICK inside a hold is answered AT the release (2026-09-30, OBSERVED).** Of the
+  census's 149 live clicks, four were sent while the player's property 8 was set
+  (`routerbench.hold_verdict`). Three were answered by a grant at the release instant,
+  to the microsecond: `20260817T231139` :54071, `20260824T074002` :55771 and
+  `20260929T150923` :53756 t=1126.488. The fourth, on that last connection at
+  t=1126.006, came 0.44 s into a pickup's hold and was superseded by the click at
+  +0.482 before the release at +0.552. It got nothing, and the release answered its
+  successor. RETHINK-QB's "every click answered within one RTT" is therefore the
+  contract for FREE clicks. The three held ones fell inside the window only because
+  they came late in their holds. Ours grants during a hold on purpose
+  (`GRANT_DURING_HOLD`, the owner's feel ruling).
 
 **Our E3 release sent property 8 → 0 with nothing attached.** That is the inverse
 of retail's 103/103 invariant, and it is the reason the release should not be

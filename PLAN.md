@@ -2310,8 +2310,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
-  serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest;
-  three corpus tests still red (test_wearmap, test_routerbench, test_weaponcensus).
+  serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
 * **RANGERLOOP-F8, a defect:** MOVECODE-1z-dj's avoid halt cancels an S15 pickup beside a
   standing NPC while the client reaches the pile
   ([CONFIRM-2026-09-30.md](studies/presearing/CONFIRM-2026-09-30.md) §7, §10).

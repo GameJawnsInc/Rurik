@@ -28,6 +28,65 @@ move back.
 
 ---
 
+### RANGERPRE's corpus reds, the other three -- 2026-09-30 -- **test_wearmap, test_weaponcensus and test_routerbench green again; all three were the tests, all three trace to the RANGERPRE tape, and each carried a finding**
+
+These are the three files the morning's landing left red
+([studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md) §5), re-run on `main` at `b57bd894`.
+Each was scanned per tape and per connection before any check was touched. Every moved number traces
+to `20260929T150923`, and every literal still reproduces exactly on the captures before it. The brief
+had routerbench's click possibly coming from the day's loopback harness series. It does not:
+`census()` reads `captures/live/` only, and the click is on the live tape.
+
+- **`test_wearmap` §3, 34 undeclared worn items: a SECOND DECLARATION SITE, and the census's defect.**
+  All 34 are on :53880, an outpost. Every one is declared by `0x015F` before its wear: the short
+  record's REPLACE half, with `0x015E`'s layout ([reconstruction FINDINGS](studies/reconstruction/FINDINGS.md)
+  §6.4). The census read only the CREATE pair `0x015E` / `0x0161`, and it had been green because
+  [playercomposite FINDINGS](studies/playercomposite/FINDINGS.md) 9.30 had `0x015F` and `0x0162` NOT
+  FOUND. It now reads all four. It also READS "declared first", which it had never checked: 0 of
+  12,854 wears precede their declare. The CREATE pair's claim is exact before the tape (11,694 wears,
+  0 not created), and the 34 are pinned on the tape. The 34 also pass every §3–§4 join, with zero
+  mixed flag/record cells. 9.30 now carries a dated FOUND.
+- **`test_weaponcensus` WEAPONS-Q8 (bows at 2.63–2.72 s): players and hostiles POOLED, so FAILED AS
+  WRITTEN and re-scoped.** On 2026-09-18, "both bow attackers 2.476" meant a player (`0x006E`, the
+  owner's Ranger) and a class-1 hostile (`0x006D`, `20260915T155656` agent 56). The hostile's mode
+  read 2.476 on only 5 of its 10 gaps. The tape adds two PLAYER bows at 2.478 and 2.479, which
+  confirm the claim. It also adds three class-1 HOSTILES shooting the player, at 2.714, 2.717 and
+  2.626, every one still told 2.475 by `0x0035`. That is WEAPONS-C5: "never calibrate a weapon's
+  clock on a hostile". `attackers()` rows now carry `player`. The literal is exact on the captures
+  before the file's PIN, and the whole-corpus claim covers player bows only (3 of 3 at 2.476 ± 0.01),
+  with hostiles reported. **The finding, a WEAPONS-Q7 datum:** the four class-1 hostile bows put all
+  29 of their clean gaps in four clusters. They are the weapon's duration plus 0, +0.151, +0.239 and
+  +0.377 s, the same offsets the 1.75 s hostiles showed (+0.15, +0.235, +0.375). OBSERVED, n = 4
+  bodies; the mechanism is unclaimed. WEAPONS-Q2's longbow/recurve inference rests on `0x0035` and
+  stands ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §9 and the Q7 row).
+- **`test_routerbench` §2, one click of 149 unanswered: RETHINK-QB's RTT contract FAILED AS WRITTEN.
+  It is the contract for FREE clicks.** The click, :53756 t=1126.006, was sent 0.44 s into the
+  player's action hold after a pickup's arrival (`0x009F [8, 9, 1]`, `0x0159`, `0x0028`). A second
+  click at +0.482 superseded it before the release at +0.552, and the release answered the second
+  click. [animref FINDINGS](studies/animref/FINDINGS.md) §30.4 already had the law: under property 8
+  retail grants nothing, and the release and the grant are one event. Four of the 149 clicks were
+  held. All three answered ones were answered at the release to the microsecond, and landed inside
+  one RTT only because they came late in their holds. `routerbench` gains `click_row()` (census()'s
+  row, factored out), `hold_at()` and `hold_verdict()`. The RTT check is scoped to free clicks
+  (145/145), with the old claim exact before the tape (129/129). A held click is answered at the
+  release or superseded before it: 3 + 1, and held-other absent. Every no-answer is
+  superseded-in-hold, and the witness is pinned. Section 1 has the known-bad arm, a grant INSIDE a
+  hold reading held-other. Our server grants during a hold on purpose (`GRANT_DURING_HOLD`, the
+  owner's feel ruling), so no server question opens. animref §30.4 and
+  [REALFIX](studies/movement/REALFIX.md)'s QB paragraph carry dated notes.
+
+**Also:** `test_wearmap`'s floor 20 → 16 (`d7022a8d`). Its "mandatory core" had counted section 2,
+which needs the pinned client from the vault, so a bare run failed 16 of 20 on HEAD too.
+
+**Tests:** `test_wearmap` 42 vaulted / 16 bare (floor 16), `test_weaponcensus` 60 / 25 (floor 24 →
+25, measured), `test_routerbench` 58 (floor 50 → 58), all green. **Planted:** a shadow vault of
+junctions with the RANGERPRE tape doubled under `20991231T000000` kept all three green, and each
+visibly read the plant (68 `0x015F` declares, the doubled bow rows, 169 clicks). The shadow was
+torn down junction by junction. Not run: the full suite. Only these three read the changed code:
+`weaponcensus.attackers()` has no other consumer, and `routerbench` has no other importer.
+
+---
+
 ### RANGERPRE's loopback confirmation -- 2026-09-30 -- **S10, S12, S15-S18, S20 and S21 landed and run on our client: six CONFIRMED, S16 CONFIRMED on its first approach, and S15's pickup FAILS by default beside a standing NPC; six shipped steps confirmed beside them; the hand restore ships ON; nine findings (RANGERLOOP-F1..F9)**
 
 **Landed** on lanes `rp2-a`..`rp2-d`, merged into `rangerpre` at `e968131a` and `d2fc95e1`.

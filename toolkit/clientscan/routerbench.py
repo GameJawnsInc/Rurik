@@ -120,6 +120,16 @@ INPUT_OPS = frozenset({OP_REPORT, OP_CLICK, OP_STOP, 57})
 # in the module docstring).
 OP_INSTANCE = 409
 
+# s2c 0x009F [hdr, property, agent, value]. Property 8 is the player's action
+# hold (GWCA's `disabled`), and animref FINDINGS 30.4 measured what retail does
+# under it: while it is SET the player gets essentially no grants, and the
+# release and the movement grant are ONE event (103 of 108 within a
+# microsecond). So a click sent inside a hold is answered AT the release, not
+# within an RTT of the click. RETHINK-QB's 29 clicks had none; the census found
+# four by 2026-09-30, one of them unanswered (see hold_verdict).
+OP_PROP_INT = 159
+PROP_HOLD = 8
+
 
 def dist(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
@@ -235,6 +245,35 @@ def modeled_origin(merged, agent, when):
     return final, (when - anchored_at if anchored_at is not None else None)
 
 
+def next_input_after(merged, when):
+    """(t, op) of the first c2s INPUT row strictly after `when`, or None."""
+    for t, d, op, _v in merged:
+        if t > when and d == "c2s" and op in INPUT_OPS:
+            return t, op
+    return None
+
+
+def hold_at(merged, agent, when):
+    """(held, release_t): whether `agent`'s property 8 is SET at `when`, and
+    the instant of the first 0x009F clearing it after `when` (None when not
+    held, or when the capture ends inside the hold). A re-arm while set is
+    not a release."""
+    held, release = False, None
+    for t, d, op, v in merged:
+        if d != "s2c" or op != OP_PROP_INT or len(v) < 4:
+            continue
+        if v[1] != PROP_HOLD or v[2] != agent:
+            continue
+        if t <= when:
+            held = bool(v[3])
+        elif not held:
+            break
+        elif not v[3]:
+            release = t
+            break
+    return held, release
+
+
 def chain_for_click(merged, agent, click_t, click_pt):
     """The grants this click owns, and how the chain ended.
 
@@ -250,13 +289,7 @@ def chain_for_click(merged, agent, click_t, click_pt):
     """
     grants = []
     end = "open"
-    next_input = None
-    for t, d, op, _v in merged:
-        if t <= click_t:
-            continue
-        if d == "c2s" and op in INPUT_OPS:
-            next_input = (t, op)
-            break
+    next_input = next_input_after(merged, click_t)
     for t, pt, pf, ps in grant_rows(merged, agent):
         if t <= click_t:
             continue
@@ -346,7 +379,9 @@ def census(root=None):
       first_dist -- that grant's distance to the click point,
       kind       -- "verbatim" | "part-way" | "no-answer",
       n_grants, end, origin ((x,y) or None), origin_age,
-      terminal_exact -- True when the chain's last grant == click bit-exact.
+      terminal_exact -- True when the chain's last grant == click bit-exact
+                        (promised here and not returned until 2026-09-30),
+      held, release_dt, next_input_dt -- the action hold (see hold_verdict).
     Connections that fail decode/attribution are in `skipped` with reasons,
     never silently dropped.
     """
@@ -369,32 +404,71 @@ def census(root=None):
             skipped.append((cap, gf, "no-player-attribution"))
             continue
         for ct, cpt, _cplane in clicks:
-            click_agent = answering_agent(merged, agent, ct, cpt)
-            grants, end = chain_for_click(merged, click_agent, ct, cpt)
-            first = grants[0] if grants else None
-            first_dt = None if first is None else first[0] - ct
-            first_dist = None if first is None else dist(first[1], cpt)
-            if first is None or first_dt > RTT_WINDOW:
-                kind = "no-answer"
-            elif first_dist <= EXACT_TOL:
-                kind = "verbatim"
-            else:
-                kind = "part-way"
-            pos = last_pos_before(merged, ct)
-            terminal_exact = bool(
-                grants and end == "terminal"
-                and grants[-1][1] == (cpt[0], cpt[1]))
-            rows.append({
-                "cap": cap, "conn": gf, "t": ct, "click": cpt,
-                "agent": click_agent, "first_dt": first_dt,
-                "first_dist": first_dist, "kind": kind,
-                "n_grants": len(grants), "end": end,
-                "origin": None if pos is None else pos[0],
-                "origin_age": None if pos is None else pos[2],
-                "grants": grants,
-                "merged_ref": None,
-            })
+            rows.append(dict(click_row(merged, agent, ct, cpt),
+                             cap=cap, conn=gf))
     return rows, skipped
+
+
+def click_row(merged, agent, ct, cpt):
+    """One census row for the click at `ct` on `cpt` (census() adds cap and
+    conn). `held` / `release_dt` / `next_input_dt` are the answering agent's
+    action hold at the click, when it released, and when the next input came,
+    each relative to the click -- what hold_verdict() reads."""
+    click_agent = answering_agent(merged, agent, ct, cpt)
+    grants, end = chain_for_click(merged, click_agent, ct, cpt)
+    first = grants[0] if grants else None
+    first_dt = None if first is None else first[0] - ct
+    first_dist = None if first is None else dist(first[1], cpt)
+    if first is None or first_dt > RTT_WINDOW:
+        kind = "no-answer"
+    elif first_dist <= EXACT_TOL:
+        kind = "verbatim"
+    else:
+        kind = "part-way"
+    pos = last_pos_before(merged, ct)
+    terminal_exact = bool(
+        grants and end == "terminal"
+        and grants[-1][1] == (cpt[0], cpt[1]))
+    held, release_t = hold_at(merged, click_agent, ct)
+    nxt = next_input_after(merged, ct)
+    return {
+        "t": ct, "click": cpt,
+        "agent": click_agent, "first_dt": first_dt,
+        "first_dist": first_dist, "kind": kind,
+        "n_grants": len(grants), "end": end,
+        "origin": None if pos is None else pos[0],
+        "origin_age": None if pos is None else pos[2],
+        "grants": grants,
+        "terminal_exact": terminal_exact,
+        "held": held,
+        "release_dt": None if release_t is None else release_t - ct,
+        "next_input_dt": None if nxt is None else nxt[0] - ct,
+        "merged_ref": None,
+    }
+
+
+def hold_verdict(row):
+    """Where a click's answer sits against its agent's action hold:
+
+      "free"                -- property 8 clear at the click; RETHINK-QB's
+                               contract (answered within one RTT) is about these;
+      "answered-at-release" -- held, and the first grant IS the release, to
+                               the microsecond (animref 30.4's one event);
+      "superseded-in-hold"  -- held, no grant at all, and the next input came
+                               before any release: the release, when it comes,
+                               answers THAT input;
+      "held-other"          -- held and neither: a grant inside the hold, or
+                               a release that answered nothing. What retail
+                               has not been seen to do; the census must say so.
+    """
+    if not row["held"]:
+        return "free"
+    rel, fdt, nxt = row["release_dt"], row["first_dt"], row["next_input_dt"]
+    if fdt is not None and rel is not None and abs(fdt - rel) < 1e-6:
+        return "answered-at-release"
+    if fdt is None and nxt is not None and (rel is None or nxt < rel):
+        return "superseded-in-hold"
+    return "held-other"
 
 
 # ---------------------------------------------------------------------------
