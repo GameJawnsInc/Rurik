@@ -15136,17 +15136,23 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
 # and across, of where the model put the target at the launch
 # (RECONSTRUCTION), several of them 180-290 u misses. The 58 were picked by
 # that same along ~ speed x flight test, so they alone are partly circular.
-# The 17 are OPEN (that design pass; the target's move age does not explain
-# them) -- e.g. launch 337.615 on 20260929T150923 :55934, 46 ms into
-# retail's own 0x002A approach, a miss. A body's velocity is a finite
-# difference over VELOCITY_WINDOW of its own model position (the trail the
-# world tick keeps), HELD between samples; a stander's is 0, so a standing
-# target is aimed at where it stands. So ours too is unled until the
-# trail's next sample (up to one window into a walk) and under-led until
-# the one after (up to two): at 337.615, 46 ms in, ours aims 0-29 u from the
-# target's point where a full lead is ~142 u -- like retail. Only an unled
-# launch later in a move is one ours would lead where retail did not, and
-# whether any of the 17 is one is untested.
+# The 17 are OPEN (that design pass; the target's move age does not
+# explain them alone): its own move ages put about half the unled launches
+# 0.5 s or more into their move (RECONSTRUCTION; the exact 17 are not
+# reproduced). Launch 337.615 on 20260929T150923 :55934, 46 ms into
+# retail's own 0x002A approach and a miss, is NOT one of them: the model
+# puts its aim ~34 u from the target, where a full lead is ~170 u. A
+# body's velocity is a finite difference over VELOCITY_WINDOW of its own
+# model position (the trail the world tick keeps), HELD between samples.
+# So ours is unled until the trail's next sample (up to one window into a
+# walk) and under-led until the one after (up to two) -- at 337.615 ours
+# aims 0-29 u from the target's point, like retail -- and it keeps leading
+# on the held velocity for up to two windows after a stop or a mid-walk
+# re-order, where retail aims a just-stopped target at its stop point (7
+# anchored launches within 0.5 s of a 0x0028; e.g. :56025 838.092, 0.4 u
+# from it). A stopped target reads velocity 0 only from the trail's second
+# sample after the stop. So on the late-move half of the unled launches,
+# and on just-stopped targets, ours is not retail's.
 #
 # THE GEOMETRY (2026-09-29, RANGERPRE-S9, studies/presearing/RANGERPRE.md;
 # it supersedes 2026-09-20's). At the arrival the projectile CONNECTS when
