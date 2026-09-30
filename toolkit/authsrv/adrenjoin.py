@@ -339,6 +339,17 @@ def scan(costs=None, set_aside=None):
             bars = [tuple(int(x) for x in v[2]) for _t, op, v in msgs
                     if op == SKILLBAR_UPDATE and len(v) > 2 and int(v[1]) == me]
             on_bar = {s for bar in bars for s in bar if s}
+            # AND every in-game slot write (0x00D9), so "on the bar" means every
+            # skill the own bar HELD -- the same set `by_connection` builds from
+            # its timeline. 2026-09-30: this read 0x00DA alone, and RANGERPRE's
+            # tape (20260929T150923 :56064, map 160) arms a dark [394, 446] with
+            # three 0x00D9 writes (382, 384, 1) and no 0x00DA after them: this
+            # filed it dark and `by_connection` armed (test_adrenwire 12, the
+            # split check, 69/57 against 70/56). The first 0x00D9 in the corpus
+            # to change a connection's arm; 0 hits and 0 damage on it.
+            on_bar |= {int(v[3]) for _t, op, v in msgs
+                       if op == SKILLBAR_UPDATE_SKILL and len(v) > 3
+                       and int(v[1]) == me and int(v[3])}
             adrenal = sorted(s for s in on_bar if costs.get(s, 0) > 0)
             arm = "armed" if adrenal else "dark"
             s = stats[arm]
@@ -568,7 +579,12 @@ def by_connection(costs=None, set_aside=None):
                  # fighting on each side of the bar's state, IN ORDER; a hit
                  # before the first own 0x00DA is "before_bar", not dark
                  "hits_dark": 0, "hits_armed": 0, "hits_before_bar": 0,
-                 "family_dark": 0, "family_before_bar": 0}
+                 "family_dark": 0, "family_before_bar": 0,
+                 # damage TAKEN on each side too, and the side the bar OPENED
+                 # on: fighting on the side opposite `opens` is what would make
+                 # a flip a transition witness (test_adrenwire 12, 2026-09-30)
+                 "damage_dark": 0, "damage_armed": 0, "damage_before_bar": 0,
+                 "opens": None}
             bar, armed = [], None          # None until the first own 0x00DA
             for i, (_t, op, v) in enumerate(msgs):
                 if op == SKILLBAR_UPDATE and len(v) > 2 and int(v[1]) == me:
@@ -586,8 +602,10 @@ def by_connection(costs=None, set_aside=None):
                 if r["bars"]:
                     now_armed = any(costs.get(s, 0) > 0 for s in bar if s)
                     if armed is not None and now_armed != armed:
-                        r["flips"].append({"index": i,
+                        r["flips"].append({"index": i, "t": round(float(_t), 3),
                                            "to": "armed" if now_armed else "dark"})
+                    if armed is None:
+                        r["opens"] = "armed" if now_armed else "dark"
                     armed = now_armed
                 side = ("before_bar" if armed is None
                         else "armed" if armed else "dark")
@@ -624,6 +642,7 @@ def by_connection(costs=None, set_aside=None):
                 elif op in DAMAGE_OPS and int(v[1]) in DAMAGE_PROPS + (LIFE_DRAIN_PROP,):
                     if is_damage_to(op, v, me):
                         r["damage_taken"] += 1
+                        r["damage_" + side] += 1
                     if (op == PROP_FLOAT_TARGET and int(v[3]) == me
                             and int(v[1]) in DAMAGE_PROPS):
                         r["hits_landed"] += 1

@@ -28,6 +28,49 @@ move back.
 
 ---
 
+### RANGERPRE's corpus reds -- 2026-09-30 -- **three tests red on `main` from the Reforged pre-Searing tape; each classified per connection; all three were the tests, and two carried findings**
+
+The live capture `20260929T150923` (RANGERPRE, [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md))
+turned five checks in three files red on `main` at `e18d67f3`. Each was scanned per tape and per
+connection with and without that stamp before any check was touched; every moved number traces to
+that one tape, and nothing before it moved.
+
+- **`test_adrenwire` §12, the split (70/56 against 69/57): a SCANNER DEFECT, fixed in `adrenjoin.scan()`.**
+  The check was right. `:56064` (map 160) arms a dark `[394, 446]` with three `0x00D9` slot writes
+  (382, 384, 1) and no `0x00DA` after them; `by_connection` applied the writes, `scan()` read `0x00DA`
+  alone. `scan()` now reads both. The check is unchanged, and no damage row moved (0 hits, 0 damage there).
+- **`test_adrenwire` §12, THE TRANSITION: FAILED AS WRITTEN, re-scoped.** These are the corpus's first
+  mid-connection flips, three on two connections: `:56064` dark → armed at 14.33 s, and `:53756`
+  armed → dark → armed inside one batch at 193.41 s, where the secondary grant clears slots 2–4, sends
+  `0x00B7 [2, 1]` and refills them. Neither flip is fought across. So the fighting the gate's caveat
+  needs, a hit on the side opposite the one the bar opened on, is still UNOBSERVED. The check now pins
+  0 flips as of the tape, pins the tape's flips exactly, and holds that, corpus-wide, nothing is fought
+  on a flipped side. `by_connection` carries `opens` and damage per side.
+- **`test_npcdefs` §8, map 146: a SIZE PIN plus one FAILED AS WRITTEN.** The tape reaches map 146 in
+  four more connections and creates 15 hostile definitions there: all 13 pinned, plus 1434 and 1438.
+  "1434 is not created on any September map-146 tape" is refuted: the tape creates 1434 six times,
+  byte-identical to its July declaration, with max health 8. That is RANGERPRE-F1's "Recovered", and
+  `PLAN.md` §3.2's R4c-2 line now says so. Both checks are exact as of the pin, exact on the tape, and
+  a signature over the whole pool.
+- **`test_movesync` §16, the 2 s window: CONFIRMING evidence the predicate refused. It is not a teleport
+  or a zone.** `:56025` (map 146), t0 777.785, is 557.15 u in 1.934 s = 288.07 u/s. It is an interact's
+  auto-approach from rest: a `0x0047` stop, then `0x0039` on agent 38, which the server answers with a
+  `0x002A` follow. The body's speed is declared only by its own `0x0020` create (288.0 × 1.0), so the
+  predicate now reads that too. Even then the row is 0.137 u past 288 × dt, a start stamp 0.48 ms late.
+  Of 957 retail intervals of ≥ 1 s at 280–296 u/s, 392 read above 288.0 and 189 read faster than this
+  row. **A row that starts FROM REST may now start up to `LATE_STAMP_MAX` (67 ms) early. This widens the
+  bound for from-rest rows only, and it is the one judgement call in this landing.** The Zaishen
+  control's predecessor moved, so its zero-slack verdict and its +1 u arm are unchanged. Corpus-free
+  CONTROL and KNOWN-BAD arms cover both new terms.
+
+**Tests:** `test_adrenwire` 97 (floor 15), `test_npcdefs` 63 (floor 63), `test_movesync` 206 vaulted,
+floor 146 → 148 measured bare, all green. Future-stamp plants stay green; the known-bad plants redden.
+TESTS.md carries each. Not run: the full suite (only these three read the changed code; `adrenjoin` has
+no other importer but `test_gapreaders`, which was re-run). **Bare, `test_adrenwire` §3's off-grid cost
+census fails over 0 rows. HEAD fails it too; it is not this change and is left open.**
+
+---
+
 ### RANGERPRE, the Reforged pre-Searing Ranger -- 2026-09-29 -- **the owner's casual live run captured and read; Reforged Mode found ON the wire (every pre-Searing capture is Reforged); eleven desk-verifiable server diffs SHIPPED, each reviewed**
 
 **The run** ([studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md)): live capture
