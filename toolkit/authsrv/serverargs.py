@@ -1381,6 +1381,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "On 20260930T133106 that cancelled 3 of 3 pickups beside "
                          "the revived Hatcher while the client's body reached "
                          "the pile. Known-bad arm.")
+    ap.add_argument("--no-revive-flags", action="store_true",
+                    help="RANGERLOOP-F10 REVERT: an NPC's timer revive sends the "
+                         "0x00F1 status ALONE, without the 0x0026 [agent, 9] that "
+                         "retail's in-place revive carries (62 of 63 in one segment "
+                         "with the status). The client then keeps the revived body "
+                         "at life-state 8, no obstacle to anyone, while our mirror "
+                         "counts it (20260930T151413). Known-bad arm.")
     ap.add_argument("--no-mirror-avoid", action="store_true",
                     help="NPCTRACK-F14 REVERT: the server's mirror of the "
                          "player's world-0 copy walks every leg straight, "

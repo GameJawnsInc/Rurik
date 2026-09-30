@@ -28,8 +28,10 @@ capture's directory is absent: ours re-encoded with retail's ids must be byte-id
 to the plaintext, and a sabotaged tape must fail the same comparator; 7 the pickup beside a
 standing NPC (RANGERLOOP-F8): the real AgTrack guard and avoidance pass at Run A's and Run
 A''s coordinates -- the halt must not cancel the pickup, the known-bad arm must, and 1z-dj's
-park must still take everything that is not a pickup walk. Sections 1-5 and 7 need no
-vault, no socket and no client.
+park must still take everything that is not a pickup walk; 8 the revive's life-state byte
+(RANGERLOOP-F10): 0x0026 [agent, 9] behind the status, the byte whose absence left section
+7's revived Hatcher non-colliding in the client. Sections 1-5, 7 and 8 need no vault, no
+socket and no client.
 """
 import math
 import os
@@ -58,8 +60,9 @@ from codec import Codec                                        # noqa: E402  (au
 # The review round adds two fixture-free checks (3j, 3k: the pickup/world-tick race),
 # so both move by 2, each read off a real green run: 37 bare (1 declared skip), 46
 # with the capture. Section 7 (RANGERLOOP-F8, fixture-free) adds 8: 45 bare, 54 with
-# the capture, both from the green runs of 2026-09-30.
-LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=45)
+# the capture, both from the green runs of 2026-09-30. Section 8 (RANGERLOOP-F10, the
+# revive's life-state byte, fixture-free) adds 4: 49 bare, 58 with the capture.
+LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=49)
 check = checks.adopt(LEDGER)
 
 STAMP = "20260929T150923"
@@ -1069,6 +1072,70 @@ def section_beside():
           "--no-pickup-through-avoid-halt wired in main() and read by the park")
 
 
+# --------------------------------------------------------------------------- 8
+# RANGERLOOP-F10: why section 7's Hatcher was no obstacle to the client. The kill
+# sends 0x0026 [agent, 8], and revive_due sent the 0x00F1 status ALONE, so the client
+# kept the revived body at life-state 8 (agenttap, 20260930T151413: m_flags
+# 0x00020009 -> 0x00020008 at the first kill, never back). Retail's in-place revive
+# carries 0x0026 [agent, 9] in the status's own segment, the status first (62 of 63
+# NPC revives, 16 connections, 6 captures; the census is authsrv's comment on
+# REVIVE_SENDS_ALIVE_FLAGS).
+OP_STAT, OP_FLAGS26, OP_MAXINT, OP_BAR = 0x00F1, 0x0026, 0x009F, 0x00A3
+
+
+def revive_sends(defer, flags):
+    """revive_due on a long-dead practice body (agent 10), under the two switches."""
+    agent = foe_entry(HATCHER_AT)
+    agent.update(dead=True, died_at=0.0, health=0.0)
+    st = fresh(agents={10: agent})
+    sent, send = collect()
+    saved = (authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS)
+    authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS = defer, flags
+    try:
+        authsrv.revive_due(send, st, 0)
+    finally:
+        authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS = saved
+    return sent, agent
+
+
+def section_revive_flags():
+    print("\n8. the revive's life-state byte (RANGERLOOP-F10): 0x0026 [agent, 9] behind "
+          "the status")
+    sent, agent = revive_sends(0.05, True)
+    check(sent == [(OP_STAT, [10, 0]), (OP_FLAGS26, [10, authsrv.AGENT_FLAGS_BODY_ALIVE])]
+          and authsrv.AGENT_FLAGS_BODY_ALIVE == 9 and agent["dead"] is False,
+          "8a. HEADLINE, the shipped arm (the refill deferred a tick): the revive sends "
+          "the status [10, 0] and then 0x0026 [10, 9], retail's in-place revive, status "
+          "first, one tick -- the life-state byte back to alive",
+          f"{[(hex(o), v) for o, v in sent]}")
+    sent, _a = revive_sends(0.0, True)
+    check([o for o, _v in sent] == [OP_STAT, OP_MAXINT, OP_BAR, OP_FLAGS26]
+          and sent[-1] == (OP_FLAGS26, [10, 9]),
+          "8b. the immediate arm: status, the max, the bar, and the flags byte LAST -- it "
+          "closes what the tick sends, as it closes the player's and a party body's rise",
+          f"{[(hex(o), v) for o, v in sent]}")
+    got = [revive_sends(d, False)[0] for d in (0.05, 0.0)]
+    check(got[0] == [(OP_STAT, [10, 0])]
+          and OP_FLAGS26 not in [o for o, _v in got[1]],
+          "8c. KNOWN-BAD ARM (--no-revive-flags): the status alone, no 0x0026 on either "
+          "arm -- the wire that left 20260930T151413's Hatcher at life-state 8",
+          f"{[[(hex(o), v) for o, v in s] for s in got]}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    import serverargs
+    sa = open(serverargs.__file__, encoding="utf-8").read()
+    i_main = src.find("\ndef main():")
+    i_flag = src.find("    if a.no_revive_flags:", i_main)
+    i_rev = src.find("\ndef revive_due(")
+    i_end = src.find("\ndef ", i_rev + 1)
+    check(authsrv.REVIVE_SENDS_ALIVE_FLAGS is True
+          and authsrv.capture_flags().get("REVIVE_SENDS_ALIVE_FLAGS") is True
+          and '"--no-revive-flags"' in sa and 0 < i_main < i_flag
+          and "REVIVE_SENDS_ALIVE_FLAGS = False" in src[i_flag:i_flag + 120]
+          and src[i_rev:i_end].count("if REVIVE_SENDS_ALIVE_FLAGS:") == 2,
+          "8d. ships ON, on the capture's flags row, with its revert --no-revive-flags "
+          "wired in main(), read by both of revive_due's arms")
+
+
 def main():
     codec = Codec()
     section_leaf(codec)
@@ -1078,6 +1145,7 @@ def main():
     section_source()
     section_tape(codec)
     section_beside()
+    section_revive_flags()
     return LEDGER.verdict()
 
 

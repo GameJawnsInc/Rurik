@@ -14516,6 +14516,30 @@ ENEMY_BURROW_HIDDEN = float(_ENEMY.get("burrow_hidden_seconds", 4.0))
 # these are placeholders chosen to make a fight legible to a person watching.
 HIT_FRACTION = 0.15        # of maximum health, so ~7 clicks to kill
 REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
+# RANGERLOOP-F10 (2026-09-30): THE REVIVE TURNS THE LIFE-STATE BYTE BACK TO
+# ALIVE. The kill sends 0x0026 [agent, 8], and until this, revive_due sent the
+# 0x00F1 status ALONE. On our client that left the revived body at life-state 8.
+# agenttap read the practice Hatcher's m_flags 0x00020009 -> 0x00020008 at the
+# first kill and never back (20260930T151413). Bit 0 clear, the client walked
+# world-0 straight into its disc 3 of 3 times: two pickups, and a plain 0x0029
+# ending 75.3 u from its centre. Before the kill the same disc stopped the
+# approach at 65 u. Our mirror counted it all along (`_npc_obstacles` reads
+# `dead`), so every avoid halt against a revived practice target was ours
+# alone: Run A's three cancelled pickups and both parks, 45 u and 54 u from
+# the body.
+# RETAIL (respawn.py's in-place revives, re-read by opcode): 63 NPC revives on
+# 16 connections in 6 captures. 62 of 63 carry the status [agent, 0] and
+# 0x0026 [agent, 9] in ONE segment, the status first, with 0x00A2 [55, agent,
+# f] between them. That 0x00A2 is GV_HEALTH_GAIN, the revive's own heal; ours
+# is the deferred 0x009F + 0x00A3 refill (REVIVE_REFILL_DEFER), which has its
+# own crash history and is not touched here.
+# The flags byte closes what the revive sends THIS tick. With the refill
+# deferred (the default), it goes right behind the status. In the immediate
+# arm it goes behind the refill. That is the player path's shape (JARIN) and
+# revive_party_body's. Bit 0 reading as "alive" is RECONSTRUCTION; the two
+# values and both transitions are OBSERVED. --no-revive-flags reverts to the
+# status alone, the known-bad arm.
+REVIVE_SENDS_ALIVE_FLAGS = True   # --no-revive-flags reverts
 
 
 # WEAPON DAMAGE moved to combatmath.py (REFACTOR-A12), banner and all; its lazy
@@ -28558,6 +28582,12 @@ def revive_due(send, state, conn_id):
         # (0x00C1 goes out on every press) and no attack ever follows.
         if REVIVE_REFILL_DEFER > 0.0:
             agent["refill_due_at"] = now + REVIVE_REFILL_DEFER
+            # RANGERLOOP-F10: the life-state byte closes this tick's sends.
+            # The deferred refill follows it.
+            if REVIVE_SENDS_ALIVE_FLAGS:
+                send(GAME_SMSG_AGENT_UPDATE_FLAGS, [agent_id, AGENT_FLAGS_BODY_ALIVE],
+                     f"flags {AGENT_FLAGS_BODY_ALIVE} on the revived agent {agent_id} "
+                     f"[RANGERLOOP-F10]")
             print(f"[c{conn_id}] agent {agent_id} is back up "
                   f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
             continue
@@ -28592,6 +28622,12 @@ def revive_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill bar on agent {agent_id}")
+        # RANGERLOOP-F10: the life-state byte closes the immediate arm, as it
+        # closes the player's and a party body's rise.
+        if REVIVE_SENDS_ALIVE_FLAGS:
+            send(GAME_SMSG_AGENT_UPDATE_FLAGS, [agent_id, AGENT_FLAGS_BODY_ALIVE],
+                 f"flags {AGENT_FLAGS_BODY_ALIVE} on the revived agent {agent_id} "
+                 f"[RANGERLOOP-F10]")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
 
@@ -45672,6 +45708,13 @@ def main():
               "copy on a pickup walk parks the model and the pickup CANCELS as "
               "short of the item -- 20260930T133106's 3 of 3, while the client "
               "reached the pile. KNOWN-BAD arm [RANGERLOOP-F8 revert]", flush=True)
+    if a.no_revive_flags:
+        global REVIVE_SENDS_ALIVE_FLAGS
+        REVIVE_SENDS_ALIVE_FLAGS = False
+        print("[combat] --no-revive-flags: an NPC's timer revive sends the 0x00F1 "
+              "status alone, with no 0x0026 [agent, 9]. The client keeps the body at "
+              "life-state 8, where nothing collides with it, and our mirror still "
+              "counts it. KNOWN-BAD arm [RANGERLOOP-F10 revert]", flush=True)
     if a.no_mirror_avoid:
         global MIRROR_AVOID
         MIRROR_AVOID = False
