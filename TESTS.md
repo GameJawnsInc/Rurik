@@ -13111,7 +13111,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   histogram over both captures is **{9: 200, 8: 4}**, against an `authsrv.py`
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
-  vault-less §1),
+  vault-less §1. **2026-09-29, RANGERPRE-S7: §3's thesis is REFUTED** -- the pair
+  is the 75-XP death-penalty tick on any award that crosses a multiple of 75 since
+  the load (the six "burst" sightings are quest hand-ins, the Wolf's 126 crossed
+  75, the three clean 26s crossed nothing; `test_killxp.py` §5). The checks are
+  unchanged and still green, now because the fixture body has no level, is paid 26
+  on a fresh counter and crosses nothing; the docstring and §3's labels say so),
   `toolkit/authsrv/test_killxp.py` (**2026-09-29, RANGERPRE-S6 (KILLXP-a): kill
   experience is per foe.** Every hostile death used to pay `0x00EE [0, 26]`; retail
   pays GWW's "Experience per foe" table by foe level minus player level, split by
@@ -13127,14 +13132,33 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   no-effect kills; among them the 17 level-0 kills on map 212, the 6 on 430 and
   the 8 on 238 are Reforged-flagged characters, 0x003C bit 2 set, outside the
   effect's zone and paid 100%; the PvP arena's one award is not flagged). §3 drives
-  `kill_agent`: status, `[0, 100]`, flags for a level-1 foe at L1; 64 at L3; the
-  worm's 15; a henchman halving it; a zero share sending no `0x00EE`; the no-level
-  fixture's 26; the stand-in's scope and the `reforged_effect` seam; the store and
-  the death-penalty bank fed the same number the wire carried; and the revert arm
-  `--kill-xp-constant`, whose `[0, 26]` the level-1 predicate refuses. §4 pins both
-  flags (serverargs text, `main()`'s flips and the pair's refusal). Proven red by
-  reverting kill_agent's award hunk to the constant. The 75-XP tick is S7's.
-  Floor 30, measured with and without the vault -- nothing here reads it),
+  `kill_agent`: status, the 75-XP tick, `[0, 100]`, flags for a level-1 foe at L1
+  (S7's frame since that step); 64 at L3; the worm's 15; a henchman halving it; a
+  zero share sending no `0x00EE`; the no-level fixture's 26; the stand-in's scope
+  and the `reforged_effect` seam; the store and the death penalty fed the same
+  number the wire carried; and the revert arm `--kill-xp-constant`, whose `[0, 26]`
+  the level-1 predicate refuses. §4 pins both flags (serverargs text, `main()`'s
+  flips and the pair's refusal). Proven red by reverting kill_agent's award hunk to
+  the constant. **§5, 2026-09-29, RANGERPRE-S7 (KILLXP-b): the 75-XP tick.**
+  `0x009C [player, m]` + `0x00EE [10, d]` ride every award whose experience crosses
+  a multiple of 75 SINCE THE INSTANCE LOADED, at neutral too (`[player, 100]` +
+  `[10, 0]`), AHEAD of the award (20260929T150923 :55934 477.1186). `morale.crossings`
+  / `morale.recover`; then TICK_TAPES, the 68 PvE awards of 17 connections in 8
+  captures pinned as literals (tick or not, the tick's own m and d, the deaths
+  between): the since-load counter fits 68/68 and the 36 awards under 75; two
+  KNOWN-BAD ARMS must fall short -- the character's total experience (58/68) and
+  the pre-S7 bank, `morale.experience_credit` (20/68); OUR `morale_experience`
+  replayed over each connection puts retail's (m, d) on all 43 ticks and nothing on
+  the 25 others. Frames: three 25s tick on the third, ahead of its award; a
+  recovery from 85 carries 0x009F 42 and not 41 / 43, one from 87 all three (the
+  energy maximum moved; :60877 675.898's order); a hero ticks behind the award
+  (alone at neutral, with its 42 from 85) and a henchman never; a hand-in is
+  `[player, 100]`, `[10, 0]`, `[0, 250]`, the gold; 2000 from 90 is 736.185's
+  `[10, 10]` with the maxima before `[0, 2000]`. Proven red by reverting
+  `morale_experience` to the bank. The re-pins it forced: `test_quests.py` §23
+  filters `0x00EE` to attr 0, `test_agentlife.py` JARIN check 8 asserts the counter
+  is NOT zone-carried. Floor 44, measured with and without the vault -- nothing here
+  reads it),
   `toolkit/authsrv/test_timingjoin.py` (**2026-09-18, SLICE-F49..F51's instrument:
   `timingjoin.py`, every timed quantity around an attacker with a RETAIL tape and one of
   OUR recorder captures decoded through the same codec and run through the same joins,

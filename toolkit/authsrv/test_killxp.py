@@ -24,11 +24,25 @@ level-0 kills on map 212 and the 6 on map 430 are Reforged-flagged characters
 outside the effect's zone, paid 100%.
 
 Section 3 drives OUR kill_agent -- the frame, the zero share, the fixture
-fallback, the party split, the stand-in's scope, the store and the morale bank
-fed the same number the wire carried -- and runs the revert arm
+fallback, the party split, the stand-in's scope, the store and the death
+penalty fed the same number the wire carried -- and runs the revert arm
 (--kill-xp-constant), whose [0, 26] the level-1 predicate must refuse.
-Section 4 pins the two flags. What the kill frame's `0x009C` + `0x00EE [10, 0]`
-lines are (the 75-XP tick) is RANGERPRE-S7's, not this file's.
+Section 4 pins the two flags.
+
+SECTION 5 IS RANGERPRE-S7 (KILLXP-b): the kill frame's `0x009C [player, m]` +
+`0x00EE [10, d]` lines. They are the 75-XP death-penalty tick: they ride every
+award whose experience crosses a multiple of 75 SINCE THE INSTANCE LOADED, at
+neutral morale too ([player, 100] + [10, 0]), AHEAD of the award's own
+`0x00EE [0, x]`. The oracle is again the wire, pinned: the 68 PvE awards of
+seventeen connections in eight captures, each marked tick or no tick with the
+tick's own values, and the deaths between them (TICK_TAPES). The since-load
+counter predicts 68 of 68; two KNOWN-BAD ARMS fall short -- the character's
+total experience (58) and the pre-S7 bank that started at the death and was
+silent at neutral (morale.experience_credit, 20). Then OUR server replays each
+connection through morale_experience and must put retail's (m, d) on the wire
+for all 43 ticks and nothing on the other 25; then kill_agent's and
+grant_quest_reward's frames, the maxima riding a tick only when they moved,
+and the heroes' ticks behind the award.
 
 NO VAULT, NO SOCKET, NO CLIENT.
 """
@@ -43,9 +57,10 @@ import checks  # noqa: E402
 import agents  # noqa: E402
 import killxp  # noqa: E402
 
-# FLOOR 30: the green run's count (2026-09-29, RANGERPRE-S6), measured both with
-# the vault and with RURIK_VAULT at a nonexistent path -- nothing here reads it.
-LEDGER = checks.Ledger("kill experience", floor=30)
+# FLOOR 44: the green run's count (2026-09-29, RANGERPRE-S7: S6's 30 + section
+# 5's 14), measured both with the vault and with RURIK_VAULT at a nonexistent
+# path -- nothing here reads it.
+LEDGER = checks.Ledger("kill experience", floor=44)
 check = LEDGER.ok
 
 # OBSERVED (the corpus scan of 2026-09-29, every input re-derived from its own
@@ -72,6 +87,63 @@ WITNESSES = (
      "20260929T150923 :53756 1060.488, 1107.883, 1117.822, 1140.933"),
     (3, 2, 1, True, 146, 126, 1, "20260929T150923 :56025 861.965 (def 1438)"),
 )
+
+
+# OBSERVED (RANGERPRE-S7's scan of 2026-09-29, every PvE 0x00EE [0, x] on the
+# connection, in wire order): (citation, map, the load's experience -- 0x00E9
+# field 0 --, the awards). A token `x` is an award whose segment carries no
+# tick; `x^m/d` one whose segment carries 0x009C [player, m] and 0x00EE [10, d]
+# ahead of it; `dM` a death between awards (0x009C [player, M] with 0x00EE
+# [10, -15], no award). Kill and quest awards alike: the counter is fed by both.
+TICK_TAPES = (
+    ("20260807T143055 :60935 46.797", 148, 0, "100^100/0"),
+    ("20260807T143055 :64103 251.917 (the Wolf)", 146, 876, "126^100/0"),
+    ("20260807T143055 :62994 70.441 .. 92.792", 146, 100,
+     "250^100/0 26 500^100/0"),
+    ("20260810T235916 :61193 45.208", 148, 0, "100^100/0"),
+    ("20260810T235916 :61624 68.073 .. 126.917", 146, 100,
+     "250^100/0 26 500^100/0"),
+    ("20260810T235916 :49163 294.908", 146, 876, "26"),
+    ("20260819T132414 :52606 145.487 .. 276.817", 238, 2625,
+     "1000^100/0 25 25^100/0 20 100^100/0 30^100/0 30 30 30^100/0 30 1000^100/0"),
+    ("20260913T210901 :60877 343.221 .. 736.185", 212, 0,
+     "25 25 d85 25^86/1 25 25 25^87/1 25 25 25^88/1 25 25 25^89/1 25 25 "
+     "25^90/1 25 25 2000^100/10"),
+    ("20260914T005758 :56011 184.341 .. 534.477", 430, 6575,
+     "32 32 32^100/0 d85 32 32^86/1 32"),
+    ("20260914T180058 :56301 292.643", 146, 928, "250^100/0"),
+    ("20260915T155656 :51922 412.523", 146, 1178, "105^100/0"),
+    ("20260929T150923 :55934 231.001 .. 627.373", 146, 100,
+     "250^100/0 26 500^100/0 105^100/0 26^100/0 105^100/0 176^100/0 126^100/0 "
+     "105^100/0 250^100/0"),
+    ("20260929T150923 :59427 1244.150 .. 1279.408", 148, 2731,
+     "250^100/0 100^100/0 500^100/0"),
+    ("20260929T150923 :53880 727.487", 148, 1769, "250^100/0"),
+    ("20260929T150923 :59969 207.676", 148, 0, "100^100/0"),
+    ("20260929T150923 :53756 1060.488 .. 1190.237", 160, 2145,
+     "84^100/0 84^100/0 84^100/0 84^100/0 250^100/0"),
+    ("20260929T150923 :56025 861.965", 146, 2019, "126^100/0"),
+)
+
+
+def _tape(tokens):
+    """[("died", M) | (x, (m, d) or None)] from one TICK_TAPES string."""
+    out = []
+    for tok in tokens.split():
+        if tok.startswith("d"):
+            out.append(("died", int(tok[1:])))
+        elif "^" in tok:
+            x, md = tok.split("^")
+            m, d = md.split("/")
+            out.append((int(x), (int(m), int(d))))
+        else:
+            out.append((int(tok), None))
+    return out
+
+
+def _s32(v):
+    v = int(v) & 0xFFFFFFFF
+    return v - 0x100000000 if v >= 0x80000000 else v
 
 
 def _fit(fn):
@@ -199,16 +271,23 @@ def section_witnesses(authsrv):
 def section_our_frame(authsrv):
     print("\n3. our kill_agent: the award, and every consumer of it")
     ops = lambda sent: [op for op, _v in sent]
-    frame = [authsrv.GAME_SMSG_AGENT_UPDATE_STATUS, authsrv.GAME_SMSG_AGENT_KILL_REWARD,
-             authsrv.GAME_SMSG_AGENT_UPDATE_FLAGS]
+    # RANGERPRE-S7: a first award of 100 crosses 75, so the frame carries the
+    # tick -- 0x009C [player, 100], 0x00EE [10, 0] -- AHEAD of the award.
+    frame = [(authsrv.GAME_SMSG_AGENT_UPDATE_STATUS, None),
+             (authsrv.GAME_SMSG_AGENT_MORALE, [authsrv.PLAYER_AGENT_ID, 100]),
+             (authsrv.GAME_SMSG_PLAYER_ATTR_UPDATE, [authsrv.PLAYER_ATTR_MORALE_ID, 0]),
+             (authsrv.GAME_SMSG_AGENT_KILL_REWARD, [0, 100]),
+             (authsrv.GAME_SMSG_AGENT_UPDATE_FLAGS, None)]
 
     def level1_ok(sent):
-        return ops(sent) == frame and _awards(authsrv, sent) == [[0, 100]]
+        return (len(sent) == len(frame)
+                and all(op == fo and (fv is None or v == fv)
+                        for (op, v), (fo, fv) in zip(sent, frame)))
 
     sent = _kill(authsrv, _state(1, 1, 146), _foe(1))
-    check(level1_ok(sent), "a level-1 foe at player level 1: status, [0, 100], "
-          "flags -- three messages (retail's 100-xp frames carry S7's tick lines "
-          "ahead of the award; the tick is not this step)",
+    check(level1_ok(sent), "a level-1 foe at player level 1: status, the 75-XP "
+          "tick 0x009C [player, 100] + 0x00EE [10, 0], [0, 100], flags -- retail's "
+          "frame shape (RANGERPRE-S7; 20260929T150923 :55934 477.1186 for its 176)",
           str([(hex(op), v) for op, v in sent]))
     sent = _kill(authsrv, _state(3, 1, 146), _foe(1))
     check(_awards(authsrv, sent) == [[0, 64]],
@@ -286,12 +365,13 @@ def section_our_frame(authsrv):
           "under --persist the store accrues the 100 the wire carried, not 26",
           f"xp {store.row['xp']}, saves {store.saves}")
 
-    # ...and so does the death-penalty bank.
+    # ...and so does the death penalty.
     st = _state(1, 1, 146, morale=85)
     _kill(authsrv, st, _foe(1))
     check(st["morale"] == 86,
-          "a penalised player's first level-1 kill buys back 1%: the bank was fed "
-          "the 100 paid (a 26 took three kills)", f"morale {st['morale']}")
+          "a penalised player's first level-1 kill buys back 1%: the 75-XP "
+          "counter was fed the 100 paid (a 26 took three kills)",
+          f"morale {st['morale']}")
 
     # THE REVERT ARM, and the predicate must refuse it.
     saved = authsrv.KILL_XP_RULE
@@ -323,12 +403,207 @@ def section_flags(authsrv):
           "serverargs registers both; main() flips each and refuses the pair")
 
 
+def section_tick(authsrv):
+    import morale
+    print("\n5. the 75-XP tick (RANGERPRE-S7): since the load, at neutral too, "
+          "ahead of the award")
+    P = authsrv.PLAYER_AGENT_ID
+    MOR, ATTR = authsrv.GAME_SMSG_AGENT_MORALE, authsrv.GAME_SMSG_PLAYER_ATTR_UPDATE
+    PINT, PFLT = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT)
+    STATUS, FLAGS = (authsrv.GAME_SMSG_AGENT_UPDATE_STATUS,
+                     authsrv.GAME_SMSG_AGENT_UPDATE_FLAGS)
+    XP = authsrv.GAME_SMSG_AGENT_KILL_REWARD
+
+    def shape(sent):
+        """The frame as (op, values) with the status and flags values elided
+        and the 0x00EE delta read signed; 0x00A2 [43] as (op, 43)."""
+        out = []
+        for op, v in sent:
+            if op in (STATUS, FLAGS):
+                out.append((op,))
+            elif op == PFLT:
+                out.append((op, v[0]))
+            elif op == ATTR and v[0] == authsrv.PLAYER_ATTR_MORALE_ID:
+                out.append((op, [v[0], _s32(v[1])]))
+            else:
+                out.append((op, list(v)))
+        return out
+
+    check(morale.crossings(0, 74) == 0 and morale.crossings(0, 75) == 1
+          and morale.crossings(74, 1) == 1 and morale.crossings(1012, 176) == 2
+          and morale.crossings(250, 26) == 0 and morale.crossings(881, 26) == 1
+          and morale.crossings(425, 2000) == 27 and morale.crossings(10, -5) == 0,
+          "crossings: multiples of 75 passed -- 881 -> 907 crosses one "
+          "(:55934 383.573), 250 -> 276 none (264.333), 425 -> 2425 twenty-seven "
+          "(:60877 736.185), a negative gain none")
+    check(morale.recover(85, 1) == 86 and morale.recover(90, 27) == 100
+          and morale.recover(100, 3) == 100 and morale.recover(105, 1) == 105
+          and morale.recover(40, 0) == 40,
+          "recover: +1 per crossing, capped at neutral (90 + 27 -> 100, the "
+          "wire's [10, 10]); at or above neutral nothing moves")
+
+    tapes = [(c, mp, lx, _tape(s)) for c, mp, lx, s in TICK_TAPES]
+    awards = [(x, t) for _c, _m, _l, tp in tapes for x, t in tp if x != "died"]
+    n_tick = sum(1 for _x, t in awards if t is not None)
+    n_disc = sum(1 for x, _t in awards if x < 75)
+    check(len(awards) == 68 and n_tick == 43 and n_disc == 36
+          and len({c.split()[0] for c, *_ in TICK_TAPES}) == 8,
+          "the pinned corpus: 68 PvE awards in 17 connections of 8 captures, 43 "
+          "carrying the tick, 36 of them under 75 (the ones that discriminate)",
+          f"{len(awards)} awards, {n_tick} ticks, {n_disc} under 75")
+
+    def arm(rule):
+        """How many of the 68 awards a counter rule reproduces (tick or not)."""
+        hit = disc = 0
+        for _c, _mp, lx, tp in tapes:
+            since, total, bank, mor = 0, int(lx), 0, morale.BASELINE
+            for x, t in tp:
+                if x == "died":
+                    mor = t
+                    continue
+                if rule == "since":
+                    pred = morale.crossings(since, x) > 0
+                elif rule == "total":
+                    pred = morale.crossings(total, x) > 0
+                else:
+                    _m, bank, rec = morale.experience_credit(mor, bank, x)
+                    pred = rec > 0
+                hit += pred == (t is not None)
+                disc += x < 75 and pred == (t is not None)
+                since, total = since + x, total + x
+                if t is not None:
+                    mor = t[0]
+        return hit, disc
+
+    got, disc = arm("since")
+    check(got == 68 and disc == 36,
+          "the SINCE-LOAD counter (0 at the instance's load, fed by every award "
+          "paid, not reset by a death) predicts tick-or-silence on 68 of 68, and "
+          "36 of the 36 awards under 75", f"{got}/68, {disc}/36")
+    got, _d = arm("total")
+    check(got == 58,
+          "KNOWN-BAD ARM: the character's TOTAL experience (0x00E9 field 0 at the "
+          "load, plus the awards) fits 58 of 68 -- :55934 264.333's 350 -> 376 "
+          "crosses 375 and retail sends no tick", f"{got}/68")
+    got, _d = arm("bank")
+    check(got == 20,
+          "KNOWN-BAD ARM: the pre-S7 bank (morale.experience_credit: counts from "
+          "the death, silent at neutral) fits 20 of 68", f"{got}/68")
+
+    # OUR SERVER, replayed over the same awards: the deaths set morale from the
+    # tape's own 0x009C, each award goes through morale_experience, and what
+    # went on the wire must be retail's (m, d) -- or nothing.
+    bad, ticks_ok = [], 0
+    for cite, mp, _lx, tp in tapes:
+        st = {"level": 1, "map_id": mp}
+        for x, t in tp:
+            if x == "died":
+                st["morale"] = t
+                continue
+            sent = []
+            authsrv.morale_experience(
+                lambda op, v, label="", quiet=False: sent.append((op, list(v))),
+                st, 0, x)
+            m = [v[1] for op, v in sent if op == MOR and v[0] == P]
+            d = [_s32(v[1]) for op, v in sent
+                 if op == ATTR and v[0] == authsrv.PLAYER_ATTR_MORALE_ID]
+            ours = (m[0], d[0]) if (len(m), len(d)) == (1, 1) else (
+                None if not (m or d) else ("malformed", m, d))
+            if ours != t:
+                bad.append((cite, x, t, ours))
+            elif t is not None:
+                ticks_ok += 1
+    check(not bad and ticks_ok == 43,
+          "OUR morale_experience, replayed over each connection, puts retail's "
+          "0x009C [player, m] + 0x00EE [10, d] on all 43 ticking awards (36 of "
+          "them [100] + [10, 0] at neutral, +1 six times, +10 once) and nothing "
+          "on the other 25", f"{ticks_ok}/43 ticks; misses {bad[:6]}")
+
+    # kill_agent: three level-0 kills at L1, 25 each -- 25, 50, 75 (:60877's shape)
+    st = _state(1, 1, 212)
+    frames = [shape(_kill(authsrv, st, _foe(0))) for _ in range(3)]
+    quiet = [(STATUS,), (XP, [0, 25]), (FLAGS,)]
+    check(frames[0] == quiet and frames[1] == quiet
+          and frames[2] == [(STATUS,), (MOR, [P, 100]), (ATTR, [10, 0]),
+                            (XP, [0, 25]), (FLAGS,)],
+          "three 25s: no tick, no tick, and the tick AHEAD of the third award "
+          "(the counter reaches 75) -- a neutral tick carries no maxima",
+          str(frames))
+
+    # a recovery: 85 -> 86 moves health (86) and not energy (22), so the 42
+    # rides the tick and 41 / 43 do not (:60877 634.715: 9C, EE10, 42, EE0)
+    got = shape(_kill(authsrv, _state(1, 1, 146, morale=85), _foe(1)))
+    check(got == [(STATUS,), (MOR, [P, 86]), (ATTR, [10, 1]),
+                  (PINT, [agents.PROP_HEALTH_MAX, P, 86]), (XP, [0, 100]), (FLAGS,)],
+          "a recovery from 85: 0x009C [player, 86], [10, 1], 0x009F [42, player, "
+          "86], THEN the award -- no 41 / 43, the energy maximum did not move",
+          str(got))
+    got = shape(_kill(authsrv, _state(1, 1, 146, morale=87), _foe(1)))
+    check(got == [(STATUS,), (MOR, [P, 88]), (ATTR, [10, 1]),
+                  (PINT, [agents.PROP_ENERGY_MAX, P, 23]),
+                  (PFLT, agents.PROP_ENERGY_REGEN),
+                  (PINT, [agents.PROP_HEALTH_MAX, P, 88]), (XP, [0, 100]), (FLAGS,)],
+          "87 -> 88 moves the energy maximum (22 -> 23): 41 and 0x00A2 43 ride "
+          "the tick ahead of the 42 (:60877 675.898's order)", str(got))
+
+    # heroes: after the award, on their own counter; a henchman never ticks
+    H = authsrv.HERO_AGENT_ID
+
+    def body(hero):
+        return {"name": "h", "dead": False, "allegiance": agents.ALLEGIANCE_PLAYER,
+                "hero": hero, "health": 100.0, "max_health": 100.0,
+                "base_max_health": 100.0, "base_max_energy": 20.0,
+                "pos": (100.0, 0.0)}
+
+    st = _state(1, 1, 146, agents={H: body(6), 201: body(None)})
+    got = shape(_kill(authsrv, st, _foe(1)))
+    check(got == [(STATUS,), (MOR, [P, 100]), (ATTR, [10, 0]), (XP, [0, 100]),
+                  (MOR, [H, 100]), (FLAGS,)],
+          "a hero ticks BEHIND the award -- 0x009C [hero, 100] alone at neutral "
+          "(20260914T005758 :56011 238.177) -- and the henchman beside it does not",
+          str(got))
+    st = _state(1, 1, 146, agents={H: body(6)}, hero_morale={H: 85})
+    got = shape(_kill(authsrv, st, _foe(1)))
+    check(got == [(STATUS,), (MOR, [P, 100]), (ATTR, [10, 0]), (XP, [0, 100]),
+                  (MOR, [H, 86]), (PINT, [agents.PROP_HEALTH_MAX, H, 86]), (FLAGS,)],
+          "a penalised hero: 0x009C [hero, 86] and its 0x009F [42, hero, 86] "
+          "behind the award (:56011 410.841)", str(got))
+
+    # the quest frame: the tick ahead of the xp, the gold behind it
+    gold = authsrv.merchant.GAME_SMSG_GOLD_CREDIT
+    sent = []
+    authsrv.grant_quest_reward(
+        lambda op, v, label="", quiet=False: sent.append((op, list(v))),
+        {"quests": set(), "agents": {}}, 1463,
+        {"reward_experience": 250, "reward_gold": 25}, 0)
+    got = shape(sent)
+    check(got == [(MOR, [P, 100]), (ATTR, [10, 0]), (XP, [0, 250]),
+                  (gold, [authsrv.PLAYER_INVENTORY_KEY, 25])],
+          "a hand-in: 0x009C [player, 100], [10, 0], [0, 250], then the gold -- "
+          "the tick ahead of the xp on 20 of 20 retail hand-ins", str(got))
+    sent = []
+    authsrv.grant_quest_reward(
+        lambda op, v, label="", quiet=False: sent.append((op, list(v))),
+        {"quests": set(), "agents": {}, "morale": 90, "xp_since_load": 425},
+        347, {"reward_experience": 2000}, 0)
+    got = shape(sent)
+    check(got == [(MOR, [P, 100]), (ATTR, [10, 10]),
+                  (PINT, [agents.PROP_ENERGY_MAX, P, 25]),
+                  (PFLT, agents.PROP_ENERGY_REGEN),
+                  (PINT, [agents.PROP_HEALTH_MAX, P, 100]), (XP, [0, 2000])],
+          "2000 from 90 with 425 since the load: [player, 100], [10, 10], the "
+          "maxima, then [0, 2000] -- 20260913T210901 :60877 736.185's order",
+          str(got))
+
+
 def main():
     import authsrv
     section_rule()
     section_witnesses(authsrv)
     section_our_frame(authsrv)
     section_flags(authsrv)
+    section_tick(authsrv)
     return LEDGER.verdict()
 
 

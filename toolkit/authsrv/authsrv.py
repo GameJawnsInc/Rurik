@@ -365,8 +365,9 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     0x0052 · 0x004A on 10 of 10, and turn_in_quest does the same (the D9 fix
     pass; --no-reward-in-frame puts them after 0x004A as pass 1 did). The
     fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the DOUBLED
-    0x0052, 0x00EE [10, 0] (UNREAD) -- is documented in studies/quests §12.1 and
-    stays deferred; nothing here is invented for those or the four chat lines.
+    0x0052 -- is documented in studies/quests §12.1 and stays deferred; nothing
+    here is invented for those or the four chat lines. Its 0x00EE [10, 0], UNREAD
+    there, is the 75-XP tick and IS sent since RANGERPRE-S7 (below).
     THE SKILLS COME LAST (RANGERPRE-S5, QUESTFLOW-H1): on every retail hand-in
     that grants skills the 0x00DC/0x00D9 pairs follow the gold 0x0140, or the
     xp and its level-up lines when there is no gold -- OBSERVED 4 of 4 (of 22
@@ -397,9 +398,16 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     xp_paid = 0
     if xp is not None:
         xp_paid = int(xp)
+        # THE 75-XP TICK FIRST (RANGERPRE-S7): 0x009C < 0x00EE [10] < 0x00EE
+        # [0, xp] on 20 of 20 retail hand-ins -- every quest award on tape is
+        # 100 or more, so each crosses (20260913T210901 :60877 736.185: 0x009C
+        # [9 = the player, 100], [10, 10] from 90, the maxima, then [0,
+        # 2000]). The heroes' ticks after the award, as on a kill
+        # (RECONSTRUCTION for a hand-in).
+        morale_experience(send, state, conn_id, xp_paid)
         send(GAME_SMSG_AGENT_KILL_REWARD, [KILL_REWARD_ATTR, xp_paid],
              f"quest {qid} reward: experience +{xp_paid} (SLICE-B5, ours)")
-        morale_experience(send, state, conn_id, xp_paid)
+        hero_morale_experience(send, state, conn_id, xp_paid)
     # THE GOLD, after the experience -- the tape's order (DESKWORK-D9).
     gold_paid = 0
     if gold is not None and QUEST_GOLD_ENABLED:
@@ -5123,6 +5131,9 @@ PLAYER_ATTR_MORALE_ID = 10
 # study found still stands: the `[10,0]`+`[0,X]` pair marked by this opcode is a
 # broadcast burst rather than a kill shape. What changes is that attr 10 has a
 # name -- `[10, 0]` is a morale no-op riding an experience award.
+# REFUTED 2026-09-29 (RANGERPRE-S7): "broadcast burst rather than a kill
+# shape". The pair is the 75-XP tick on ANY award whose experience crosses a
+# multiple of 75 since the load, kills included (morale_experience).
 GAME_SMSG_AGENT_MORALE = 0x009C
 def balthazar_rate(map_id):
     """Balthazar-per-kill for THIS map, from its content row -- 0 by default.
@@ -20301,16 +20312,30 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     #
     # RANGERPRE-S6 (KILLXP-a): the VALUE is per foe (kill_experience; 26 was
     # one row of the wiki's table), so "[0, 26]" above is REFUTED as a
-    # constant. The pair paragraph is CONTESTED by the same capture -- read
-    # there as the 75-XP death-penalty tick -- and is RANGERPRE-S7's, not
-    # this step's. A share of 0 (a foe six or more levels below) sends
+    # constant. A share of 0 (a foe six or more levels below) sends
     # nothing: whether retail sends [0, 0] is UNVERIFIED, and the corpus's
     # two unpaid deaths carry no 0x00EE at all.
+    #
+    # RANGERPRE-S7 (KILLXP-b): and the PAIR paragraph is REFUTED. 0x009C
+    # [player, m] + 0x00EE [10, d] is the 75-XP death-penalty tick
+    # (morale_experience): it rides the award whose experience crosses a
+    # multiple of 75 since the instance loaded, at neutral morale too, where
+    # it is [player, 100] + [10, 0]. The "three clean kills" were 26s that
+    # crossed nothing, the Wolf's was a 126 that crossed 75, and the "burst"
+    # was six quest hand-ins (100 / 250 / 500, each crossing). OBSERVED
+    # order: the tick, the award, the flags on 23 of 23 ticking kill frames
+    # (20260929T150923 :55934 477.1186: 0x009C [31, 100], 0x00EE [10, 0],
+    # 0x00EE [0, 176], ..., 0x0026); the status ahead of them all; a drop
+    # ahead of the tick (383.5733 -- LOOT's slot, between the status and this
+    # block); the heroes' ticks right behind the award (20260914T005758
+    # :56011 238.177 and 410.841).
     _xp = kill_experience(state, agent)
     if _xp:
+        morale_experience(send, state, conn_id, _xp)   # the tick FIRST, 23/23
         send(GAME_SMSG_AGENT_KILL_REWARD,
              [KILL_REWARD_ATTR, _xp],
              f"kill reward [{KILL_REWARD_ATTR}, {_xp}]")
+        hero_morale_experience(send, state, conn_id, _xp)   # after the award
     _strip_and_step_down()             # between the reward and the flags: 631.935
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
          f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
@@ -20325,15 +20350,9 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # sits -- the three-message template is ArenaNet's shape and nothing of ours
     # goes inside it.
     kill_completes_objective(send, state, target_id, conn_id)
-    # ...and so does the other half of the death penalty. WIKI (GWW, "Death
-    # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
-    # so the kill reward that just went out is also the way back up. Sends
-    # nothing at all while morale is neutral, which is every session in
-    # which nothing has died -- and nothing on a kill that leaves the bank
-    # short of 75. It is fed the xp this kill PAID (RANGERPRE-S6): a 26 took
-    # three kills to a percent, a level-1 foe's 100 at player level 1 takes
-    # one. Where the tick sits and what it counts is RANGERPRE-S7's.
-    morale_experience(send, state, conn_id, _xp)
+    # (The death penalty's other half -- WIKI "gaining 75 experience will
+    # remove 1% DP" -- was sent HERE, after the flags, until RANGERPRE-S7; it
+    # is the tick ahead of the award now.)
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -27092,7 +27111,8 @@ def player_pools(state):
     gap that made "you cannot die" a property of the code rather than a decision.
     """
     state.setdefault("morale", morale.BASELINE)
-    state.setdefault("morale_xp_bank", 0)
+    # (No experience bank: RANGERPRE-S7's counter, state["xp_since_load"],
+    # starts at 0 with the instance -- morale_experience.)
     # When the player last stood up. 0.0 means never -- and `death_is_free`
     # answers the falsy case FIRST, so the first death of a session can never
     # fall inside a grace window that has not happened yet.
@@ -27217,7 +27237,7 @@ def map_death_penalty(map_id):
     return bool(row.get("death_penalty", False))
 
 
-def push_morale(send, state, conn_id, new_value, why, between=None):
+def push_morale(send, state, conn_id, new_value, why, between=None, tick=False):
     """Move the player's morale and put ArenaNet's own tick on the wire.
 
     THE SHAPE IS OBSERVED, off the one player death in the live corpus
@@ -27243,11 +27263,21 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     FRACTION of maximum energy per second, so a pool that shrinks 15% while this
     stands still is a 15% slower regeneration nobody asked for. Retail resent it;
     so do we.
+
+    `tick=True` IS THE 75-XP TICK (RANGERPRE-S7, KILLXP-b; morale_experience):
+    it goes out even when the value does not move -- 0x009C [player, 100] +
+    0x00EE [10, 0] and nothing else, 36 of 36 neutral ticks in the live corpus
+    -- and each maximum rides it only when it CHANGED: 0x009F 42 on 7 of 7
+    recoveries, 41 + 0x00A2 43 on the 2 of 7 whose energy maximum moved
+    (20260913T210901 :60877 675.898, 27 -> 28; 736.185, 28 -> 30). The death
+    path passes no tick and is unchanged.
     """
     old = player_morale(state)
     new_value = morale.clamp(new_value)
-    if new_value == old:
+    if new_value == old and not tick:
         return old
+    old_energy = player_max_energy(state)
+    old_health = int(player_max_health(state))
     state["morale"] = new_value
     max_energy = player_max_energy(state)
     max_health = int(player_max_health(state))
@@ -27262,15 +27292,20 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     # nothing.
     if between is not None:
         between()
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
-         f"maximum energy {max_energy} at morale {morale.display(new_value)}")
+    # THE 75-XP TICK sends a maximum only when it moved (the docstring); every
+    # other caller sends both, as before.
+    _energy_moved = not tick or max_energy != old_energy
+    _health_moved = not tick or max_health != old_health
+    if _energy_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
+             f"maximum energy {max_energy} at morale {morale.display(new_value)}")
     # THE POOL'S OWN BOOK RESIZES WITH THE WIRE (energy-arc merge,
     # 2026-08-20): set_maximum recomputes the stored rate the way retail's
     # numbers show (0.0528 at 25 -> 0.06 at 22, the same four pips), so the
     # RESURRECT resend in restore_player_energy is already rescaled with no
     # second computation to drift.
-    if ENERGY:
+    if ENERGY and _energy_moved:
         player_energy(state).set_maximum(max_energy)
     # THE CHANNEL IS 0x00A2 AND THE DEATH VALUE IS ZERO -- both are the
     # capture's, not a choice: the only death-with-morale batch in the corpus
@@ -27286,17 +27321,19 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     # there is RECONSTRUCTION (the fraction must track the pool or the
     # absolute rate silently changes -- the docstring's argument).
     _dead = bool(state.get("player_dead"))
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
-         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
-          _f32(0.0 if _dead else
-               morale.regen_fraction(agents.PLAYER_FLOAT_43,
-                                     agents.PLAYER_ENERGY, max_energy))],
-         "energy regeneration stops: the player is dead" if _dead else
-         "energy regeneration, rescaled to the new pool")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
-         f"maximum health {max_health} at morale {morale.display(new_value)}")
-    state["player_max_declared"] = int(max_health)      # 3(a): the tracker
+    if _energy_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+              _f32(0.0 if _dead else
+                   morale.regen_fraction(agents.PLAYER_FLOAT_43,
+                                         agents.PLAYER_ENERGY, max_energy))],
+             "energy regeneration stops: the player is dead" if _dead else
+             "energy regeneration, rescaled to the new pool")
+    if _health_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
+             f"maximum health {max_health} at morale {morale.display(new_value)}")
+        state["player_max_declared"] = int(max_health)  # 3(a): the tracker
     # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
     # to notice: our own bookkeeping is what decides when the player dies, so a
     # current health left above the new maximum would make the next fraction we
@@ -27345,21 +27382,36 @@ def death_penalty_due(send, state, conn_id, between=None):
 
 
 def morale_experience(send, state, conn_id, gained):
-    """Experience buys death penalty back, 1% per 75 XP.
+    """Experience buys death penalty back, 1% per 75 XP -- and the 75-XP tick.
 
-    WIKI (GWW, "Death Penalty", section Counters). The bank is what makes this
-    honest at our kill sizes: a 26-XP kill is not a third of a percent on the
-    wire, it is nothing at all until the third one.
+    WIKI (GWW, "Death Penalty", section Counters): 75 experience removes 1%.
+
+    RANGERPRE-S7 (KILLXP-b): WHAT RETAIL SENDS is a tick each time the
+    player's experience SINCE THIS INSTANCE LOADED crosses a multiple of 75 --
+    0x009C [player, m] + 0x00EE [10, d], ahead of the award's own 0x00EE
+    [0, xp], at neutral morale too, where it is [player, 100] + [10, 0] and
+    moves nothing. OBSERVED on 43 of the live corpus's 68 PvE awards, and the
+    since-load counter predicts all 68 (tick or no tick): 20260929T150923
+    :55934 477.119 carries 0x009C [31, 100], 0x00EE [10, 0], 0x00EE [0, 176];
+    the 26 at 264.333 (250 -> 276) carries none; the 26 at 383.573 (881 ->
+    907) does. The counter is RECONSTRUCTION: from 0 at the load, fed by every
+    award paid (kills after the party split, quest rewards), NOT reset by a
+    death, NOT carried from the last instance (zone_carry_store carries none);
+    the known-bad arms are the character's total experience (58 of 68) and
+    the pre-S7 bank that started at the death and was silent at neutral
+    (morale.experience_credit, 20 of 68). The CALLER puts this ahead of its
+    0x00EE [0, xp] and the heroes' ticks after it (hero_morale_experience).
     """
-    hero_morale_experience(send, state, conn_id, gained)     # JARIN: per hero
-    before = player_morale(state)
-    after, bank, recovered = morale.experience_credit(
-        before, int(state.get("morale_xp_bank", 0)), gained)
-    state["morale_xp_bank"] = bank
-    if not recovered:
-        return before
-    return push_morale(send, state, conn_id, after,
-                       f"{recovered}% back from experience")
+    before = int(state.get("xp_since_load", 0))
+    state["xp_since_load"] = before + max(0, int(gained))
+    n = morale.crossings(before, gained)
+    old = player_morale(state)
+    if n <= 0:
+        return old
+    new = morale.recover(old, n)
+    return push_morale(send, state, conn_id, new,
+                       f"{new - old}% back from experience" if new != old
+                       else "the 75-XP tick, a no-op at this morale", tick=True)
 
 
 # CASTAI (2026-09-27; DESKWORK-D8 step 6, studies/deskwork/PLAN.md; owner's ruling PLAN.md
@@ -29176,23 +29228,38 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
 
 def hero_morale_experience(send, state, conn_id, gained):
     """The kill's experience buys a hero's penalty back too (410.84 s: [29,
-    86] and [30, 86], each with its prop 42), per hero, its own bank."""
+    86] and [30, 86], each with its prop 42), per hero, its own counter.
+
+    RANGERPRE-S7 (KILLXP-b): the hero takes the player's 75-XP tick on its
+    OWN since-load counter, AFTER the award line -- 0x009C [hero, m] always,
+    0x009F [42, hero, max] only when m moved: 20260914T005758 :56011 238.177
+    ([30, 100] alone, at neutral), 410.841 ([30, 86] + its 42). A henchman
+    never ticks (0 on 20260819T132414's three). Feeding the hero the player's
+    share is RECONSTRUCTION, and it does not reproduce the third witness:
+    :56011 534.478 ticks the hero ([30, 87]) and not the player (192, short of
+    225), so the hero's counter was ahead by something the tape does not show
+    (NOT FOUND; the death at 443.855 that paid the player nothing is the
+    candidate)."""
+    counters = state.setdefault("hero_xp_since_load", {})
     for aid, row in party_bodies(state):
         if hero_body_id(row) is None:
             continue
-        bank = state.setdefault("hero_morale_bank", {})
-        after, b, rec = morale.experience_credit(
-            hero_morale(state, aid), int(bank.get(aid, 0)), gained)
-        bank[aid] = b
-        if not rec:
+        before = int(counters.get(aid, 0))
+        counters[aid] = before + max(0, int(gained))
+        n = morale.crossings(before, gained)
+        if n <= 0:
             continue
-        _e, h_max = hero_morale_apply(state, aid, row, after)
-        send(GAME_SMSG_AGENT_MORALE, [aid, after],
-             f"morale {morale.display(after)} on hero agent {aid} "
-             f"({rec}% back from experience) [JARIN]")
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, aid, h_max],
-             f"hero agent {aid} health max {h_max} at morale {after}")
+        old = hero_morale(state, aid)
+        new = morale.recover(old, n)
+        send(GAME_SMSG_AGENT_MORALE, [aid, new],
+             f"morale {morale.display(new)} on hero agent {aid} "
+             + (f"({new - old}% back from experience) [JARIN]" if new != old
+                else "(the 75-XP tick, a no-op at this morale) [RANGERPRE-S7]"))
+        if new != old:
+            _e, h_max = hero_morale_apply(state, aid, row, new)
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.PROP_HEALTH_MAX, aid, h_max],
+                 f"hero agent {aid} health max {h_max} at morale {new}")
 
 
 def hero_locks_release(send, state, target_id, conn_id):
@@ -29420,9 +29487,10 @@ def zone_carry_store(state):
     key = state.get("char_uuid")
     if not key:
         return
+    # No experience counter rides the carry: retail's 75-XP tick counts from
+    # each instance's load (RANGERPRE-S7; morale_experience).
     ZONE_CARRY[key] = {
         "morale": player_morale(state),
-        "morale_xp_bank": int(state.get("morale_xp_bank", 0)),
         "hero_ai_mode": {aid: int(c.get("ai_mode", AI_MODE_FIGHT))
                          for aid, c in (state.get("hero_cmd") or {}).items()},
         "hero_morale": dict(state.get("hero_morale") or {}),
@@ -29442,7 +29510,6 @@ def zone_carry_apply(state, conn_id):
         hero_command(state, aid)["ai_mode"] = int(m)
     if party_bodies_here(state):
         state["morale"] = int(got["morale"])
-        state["morale_xp_bank"] = int(got["morale_xp_bank"])
         state["hero_morale"] = dict(got["hero_morale"])
         print(f"[c{conn_id}] ZONE: morale {got['morale']} and the hero stances "
               f"carried into the field [JARIN]", flush=True)

@@ -20,6 +20,18 @@ tick, and that tick carries the `0x009C` marker too, which is what gives the
 coincidence away. Copying the pair would have looked like more fidelity and
 been less. Section 3 asserts we do not send it.
 
+REFUTED 2026-09-29 (RANGERPRE-S7, KILLXP-b), the paragraph above: the pair is
+the 75-XP death-penalty tick, `0x009C [player, m]` + `0x00EE [10, d]`, riding
+ANY award whose experience crosses a multiple of 75 since the instance loaded
+-- a kill's or a quest's. The six "burst" sightings are quest hand-ins (100 /
+250 / 500), the Wolf's is a 126 kill that crossed 75, and the three clean
+kills are 26s that crossed nothing. Our server sends the tick now
+(`morale_experience`, pinned in test_killxp.py section 5). Section 3's checks
+still hold, and now for that reason: this file's fixture body has no level,
+so it pays the constant 26 on a fresh counter, which crosses nothing -- the
+shape of retail's three clean kills. The checks are unchanged; their labels
+say what they now mean.
+
 Vault-less runs skip sections 2-4 loudly and keep section 1.
 """
 
@@ -170,24 +182,26 @@ def main():
               f"and its flags byte is [{agent}, 8] (t={t:.3f})",
               f"{flags}")
 
-    print("\n3. the PAIR is not a kill shape, and we do not send it")
+    print("\n3. the PAIR on a kill that crosses nothing (RANGERPRE-S7: the pair "
+          "is the 75-XP tick)")
     pairs = [k for k in rewarded
              if len([v for o, v in k[4] if o == 0x00EE]) > 1]
     check(len(pairs) == 1,
           "exactly one death in the corpus shows the [10,0]+[0,X] pair",
-          "the Wolf -- and its tick also carries 0x009C [agent, 100], the "
-          "marker every one of the 6 NON-kill pair sightings carries too")
+          "the Wolf -- its 126 is the one award on these two captures' kills "
+          "that crosses 75 (RANGERPRE-S7); the 6 NON-kill sightings are quest "
+          "hand-ins, which cross too")
     for _s, _c, _t, _a, window in pairs:
         check(any(o == 0x009C for o, _v in window),
-              "and that death's tick carries the 0x009C burst marker",
-              "which is the evidence that the pair belongs to the burst rather "
-              "than to the kill")
+              "and that death's tick carries the 0x009C [player, 100]",
+              "the tick's own first line (0x009C, then 0x00EE [10, 0]); read "
+              "until RANGERPRE-S7 as a burst marker -- REFUTED")
     check(all(v != [10, 0] for o, v in win if o == 0x00EE),
-          "our server sends no [10, 0]",
-          "copying the pair would have looked like more fidelity and been less")
+          "our fixture kill (no level: 26 on a fresh counter) sends no [10, 0]",
+          "26 crosses no multiple of 75 -- retail's three clean kills; a "
+          "crossing kill carries the tick (test_killxp.py section 5)")
     check(all(o != 0x009C for o, _v in win),
-          "and no 0x009C -- n=1 as a kill signal, and it marks the OTHER "
-          "mechanism")
+          "and no 0x009C -- the tick's other line, absent for the same reason")
 
     print("\n4. the flags value, re-counted over both captures")
     import tape as T

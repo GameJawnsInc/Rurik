@@ -1085,7 +1085,10 @@ def main():
         return paid, sent, st
 
     paid, sent, _st = _grant({"reward_experience": 100})
-    xp = [v for op, v, _l in sent if op == _OP_XP]
+    # attr 0 only: since RANGERPRE-S7 the frame also carries the 75-XP tick's
+    # 0x00EE [10, 0] (same opcode, the morale attribute), ahead of the xp.
+    xp = [v for op, v, _l in sent
+          if op == _OP_XP and v[0] == authsrv.KILL_REWARD_ATTR]
     check(paid == 100 and xp == [[authsrv.KILL_REWARD_ATTR, 100]],
           "reward_experience = 100 goes out as ONE 0x00EE [0, 100] -- the "
           "kill's own delta, which the client is proven to apply +=",
@@ -1155,8 +1158,9 @@ def main():
                 st, 1463, {"reward_experience": 250, "reward_gold": 25}, 0)
         finally:
             authsrv.REWARD_IN_FRAME = _saved_frame
-        return [op for op, _v, _l in sent
-                if op in (_REMOVE, _UNLIST, _OP_XP, _GOLD)], st
+        return [op for op, v, _l in sent
+                if op in (_REMOVE, _UNLIST, _GOLD)
+                or (op == _OP_XP and v[0] == authsrv.KILL_REWARD_ATTR)], st
 
     order, st = _turn_in(True)
     check(order == [_REMOVE, _OP_XP, _GOLD, _UNLIST]
