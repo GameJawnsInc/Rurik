@@ -599,8 +599,9 @@ Both are now graded against an enumerated content surface:
   skill_effect 113 — was map 10, npc 56 on 2026-08-14 and map 15, npc 56 on 2026-08-27).
   **The tracked census** (`content/*.toml` and `content/overrides/` alone, no vault, which
   `toolkit/test_checks.py` recomputes and reddens on when this line disagrees): map 19,
-  npc 9. **Read the NPC figure carefully before scoring R4c-1 against it**: only **9** of
-  the 63 are tracked in `content/npcs.toml`; the other **54** are the gitignored
+  npc 10 (2026-09-29: + `stone_elemental`, definition 1414, RANGERPRE-S14). **Read the NPC
+  figure carefully before scoring R4c-1 against it**: only **10** of the 64 are tracked in
+  `content/npcs.toml`; the other **54** are the gitignored
   `vault/content/npcs.toml` overlay `npcdefs.py` emits, with no name, armor, energy or
   allegiance (that module's own header says so). So the "≥15 NPC templates" bar is met on
   the count and **not** on the content, which is the distinction this criterion exists to
@@ -2299,6 +2300,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   **Q3** (which control's notification reaches the send), **Q6** (a PvE character with unlocks, on tape).
   The overspent-store load fix (PLAN-LOG, 2026-09-25) is offline only: its client check spends past 10
   points under a larger budget, then launches `--party slice` -- the load completes, the panel at 0 of 10.
+
+**The Reforged pre-Searing run, 2026-09-29** — [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md) §4-§5
+
+* **RANGERPRE-S10, S12, S15-S21** are open, each specified; they need one pre-registered
+  loopback run. Also open there: an attack skill's condition landing on a miss; serving
+  the Reforged effect 3434, and a wire-derived game_mode that can contradict a manifest.
 
 ### 8.2 Waiting on the owner, or on a live capture
 

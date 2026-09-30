@@ -10,9 +10,11 @@ the content rows -- necessary, and they each carry the arm that makes them
 mean something (the rival bit order, the hammer in hand, the revert flag).
 Since RUN-DAGGERS-1 (20260917T160915) the dual's two batches, the cold dual's two
 fail words, the silent re-lead, the double strike's batch and the critical's
-energy pair are retail's own order too. What stays RECONSTRUCTION: the clear at
-the ATTACKER's death, the bare release for a wrong weapon, a blocked lead
-advancing nothing, and what a missed first strike does to a double.
+energy pair are retail's own order too, and since RANGERPRE-S2 so is the answer
+to a wrong weapon (#1985, section 4b, off 20260929T150923 -- it used to be the
+bare release, RECONSTRUCTION). What stays RECONSTRUCTION: the clear at the
+ATTACKER's death, a blocked lead advancing nothing, and what a missed first
+strike does to a double.
 
 No socket, no client. Sections 3-6 read `skills` rows, which are VAULT-ONLY
 (skilltable.py --emit-content); without them the chain fields read 0 and the
@@ -31,7 +33,7 @@ import chain  # noqa: E402
 import checks  # noqa: E402
 
 # FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=105)   # 2026-09-23 (DESKWORK-D5 step 7): +2 in section 4, the weapon gate's reason id under --refusal-reasons and the bare release without it, from the green run
+LEDGER = checks.Ledger("daggers and the attack chain", floor=109)   # 2026-09-29 (RANGERPRE-S2): +4 in section 4b, retail's answer to a weapon mismatch off 20260929T150923 and ours to the same press, 109 from the green run; section 4 re-pinned to #1985 always, count unchanged ;; 2026-09-23 (DESKWORK-D5 step 7): +2 in section 4, the weapon gate's reason id under --refusal-reasons and the bare release without it, from the green run
 check = LEDGER.ok
 
 PLAYER = 1
@@ -220,40 +222,43 @@ def section_weapon_gate(have_fields):
         check(not authsrv.weapon_satisfies(OFF) and authsrv.weapon_satisfies(322),
               "a hammer satisfies Power Attack's any-melee mask (0xB9) and "
               "not Fox Fangs's daggers (0x08)")
-        sent = _land(authsrv, _world(authsrv), OFF)
-        check([op for op, _ in sent] == [E2],
-              "Fox Fangs pressed with a hammer in hand: the bare release and "
-              "NOTHING else -- no 0x00E4, no energy, no cast (RECONSTRUCTION: "
-              "retail's answer is not observed)", str([hex(o) for o, _ in sent]))
+        # RANGERPRE-S2 (2026-09-29): the answer is retail's, OBSERVED 1 of 1
+        # (section 4b reads the witness off the tape) -- #1985 on the warning
+        # panel, then the release. Until then this pinned the bare release
+        # (RECONSTRUCTION, "the client very likely never sends the press").
+        import chatdefs
+        default = _land(authsrv, _world(authsrv), OFF)
+        check([op for op, _ in default] == [authsrv.GAME_SMSG_CHAT_MESSAGE_CORE,
+                                            authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER, E2]
+              and default[0][1] == [chatdefs.refusal_body(chatdefs.REFUSE_WEAPON_TYPE)]
+              and chatdefs.REFUSE_WEAPON_TYPE == 1985
+              and default[1][1] == [authsrv.PLAYER_NUMBER, chatdefs.CHANNEL_WARNING]
+              and default[2][1] == [PLAYER, OFF, 0],
+              "Fox Fangs pressed with a hammer in hand: the sentence #1985 (the "
+              "weapon-type refusal) on channel 7, then the release, and NOTHING "
+              "else -- no 0x00E4, no energy, no cast (OBSERVED: retail's answer "
+              "to a bow skill with a sword in hand, 20260929T150923 :53756)",
+              str([(hex(o), v) for o, v in default]))
         authsrv.WEAPON_GATE = False
         sent = _land(authsrv, _world(authsrv), OFF)
         check(E4 in [op for op, _ in sent],
               "--no-weapon-gate: the same press is accepted (the arm before "
               "today)")
-        # DESKWORK-D5 step 7: the reason id, DEFAULT OFF. Under --refusal-reasons
-        # the same refusal carries #1985 on the warning panel ahead of the
-        # release (RECONSTRUCTION from the sentence's own condition; the id
-        # is pinned, never the text).
-        import chatdefs
+        # DESKWORK-D5 step 7 put #1985 behind --refusal-reasons; RANGERPRE-S2
+        # took it out. The flag must change nothing about this refusal now.
         authsrv.WEAPON_GATE = True
         authsrv.REFUSAL_REASON_IDS = True
         try:
             sent = _land(authsrv, _world(authsrv), OFF)
-            ops = [op for op, _ in sent]
-            check(ops == [authsrv.GAME_SMSG_CHAT_MESSAGE_CORE,
-                          authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER, E2]
-                  and sent[0][1] == [chatdefs.refusal_body(chatdefs.REFUSE_WEAPON_TYPE)]
-                  and chatdefs.REFUSE_WEAPON_TYPE == 1985
-                  and sent[1][1][1] == chatdefs.CHANNEL_WARNING,
-                  "--refusal-reasons: the sentence #1985 (the weapon-type refusal) on "
-                  "channel 7, then the release -- retail's three-message shape with the "
-                  "RECONSTRUCTED id", str([(hex(o), v) for o, v in sent]))
+            check(sent == default,
+                  "--refusal-reasons: the SAME three messages as the default -- "
+                  "#1985 no longer rides the flag (it did until RANGERPRE-S2)",
+                  str([(hex(o), v) for o, v in sent]))
         finally:
             authsrv.REFUSAL_REASON_IDS = False
-        sent = _land(authsrv, _world(authsrv), OFF)
-        check([op for op, _ in sent] == [E2],
-              "  and with the flag OFF (the default) the bare release again -- the "
-              "two arms differ")
+        check(chatdefs.refusal_evidence(chatdefs.REFUSE_WEAPON_TYPE) == "OBSERVED",
+              "  and the id the gate sends is labelled OBSERVED at the read "
+              "(chatdefs.REFUSAL_OBSERVED)")
     finally:
         authsrv.WEAPON_GATE = True
         agents.PLAYER_WEAPON = held
@@ -268,6 +273,113 @@ def section_weapon_gate(have_fields):
               "that asks for no weapon is untouched")
     finally:
         authsrv.EQUIP_WEAPON = saved_equip
+
+
+# RANGERPRE-S2: the one weapon-mismatched press on the live corpus -- bow skill
+# 394 pressed with a sword and a shield in hand, map 160 (a field).
+MISMATCH_TAPE, MISMATCH_CONN, MISMATCH_SKILL = "20260929T150923", "_53756-", 394
+# The world's clock and movement: what shares a segment with any answer.
+AMBIENT = {0x000C, 0x000D, 0x001E, 0x0020, 0x0021, 0x0028, 0x0029, 0x002A, 0x002B}
+
+
+def section_retail_mismatch():
+    """Retail's own answer to a weapon mismatch, read off the tape, then the
+    same press through OUR handler. The first three checks pin the PREMISE
+    (retail's client sends the press and retail names #1985); the fourth is
+    the one the server change reddens."""
+    import authsrv
+    import chatdefs
+    print(f"\n4b. retail's answer to a weapon mismatch: {MISMATCH_TAPE} "
+          f":53756 (RANGERPRE-S2)")
+    import vaultpath
+    try:
+        cap = str(vaultpath.require_dir("captures", "live", MISMATCH_TAPE))
+    except (Exception, SystemExit):                            # noqa: BLE001
+        LEDGER.skip("section 4b",
+                    f"needs the live capture {MISMATCH_TAPE} -- 4 checks")
+        return
+    if authsrv.skill_chain_fields(MISMATCH_SKILL)[2] != 0x02:
+        LEDGER.skip("section 4b",
+                    "the skills rows do not give 394 weapon_req 0x02 (a bow; the "
+                    "vault table predates DAGGERS-B1) -- 4 checks")
+        return
+    import codedstr
+    import livewire
+    import weaponcensus
+    files = [g for g in livewire.connections(cap)
+             if MISMATCH_CONN in os.path.basename(g)]
+    conn, merged, ok = (livewire.decode_conn(cap, files[0]) if len(files) == 1
+                        else (None, [], False))
+    check(len(files) == 1 and ok,
+          "the capture is present, so the witness connection :53756 must be "
+          "in it and decode closed in both directions (a FAIL, never a skip)",
+          f"{files} ok={ok}")
+    if not ok:
+        return
+    presses = [(t, v) for t, d, op, v in merged
+               if d == "c2s" and op == authsrv.GAME_CMSG_ATTACK_SKILL
+               and v[1] == MISMATCH_SKILL]
+    t0, press = presses[0] if len(presses) == 1 else (None, None)
+    answer = [(op, v) for t, d, op, v in merged
+              if d == "s2c" and t0 is not None and t0 < t <= t0 + 0.1
+              and op not in AMBIENT]
+    later = [op for t, d, op, v in merged
+             if d == "s2c" and t0 is not None and t0 < t <= t0 + 0.5
+             and op in (E3, E4) and v[2] == MISMATCH_SKILL]
+    retail_ops = [op for op, _ in answer]
+    said = (codedstr.decode_id([ord(c) for c in answer[0][1][1]])
+            if retail_ops[:1] == [0x005D] else None)
+    check(press is not None and press[1:] == [MISMATCH_SKILL, 0, 22, 0]
+          and retail_ops == [0x005D, 0x005E, E2]
+          and said == (1985, 1)
+          and answer[1][1][1:] == [1, 7]
+          and answer[2][1][1:] == [9, MISMATCH_SKILL, 0]
+          and not later,
+          "retail: c2s 0x0027 [394, 0, 22, 0] at t=1055.952 answered within "
+          "0.1 s by 0x005D #1985, 0x005E [1, 7], 0x00E2 [9, 394, 0] and "
+          "nothing else, no E4 or E3 for 394 within 0.5 s -- the client DOES "
+          "send the press",
+          f"press {press} at {t0}; answer {[(hex(o), v) for o, v in answer]}; "
+          f"decoded {said}; later {later}")
+    if len(answer) != 3:
+        return
+    s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
+    items = weaponcensus.items_of(s2c)
+    held = weaponcensus.held_at(weaponcensus.hands_timeline(s2c),
+                                answer[2][1][1], t0) or (None, None)
+    types = tuple(weaponcensus.held_type(items, i) for i in held)
+    req = authsrv.skill_chain_fields(MISMATCH_SKILL)[2]
+    check(types == (27, 24)
+          and not req & authsrv.WEAPON_TYPE_REQ_BIT.get(27, 0)
+          and req & authsrv.WEAPON_TYPE_REQ_BIT.get(5, 0),
+          "the refused agent held a sword (27) and a shield (24) at the press, "
+          "and OUR mask says 394 (0x02) fails on a sword and passes on a bow "
+          "(5) -- the sentence's condition, on our table",
+          f"held {held} types {types}, req {req:#04x}")
+    sword = agents.item_template("starter_sword")
+    held_before = agents.PLAYER_WEAPON
+    ours = []
+    try:
+        agents.PLAYER_WEAPON = sword
+        st = _world(authsrv)
+        st["agents"] = {22: st["agents"][FOE]}
+        authsrv.handle_skill_press(
+            list(press), lambda op, vals, label="", quiet=False:
+            ours.append((op, list(vals))), st, 1,
+            authsrv.GAME_CMSG_ATTACK_SKILL)
+    finally:
+        agents.PLAYER_WEAPON = held_before
+    check(sword["item_type"] == 27
+          and [op for op, _ in ours] == retail_ops
+          and ours[0][1] == answer[0][1][1:]
+          and ours[1][1] == answer[1][1][1:]
+          and ours[2][1][0] == authsrv.PLAYER_AGENT_ID
+          and ours[2][1][1:] == answer[2][1][2:],
+          "OURS, retail's press values verbatim with starter_sword in hand: "
+          "the same three opcodes, the same coded body, the same [1, 7], and "
+          "0x00E2 echoing the same skill and copy (the agent id is ours by "
+          "design)",
+          f"ours {[(hex(o), v) for o, v in ours]}")
 
 
 def section_chain(have_fields):
@@ -994,6 +1106,7 @@ def main():
     try:
         section_party()
         section_weapon_gate(have_fields)
+        section_retail_mismatch()
         section_chain(have_fields)
         section_condition_slot(have_fields)
         section_second_strike_and_crits(have_fields)

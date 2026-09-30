@@ -62,8 +62,11 @@ from codec import Codec  # noqa: E402
 # send-path guard, and its plain body); section 7's skip now catches SystemExit,
 # so the BARE run is green again -- 43 checks + 2 declared skips, measured with
 # RURIK_VAULT at an empty directory; 52 with the vault. Floor 40 -> 43.
+# 2026-09-29 (RANGERPRE-S14): +1 unconditional in section 6 (1958 / 1959 stay
+# RECONSTRUCTION, REFUSE_IMMUNE); bare 44 + 2 declared skips, 53 with the vault.
+# Floor 43 -> 44.
 LEDGER = checks.Ledger("chat echo: framing, fragments, arm, retail bytes",
-                       floor=43)
+                       floor=44)
 check = checks.adopt(LEDGER)
 
 CAPTURE = "20260817T183756"   # the multi-part advert, studies/chat 2 and 3
@@ -287,9 +290,18 @@ def main():
           and chatdefs.refusal_evidence(1961) == "OBSERVED"
           and chatdefs.refusal_evidence(1934) == "OBSERVED"
           and chatdefs.refusal_evidence(1988) == "OBSERVED"
-          and chatdefs.REFUSAL_OBSERVED == {1934, 1960, 1961, 1988},
-          "exactly four ids are OBSERVED (1960 39 of 39, 1961 on screen and 17x on the wire, "
-          "1934 1 of 1, 1988 1 of 1 -- the recharge refusal, fix pass 2026-09-23)")
+          and chatdefs.refusal_evidence(1985) == "OBSERVED"
+          and chatdefs.refusal_evidence(1957) == "OBSERVED"
+          and chatdefs.REFUSAL_OBSERVED == {1934, 1957, 1960, 1961, 1985, 1988},
+          "exactly six ids are OBSERVED (1960 39 of 39, 1961 on screen and 17x on the wire, "
+          "1934 1 of 1, 1988 1 of 1 -- the recharge refusal, fix pass 2026-09-23; 1985 1 of 1 "
+          "-- the weapon mismatch, 20260929T150923 :53756 t=1056.002, RANGERPRE-S2; 1957 1 of "
+          "1 -- a non-fleshy target's Bleeding, the same connection t=1057.415, RANGERPRE-S14)")
+    check(chatdefs.refusal_evidence(1958) == "RECONSTRUCTION"
+          and chatdefs.refusal_evidence(1959) == "RECONSTRUCTION"
+          and chatdefs.REFUSE_IMMUNE == {"Bleeding": 1957, "Disease": 1958, "Poison": 1959},
+          "the other two immunity sentences (Disease 1958, Poison 1959) stay RECONSTRUCTION: "
+          "WIKI's fleshy set, on no wire held (RANGERPRE-S14)")
     check(chatdefs.refusal_evidence(1964) == "RECONSTRUCTION",
           "1964 -- the OTHER id with the recharging sentence -- stays RECONSTRUCTION: never "
           "on any wire held; the id retail sent was 1988")

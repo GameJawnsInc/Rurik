@@ -43,7 +43,9 @@ is a section's UPPER_CASE families, "moved out" a leaf that took part of it. Fil
 - SCALE_MEANS_DAMAGE: what a skill's scale means, and the simulation's own constants; flags
   SCALE_MEANS_*, TICK_SECONDS, COLLISION_STEP; e.g. skill_damage, skill_heal; moved out: skillread
 - GAME_SMSG_NPC_UPDATE_PROPERTIES: agent properties, kill rewards, the attribute opcodes; flags
-  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*; e.g. accrue_kill_rewards; moved out: attribcolumns
+  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*, KILL_XP_RULE, REFORGED_XP; e.g. accrue_kill_rewards;
+  moved out: attribcolumns; new leaf: killxp (the per-foe table; kill_experience sits above
+  kill_agent)
 - "skills ----" and its three sub-banners: effects, the status word, what a skill costs, the
   adrenaline family, the skill bar, the unlocks; flags EFFECTS, DEEP_WOUND_*, AGENT_ADRENALINE_*,
   SKILLBAR_*; e.g. build_unlock_bitmap; moved out: skillunlock
@@ -133,6 +135,7 @@ import pools  # noqa: E402
 import chain  # noqa: E402
 import wearmap  # noqa: E402
 import morale  # noqa: E402
+import killxp  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
@@ -362,13 +365,19 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     0x0052 · 0x004A on 10 of 10, and turn_in_quest does the same (the D9 fix
     pass; --no-reward-in-frame puts them after 0x004A as pass 1 did). The
     fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the DOUBLED
-    0x0052, 0x00EE [10, 0] (UNREAD) -- is documented in studies/quests §12.1 and
-    stays deferred; nothing here is invented for those or the four chat lines.
-    NOTED, NOT MOVED: on the two retail hand-ins that grant skills
-    (20260807T143055 92.792 s, 20260810T235916 126.917 s) the 0x00DC/0x00D9
-    pairs come AFTER the gold; ours go first (test_mechanics §29 locks skills
-    ahead of the xp, from the tape's kill frame) -- n=2, left for a pass that
-    reads why.
+    0x0052 -- is documented in studies/quests §12.1 and stays deferred; nothing
+    here is invented for those or the four chat lines. Its 0x00EE [10, 0], UNREAD
+    there, is the 75-XP tick and IS sent since RANGERPRE-S7 (below).
+    THE SKILLS COME LAST (RANGERPRE-S5, QUESTFLOW-H1): on every retail hand-in
+    that grants skills the 0x00DC/0x00D9 pairs follow the gold 0x0140, or the
+    xp and its level-up lines when there is no gold -- OBSERVED 4 of 4 (of 22
+    hand-ins in the live corpus): 20260807T143055 :62994 92.792 s,
+    20260810T235916 :61624 126.917 s, 20260929T150923 :55934 293.809 s (q86:
+    0x00EE [0,500], 0x0140 [2,25], then 394 and 446), and 20260913T210901
+    :60877 736.185 s (q347, no gold). Ours granted them FIRST until then
+    (test_mechanics §29 locked skills ahead of the xp), although that MANTID
+    frame itself has them after the xp and its level-up lines.
+    --quest-skills-first restores the old order as the known-bad arm.
 
     The same consequences the experience has: the wire delta, the death-penalty
     credit (WIKI: 75 XP buys back 1%), and the persisted sheet under --persist.
@@ -376,18 +385,29 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     """
     xp = row.get("reward_experience")
     gold = row.get("reward_gold")
-    # MANTID: a quest may hand over skills -- the tutorial's reward carried the
-    # Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write, in the
-    # same frame as the experience, before the two removes.
-    for sid in row.get("reward_skills") or ():
-        grant_skill(send, state, int(sid), conn_id,
-                    unlocked=int(sid) in state.get("skills_known", set()))
+
+    def _reward_skills():
+        # MANTID: a quest may hand over skills -- the tutorial's reward carried
+        # the Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write,
+        # in the same frame as the experience, before the closing 0x0052.
+        for sid in row.get("reward_skills") or ():
+            grant_skill(send, state, int(sid), conn_id,
+                        unlocked=int(sid) in state.get("skills_known", set()))
+    if not QUEST_SKILLS_AFTER_GOLD:
+        _reward_skills()        # --quest-skills-first: the pre-S5 order, KNOWN-BAD
     xp_paid = 0
     if xp is not None:
         xp_paid = int(xp)
+        # THE 75-XP TICK FIRST (RANGERPRE-S7): 0x009C < 0x00EE [10] < 0x00EE
+        # [0, xp] on 20 of 20 retail hand-ins -- every quest award on tape is
+        # 100 or more, so each crosses (20260913T210901 :60877 736.185: 0x009C
+        # [9 = the player, 100], [10, 10] from 90, the maxima, then [0,
+        # 2000]). The heroes' ticks after the award, as on a kill
+        # (RECONSTRUCTION for a hand-in).
+        morale_experience(send, state, conn_id, xp_paid)
         send(GAME_SMSG_AGENT_KILL_REWARD, [KILL_REWARD_ATTR, xp_paid],
              f"quest {qid} reward: experience +{xp_paid} (SLICE-B5, ours)")
-        morale_experience(send, state, conn_id, xp_paid)
+        hero_morale_experience(send, state, conn_id, xp_paid)
     # THE GOLD, after the experience -- the tape's order (DESKWORK-D9).
     gold_paid = 0
     if gold is not None and QUEST_GOLD_ENABLED:
@@ -400,6 +420,10 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     elif gold is not None and not QUEST_GOLD_ENABLED:
         print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
               f"(--no-quest-gold, the pre-DESKWORK-D9 behaviour).", flush=True)
+    # THE SKILLS, after the gold -- the tape's order, 4 of 4 (RANGERPRE-S5).
+    # Before the early return below, so a skills-only row still grants them.
+    if QUEST_SKILLS_AFTER_GOLD:
+        _reward_skills()
     if xp is None and not gold_paid:
         print(f"[c{conn_id}] quest {qid} turned in: no reward_experience"
               + ("" if gold is None else " and no gold paid")
@@ -449,6 +473,12 @@ def turn_in_quest(send, state, qid, row, conn_id):
     hand-in-adjacent order NOT witnessed); --no-reward-in-frame restores that
     for an A/B. What is still not sent, and why, is grant_quest_reward's
     docstring.
+
+    THEN THE QUEST-COMPLETE VISUAL (RANGERPRE-S8, QUESTFLOW-H3): 0x009F [20,
+    own agent, 7] immediately after the 0x004A, on 22 of 22 retail hand-ins
+    (QUEST_COMPLETE_VISUAL_ID; what it draws is UNREAD). It follows the 0x004A
+    under either --no-reward-in-frame arm, so pass 1's order keeps it there too;
+    --no-quest-complete-visual drops it, as every run before S8.
     """
     send(GAME_SMSG_QUEST_REMOVE, [qid],
          f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
@@ -458,6 +488,12 @@ def turn_in_quest(send, state, qid, row, conn_id):
         grant_quest_reward(send, state, qid, row, conn_id)
     send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
          f"QUEST_REMOVE_AND_UNLIST[{qid}]")
+    if QUEST_COMPLETE_VISUAL:
+        send(GAME_SMSG_AGENT_GENERIC_VALUE,
+             [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID,
+              QUEST_COMPLETE_VISUAL_ID],
+             f"quest {qid} complete: visual {QUEST_COMPLETE_VISUAL_ID} on the "
+             f"player (RANGERPRE-S8, OBSERVED 22 of 22; its look UNREAD)")
     if not REWARD_IN_FRAME:
         grant_quest_reward(send, state, qid, row, conn_id)
 
@@ -3078,6 +3114,7 @@ def select_weapon_set(send, state, k, conn_id):
     s = WEAPON_SETS[k]
     player_pools(state)
     old_max_energy = player_max_energy(state)
+    _held_hp = held_health_bonus(state)          # RANGERPRE-S11: the hands' 564, before
     old_base = WEAPON_ATTACK_SPEED
     agents.PLAYER_OFFHAND = None
     # DESKWORK-D1 step 8 (the fix pass, ENG-B4): the swing model follows WHAT
@@ -3130,6 +3167,11 @@ def select_weapon_set(send, state, k, conn_id):
                _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43,
                                           agents.PLAYER_ENERGY, new_max_energy))],
               "energy regeneration, rescaled to the new pool [WEAPONS-W9]")
+    # RANGERPRE-S11: a set whose 564 differs moves the health maximum too, after
+    # the energy pair -- the morale batch's 41, 43, 42 order. INFERRED: the
+    # equip's 42 is OBSERVED (:56064 t=932.526), but no switch on any tape
+    # moved a 564 item (the design lane's census: 15 switches, no 564, no 42).
+    held_max_moved(_send, state, held_health_bonus(state) - _held_hp, f"weapon set {k}")
     print(f"[c{conn_id}] weapon set {old} -> {k}: {', '.join(changed)}; "
           f"{len(out)} messages [WEAPONS-W9]", flush=True)
     return out
@@ -4034,10 +4076,15 @@ def agent_health_fraction(state, target_id):
 # (daggers F6); the handler and the 0..3 bound are studies/newopcodes'.
 GAME_SMSG_AGENT_COMBO_STATE = 0x005C
 # B4. No profession's attack skills were held to a weapon before this. WHAT
-# RETAIL SENDS on a mismatch is NOT OBSERVED (the client very likely never
-# sends the press): the answer is the bare release, the shape the press
-# handler's own comment prescribes for "a refusal we cannot name a reason
-# for". RECONSTRUCTION. --no-weapon-gate is the control.
+# RETAIL SENDS on a mismatch is OBSERVED 1 of 1 (RANGERPRE-S2, 2026-09-29):
+# the client DOES send the press -- this banner's "very likely never sends
+# it" is REFUTED -- and retail answers #1985, [1, 7], 0x00E2 with no E4
+# (20260929T150923 :53756 t=1056.002, bow skill 394 with a sword in hand);
+# the gate sends exactly that (handle_skill_press). That the refusal is
+# caused by the weapon rather than something else about that press is
+# CORROBORATED, not isolated: 0 of 184 weapon-satisfied corpus presses draw
+# #1985, and sword skills 382 / 384 pressed at the same target 0.85 s and
+# 2.36 s later were accepted. --no-weapon-gate is the control.
 WEAPON_GATE = True
 # B5. --no-chain-state is the control: no 0x005C, and an off-hand or a dual
 # lands whatever it follows (the behaviour before today).
@@ -5064,9 +5111,29 @@ AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
 # attr_id 0 = experience is UPSTREAM and UNVERIFIED; 26 is copied from the wire,
 # not derived. Whether it varies by creature is UNMEASURED: three different
 # creatures gave 26, which is evidence that it does NOT vary, at n=3.
+#
+# REFUTED 2026-09-29 (RANGERPRE-S6, KILLXP-a): the last sentence above. The value
+# is per foe -- 20, 25, 26, 30, 32, 84, 105, 126 and 176 are all on ArenaNet's
+# wire -- and all 49 own-kill awards in the live corpus are the wiki's
+# level-difference table, split by the party and times the Reforged effect's
+# +5% (CORROBORATED, zero free parameters; `killxp.py`, content/world.toml
+# [player.experience]). The three 26s were level-0 foes at player level 1 under
+# that effect: floor(25 x 1.05). The 20260929T150923 kill at wire t 477.1186 on
+# :55934 pays [0, 176] for a level-5 foe at player level 1. attr 0 = experience
+# is CORROBORATED by the same fit: the values are the wiki's experience table.
+# KILL_REWARD_VALUE stays as the PRE-KILLXP constant: what a body with no level on
+# its row is paid (a test fixture -- every spawn path sets `npc.level`), and every
+# kill under --kill-xp-constant.
 GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
 KILL_REWARD_ATTR = 0
 KILL_REWARD_VALUE = 26
+KILL_XP_RULE = True     # False (--kill-xp-constant): every kill pays KILL_REWARD_VALUE
+# The Reforged Mode effect's +5%, which retail pays only where it sends the
+# effect (0x0041 [own, 0, 3434, 0, 1] at a Prophecies explorable load) and this
+# server never sends. OFF by default; --reforged-xp pays it on the row's
+# reforged_effect_maps as a stand-in until the effect itself is served, and a
+# state["reforged_effect"] that load sets overrides both (reforged_effect).
+REFORGED_XP = False
 
 # THE SAME OPCODE, the other attribute. `0x00EE` is `[attr_id, delta]` over the
 # 15 player attributes, so the kill reward above (attr 0, experience) and the
@@ -5087,6 +5154,9 @@ PLAYER_ATTR_MORALE_ID = 10
 # study found still stands: the `[10,0]`+`[0,X]` pair marked by this opcode is a
 # broadcast burst rather than a kill shape. What changes is that attr 10 has a
 # name -- `[10, 0]` is a morale no-op riding an experience award.
+# REFUTED 2026-09-29 (RANGERPRE-S7): "broadcast burst rather than a kill
+# shape". The pair is the 75-XP tick on ANY award whose experience crosses a
+# multiple of 75 since the load, kills included (morale_experience).
 GAME_SMSG_AGENT_MORALE = 0x009C
 def balthazar_rate(map_id):
     """Balthazar-per-kill for THIS map, from its content row -- 0 by default.
@@ -5107,10 +5177,14 @@ def balthazar_rate(map_id):
     return int(row.get("balthazar_per_kill", 0))
 
 
-def accrue_kill_rewards(send, state, conn_id):
+def accrue_kill_rewards(send, state, conn_id, xp=KILL_REWARD_VALUE):
     """Make the kill reward ACCRUE instead of evaporating.
 
-    The [0, 26] xp delta hit_enemy sends is ArenaNet's own kill shape and the
+    `xp` is what kill_agent just paid on the wire (kill_experience, RANGERPRE-S6):
+    the store gains the number the client added, not a constant beside it. The
+    default is the pre-KILLXP constant, for callers that name no kill.
+
+    The [0, xp] delta hit_enemy sends is ArenaNet's own kill shape and the
     client applies it += to the sheet -- but nothing on our side remembered
     it, so the next 0x00E9 (or the next session) snapped the sheet back to
     the store's old numbers. With --persist armed and the burst having found
@@ -5131,7 +5205,7 @@ def accrue_kill_rewards(send, state, conn_id):
     row = store.character_by_uuid(state.get("char_uuid", ""))
     if row is None:
         return
-    row["xp"] += KILL_REWARD_VALUE
+    row["xp"] += int(xp)
     balth = store.account()["factions"].get("balthazar")
     rate = balthazar_rate(state.get("map_id", -1))
     if balth is not None and rate > 0:
@@ -5292,7 +5366,8 @@ EFFECTS = True
 #
 # Deep Wound (482) is the one condition whose mechanic is on the WIRE rather
 # than in the client: retail's apply batch is [0x0042 482, 0x00F1, 0x009F
-# 42 = max*0.8] and its close [0x0044, 0x00F1, 0x009F 42 = max], 2 of 2 each
+# 42 = max - floor(max/5), cap 100] and its close [0x0044, 0x00F1, 0x009F
+# 42 = max], 2 of 2 each
 # in the Isle capture (isle 8.2, mechanised by deepwoundjoin.py). The CLIENT
 # then applies the maximum change as a SIGNED delta to current health --
 # `--probe health_shrink` (studies/unitsetup 8 Q5): 25 + (50-100) = -25 in
@@ -5305,7 +5380,7 @@ EFFECTS = True
 # known-bad arm: the episode opens and times out, the maximum never moves.
 STATUS_WORD = True     # False (--no-status-word): no 0x00F1 rides an effect.
 DEEP_WOUND = True      # False (--no-deep-wound): 482 is an icon and nothing else.
-DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"
+DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"; FLOORED, OBSERVED (skills 41.7)
 DEEP_WOUND_CAP = 100             # WIKI: "never ... by more than 100 health"
 DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 #
@@ -11587,6 +11662,16 @@ NO_MARKER_POS = (float("inf"), float("inf"))
 
 GAME_SMSG_QUEST_REMOVE = 0x0052
 GAME_SMSG_QUEST_REMOVE_AND_UNLIST = 0x004A
+# THE QUEST-COMPLETE VISUAL (RANGERPRE-S8, QUESTFLOW-H3). The message right after
+# a hand-in's closing 0x004A is 0x009F [GV_EFFECT_ON_TARGET = 20, the player's own
+# agent, 7] -- OBSERVED on 22 of 22 hand-ins in the live corpus, the agent equal to
+# the batch's own 0x009C agent on all 20 that carry one; 9 of 9 in 20260929T150923
+# (:55934 293.809, q86: 0x0052, 0x004A, 0x009F [20, 31, 7]). WHAT 7 DRAWS IS
+# UNREAD. On that tape the other two [20, x, 7] land on OTHER players' agents
+# (:59427 1251.088 on 265, 1278.037 on 285) and none reaches the own agent outside
+# a hand-in, which reads as a visual everyone nearby sees -- UNVERIFIED on our
+# client. A wire constant, the same on every quest, so not a content column.
+QUEST_COMPLETE_VISUAL_ID = 7
 
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
@@ -11860,12 +11945,18 @@ GAME_SMSG_SKILL_REFUSED = 0x00E2
 REFUSAL_SILENT = False
 # Set from --refusal-reasons (DESKWORK-D5 step 7). OFF by default: the table
 # `chatdefs.REFUSAL_REASONS` names the client's whole refusal block by id, but
-# only 1934, 1960, 1961 and 1988 are OBSERVED answering a condition (the fix
-# pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988 x1);
-# every other row is RECONSTRUCTION from the sentence's own statement, and a
-# reconstructed sentence on the warning panel is invented traffic until a tape
-# shows it. The two OBSERVED resource refusals are sent regardless of this
-# flag. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
+# only 1934, 1957, 1960, 1961, 1985 and 1988 are OBSERVED answering a condition
+# (the fix pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1,
+# 1988 x1; RANGERPRE-S2 added the weapon gate's 1985 x1, 20260929T150923 :53756
+# t=1056.002; RANGERPRE-S14 the immunity sentence 1957 x1, the same connection
+# t=1057.415); every other row is RECONSTRUCTION from the sentence's own
+# statement, and a reconstructed sentence on the warning panel is invented
+# traffic until a tape shows it. Every OBSERVED id this server sends (1934,
+# 1957, 1960, 1961, 1985; nothing here sends 1988) goes out regardless of this
+# flag -- the weapon gate's #1985 since 2026-09-29, when it stopped riding the
+# flag -- so its consumers left are the party-target gate's #1986 on a foe
+# spell and the immunity sentences 1958 / 1959 (Disease, Poison: WIKI, on no
+# wire). (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
 REFUSAL_REASON_IDS = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
@@ -12921,12 +13012,33 @@ QUEST_GOLD_ENABLED = True      # False (--no-quest-gold): a turned-in quest's
                                # on 6 connections in 4 captures; the specific
                                # amount is the content row's own number).
 REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
-                               # (skills, 0x00EE, 0x0140) go AFTER the closing
+                               # (0x00EE, 0x0140, skills) go AFTER the closing
                                # 0x004A, as every run before the D9 fix pass.
                                # Default ON: turn_in_quest sends them BETWEEN
                                # 0x0052 and 0x004A -- retail's relative order on
                                # 10 of 10 hand-ins (the xp 0x00EE, then the gold,
                                # then 0x0052 · 0x004A close the quest family).
+SKILL_LOAD_RETAIL_ORDER = True # False (--no-retail-skill-order): the load sends
+                               # the character library 0x00DB BEFORE the bar
+                               # 0x00DA, as every tree since 04bafc1f
+                               # (2026-08-06) did. Default ON: the bar
+                               # first, then 0x00DB --
+                               # retail's order on 126 of 126 live connections
+                               # carrying both (OBSERVED, RANGERPRE-S4;
+                               # 20260929T150923, 11 of 11). 0x001D does not move.
+QUEST_SKILLS_AFTER_GOLD = True  # False (--quest-skills-first): a hand-in's
+                               # reward_skills (0x00DC/0x00D9[/0x001C]) go out
+                               # BEFORE the xp 0x00EE, as every run before
+                               # RANGERPRE-S5. Default ON: grant_quest_reward
+                               # sends them after the gold 0x0140 -- retail's
+                               # order on 4 of 4 skill-granting hand-ins
+                               # (OBSERVED; 20260929T150923 :55934 293.809).
+QUEST_COMPLETE_VISUAL = True   # False (--no-quest-complete-visual): a hand-in
+                               # sends no 0x009F [20, own, 7] after its 0x004A,
+                               # as every run before RANGERPRE-S8. Default ON:
+                               # turn_in_quest sends it right after the 0x004A
+                               # -- retail's next message on 22 of 22 hand-ins
+                               # (OBSERVED; QUEST_COMPLETE_VISUAL_ID).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -14071,7 +14183,8 @@ def launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how):
     shot = {"shooter": agent_id, "target": tid, "arrives_at": now + flight,
             "handle": 1 + sum(1 for s in flying if s["shooter"] == agent_id),
             "damage_type": how["damage_type"],
-            "aim": (float(tx), float(ty))}                     # studies/weapons 38
+            "aim": (float(tx), float(ty)),                     # studies/weapons 38
+            "origin": (float(ax), float(ay))}                  # RANGERPRE-S9: the line of fire
     flying.append(shot)
     send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
          [agent_id, [float(tx), float(ty)], 0, _f32(flight), how["projectile"],
@@ -14544,7 +14657,8 @@ def launch_player_projectile(send, state, conn_id, swing, how):
     flying = state.setdefault("player_projectiles", [])
     shot = {"target": swing["target"], "arrives_at": now + flight,
             "handle": len(flying) + 1, "damage_type": how["damage_type"],
-            "aim": (tx, ty)}                                   # studies/weapons 38
+            "aim": (tx, ty),                                   # studies/weapons 38
+            "origin": (px, py)}                                # RANGERPRE-S9: the line of fire
     flying.append(shot)
     send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
          [PLAYER_AGENT_ID, [tx, ty], 0, _f32(flight), how["projectile"],
@@ -15112,7 +15226,8 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
     return "landed" if foes else None
 
 
-# ---- THE HIT TEST: THE LEAD AND THE DODGE (2026-09-20, studies/weapons 39) ----
+# ---- THE HIT TEST: THE LEAD AND THE DODGE (2026-09-20, studies/weapons 39;
+# ---- the geometry re-fitted 2026-09-29, RANGERPRE-S9) ----
 #
 # WIKI (GWW "Projectile"): "A projectile's trajectory is calculated based on
 # the location and velocity of the target at the time of fire, automatically
@@ -15124,25 +15239,74 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
 # spell draws its impact on the ground at the aim and no word (the Daggers,
 # 2 of 17); a burst still explodes and words whoever stands in its area
 # (Fireball, 21 of 35 impacts on the ground, 31 of 35 announced targets
-# worded). The GEOMETRY is NOT measurable from the tapes: the nearest
-# position samples sit up to a third of a second from the arrival, a walker
-# covers tens of units in that, and direct hits read 0..104 u from the aim
-# where misses read 0..140; a "course change in flight" reading is REFUTED
-# outright (7 misses with none, 12 hits with one). So the mechanism is the
-# wiki's and the two numbers are ours, said so: the AIM leads the target by
-# its velocity at the launch (the flight refined once), and at the arrival
-# the projectile CONNECTS when the target stands within DODGE_TOLERANCE of
-# the aim -- rA + rB, the two body radii the client's own follow-stop adds
-# (BOUNDING_RADIUS, 12 u, what every 0x0020 carries), 24 u -- else it is
-# dodged. A body's velocity is a finite difference over VELOCITY_WINDOW of
-# its own model position (the trail the world tick keeps); a stander's is 0,
-# so a standing target is aimed at where it stands and hit there, as every
-# test before today assumed. RUN-WEAPONS-1B's Orb block measures both
-# numbers (studies/weapons 39). --no-dodge reverts: the aim is the target's
-# position and every projectile connects.
+# worded). A "course change in flight" reading is REFUTED outright (7
+# misses with none, 12 hits with one). The AIM leads the target by its
+# velocity at the launch (the flight refined once) -- CORROBORATED
+# 2026-09-29, WITH evidence against it: of the 75 launches the RANGERPRE-S9
+# design pass classed as at a moving target, 58 are aimed speed x flight
+# ahead (ratio median 0.97) and 17 are NOT led -- aimed within 20 u, along
+# and across, of where the model put the target at the launch
+# (RECONSTRUCTION), several of them 180-290 u misses. The 58 were picked by
+# that same along ~ speed x flight test, so they alone are partly circular.
+# The 17 are OPEN (that design pass; the target's move age does not
+# explain them alone): its own move ages put about half the unled launches
+# 0.5 s or more into their move (RECONSTRUCTION; the exact 17 are not
+# reproduced). Launch 337.615 on 20260929T150923 :55934, 46 ms into
+# retail's own 0x002A approach and a miss, is NOT one of them: the model
+# puts its aim ~34 u from the target, where a full lead is ~170 u. A
+# body's velocity is a finite difference over VELOCITY_WINDOW of its own
+# model position (the trail the world tick keeps), HELD between samples.
+# So ours is unled until the trail's next sample (up to one window into a
+# walk) and under-led until the one after (up to two) -- at 337.615 ours
+# aims 0-29 u from the target's point, like retail -- and it keeps leading
+# on the held velocity for up to two windows after a stop or a mid-walk
+# re-order, where retail aims a just-stopped target at its stop point (7
+# anchored launches within 0.5 s of a 0x0028; e.g. :56025 838.092, 0.4 u
+# from it). A stopped target reads velocity 0 only from the trail's second
+# sample after the stop. So on the late-move half of the unled launches,
+# and on just-stopped targets, ours is not retail's.
+#
+# THE GEOMETRY (2026-09-29, RANGERPRE-S9, studies/presearing/RANGERPRE.md;
+# it supersedes 2026-09-20's). At the arrival the projectile CONNECTS when
+# the target stands within DODGE_TOLERANCE of the aim ACROSS the line of
+# fire (the shooter's point at the launch -> the aim, the shot's "origin")
+# and within DODGE_ALONG of it ALONG that line, short or long; else it is
+# dodged. 2026-09-20's 24 u disc -- rA + rB, the two BOUNDING_RADIUS body
+# radii the follow-stop adds -- is REFUTED: 3 of retail's 4 Flare hits on
+# 20260929T150923 land outside it. The Flare tape (skill 194, projectile
+# 343, :55934) read first by dead reckoning off the client's own reports
+# (~18 u of error) put hits 7.9-48 u from the aim (one at 80 u) and misses
+# 71-101 u: a band, not a derived constant. Rebuilt from retail's OWN orders
+# (0x0029 / 0x002A dests, 0x002B speed factors, 0x0028 stops; positive
+# control: 11 standing launches' aims predicted within 1.28 u) its 12
+# anchored arrivals read hits 0-52 u and misses 71.8-105.8 u, every one
+# displaced SIDEWAYS, and the 80 u hit was the first instrument's artefact.
+# Over 572 trusted live arrivals on 39 captures (72 with the target moved
+# >= 5 u: 60 hits, 12 misses) no single radius separates the two (the best
+# is wrong 4 times, 24 u 15 times); "across <= B and |along| <= A" separates
+# all of them for B in [51.0, 57.5] and A in [101, 128]. BOTH NUMBERS BELOW
+# ARE FITTED inside those bands -- RECONSTRUCTION, the mechanism UNVERIFIED
+# (a swept volume? square or rounded ends fit alike) -- and the ALONG band
+# rests on 6 hits (along -100.1, -97.5, -55.8, +59.9, +68.6, +88.8; 4 of
+# them beyond the 66 u disc) and 2 misses (-128.5, -394.5), the weaker of
+# the two. What it buys: a target that steps
+# SIDEWAYS dodges; one that backs straight away or runs straight in is
+# still met inside DODGE_ALONG. The corpus walk that measured the bands is
+# not a tool in this tree yet (RANGERPRE section 4 defers it);
+# test_weapons 27 carries retail's deciding rows literally. 54 sits near
+# FOLLOW_STOP_PAD (56) with no known causal link -- not a derivation. Our
+# player's position adopts the client's report where retail keeps its own
+# model point (0-16 u apart on that tape), so a verdict within ~15 u of the
+# across edge can still differ from retail's. A burst's direct-or-ground
+# choice (send_area_impact) takes the same verdict, though bursts were left
+# out of the fit: UNVERIFIED there. A shot with no origin on record falls
+# back to a DODGE_TOLERANCE disc: OUR choice, not retail's. --no-dodge
+# reverts: the aim is the target's position and every projectile connects.
 DODGE = True
-DODGE_TOLERANCE = 24.0       # u: rA + rB -- twice BOUNDING_RADIUS (12.0, the follow-stop
-                             # block below; test_weapons 27 locks the relation). RECONSTRUCTION
+DODGE_TOLERANCE = 54.0       # u ACROSS the line of fire. RECONSTRUCTION: fitted inside retail's
+                             # band [51.0, 57.5] (RANGERPRE-S9; test_weapons 27 holds the rows)
+DODGE_ALONG = 114.0          # u ALONG it, short of or past the aim. RECONSTRUCTION: fitted
+                             # inside [101, 128] -- a band 6 hits and 2 misses wide
 VELOCITY_WINDOW = 0.25                     # s: the trail's sampling span
 
 
@@ -15201,13 +15365,24 @@ def led_aim(shooter, target, velocity, speed):
 
 def projectile_connects(state, shot):
     """Does a projectile that has reached its aim find its target there --
-    within DODGE_TOLERANCE of the aim? Always, with the feature off or no
-    aim on record."""
+    within DODGE_TOLERANCE of the aim across the line of fire and
+    DODGE_ALONG along it (RANGERPRE-S9)? A shot with no origin on record, or
+    one launched from its own aim, is tested against a DODGE_TOLERANCE disc
+    (ours). Always, with the feature off or no aim on record."""
     if not DODGE or shot.get("aim") is None:
         return True
     x, y = target_pos(state, shot["target"])
     ax, ay = shot["aim"]
-    return math.hypot(float(x) - float(ax), float(y) - float(ay)) <= DODGE_TOLERANCE
+    dx, dy = float(x) - float(ax), float(y) - float(ay)
+    o = shot.get("origin")
+    if o is not None:
+        lx, ly = float(ax) - float(o[0]), float(ay) - float(o[1])
+        n = math.hypot(lx, ly)
+        if n > 1e-6:
+            ux, uy = lx / n, ly / n
+            return (abs(dx * uy - dy * ux) <= DODGE_TOLERANCE
+                    and abs(dx * ux + dy * uy) <= DODGE_ALONG)
+    return math.hypot(dx, dy) <= DODGE_TOLERANCE      # no line of fire on record: OURS
 
 
 # ---- A POINT-BLANK BURST: no flight, every foe around the target (2026-09-20, studies/weapons 40)
@@ -15535,6 +15710,20 @@ HEX_EFFECT_CLASS = {
 HEX_EFFECT_BASE = 1             # every hex, 38/39 sent + 1 withheld (already live)
 HEX_TYPE_CODE = 4               # effects.EFFECT_TYPES' hex, areatime.HEX_TYPE
 _HEX_CLASS_UNWITNESSED = set()
+# THE CONDITION'S VISUAL WORDS (RANGERPRE-S13, 2026-09-29), on EVERY wearer: a
+# condition's apply sends [6, T, id] between the 0x0042 and the 0x00F1 and its
+# close [7, T, id] ahead of the 0x00F1 -- the ids and their witnesses are
+# effects.CONDITION_EFFECT_IDS (OBSERVED, 54 of 54 fresh applies; Crippled and
+# Deep Wound none). A foe's 0x0042 stays unsent (MANTID) and its [6] goes: retail
+# 20260929T150923 :53756, [6, T, 23], 0x00F1 [T, 3], [44, T, -0.09375] 3 of 3,
+# and [7, 27, 23], 0x00F1 [27, 0], [44, 27, +0.0] at the expiry (1137.703). An
+# EXTENSION (a longer re-application) keeps the visual up and sends neither word
+# -- retail's re-applications draw no second [6], 5 of 5; that our extension is a
+# REMOVE + APPLY pair where retail stacks a second episode is the older
+# divergence, unchanged (RECONSTRUCTION for the kept visual). Once conditions
+# carry auras the book in aura_on / aura_off MUST be keyed by (wearer, buff):
+# see aura_off. --no-condition-effect-words reverts: no [6] / [7] for a condition.
+CONDITION_EFFECT_WORDS = True
 # 0x00F1 bit 0x400 while a movement-speed-DECREASE episode is live on the
 # wearer. RECONSTRUCTION: set with Teinai's Prison's 0x0027 x0.34 and cleared
 # at its end while another hex kept 0x800 up (651.779: 0xC00 -> 0x803), 6/6;
@@ -20128,6 +20317,39 @@ def attack_tick(send, state, conn_id, rec=None):
 
 
 
+def reforged_effect(state):
+    """Is the Reforged Mode effect (skill 3434) on in this instance?
+
+    Retail's answer is the zone's, not the character's: 0x0041 [own, 0, 3434,
+    0, 1] arrives once per load on 15 of 15 pre-Searing explorable connections
+    and 0 of 112 others, and a Reforged-flagged character on a Factions or
+    Nightfall map is paid 100% (content/world.toml [player.experience], note).
+    So the character flag (0x003C bit 2, the summary's bit 16) is NOT read
+    here. `state["reforged_effect"]`, when a load has set it, is the answer;
+    until one does, --reforged-xp stands in on the row's observed maps."""
+    if "reforged_effect" in state:
+        return bool(state["reforged_effect"])
+    return bool(REFORGED_XP) and killxp.reforged_map(state.get("map_id"))
+
+
+def kill_experience(state, agent):
+    """What this hostile's death pays the player: 0x00EE [0, x]'s x.
+
+    RANGERPRE-S6 (KILLXP-a): killxp.share over the foe's row level, the
+    player's level, the party (party_member_count -- the roster, the player
+    included; the wiki's "nearby" is UNVERIFIED) and the Reforged effect.
+    CORROBORATED on 49 of 49 live awards. A body with no level on its row
+    is paid the pre-KILLXP constant; so is every kill under
+    --kill-xp-constant, the revert arm."""
+    if not KILL_XP_RULE:
+        return KILL_REWARD_VALUE
+    lvl = (agent.get("npc") or {}).get("level")
+    if lvl is None:
+        return KILL_REWARD_VALUE
+    return killxp.share(int(lvl), player_level_of(state),
+                        party_member_count(state), reforged_effect(state))
+
+
 def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     """Put an agent down. ONE place since SKILLS-DW (2026-09-09).
 
@@ -20218,9 +20440,33 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # coincidence -- and that tick carries the 0x009C marker too, which is
     # what gives the coincidence away. The three CLEAN kills carry one
     # message and no 0x009C. studies/combat/PLAN.md 13.
-    send(GAME_SMSG_AGENT_KILL_REWARD,
-         [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
-         f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+    #
+    # RANGERPRE-S6 (KILLXP-a): the VALUE is per foe (kill_experience; 26 was
+    # one row of the wiki's table), so "[0, 26]" above is REFUTED as a
+    # constant. A share of 0 (a foe six or more levels below) sends
+    # nothing: whether retail sends [0, 0] is UNVERIFIED, and the corpus's
+    # two unpaid deaths carry no 0x00EE at all.
+    #
+    # RANGERPRE-S7 (KILLXP-b): and the PAIR paragraph is REFUTED. 0x009C
+    # [player, m] + 0x00EE [10, d] is the 75-XP death-penalty tick
+    # (morale_experience): it rides the award whose experience crosses a
+    # multiple of 75 since the instance loaded, at neutral morale too, where
+    # it is [player, 100] + [10, 0]. The "three clean kills" were 26s that
+    # crossed nothing, the Wolf's was a 126 that crossed 75, and the "burst"
+    # was six quest hand-ins (100 / 250 / 500, each crossing). OBSERVED
+    # order: the tick, the award, the flags on 23 of 23 ticking kill frames
+    # (20260929T150923 :55934 477.1186: 0x009C [31, 100], 0x00EE [10, 0],
+    # 0x00EE [0, 176], ..., 0x0026); the status ahead of them all; a drop
+    # ahead of the tick (383.5733 -- LOOT's slot, between the status and this
+    # block); the heroes' ticks right behind the award (20260914T005758
+    # :56011 238.177 and 410.841).
+    _xp = kill_experience(state, agent)
+    if _xp:
+        morale_experience(send, state, conn_id, _xp)   # the tick FIRST, 23/23
+        send(GAME_SMSG_AGENT_KILL_REWARD,
+             [KILL_REWARD_ATTR, _xp],
+             f"kill reward [{KILL_REWARD_ATTR}, {_xp}]")
+        hero_morale_experience(send, state, conn_id, _xp)   # after the award
     _strip_and_step_down()             # between the reward and the flags: 631.935
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
          f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
@@ -20228,19 +20474,16 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     hero_locks_release(send, state, target_id, conn_id)
     # AFTER the measured three-message template, never inside it: the
     # status/reward/flags order is ArenaNet's own tick shape, and the
-    # accrual only appends to it (and only under --persist).
-    accrue_kill_rewards(send, state, conn_id)
+    # accrual only appends to it (and only under --persist). The same _xp the
+    # wire just carried: the store must gain what the client added.
+    accrue_kill_rewards(send, state, conn_id, _xp)
     # SLICE-B4: and a kill can meet a quest objective. Same rule about where it
     # sits -- the three-message template is ArenaNet's shape and nothing of ours
     # goes inside it.
     kill_completes_objective(send, state, target_id, conn_id)
-    # ...and so does the other half of the death penalty. WIKI (GWW, "Death
-    # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
-    # so the kill reward that just went out is also the way back up. Sends
-    # nothing at all while morale is neutral, which is every session in
-    # which nothing has died -- and nothing on the first two kills after a
-    # death either, because 26 XP is not a percent yet.
-    morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
+    # (The death penalty's other half -- WIKI "gaining 75 experience will
+    # remove 1% DP" -- was sent HERE, after the flags, until RANGERPRE-S7; it
+    # is the tick ahead of the award now.)
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -23068,20 +23311,22 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
 
     # ---- DAGGERS-B4: THE WEAPON GATE, ahead of the resource gate ---------
     # The skill record's own mask against what the character holds: a dagger
-    # attack with a sword in hand begins nothing and costs nothing. The bare
-    # release, no chat line -- the refusal's sentence is not observed (see
-    # WEAPON_GATE). DESKWORK-D5 step 7: under --refusal-reasons the release
-    # carries #1985 (chatdefs.REFUSE_WEAPON_TYPE, the label
-    # skill_needs_different_weapon_type -- RECONSTRUCTION from the sentence's
-    # own condition, no tape shows it).
+    # attack with a sword in hand begins nothing and costs nothing. The
+    # answer is retail's, OBSERVED 1 of 1 (RANGERPRE-S2, 2026-09-29):
+    # 20260929T150923 :53756, c2s 0x0027 [394, 0, 22, 0] at t=1055.952 -- a
+    # bow skill pressed with a sword and a shield in hand -- answered at
+    # 1056.002 by 0x005D #1985 ([0x08C1]), 0x005E [1, 7], 0x00E2 [9, 394, 0]
+    # and nothing else: no E4, no E3. #1985 is chatdefs.REFUSE_WEAPON_TYPE
+    # (skill_needs_different_weapon_type) and answers 0 of the corpus's 184
+    # weapon-satisfied presses, so it is sent always, as #1960 is; until
+    # today it rode --refusal-reasons and the default was the bare release.
     if WEAPON_GATE and not weapon_satisfies(skill_id):
         print(f"[c{conn_id}] REFUSED skill {skill_id}: its weapon_req "
               f"{skill_chain_fields(skill_id)[2]:#04x} is not what the player "
               f"holds (item_type "
               f"{(agents.PLAYER_WEAPON or {}).get('item_type') if EQUIP_WEAPON else None}) "
               f"[DAGGERS-B4]", flush=True)
-        refuse_press(send, skill_id, copy, conn_id,
-                     chatdefs.REFUSE_WEAPON_TYPE if REFUSAL_REASON_IDS else None)
+        refuse_press(send, skill_id, copy, conn_id, chatdefs.REFUSE_WEAPON_TYPE)
         return
 
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
@@ -24641,7 +24886,7 @@ def effect_list_send(send, state, op, values, label):
     sent [7, foe, 1] and [7, foe, 4] when the hexed hatchling died."""
     agent_id = values[0]
     if op == GAME_SMSG_EFFECT_REMOVE and not HEX_EFFECT_WORDS:
-        aura_off(send, state, values[1])          # the pre-D6 slot: ahead of the 0x0044
+        aura_off(send, state, agent_id, values[1])    # the pre-D6 slot: ahead of the 0x0044
     if effect_list_visible(state, agent_id):
         send(op, values, label)
         shown = True
@@ -24651,7 +24896,7 @@ def effect_list_send(send, state, op, values, label):
     if op == GAME_SMSG_EFFECT_REMOVE and HEX_EFFECT_WORDS:
         # studies/weapons 43: the [7]s BEHIND the 0x0044 (the observer's copy)
         # and ahead of the caller's 0x00F1 -- retail's end batch, 39/39 hexes.
-        aura_off(send, state, values[1])
+        aura_off(send, state, agent_id, values[1])
     return shown
 
 
@@ -24664,17 +24909,23 @@ def skill_effect_row(skill_id):
 
 def aura_on(send, state, ep, conn_id):
     """Properties 6 for each aura id the skill's content row names (OBSERVED for
-    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by buff for the off.
+    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by (wearer, buff)
+    for the off.
 
     studies/weapons 43 (HEX_EFFECT_WORDS): a HEX whose row names no `auras`
     draws hex_effect_ids -- `1` and its profession's class (OBSERVED 39/39 on
     the single-target hexes); and every id is REFERENCE-COUNTED per wearer,
     so a second live hex holding the `1` sends no second [6, wearer, 1]
     (651.779, once) and the [7] goes out when the last holder closes.
+    RANGERPRE-S13 (CONDITION_EFFECT_WORDS): a CONDITION draws its own id,
+    effects.CONDITION_EFFECT_IDS (OBSERVED 54/54 fresh applies), through the
+    same count -- so Weakness and Cracked Armor share one 29 (RECONSTRUCTION).
     """
     ids = skill_effect_row(ep["skill"]).get("auras") or ()
     if not ids and HEX_EFFECT_WORDS and int(ep.get("type_code", 0)) == HEX_TYPE_CODE:
         ids = hex_effect_ids(ep["skill"])
+    if not ids and CONDITION_EFFECT_WORDS and ep["skill"] in effects.CONDITION_EFFECT_IDS:
+        ids = (effects.CONDITION_EFFECT_IDS[ep["skill"]],)
     if not ids:
         return
     ids = tuple(int(a) for a in ids)
@@ -24688,11 +24939,20 @@ def aura_on(send, state, ep, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_AURA_ON, ep["agent"], aura],
              f"aura {aura} on agent {ep['agent']} (skill {ep['skill']})")
-    state.setdefault("auras_by_buff", {})[ep["buff"]] = (ep["agent"], ids)
+    state.setdefault("auras_by_buff", {})[(ep["agent"], ep["buff"])] = (ep["agent"], ids)
 
 
-def aura_off(send, state, buff):
-    held = state.get("auras_by_buff", {}).pop(buff, None)
+def aura_off(send, state, agent_id, buff):
+    """The [7]s for one closing episode, found by (WEARER, buff) -- never by the
+    buff alone (RANGERPRE-S13). A buff id is ours and is RECYCLED the moment
+    EffectTable.strip_agent frees it, and at a death hex_end_burst's payoff runs
+    in strip_effects BETWEEN the strip and the REMOVE loop: Incendiary Bonds'
+    Burning on the foe beside the corpse takes the corpse's freed id. Keyed by
+    the buff alone, the corpse's REMOVE then popped the neighbour's record and
+    sent [7, 11, 25] in place of the corpse's [7, 10, 1] [7, 10, 12] (the design
+    prototype; test_skilldamage 11c (d) and test_condwords 2g hold it). Latent
+    while only hexes carried auras; live once a condition does."""
+    held = state.get("auras_by_buff", {}).pop((agent_id, buff), None)
     if not held:
         return
     agent_id, ids = held
@@ -25442,11 +25702,85 @@ def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
                       skill_knock_down_seconds(skill_id))
 
 
+# CONDITION IMMUNITY (RANGERPRE-S14, the IMMUNE item's first half, 2026-09-29).
+# A NON-FLESHY creature takes no Bleeding, Disease or Poison: the apply opens no
+# episode and sends no 0x0042, no [6], no status word and no rate, and the
+# inflicting PLAYER is told why on the warning panel -- #1957 / #1958 / #1959
+# (chatdefs.REFUSE_IMMUNE), refuse_press's 0x005D + 0x005E [1, 7] pair WITHOUT a
+# 0x00E2, since nothing was pressed and refused: the skill completed.
+#
+# OBSERVED (Bleeding, n = 1): 20260929T150923 :53756 (build 38888, Reforged),
+# the player's Sever Artery (382) completing on agent 22 -- definition 1414, file
+# 17253 -- at t=1057.415 is [46, 9, 0], 0x00CF [9, 25], the damage word, 0x005D
+# #1957, 0x005E [1, 7], 0x00E3 [9, 382, 0]; nothing names 22 again ([6], 0x00F1,
+# [44]) until its death word at 1060.488. The same skill on file 141274 draws
+# [6, T, 23], 0x00F1 [T, 3], [44, T, -0.09375], 3 of 3 (test_condwords). Gash
+# (384) on 22 at 1058.906 is a plain hit, no Deep Wound: its requires_condition
+# gate reads the target's LIVE conditions (attack_skill_terms), and an immune
+# target never holds one -- so that falls out of this gate with no code of its own.
+# WIKI (GWW "Fleshy" rev 2611793; "Bleeding" rev 2673942): non-fleshy creatures,
+# Elementals among them, are immune to Bleeding, Disease and Poison -- the two
+# we have never seen refused ride the wiki alone (1958 / 1959 NOT FOUND on any
+# wire, sent only under --refusal-reasons).
+#
+# WHO IS NON-FLESHY is content: the `creature_trait` row keyed by the body's
+# model file (content/npcs.toml, agents.creature_fleshy), RECONSTRUCTION as a key.
+# The player is always fleshy. WHO HEARS THE SENTENCE is the inflicter when it is
+# the player (`by_agent`); a body inflicting on a non-fleshy one is refused in
+# silence -- whether a party member's controller would hear it is NOT MEASURABLE
+# on a solo instance (UNVERIFIED). The sentence rides the player's two cast_tick
+# completion sites that pass by_agent=PLAYER_AGENT_ID: Desperation Blow's random
+# condition (the skill_random_condition arm) and the `inflicted` apply after the
+# damage -- and that second site completes the player's NON-attack targeted casts
+# as well as its attack skills (in the loaded content, 131 and 985 are non-attack
+# Bleeding inflicters that reach it). On an attack skill the sentence is OBSERVED
+# (Sever Artery, 1057.415); on a non-attack skill's Bleeding it is RECONSTRUCTION,
+# no tape having one on a non-fleshy target. The call sites that pass no `by_agent`
+# (the player's ranged strike, areas and bursts) are still refused, silently.
+# --no-condition-immunity is the known-bad arm: every creature is fleshy, the
+# pre-S14 server.
+CONDITION_IMMUNITY = True
+
+
+def agent_fleshy(state, agent_id):
+    """Is this agent open to the fleshy conditions? The player always is; a
+    body by its npc template's model file (agents.creature_fleshy)."""
+    if agent_id == PLAYER_AGENT_ID:
+        return True
+    row = state.get("agents", {}).get(agent_id) or {}
+    return agents.creature_fleshy((row.get("npc") or {}).get("file_id"))
+
+
+def condition_refused_immune(send, target_id, condition_id, conn_id, by_skill,
+                             by_agent):
+    """The apply a non-fleshy target refuses (CONDITION_IMMUNITY's banner): the
+    sentence to the inflicting player, when there is one and its id may go out
+    (OBSERVED, or --refusal-reasons), and a log line always."""
+    name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    sid = chatdefs.REFUSE_IMMUNE[name]
+    told = (by_agent == PLAYER_AGENT_ID
+            and (sid in chatdefs.REFUSAL_OBSERVED or REFUSAL_REASON_IDS))
+    if told:
+        send(GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.refusal_body(sid)],
+             f"CHAT_MESSAGE_CORE[refusal #{sid}: the target is immune to {name}]")
+        send(GAME_SMSG_CHAT_MESSAGE_SERVER, [PLAYER_NUMBER, chatdefs.CHANNEL_WARNING],
+             f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, Warning)")
+    print(f"[c{conn_id}] {name} REFUSED on agent {target_id}: non-fleshy, immune "
+          f"(skill {by_skill}, inflicter {by_agent if by_agent is not None else '?'}) "
+          + (f"-- #{sid} on the inflicter's warning panel" if told else
+             "-- no sentence (the inflicter is not the player, or the id is "
+             "RECONSTRUCTION without --refusal-reasons)")
+          + " [RANGERPRE-S14]", flush=True)
+
+
 def apply_condition(send, state, target_id, condition_id, seconds, rank,
                     conn_id, by_skill, by_agent=None):
     """Put a condition on an agent, as an episode on the same effect channel.
     `by_agent` (B4): the inflicter's agent id when the caller knows it --
-    named in Dazed's on-application interrupt, nowhere else.
+    named in Dazed's on-application interrupt, and (RANGERPRE-S14) the one who
+    hears the immunity sentence: a non-fleshy target's refusal goes to
+    condition_refused_immune, which tells the inflicter only when `by_agent` is
+    the player (CONDITION_IMMUNITY's banner). None refuses in silence.
 
     Conditions are not a separate mechanism: retail applies them with the same
     `0x0042` that carries a hex or a stance, and `bufflog` reads six of them
@@ -25470,8 +25804,17 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     if not EFFECTS:
         return None
     name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    # RANGERPRE-S14: a non-fleshy target refuses Bleeding, Disease and Poison
+    # before anything opens -- no episode, no wire but the sentence
+    # (CONDITION_IMMUNITY's banner).
+    if (CONDITION_IMMUNITY and name in chatdefs.REFUSE_IMMUNE
+            and not agent_fleshy(state, target_id)):
+        condition_refused_immune(send, target_id, condition_id, conn_id, by_skill,
+                                 by_agent)
+        return None
     table = effect_table(state)
     now = time.time()
+    _held = None                        # an extended condition's live visual (S13)
 
     # A CONDITION NEVER STACKS, and the run is what forced this line.
     # `20260820T191725` put the enemy's Sever Artery on a 0 s recharge and the
@@ -25500,6 +25843,11 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
                   f"stands, nothing sent", flush=True)
             return old_ep
         table.close(old_ep["buff"])
+        if CONDITION_EFFECT_WORDS:
+            # RANGERPRE-S13: the visual rides the extension -- lifted out of the
+            # book before the REMOVE so no [7] goes, re-filed under the new buff
+            # below so no [6] goes (retail's re-application draws none, 5/5).
+            _held = state.get("auras_by_buff", {}).pop((target_id, old_ep["buff"]), None)
         effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [target_id, old_ep["buff"]],
              f"EFFECT_REMOVE(buff {old_ep['buff']}, {name}, EXTENDED from "
              f"{remaining:.1f}s to {seconds:.1f}s)")
@@ -25515,9 +25863,16 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     print(f"[c{conn_id}] {name} on agent {ep['agent']}: buff {ep['buff']}, "
           f"{ep['duration']:.1f}s (inflicted by skill {by_skill} at rank "
           f"{rank})", flush=True)
-    # RETAIL'S BATCH, in retail's order: the apply above, then the status
+    # RETAIL'S BATCH, in retail's order: the apply above, then the condition's
+    # visual [6, T, id] (RANGERPRE-S13: 0x0042 first 54/54, the [6] ahead of the
+    # 0x00F1 48/48; a foe's too, whose 0x0042 is not sent), then the status
     # word (0x02 | the condition's own bit), then -- for Deep Wound alone --
     # the maximum. [0x0042, 0x00F1, 0x009F 42] on 2 of 2 (deepwoundjoin.py).
+    if CONDITION_EFFECT_WORDS:
+        if _held is not None:
+            state.setdefault("auras_by_buff", {})[(ep["agent"], ep["buff"])] = _held
+        else:
+            aura_on(send, state, ep, conn_id)
     push_status(send, state, ep["agent"], conn_id)
     if condition_id == effects.CONDITION_BY_NAME["Deep Wound"]:
         deep_wound_open(send, state, ep["agent"], conn_id)
@@ -25726,6 +26081,16 @@ def agent_pool_max(state, agent_id):
     return float(agent["max_health"]) if agent else None
 
 
+# THE ZERO RATE IS +0.0 (RANGERPRE-S3, 2026-09-29). OBSERVED: every zero prop-44
+# word on the live corpus is 0x00000000 -- 561 of 561 over 38 captures and 127
+# connections, none 0x80000000, while 736 NONZERO rates carry the sign bit
+# (degeneration). The witness is Bleeding's expiry on a foe, 20260929T150923
+# :53756 t=1137.703144: [0x009F [7, 27, 23], 0x00F1 [27, 0], 0x00A2 [44, 27,
+# 0x00000000]]. Ours sent -(0 x 2)/64 = -0.0 (0x80000000), bit-different on every
+# close that returns a rate to zero. --regen-zero-signed is the known-bad arm.
+REGEN_ZERO_POSITIVE = True
+
+
 def push_regen(send, state, agent_id, conn_id):
     """Tell the client this agent's NET health-regeneration rate, if it changed.
 
@@ -25752,6 +26117,8 @@ def push_regen(send, state, agent_id, conn_id):
     live = table.on_agent(agent_id) if table else []
     pips = net_pips(state, agent_id, live)      # conditions + hex rows (B2), one cap
     rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
+    if REGEN_ZERO_POSITIVE and not pips:
+        rate = 0.0                              # retail's +0.0, 561/561 (above)
     seen = state.setdefault("regen_rate", {})
     if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
         return None
@@ -25816,13 +26183,25 @@ def push_status(send, state, agent_id, conn_id):
 
 
 def deep_wound_reduction(maximum):
-    """How much Deep Wound takes off a maximum. WIKI rule, retail-exact at 480.
+    """How much Deep Wound takes off a maximum: 20 % FLOORED, capped at 100.
 
-    round() rather than floor: the one retail witness is 480 -> 384, which
-    every rounding fits; below a multiple of 5 the rounding is UNVERIFIED and
-    named so here rather than hidden in an int().
+    FLOORED, OBSERVED (RANGERPRE-S1, studies/skills 41.7): an NPC at 64 went
+    to 52 (20260929T150923 :53756, agent 30, the edge at t=1116.0485, its
+    [44] f32(-6/52) exactly and the next hit's 42 = 52), n=1; a PvP-arena
+    opponent at 483 went to 387 (20260817T231139 :50513, agent 10, t=460.161,
+    [44] f32(-20/387)). round() sent 51 and 386. Every multiple of 5 -- the
+    480 -> 384 witnessed six times, the capped 555 -> 455 -- fits both, which
+    is why round() stood until a maximum off the 5s was read. The PLAYER's
+    own reduction at such a maximum is RECONSTRUCTION: no player witness sits
+    off a multiple of 5.
+
+    floor(0.2m) == m - ceil(0.8m) for every m, so which of the two retail
+    computes is immaterial. NEVER spell it floor(m * (1.0 - 0.8)): 1.0 - 0.8
+    is 0.19999999999999996 and comes out one short on every multiple of 5
+    (480 -> 95). 0.2's double sits ABOVE 0.2, so this floor is exact on the
+    integers (test_mechanics 18 sweeps 1..2000).
     """
-    return min(DEEP_WOUND_CAP, int(round(float(maximum) * DEEP_WOUND_FRACTION)))
+    return min(DEEP_WOUND_CAP, int(math.floor(float(maximum) * DEEP_WOUND_FRACTION)))
 
 
 def deep_wound_open(send, state, agent_id, conn_id):
@@ -26999,7 +27378,8 @@ def player_pools(state):
     gap that made "you cannot die" a property of the code rather than a decision.
     """
     state.setdefault("morale", morale.BASELINE)
-    state.setdefault("morale_xp_bank", 0)
+    # (No experience bank: RANGERPRE-S7's counter, state["xp_since_load"],
+    # starts at 0 with the instance -- morale_experience.)
     # When the player last stood up. 0.0 means never -- and `death_is_free`
     # answers the falsy case FIRST, so the first death of a session can never
     # fall inside a grace window that has not happened yet.
@@ -27047,11 +27427,71 @@ def player_full_max_health(state):
 
 
 def player_max_health(state):
-    """Maximum health as the client should currently see it -- morale, and a
-    live Deep Wound's reduction, because that is the number the client holds
-    after our own `0x009F 42` and every wire fraction divides by it."""
-    return (player_full_max_health(state)
+    """Maximum health as the client should currently see it -- morale, a held
+    item's 564 (RANGERPRE-S11) and a live Deep Wound's reduction, because that
+    is the number the client holds after our own `0x009F 42` and every wire
+    fraction divides by it."""
+    return (player_full_max_health(state) + held_health_bonus(state)
             - float((state.get("deep_wound") or {}).get(PLAYER_AGENT_ID, 0)))
+
+
+# ---- RANGERPRE-S11 (MAXHP-2, 2026-09-29): A HELD ITEM'S MAXIMUM HEALTH -------
+#
+# OBSERVED n=1 (20260929T150923 :56064): the pre-Searing shield, item 696,
+# carries 564 arg 15 (combatmath.HEALTH_MODIFIER), and its equip at t=932.489
+# was answered at 932.526 by exactly [0x014B [2, 696, 5, 1], 0x006F [9, 1,
+# 696], 0x009F [42, 9, 135]] -- the player's maximum from the load's 120 to
+# 135, the 42 LAST and nothing else (no fraction, no regen: the client moves
+# its own current health by the delta, agents.PROP_HEALTH_MAX). The sword the
+# same connection equipped two seconds earlier (697, no 564) drew no 42, and
+# so did the corpus's other 9 equips and 15 set switches (the design lane's
+# census; none of the items they moved carried 564). Later loads holding
+# the shield declare 135 (:53753 994.024, :53756 998.208, :59427 1217.429),
+# which the load's 42 does through player_max_health.
+#
+# Kept OUT of player_full_max_health: land_swing scales the enemy's blow from
+# that, and a shield must not grow the blow. Morale scales the base only, the
+# way morale.effective_max treats a rune. --no-held-health is the control:
+# the maximum every run before today had.
+HELD_HEALTH = True               # --no-held-health reverts
+
+
+def held_health_bonus(state=None):
+    """The maximum health the HELD set adds: the 564 word on the lead item and
+    on the off hand -- 0 with the feature off, nothing held (--no-weapon), or
+    no 564 on either (every content item today)."""
+    if not (HELD_HEALTH and EQUIP_WEAPON):
+        return 0
+    total = 0
+    for item in (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND):
+        found = item_word(item, combatmath.HEALTH_MODIFIER)
+        if found is not None:
+            total += int(found[0])
+    return total
+
+
+def held_max_moved(send, state, delta, why):
+    """A hand change moved held_health_bonus by `delta`: the player's 42, and
+    current health by the same delta -- the client's own `health += (new_max -
+    old_max)` (agents.PROP_HEALTH_MAX), so the two books stay one number.
+    Nothing is sent for a zero delta, which is every hand change of an item
+    without 564 (retail's 24 negative controls).
+
+    THE DELTA IS SIGNED AND UNCLAMPED, deep_wound_open's precedent: taking a
+    564 item off below its bonus leaves the books at or under zero, as the
+    client's signed store does. RECONSTRUCTION -- retail's unequip of a 564
+    item is NOT FOUND on any tape. push_morale clamps a shrinking pool at
+    max(1, max) instead; the two paths disagree on purpose until a tape
+    decides the unequip."""
+    if not delta:
+        return False
+    had = "player_health" in state
+    player_pools(state)          # a fresh book seeds at the NEW maximum already
+    if had:
+        state["player_health"] = float(state["player_health"]) + delta
+    declare_player_max(send, state, f"maximum health {int(player_max_health(state))} "
+                                    f"({delta:+d}, {why}) [RANGERPRE-S11]", force=True)
+    return True
 
 
 # ---- WEAPONS-W5 (2026-09-18): A STAFF'S OR A FOCUS'S ENERGY -----------------
@@ -27124,7 +27564,7 @@ def map_death_penalty(map_id):
     return bool(row.get("death_penalty", False))
 
 
-def push_morale(send, state, conn_id, new_value, why, between=None):
+def push_morale(send, state, conn_id, new_value, why, between=None, tick=False):
     """Move the player's morale and put ArenaNet's own tick on the wire.
 
     THE SHAPE IS OBSERVED, off the one player death in the live corpus
@@ -27150,11 +27590,21 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     FRACTION of maximum energy per second, so a pool that shrinks 15% while this
     stands still is a 15% slower regeneration nobody asked for. Retail resent it;
     so do we.
+
+    `tick=True` IS THE 75-XP TICK (RANGERPRE-S7, KILLXP-b; morale_experience):
+    it goes out even when the value does not move -- 0x009C [player, 100] +
+    0x00EE [10, 0] and nothing else, 36 of 36 neutral ticks in the live corpus
+    -- and each maximum rides it only when it CHANGED: 0x009F 42 on 7 of 7
+    recoveries, 41 + 0x00A2 43 on the 2 of 7 whose energy maximum moved
+    (20260913T210901 :60877 675.898, 27 -> 28; 736.185, 28 -> 30). The death
+    path passes no tick and is unchanged.
     """
     old = player_morale(state)
     new_value = morale.clamp(new_value)
-    if new_value == old:
+    if new_value == old and not tick:
         return old
+    old_energy = player_max_energy(state)
+    old_health = int(player_max_health(state))
     state["morale"] = new_value
     max_energy = player_max_energy(state)
     max_health = int(player_max_health(state))
@@ -27169,15 +27619,20 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     # nothing.
     if between is not None:
         between()
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
-         f"maximum energy {max_energy} at morale {morale.display(new_value)}")
+    # THE 75-XP TICK sends a maximum only when it moved (the docstring); every
+    # other caller sends both, as before.
+    _energy_moved = not tick or max_energy != old_energy
+    _health_moved = not tick or max_health != old_health
+    if _energy_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
+             f"maximum energy {max_energy} at morale {morale.display(new_value)}")
     # THE POOL'S OWN BOOK RESIZES WITH THE WIRE (energy-arc merge,
     # 2026-08-20): set_maximum recomputes the stored rate the way retail's
     # numbers show (0.0528 at 25 -> 0.06 at 22, the same four pips), so the
     # RESURRECT resend in restore_player_energy is already rescaled with no
     # second computation to drift.
-    if ENERGY:
+    if ENERGY and _energy_moved:
         player_energy(state).set_maximum(max_energy)
     # THE CHANNEL IS 0x00A2 AND THE DEATH VALUE IS ZERO -- both are the
     # capture's, not a choice: the only death-with-morale batch in the corpus
@@ -27193,17 +27648,19 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     # there is RECONSTRUCTION (the fraction must track the pool or the
     # absolute rate silently changes -- the docstring's argument).
     _dead = bool(state.get("player_dead"))
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
-         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
-          _f32(0.0 if _dead else
-               morale.regen_fraction(agents.PLAYER_FLOAT_43,
-                                     agents.PLAYER_ENERGY, max_energy))],
-         "energy regeneration stops: the player is dead" if _dead else
-         "energy regeneration, rescaled to the new pool")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
-         f"maximum health {max_health} at morale {morale.display(new_value)}")
-    state["player_max_declared"] = int(max_health)      # 3(a): the tracker
+    if _energy_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+              _f32(0.0 if _dead else
+                   morale.regen_fraction(agents.PLAYER_FLOAT_43,
+                                         agents.PLAYER_ENERGY, max_energy))],
+             "energy regeneration stops: the player is dead" if _dead else
+             "energy regeneration, rescaled to the new pool")
+    if _health_moved:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
+             f"maximum health {max_health} at morale {morale.display(new_value)}")
+        state["player_max_declared"] = int(max_health)  # 3(a): the tracker
     # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
     # to notice: our own bookkeeping is what decides when the player dies, so a
     # current health left above the new maximum would make the next fraction we
@@ -27252,21 +27709,36 @@ def death_penalty_due(send, state, conn_id, between=None):
 
 
 def morale_experience(send, state, conn_id, gained):
-    """Experience buys death penalty back, 1% per 75 XP.
+    """Experience buys death penalty back, 1% per 75 XP -- and the 75-XP tick.
 
-    WIKI (GWW, "Death Penalty", section Counters). The bank is what makes this
-    honest at our kill sizes: a 26-XP kill is not a third of a percent on the
-    wire, it is nothing at all until the third one.
+    WIKI (GWW, "Death Penalty", section Counters): 75 experience removes 1%.
+
+    RANGERPRE-S7 (KILLXP-b): WHAT RETAIL SENDS is a tick each time the
+    player's experience SINCE THIS INSTANCE LOADED crosses a multiple of 75 --
+    0x009C [player, m] + 0x00EE [10, d], ahead of the award's own 0x00EE
+    [0, xp], at neutral morale too, where it is [player, 100] + [10, 0] and
+    moves nothing. OBSERVED on 43 of the live corpus's 68 PvE awards, and the
+    since-load counter predicts all 68 (tick or no tick): 20260929T150923
+    :55934 477.119 carries 0x009C [31, 100], 0x00EE [10, 0], 0x00EE [0, 176];
+    the 26 at 264.333 (250 -> 276) carries none; the 26 at 383.573 (881 ->
+    907) does. The counter is RECONSTRUCTION: from 0 at the load, fed by every
+    award paid (kills after the party split, quest rewards), NOT reset by a
+    death, NOT carried from the last instance (zone_carry_store carries none);
+    the known-bad arms are the character's total experience (58 of 68) and
+    the pre-S7 bank that started at the death and was silent at neutral
+    (morale.experience_credit, 20 of 68). The CALLER puts this ahead of its
+    0x00EE [0, xp] and the heroes' ticks after it (hero_morale_experience).
     """
-    hero_morale_experience(send, state, conn_id, gained)     # JARIN: per hero
-    before = player_morale(state)
-    after, bank, recovered = morale.experience_credit(
-        before, int(state.get("morale_xp_bank", 0)), gained)
-    state["morale_xp_bank"] = bank
-    if not recovered:
-        return before
-    return push_morale(send, state, conn_id, after,
-                       f"{recovered}% back from experience")
+    before = int(state.get("xp_since_load", 0))
+    state["xp_since_load"] = before + max(0, int(gained))
+    n = morale.crossings(before, gained)
+    old = player_morale(state)
+    if n <= 0:
+        return old
+    new = morale.recover(old, n)
+    return push_morale(send, state, conn_id, new,
+                       f"{new - old}% back from experience" if new != old
+                       else "the 75-XP tick, a no-op at this morale", tick=True)
 
 
 # CASTAI (2026-09-27; DESKWORK-D8 step 6, studies/deskwork/PLAN.md; owner's ruling PLAN.md
@@ -29083,23 +29555,38 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
 
 def hero_morale_experience(send, state, conn_id, gained):
     """The kill's experience buys a hero's penalty back too (410.84 s: [29,
-    86] and [30, 86], each with its prop 42), per hero, its own bank."""
+    86] and [30, 86], each with its prop 42), per hero, its own counter.
+
+    RANGERPRE-S7 (KILLXP-b): the hero takes the player's 75-XP tick on its
+    OWN since-load counter, AFTER the award line -- 0x009C [hero, m] always,
+    0x009F [42, hero, max] only when m moved: 20260914T005758 :56011 238.177
+    ([30, 100] alone, at neutral), 410.841 ([30, 86] + its 42). A henchman
+    never ticks (0 on 20260819T132414's three). Feeding the hero the player's
+    share is RECONSTRUCTION, and it does not reproduce the third witness:
+    :56011 534.478 ticks the hero ([30, 87]) and not the player (192, short of
+    225), so the hero's counter was ahead by something the tape does not show
+    (NOT FOUND; the death at 443.855 that paid the player nothing is the
+    candidate)."""
+    counters = state.setdefault("hero_xp_since_load", {})
     for aid, row in party_bodies(state):
         if hero_body_id(row) is None:
             continue
-        bank = state.setdefault("hero_morale_bank", {})
-        after, b, rec = morale.experience_credit(
-            hero_morale(state, aid), int(bank.get(aid, 0)), gained)
-        bank[aid] = b
-        if not rec:
+        before = int(counters.get(aid, 0))
+        counters[aid] = before + max(0, int(gained))
+        n = morale.crossings(before, gained)
+        if n <= 0:
             continue
-        _e, h_max = hero_morale_apply(state, aid, row, after)
-        send(GAME_SMSG_AGENT_MORALE, [aid, after],
-             f"morale {morale.display(after)} on hero agent {aid} "
-             f"({rec}% back from experience) [JARIN]")
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, aid, h_max],
-             f"hero agent {aid} health max {h_max} at morale {after}")
+        old = hero_morale(state, aid)
+        new = morale.recover(old, n)
+        send(GAME_SMSG_AGENT_MORALE, [aid, new],
+             f"morale {morale.display(new)} on hero agent {aid} "
+             + (f"({new - old}% back from experience) [JARIN]" if new != old
+                else "(the 75-XP tick, a no-op at this morale) [RANGERPRE-S7]"))
+        if new != old:
+            _e, h_max = hero_morale_apply(state, aid, row, new)
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.PROP_HEALTH_MAX, aid, h_max],
+                 f"hero agent {aid} health max {h_max} at morale {new}")
 
 
 def hero_locks_release(send, state, target_id, conn_id):
@@ -29327,9 +29814,10 @@ def zone_carry_store(state):
     key = state.get("char_uuid")
     if not key:
         return
+    # No experience counter rides the carry: retail's 75-XP tick counts from
+    # each instance's load (RANGERPRE-S7; morale_experience).
     ZONE_CARRY[key] = {
         "morale": player_morale(state),
-        "morale_xp_bank": int(state.get("morale_xp_bank", 0)),
         "hero_ai_mode": {aid: int(c.get("ai_mode", AI_MODE_FIGHT))
                          for aid, c in (state.get("hero_cmd") or {}).items()},
         "hero_morale": dict(state.get("hero_morale") or {}),
@@ -29349,7 +29837,6 @@ def zone_carry_apply(state, conn_id):
         hero_command(state, aid)["ai_mode"] = int(m)
     if party_bodies_here(state):
         state["morale"] = int(got["morale"])
-        state["morale_xp_bank"] = int(got["morale_xp_bank"])
         state["hero_morale"] = dict(got["hero_morale"])
         print(f"[c{conn_id}] ZONE: morale {got['morale']} and the hero stances "
               f"carried into the field [JARIN]", flush=True)
@@ -30639,6 +31126,7 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     and the store current, and mirror the hands."""
     items = state["items"]
     before = itemstore.hand_items(items, EQUIPPED_BAG_ID)
+    _held_hp = held_health_bonus(state)         # RANGERPRE-S11: the hands' 564, before
     # Every consumer of the item batch passes here, so the display mode
     # gates the batch's 0x006F ONCE (visible_slot_writes; the fix pass). The
     # count below is what the gate RETURNED, not what was planned (the
@@ -30662,6 +31150,17 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
             if row["bag"] == BACKPACK_BAG_ID:
                 held[row["slot"]] = iid
     _item_hands_mirror(state, conn_id, before)
+    # RANGERPRE-S11: a 564 item entering or leaving the hands moves the maximum,
+    # the batch's LAST message. OBSERVED in a FIELD only: retail's one 564 equip
+    # (20260929T150923 :56064 t=932.526, 0x0199 is_explorable=1) sent 0x014B,
+    # 0x006F, then the 42. A TOWN equip sends the 42 too -- INFERRED: retail's
+    # four town equips (20260819T132414 :53419, map 242, is_explorable=0, bare
+    # 0x0152 batches with no 0x006F) moved no 564 item, so no tape shows a 564
+    # equip in a town; there visible_slot_writes drops the hand 0x006F, and our
+    # move-then-42 batch is a shape no tape shows. Gated on the BONUS changing,
+    # never on declare_player_max's tracker, so a hand change of an item
+    # without 564 sends exactly the planned batch.
+    held_max_moved(send, state, held_health_bonus(state) - _held_hp, what)
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
@@ -37164,15 +37663,25 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              f"AGENT_PROFESSION_BITS"
              f"(0x{_offer:04X}) [--secondary-bits at 57e89956's "
              f"site, under --no-secondary-change]")
-    # The skill block. Upstream's SendSkillsAndAttributes
-    # sends the bar (218) BEFORE the unlock list (219); we
-    # send the unlocks first, deliberately. Upstream never
-    # puts a real id on a bar -- it sends eight zeros -- so
-    # its ordering is not evidence about a POPULATED bar,
-    # and if the client gates drawing on unlock state then
-    # having that state already in hand is the ordering that
-    # can work. If the bar draws, try upstream's order too:
-    # a difference there is a real finding either way.
+    # The skill block: THE BAR 0x00DA, THEN THE CHARACTER LIBRARY
+    # 0x00DB (RANGERPRE-S4). OBSERVED on the live corpus: the first
+    # 0x00DA precedes the first 0x00DB on 126 of 126 connections that
+    # carry both (127 decoded; one carries neither, 20260807T133758
+    # :54560; a 128th, 20260928T103123 :65009, is set aside by its
+    # manifest), and on 11 of 11 in 20260929T150923, where :53756's
+    # player block at t=998.208 runs 0x0037, 0x00B7, 0x00B6, 0x00DA,
+    # 0x009F [41], 0x009F [42], 0x009C, 0x0041, 0x008B, 0x008A,
+    # 0x00B5, 0x00DB, 0x00E9, 0x00EF. 0x001D is NOT part of the pair's
+    # order -- the same capture carries it before (:59969) and after
+    # (:63359) -- so it stays where it was. We sent the unlocks first
+    # from 04bafc1f (2026-08-06) on, deliberately: upstream's
+    # SendSkillsAndAttributes sends the bar first but only ever with
+    # eight zeros, so its order was no evidence about a POPULATED bar,
+    # and the fear was that the client gates drawing on unlock state.
+    # It does not -- studies/skills/FINDINGS.md §9 (bar contents are
+    # the server's, the bitmap gates only the picker) -- and the tape
+    # now answers the order itself. --no-retail-skill-order is that
+    # order, the one 57e89956 (test_secondary §7's recording) sent.
     # THE SKILL LIBRARY IS TWO SETS, and they are retail's two, not ours.
     # Until 2026-09-15 this server sent the SAME flag-built bitmap in both
     # messages, which worked but modelled one library where the game has
@@ -37194,8 +37703,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         UNLOCKED, UNLOCK_LABEL, seen=state.setdefault("skills_withheld", set()))
     send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_acct_words],
          f"PVP_UPDATE_UNLOCKED_SKILLS({_acct_label})")
-    send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
-         f"UPDATE_UNLOCKED_SKILLS({_char_label})")
+    if not SKILL_LOAD_RETAIL_ORDER:                     # 57e89956's order
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+             f"UPDATE_UNLOCKED_SKILLS({_char_label}) [--no-retail-skill-order]")
     # The bar the client is about to draw. Under --persist a stored bar wins,
     # so a slot the player dragged last session is still there this one --
     # 0x005C writes it and this reads it back. SKILLBAR is rebound to match so
@@ -37206,6 +37716,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
          [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
           SKILLBAR_TRAILER],
          f"SKILLBAR_UPDATE{skills}")
+    if SKILL_LOAD_RETAIL_ORDER:                         # RANGERPRE-S4, OBSERVED
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+             f"UPDATE_UNLOCKED_SKILLS({_char_label}) [after the bar: retail, "
+             f"126 of 126 live connections]")
     # A BAR SKILL OUTSIDE THE ACCOUNT LIBRARY IS A DELAYED CRASH, and the
     # delay is why this warns rather than trusting the screen. OBSERVED
     # (38797, static): GmSkSlot bit-tests the ACCOUNT container --
@@ -39297,7 +39811,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # reward lines, then 0x004A -- retail's relative
                                 # order on 10 of 10 hand-ins (DESKWORK-D9 fix
                                 # pass; --no-reward-in-frame puts the reward
-                                # after 0x004A as SLICE-B5 and D9 pass 1 did).
+                                # after 0x004A as SLICE-B5 and D9 pass 1 did),
+                                # then 0x009F [20, own, 7] right after the
+                                # 0x004A (RANGERPRE-S8, 22 of 22).
                                 # The completion family (0x004E, 0x006C, 0x0096,
                                 # 0x0097, 0x00FB) is still 0 of the corpus and a
                                 # live hand-in uses none of it; the reward is the
@@ -43788,6 +44304,30 @@ def main():
               "them. KNOWN-BAD against the tape: retail puts them between "
               "0x0052 and 0x004A on 10 of 10 hand-ins (turn_in_quest).",
               flush=True)
+    if a.no_retail_skill_order:
+        global SKILL_LOAD_RETAIL_ORDER
+        SKILL_LOAD_RETAIL_ORDER = False
+        print("[skills] --no-retail-skill-order: the load sends the character "
+              "library 0x00DB BEFORE the bar 0x00DA, as every tree from 04bafc1f "
+              "(2026-08-06) to RANGERPRE-S4 did. KNOWN-BAD against the tape: retail sends the "
+              "bar first on 126 of 126 live connections carrying both.",
+              flush=True)
+    if a.quest_skills_first:
+        global QUEST_SKILLS_AFTER_GOLD
+        QUEST_SKILLS_AFTER_GOLD = False
+        print("[quests] --quest-skills-first: a hand-in's reward_skills go out "
+              "BEFORE the experience 0x00EE, as every run before RANGERPRE-S5. "
+              "KNOWN-BAD against the tape: retail sends them after the gold "
+              "0x0140 on 4 of 4 skill-granting hand-ins (grant_quest_reward).",
+              flush=True)
+    if a.no_quest_complete_visual:
+        global QUEST_COMPLETE_VISUAL
+        QUEST_COMPLETE_VISUAL = False
+        print("[quests] --no-quest-complete-visual: a hand-in sends no 0x009F "
+              "[20, player, 7] after its 0x004A, as every run before "
+              "RANGERPRE-S8. KNOWN-BAD against the tape: retail sends it right "
+              "after the 0x004A on 22 of 22 hand-ins (turn_in_quest).",
+              flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
@@ -44964,6 +45504,11 @@ def main():
         WEAPON_ENERGY = False
         print("ENERGY: --no-weapon-energy -- a held staff or focus adds nothing to "
               "the pool [WEAPONS-W5 revert]", flush=True)
+    if a.no_held_health:
+        global HELD_HEALTH
+        HELD_HEALTH = False
+        print("HEALTH: --no-held-health -- a held item's 564 adds nothing to the "
+              "maximum and a hand change sends no 42 [RANGERPRE-S11 revert]", flush=True)
     if a.no_typed_armour:
         global TYPED_ARMOUR
         TYPED_ARMOUR = False
@@ -45035,6 +45580,20 @@ def main():
               "wearer, class] at its apply and no [7]s at its close (the status bit "
               "alone; a row's own `auras` in the pre-D6 slot, unrefcounted), this "
               "server's bytes until 2026-09-27 [studies/weapons 43 revert]", flush=True)
+    if a.no_condition_effect_words:
+        global CONDITION_EFFECT_WORDS
+        CONDITION_EFFECT_WORDS = False
+        print("CONDITIONS: --no-condition-effect-words -- a condition sends no [6, "
+              "wearer, id] at its apply and no [7] at its close (the 0x0042 / 0x00F1 "
+              "/ [44] alone), this server's bytes until 2026-09-29 [RANGERPRE-S13 "
+              "revert]", flush=True)
+    if a.no_condition_immunity:
+        global CONDITION_IMMUNITY
+        CONDITION_IMMUNITY = False
+        print("CONDITIONS: --no-condition-immunity -- every creature is fleshy: a "
+              "non-fleshy body (content creature_trait) takes Bleeding, Disease and "
+              "Poison and no #1957 goes out, this server's bytes until 2026-09-29 "
+              "[RANGERPRE-S14 revert]", flush=True)
     if a.no_snare_status_bit:
         global SNARE_STATUS_BIT
         SNARE_STATUS_BIT = False
@@ -45236,6 +45795,12 @@ def main():
         STATUS_WORD = False
         print("NO STATUS WORD: no 0x00F1 rides an effect apply or close "
               "(--no-status-word, the known-bad arm).", flush=True)
+    if a.regen_zero_signed:
+        global REGEN_ZERO_POSITIVE
+        REGEN_ZERO_POSITIVE = False
+        print("SIGNED REGEN ZERO: a rate back at zero goes out as -0.0 "
+              "(0x80000000), not retail's +0.0 (--regen-zero-signed, the "
+              "known-bad arm).", flush=True)
     if a.no_overheal_number:
         global OVERHEAL_NUMBER
         OVERHEAL_NUMBER = False
@@ -45336,9 +45901,9 @@ def main():
         global REFUSAL_REASON_IDS
         REFUSAL_REASON_IDS = True
         print("REFUSAL REASONS: RECONSTRUCTED reason ids from the client's refusal "
-              "block go out with the release (today: the weapon gate's #1985 and "
-              "the party-target gate's #1986 on a foe spell). The OBSERVED "
-              "1934/1960/1961 are sent either way.", flush=True)
+              "block go out with the release (today: the party-target gate's "
+              "#1986 on a foe spell). The OBSERVED 1934/1960/1961/1985 are "
+              "sent either way.", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION
@@ -45787,6 +46352,26 @@ def main():
               f"{morale.display(morale.FLOOR)}). Retail charges nothing in "
               f"pre-Searing, which is every map this server ships -- so this "
               f"is a deliberate experiment, not the world.")
+    if a.kill_xp_constant and a.reforged_xp:
+        raise SystemExit("--reforged-xp scales the per-foe award and "
+                         "--kill-xp-constant replaces it with the constant: "
+                         "together the first does nothing. Pick one.")
+    if a.kill_xp_constant:
+        global KILL_XP_RULE
+        KILL_XP_RULE = False
+        print(f"[map] --kill-xp-constant: every kill pays [0, "
+              f"{KILL_REWARD_VALUE}] -- the pre-RANGERPRE-S6 constant; retail "
+              f"pays the wiki's per-foe table (killxp.py) [KILLXP revert]",
+              flush=True)
+    if a.reforged_xp:
+        global REFORGED_XP
+        REFORGED_XP = True
+        print(f"[map] --reforged-xp: kills pay the Reforged Mode effect's "
+              f"{killxp.REFORGED_PERCENT - 100}% on maps "
+              f"{sorted(killxp.REFORGED_EFFECT_MAPS)} (content/world.toml "
+              f"[player.experience]) -- a stand-in: retail pays it where it "
+              f"sends 0x0041 skill 3434, which this server does not yet",
+              flush=True)
     if a.secondary_bits is not None:
         spec = a.secondary_bits.strip()
         try:

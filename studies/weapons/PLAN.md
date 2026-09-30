@@ -2444,6 +2444,40 @@ largest that hit, the client's own move-to coordinates giving the position). The
 model steers between samples; the `[55]` energy word; the bonus penetration tier (item word
 574).
 
+**CORRECTED 2026-09-29 (RANGERPRE-S9, [studies/presearing/RANGERPRE.md](../presearing/RANGERPRE.md)).**
+The geometry above is superseded; the shapes, the lead and the flag stand. The 24 u disc
+(rA + rB) is REFUTED: 3 of retail's 4 Flare hits on `20260929T150923` (:55934) land outside
+it, and over 572 trusted live arrivals it is wrong 15 times. "NOT measurable" held for the
+nearest-sample reading; rebuilding retail's server model from retail's own orders (`0x0029` /
+`0x002A` dests, `0x002B` factors, `0x0028` stops; positive control: 11 standing aims predicted
+within 1.28 u) made it measurable, and all 12 anchored Flare arrivals were displaced
+SIDEWAYS -- hits 0-52 u from the aim, misses 71.8-105.8 u (RECONSTRUCTION). No single radius
+separates the corpus (the best is wrong 4 times); across ≤ B and |along| ≤ A separates all of
+it for B in [51.0, 57.5] and A in [101, 128]. What ships: the target connects within
+`DODGE_TOLERANCE` = 54 u of the aim ACROSS the line of fire (the shot's recorded `origin` →
+the aim) and `DODGE_ALONG` = 114 u ALONG it -- both FITTED inside those bands, RECONSTRUCTION,
+the mechanism UNVERIFIED, and the along band rests on 6 hits (along -100.1, -97.5, -55.8,
++59.9, +68.6, +88.8; 4 of them beyond the 66 u disc) and 2 misses. A shot with no origin
+falls back to a 54 u disc (ours). The lead is CORROBORATED, with evidence against it: of the 75 launches the
+RANGERPRE-S9 design pass classed as at a moving target, 58 are aimed speed × flight ahead
+(ratio median 0.97) and **17 are NOT led** -- aimed within 20 u, along and across, of where
+the model put the target at the launch (RECONSTRUCTION), several of them 180-290 u misses.
+The 58 were selected by that same along ≈ speed × flight test, so they alone are partly
+circular. The 17 are OPEN (that design pass; the target's move age does not explain them
+alone): its own move ages put about half the unled launches 0.5 s or more into their move
+(RECONSTRUCTION; the exact 17 are not reproduced). Launch 337.615 on `20260929T150923` :55934,
+46 ms into retail's own `0x002A` approach and a miss, is **not** one of them: the model puts
+its aim ~34 u from the target, where a full lead is ~170 u. Ours leads by the trail's last
+`VELOCITY_WINDOW` sample, HELD between samples, so ours is unled until the trail's next sample
+(up to one window into a walk) and under-led until the one after (up to two) -- at 337.615
+ours aims 0-29 u from the target's point, like retail -- and it keeps leading on the held
+velocity for up to two windows after a stop or a mid-walk re-order, where retail aims a
+just-stopped target at its stop point (7 anchored launches within 0.5 s of a `0x0028`; e.g.
+:56025 838.092, 0.4 u from it). So on the late-move half of the unled launches, and on
+just-stopped targets, ours is not retail's.
+Section 27's three checks whose offsets lay along the line are re-aimed across it, and it
+gains retail's nine deciding arrivals as literal rows. A pinned strafe / backpedal / run-in capture would narrow both bands.
+
 ## 40. A point-blank burst -- 2026-09-20: no flight -- every foe around the target, at the completion
 
 > **Correction, 2026-09-26 (§41, `aotjoin.py`).** Two statements below are wrong and stand

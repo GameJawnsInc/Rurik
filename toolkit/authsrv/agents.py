@@ -64,6 +64,30 @@ def npc_template(key):
     return _row("npc", key)
 
 
+def creature_fleshy(file_id):
+    """Is a creature on this model file FLESHY -- open to Bleeding, Disease and
+    Poison? The `fleshy` of the `creature_trait` row naming `file_id`
+    (content/npcs.toml), else True.
+
+    RANGERPRE-S14 (IMMUNE-1). WIKI (GWW "Fleshy" rev 2611793): non-fleshy
+    creatures, Elementals among them, are immune to those three conditions.
+    OBSERVED for Bleeding on one creature (file 17253, definition 1414 of the
+    Reforged capture 20260929T150923 -- the row's own provenance). Keyed by the
+    MODEL FILE rather than the definition, because a definition index is a name
+    within one client build and ours is an allocator's choice: RECONSTRUCTION,
+    and it extends the row to every definition sharing the file (1415 does).
+
+    NEVER RAISES, and the default is the pre-S14 world: a file with no row --
+    every body on a machine whose content names none, the player's own -- is
+    fleshy, so nothing refuses a condition it took before."""
+    if file_id is None:
+        return True
+    for row in WORLD.rows("creature_trait").values():
+        if row.get("file_id") == file_id:
+            return bool(row.get("fleshy", True))
+    return True
+
+
 INF = float("inf")
 
 # GmAgent.h: the top nibble of model_id is a class tag. OBSERVED both ways --

@@ -9824,19 +9824,26 @@ def section_hold_plane():
                   f"{[hex(op) for op, _v in sent]}")
         authsrv.WIPE_SHRINE = True
         # 8. the zone carry: the stance always, the penalty into a field only
-        st6 = {"char_uuid": "abc", "morale": 85, "morale_xp_bank": 40,
+        # RANGERPRE-S7: the 75-XP counter is NOT carried -- retail's counts from
+        # each instance's load (20260929T150923 :55934 264.333: 250 -> 276 on
+        # that instance, no tick; a counter carried from the outpost's 100
+        # would have crossed 375). It replaced the old bank, which was.
+        st6 = {"char_uuid": "abc", "morale": 85, "xp_since_load": 40,
+               "hero_xp_since_load": {HERO: 40},
                "hero_cmd": {HERO: {"ai_mode": 2, "lock": None, "flag": None}},
                "hero_morale": {HERO: 85}}
         authsrv.zone_carry_store(st6)
         st7 = {"char_uuid": "abc", "map_id": 168}
         authsrv.zone_carry_apply(st7, 0)
-        LEDGER.ok(st7.get("morale") == 85 and st7.get("morale_xp_bank") == 40
+        LEDGER.ok(st7.get("morale") == 85
+                  and "xp_since_load" not in st7 and "hero_xp_since_load" not in st7
                   and authsrv.hero_command(st7, HERO)["ai_mode"] == 2
                   and st7.get("hero_morale") == {HERO: 85}
                   and "abc" not in authsrv.ZONE_CARRY,
-                  "a zone into a FIELD carries the death penalty, its bank, the hero's "
+                  "a zone into a FIELD carries the death penalty, the hero's "
                   "morale and the hero's stance (the tape's aiMode 2 in the next "
-                  "0x0072), and the carry is consumed", f"{st7}")
+                  "0x0072), NOT the 75-XP counter (it restarts with the instance), "
+                  "and the carry is consumed", f"{st7}")
         authsrv.zone_carry_store(st6)
         st8 = {"char_uuid": "abc", "map_id": 148}
         authsrv.zone_carry_apply(st8, 0)

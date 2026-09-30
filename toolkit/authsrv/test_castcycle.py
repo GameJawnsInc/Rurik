@@ -847,11 +847,12 @@ def section_attack_target_gate():
         a1, send1 = _sends()
         _press(authsrv, send0, s0, skill=STRIKE, target=0)
         _press(authsrv, send1, s1, skill=STRIKE, target=40)
-        check(a0 == refused(1934) and a1 == [(E2, [PLAYER, STRIKE, 7])],
+        check(a0 == refused(1934) and a1 == refused(1985),
               "AHEAD OF THE WEAPON GATE: with the wrong weapon in hand, "
               "target 0 still draws #1934, while the same press at a foe "
-              "draws the weapon gate's bare release (UNVERIFIED on retail: "
-              "no corpus press fails both)",
+              "draws the weapon gate's #1985 (OBSERVED alone since "
+              "RANGERPRE-S2; the ORDER is UNVERIFIED on retail: no corpus "
+              "press fails both)",
               f"target 0 {a0}, named {a1}")
         authsrv.WEAPON_GATE = saved[4]
         authsrv.weapon_satisfies = saved[3]

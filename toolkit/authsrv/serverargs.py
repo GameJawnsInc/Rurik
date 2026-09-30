@@ -204,6 +204,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "watched anyway -- the --explorable idiom, a switch "
                          "rather than a lie in content/maps.toml. "
                          "studies/morale/FINDINGS.md.")
+    ap.add_argument("--kill-xp-constant", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S6 (KILLXP-a): every "
+                         "hostile death pays 0x00EE [0, 26], the constant this "
+                         "server paid until 2026-09-29. The default pays the "
+                         "wiki's per-foe table by foe level minus player level, "
+                         "split by the party (killxp.py, content/world.toml "
+                         "[player.experience]) -- 49 of 49 live awards, where "
+                         "the constant fits 5.")
+    ap.add_argument("--reforged-xp", action="store_true",
+                    help="Pay the Reforged Mode effect's +5%% kill experience "
+                         "on the maps the effect was observed on "
+                         "([player.experience] reforged_effect_maps: the "
+                         "pre-Searing explorables). OFF by default: retail pays "
+                         "it only where it sends the effect, 0x0041 [own, 0, "
+                         "3434, 0, 1] at a Prophecies explorable load, and this "
+                         "server does not send it yet -- a stand-in until it "
+                         "does. The character's Reforged flag never drives it: "
+                         "a Factions or Nightfall character carries the flag "
+                         "and is paid 100%%.")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
                     help="OVERRIDE the mask GAME_SMSG 0x00B6 carries in the spawn "
                          "burst: which professions the character may take as a "
@@ -1004,12 +1023,38 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the purse's persistence of that credit.")
     ap.add_argument("--no-reward-in-frame", action="store_true",
                     help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
-                         "reward lines (skills, 0x00EE, 0x0140) go AFTER the "
+                         "reward lines (0x00EE, 0x0140, skills) go AFTER the "
                          "closing 0x004A, as SLICE-B5 and D9 pass 1 sent them. "
                          "The default sends them BETWEEN 0x0052 and 0x004A "
                          "(turn_in_quest) -- retail's relative order on 10 of 10 "
                          "hand-ins, where 0x004A is the last quest-family message "
                          "of the batch. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-retail-skill-order", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S4's load order: send the "
+                         "character library 0x00DB BEFORE the bar 0x00DA, as "
+                         "57e89956 did. The default sends the bar first -- "
+                         "retail's order on 126 of 126 live connections carrying "
+                         "both (20260929T150923: 11 of 11). 0x001D does not move "
+                         "either way. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--quest-skills-first", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S5's hand-in SKILL ORDER: a "
+                         "turned-in quest's reward_skills (0x00DC/0x00D9, and "
+                         "0x001C for a skill new to the account) go out BEFORE "
+                         "the experience 0x00EE, as every run before this step. "
+                         "The default sends them after the gold 0x0140 "
+                         "(grant_quest_reward) -- OBSERVED on 4 of 4 retail "
+                         "hand-ins that grant skills (20260929T150923 :55934 "
+                         "293.809 is 0x00EE [0,500], 0x0140 [2,25], then skills "
+                         "394 and 446). KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-quest-complete-visual", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S8's quest-complete "
+                         "visual: a hand-in sends no 0x009F [20, player, 7] "
+                         "after its closing 0x004A, as every run before this "
+                         "step. The default sends it right after the 0x004A "
+                         "(turn_in_quest) -- OBSERVED on 22 of 22 retail "
+                         "hand-ins, e.g. 20260929T150923 :55934 293.809 "
+                         "0x004A then 0x009F [20, 31, 7]; what visual 7 draws "
+                         "is UNREAD. KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "
@@ -2353,6 +2398,23 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "own `auras` (Empathy) still go, in the pre-D6 slot (behind the "
                          "0x00F1 at the apply, ahead of the 0x0044 at the close) and "
                          "without the reference count.")
+    ap.add_argument("--no-condition-effect-words", action="store_true",
+                    help="RANGERPRE-S13 REVERT: a condition sends no [6, wearer, id] "
+                         "at its apply and no [7, wearer, id] at its close -- the "
+                         "0x0042 / 0x00F1 / property 44 alone, this server's bytes "
+                         "until 2026-09-29. Retail sends the id on every fresh "
+                         "apply, 54 of 54 on the live corpus (Bleeding 23, Blind "
+                         "24, Burning 25, Disease 26, Poison 27, Dazed 28, Weakness "
+                         "and Cracked Armor 29; Crippled and Deep Wound none).")
+    ap.add_argument("--no-condition-immunity", action="store_true",
+                    help="RANGERPRE-S14 REVERT: every creature is fleshy -- a body "
+                         "whose model file content marks non-fleshy (creature_trait, "
+                         "content/npcs.toml) takes Bleeding, Disease and Poison like "
+                         "any other and the inflicting player hears no #1957, this "
+                         "server's bytes until 2026-09-29. Retail refused the "
+                         "player's Sever Artery on a non-fleshy creature with "
+                         "0x005D #1957 + 0x005E [1, 7] and no Bleeding "
+                         "(20260929T150923 :53756 t=1057.415; WIKI 'Fleshy').")
     ap.add_argument("--no-snare-status-bit", action="store_true",
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "
@@ -2426,6 +2488,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "adds nothing to the player's maximum energy -- the pool "
                          "every run before 2026-09-18 had. The party row's typed "
                          "player_energy stays either way.")
+    ap.add_argument("--no-held-health", action="store_true",
+                    help="RANGERPRE-S11 REVERT: a held item's 564 word (+N maximum "
+                         "health, retail's shield 120 -> 135) adds nothing to the "
+                         "player's maximum, and an equip or a set switch sends no "
+                         "0x009F 42 -- the maximum every run before 2026-09-29 had.")
     ap.add_argument("--no-projectiles", action="store_true",
                     help="land a bow's, wand's or staff's word at the swing's WINDUP "
                          "from melee reach, with no 0x00A4 / 0x00A7 -- every run "
@@ -2557,6 +2624,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the pre-2026-09-09 wire, where the only status "
                          "messages were death and revive. Retail sends the "
                          "word behind every such apply and close.")
+    ap.add_argument("--regen-zero-signed", action="store_true",
+                    help="RANGERPRE-S3 REVERT: a health-regeneration rate that "
+                         "returns to zero (a condition's expiry) goes out as "
+                         "-0.0 (0x80000000) in the 0x00A2 property-44 word, "
+                         "the pre-2026-09-29 wire. Retail's zero is +0.0, 561 "
+                         "of 561 on the live corpus.")
     ap.add_argument("--no-effects", action="store_true",
                     help="do not open or close effect episodes. The control "
                          "for the 0x0042/0x0044 channel: with it a stance is "
@@ -2715,13 +2788,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "only RECONSTRUCT from the client's own refusal block "
                          "(chatdefs.REFUSAL_REASONS, string ids 1934-1993; "
                          "DESKWORK-D5 step 7). Today its one consumer is the "
-                         "weapon gate (DAGGERS-B4), which sends #1985 with the "
-                         "0x00E2 release instead of the bare release. DEFAULT "
-                         "OFF: what retail sends on a weapon mismatch is NOT "
-                         "OBSERVED (the client very likely never sends the "
-                         "press), so the bare release -- retail's own shape "
+                         "party-target gate, which sends #1986 with the 0x00E2 "
+                         "release on a foe spell at a party body instead of "
+                         "the bare release. DEFAULT OFF: #1986 is on no wire "
+                         "we hold, so the bare release -- retail's own shape "
                          "for 3 of 43 refusals -- stays the default. The "
-                         "OBSERVED ids 1960 and 1961 are sent either way.")
+                         "OBSERVED ids 1934, 1957, 1960, 1961 and 1985 are sent "
+                         "either way; the weapon gate's #1985 (DAGGERS-B4) "
+                         "rode this flag until RANGERPRE-S2 (2026-09-29) "
+                         "observed it on retail's wire, 20260929T150923. Its "
+                         "other consumer is the immunity sentence for Disease "
+                         "and Poison (#1958 / #1959, RANGERPRE-S14), on no wire.")
     ap.add_argument("--no-skill-labels", action="store_true",
                     help="drop the LABEL tier at startup: every skill_effect "
                          "row carrying tier = \"label\" (vault/content/"

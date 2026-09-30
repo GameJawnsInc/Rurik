@@ -9,7 +9,9 @@ the one capture by eye; this mechanises it so a test can pin it):
   P1  every `0x0042` carrying skill 482 is joined by an int property 42
       (PROP_HEALTH_MAX, on 0x009F) addressed to the SAME agent, in the same
       batch -- within 50 ms, the corpus's own batch shoulder;
-  P2  the joined value is the agent's previous maximum x 0.8, exactly, and
+  P2  the joined value is the agent's previous maximum less 20 % of it,
+      FLOORED (`predicted_max`; x 0.8 exactly on the multiples of 5 this was
+      first written against, 64 -> 52 off them -- RANGERPRE-S1), and
       the reduction is capped at 100 (WIKI, GWW "Deep Wound" sec. Game
       mechanics, rev. 2026-03-02: "never reduce your maximum health by more
       than 100 health, even if your maximum health was more than 500" --
@@ -53,8 +55,16 @@ PROP_HEALTH_MAX = bufflog.PROP_HEALTH_MAX
 
 
 def predicted_max(previous):
-    """The maximum under Deep Wound, from the one before it. WIKI rule."""
-    return previous - min(CAP, round(previous * (1.0 - FRACTION)))
+    """The maximum under Deep Wound, from the one before it: the 20 % FLOORED.
+
+    OBSERVED (RANGERPRE-S1, studies/skills 41.7): 64 -> 52 on an NPC and
+    483 -> 387 on a PvP-arena opponent, where round() predicts 51 and 386.
+    INTEGER arithmetic on purpose: `previous * (1.0 - FRACTION)` floored is
+    one short on every multiple of 5 (1.0 - 0.8 is 0.19999999999999996, so
+    480 would predict 385 and redden P2 on the corpus's own 384s). The server
+    spells the same number `floor(m * 0.2)` (`authsrv.deep_wound_reduction`).
+    """
+    return previous - min(CAP, int(previous) // 5)
 
 
 def sequence(capture_dir, connection, codec):

@@ -354,3 +354,103 @@ served, defs 3486/3487; it is 0 for the Warrior's and Ranger's), and \
 agents.npc_properties sends 0 in that slot for every NPC -- its meaning is NOT \
 FOUND, so the served definition diverges there, unmodelled and said here (the \
 landing quoted the tape's value as 0; corrected by the fix pass)."""
+
+
+# ---------------------------------------------------------------------------
+# THE NON-FLESHY CREATURE -- RANGERPRE-S14 (the IMMUNE item's first half,
+# 2026-09-29; studies/presearing/RANGERPRE.md section 3).
+#
+# Two rows, and they are separate on purpose:
+#
+#   npc.stone_elemental          definition 1414, as npcdefs.py compiles it
+#                                from the Reforged capture -- a template a
+#                                spawn row can name, so the immunity below is
+#                                reachable on every machine, not only one
+#                                whose vault overlay happens to carry the file
+#   creature_trait.file_17253    the immunity itself, keyed by the MODEL FILE
+#                                (agents.creature_fleshy); every template on
+#                                that file inherits it, 1415 included
+#
+# The trait is keyed by file and not by definition because a definition index
+# is a name within ONE client build (npcdefs' docstring: 7809 is two different
+# creatures in two builds) and ours is an allocator's choice -- RECONSTRUCTION
+# as a key, said here and in agents.creature_fleshy.
+
+[npc.stone_elemental]
+# NO `name`: npcdefs writes none ("a name comes from a rendered nameplate or it
+# does not exist") and no client of ours has drawn this definition. The KEY is
+# ours, and the identity it asserts is CORROBORATED, not rendered: WIKI (GWW
+# "Stone Elemental" rev 2726826) gives an Elementalist, level 1 in Green Hills
+# County, 80 health, a hit about every 4.6 s -- and the wire carries profession
+# 6, level 1, a maximum of 64 = 80 x 0.8 (Reforged Mode) and 0x0035 4.5 s.
+# NO model_id: ArenaNet declares it with 0x0056 and sends no 0x0057, like
+# lakeside_worm; inventing one is the guess that row's comment refuses.
+definition = 1414
+file_id = 17253
+scale = 1174405120          # 0x46000000 -- hue/sat/light 0, scale 70%
+flags = 0
+profession = 6
+level = 1
+move_speed = 288.0
+attack_interval = 4.5
+attack_modifier = 1.0
+max_health = 64
+enc_name = [3898, 49008, 49548, 14043]
+
+[npc.stone_elemental.provenance]
+source = "capture"
+capture = "20260929T150923"
+origin = "live"
+build = "2026-09-01_44fbd68767a8"
+mode = "reforged"
+extractor = "toolkit/authsrv/npcdefs.py"
+verified = """OBSERVED on ArenaNet's own wire (client version 38888): \
+definition 1414 declared by GAME_SMSG 0x0056 [1414, 17253, 0, 0x46000000, 0, \
+0, 6, 1, name] in 2 connections of this capture (:53756 at t=1024.427, :56064 \
+at t=959.841), payloads byte-identical; 21 creates carried it (agent 22 on \
+:53756, 0x0020 model word 0x20000586, at t=1025.195). max_health is the \
+[42, 22, 64] joined to the create in effect at its own timestamp (t=1046.303), \
+the attack rate 0x0035's 4.5 / 1.0. Every field is npcdefs.read's row for 1414 \
+over this one capture, unchanged -- test_condimmune section 1 re-runs the \
+extractor and requires equality, field for field."""
+
+[creature_trait.file_17253]
+file_id = 17253
+fleshy = false
+
+[creature_trait.file_17253.provenance]
+source = "capture"
+capture = "20260929T150923"
+origin = "live"
+build = "2026-09-01_44fbd68767a8"
+mode = "reforged"
+extractor = "toolkit/authsrv/test_condimmune.py"
+verified = """OBSERVED (Bleeding, n = 1) on connection 10.0.0.210:53756 \
+(map 160, client version 38888, the player the instance's only one). The \
+player's Sever Artery (382) completes on agent 22 -- definition 1414, file \
+17253 (npc.stone_elemental above) -- at t=1057.415 as exactly 0x009F \
+[46, 9, 0], 0x00CF [9, 25], 0x00A3 [16, 22, 9, -0.078125], 0x005D \
+[0x08A5] = #1957 target_immune_bleeding, 0x005E [1, 7], 0x00E3 [9, 382, 0]: \
+no [6, 22, *], no 0x00F1 and no [44, 22] then or until its death word \
+0x00F1 [22, 16] at t=1060.488, and Gash (384) on it at t=1058.906 is a plain \
+hit with no Deep Wound. The control, same connection, same skill, on file \
+141274 (definition 1437): [6, T, 23], 0x00F1 [T, 3], [44, T, -0.09375] at \
+t=1113.410, 1132.708 and 1140.683, 3 of 3. #1957 is on this connection once \
+(and, by the IMMUNE design lane's census, on no other of the 127 live \
+connections). The named extractor is the test whose section 1 re-derives every \
+fact above from this connection's bytes except that corpus census."""
+note = """
+WIKI (GWW "Fleshy" rev 2611793): non-fleshy creatures, Elementals among them,
+are immune to Bleeding, Disease and Poison; GWW "Bleeding" rev 2673942 says the
+same of Bleeding. So `fleshy = false` refuses all three. Bleeding is OBSERVED;
+Disease and Poison ride the wiki alone -- their sentences, #1958 and #1959, are
+on no wire we hold (NOT FOUND), so they go out only under --refusal-reasons.
+The client's refusal block holds exactly those three immunity sentences, which
+CORROBORATES the set.
+
+Keyed by the MODEL FILE: RECONSTRUCTION. Definition 1415 (same capture, level 3,
+scale 100%) declares the same file and inherits the row; no condition was tried
+on it. Other non-fleshy families (spirits, undead, constructs) and effect-granted
+immunity are NOT MODELLED -- mapping a family to its files needs data we do not
+hold.
+"""
