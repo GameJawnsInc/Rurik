@@ -8,7 +8,10 @@ every number below was re-derived by at least one refuter or the blind lane, and
 WEAKENED a claim, its corrected form is what is written here.*
 
 **Identifiers.** `RANGERPRE-F<n>` = findings from the capture. `RANGERPRE-S<n>` = server-diff
-build steps, in the critic's landing order (§4). Convention:
+build steps, in the critic's landing order (§4). The item column's words (`MAXHP-1`, `LOOT-1`,
+`ROUTE-A`, `QUESTFLOW-H4`, `WEAPONREFUSE-B`, ...) are the design specs' item names, and §4's
+rows define them. `RANGERLOOP-F<n>` = findings from the 2026-09-30 loopback runs, registered in
+[CONFIRM-2026-09-30.md](CONFIRM-2026-09-30.md). Convention:
 [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
 ## 0. The run
@@ -139,30 +142,36 @@ L = needs a loopback client run. Status is kept here until each lands, then in P
 worktree and APPROVED by an independent reviewer who re-ran its tests and its
 fails-without-fix check (PLAN-LOG "RANGERPRE"). The commit named is each step's first; its
 review fixes follow it on the same lane.
+**2026-09-30: S10, S12, S15-S18, S20 and S21 landed** the same way, on lanes `rp2-a`..`rp2-d`
+merged at `e968131a` and `d2fc95e1`. S16's and S20's last review rounds changed only their run
+sheets. A loopback session then ran each step's pre-registered card on our client, and checked
+six of the shipped D steps beside them: [CONFIRM-2026-09-30.md](CONFIRM-2026-09-30.md)
+(PLAN-LOG "RANGERPRE's loopback confirmation"). S21's hand restore became the default after its
+run (`bc8f409b`). **S19 is not built.**
 
 | step | item | what | D/L | status |
 |---|---|---|---|---|
 | RANGERPRE-S1 | DEEPWOUND | floor the reduction; `deepwoundjoin.predicted_max` | D | **landed** `e913db63` |
-| RANGERPRE-S2 | WEAPONREFUSE-A | always send #1985 + `0x005E` + `0x00E2` | D | **landed** `959b21b5` |
-| RANGERPRE-S3 | IMMUNE-2a | the +0.0 regen zero | D | **landed** `a20fd763` |
-| RANGERPRE-S4 | SECONDARY-A | `0x00DA` before `0x00DB` at load | D | **landed** `fcc0ddff` |
+| RANGERPRE-S2 | WEAPONREFUSE-A | always send #1985 + `0x005E` + `0x00E2` | D | **landed** `959b21b5`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
+| RANGERPRE-S3 | IMMUNE-2a | the +0.0 regen zero | D | **landed** `a20fd763`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
+| RANGERPRE-S4 | SECONDARY-A | `0x00DA` before `0x00DB` at load | D | **landed** `fcc0ddff`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
 | RANGERPRE-S5 | QUESTFLOW-H1 | reward skills after the gold | D | **landed** `3a0de649` |
 | RANGERPRE-S6 | KILLXP-a | per-foe kill xp; Reforged +5% seam, Prophecies-scoped, off by default | D | **landed** `75629da9` |
 | RANGERPRE-S7 | KILLXP-b | the since-load 75-xp morale tick (supersedes QUESTFLOW-H2) | D | **landed** `c5a9e972` |
-| RANGERPRE-S8 | QUESTFLOW-H3 | `[20, own, 7]` after `0x004A` in a hand-in | D | **landed** `22ef7cc3` |
+| RANGERPRE-S8 | QUESTFLOW-H3 | `[20, own, 7]` after `0x004A` in a hand-in | D | **landed** `22ef7cc3`; **CONFIRMED** on the wire at the client's hand-in ([CONFIRM](CONFIRM-2026-09-30.md) §3); its look is for the owner's eyes |
 | RANGERPRE-S9 | DODGE | the across/along hit test against the retail band | D | **landed** `55ce30e6` |
-| RANGERPRE-S10 | MAXHP-1 | an NPC's max declared on the player's first landed hit | L | open |
-| RANGERPRE-S11 | MAXHP-2 | a held max-health modifier (the shield) moves the player's max | D | **landed** `0ed70713` |
-| RANGERPRE-S12 | ANIMAL | `anim` spawn, `anin` on first hit, fights back | L | open |
-| RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | **landed** `31112797` |
-| RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | **landed** `ce895d98` |
-| RANGERPRE-S15 | LOOT-1 | gold drop on kill, pickup, purse credit (straight walk) | L | open |
-| RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | open |
-| RANGERPRE-S17 | ROUTE-B | interact served ~75 u, with the stop/serve slack fixed | L | open |
-| RANGERPRE-S18 | QUESTFLOW-A | accept flags, marker on the objective, rewards on accept | D+L | open |
-| RANGERPRE-S19 | SECONDARY-B | a content-authored dialog button grants a secondary | L | open |
-| RANGERPRE-S20 | QUESTFLOW-H4 | reward item + quest-item removal via one shared grant helper | L | open |
-| RANGERPRE-S21 | WEAPONREFUSE-B | persist hand changes across loads (default off until a run) | L | open |
+| RANGERPRE-S10 | MAXHP-1 | an NPC's max declared on the player's first landed hit | L | **landed** `316a026b`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §4) |
+| RANGERPRE-S11 | MAXHP-2 | a held max-health modifier (the shield) moves the player's max | D | **landed** `0ed70713`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
+| RANGERPRE-S12 | ANIMAL | `anim` spawn, `anin` on first hit, fights back | L | **landed** `3bce62ed`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §5) |
+| RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | **landed** `31112797`; **CONFIRMED** on the wire and the target bar ([CONFIRM](CONFIRM-2026-09-30.md) §6); the body visual is for the owner's eyes |
+| RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | **landed** `ce895d98`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
+| RANGERPRE-S15 | LOOT-1 | gold drop on kill, pickup, purse credit (straight walk) | L | **landed** `3e0851cf`; the drop **CONFIRMED** on the client; the pickup CONFIRMED only under `--no-model-avoid-halt`: **by default MOVECODE-1z-dj's avoid halt cancels it beside a standing NPC** (RANGERLOOP-F8, open) ([CONFIRM](CONFIRM-2026-09-30.md) §7) |
+| RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | **landed** `c26ecec5`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §8); a re-approach's halt comes late once the server's mirror has diverged (RANGERLOOP-F9, open) |
+| RANGERPRE-S17 | ROUTE-B | interact served ~75 u, with the stop/serve slack fixed | L | **landed** `1c1bc840`; **CONFIRMED** on the client, n = 2 ([CONFIRM](CONFIRM-2026-09-30.md) §9) |
+| RANGERPRE-S18 | QUESTFLOW-A | accept flags, marker on the objective, rewards on accept | D+L | **landed** `55f7d0fc`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §2) |
+| RANGERPRE-S19 | SECONDARY-B | a content-authored dialog button grants a secondary | L | open: **not built**, it waits on the owner's `0x00B6` ruling (§5) |
+| RANGERPRE-S20 | QUESTFLOW-H4 | reward item + quest-item removal via one shared grant helper | L | **landed** `1c512339`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §3) |
+| RANGERPRE-S21 | WEAPONREFUSE-B | persist hand changes across loads (default ON since the run) | L | **landed** `3ab6b017`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §1); the default flipped ON in `bc8f409b` |
 
 **Deferred, with reasons** (critic's DEFER list): ROUTE-C corner-leg routing (contests
 MOVECODE-1z-dn.5's "no route" closure, conflicts with LOOT's pickup walk, and our A* picks a
@@ -185,6 +194,49 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   a fleshy foe (and, since S14, draws #1957 on a non-fleshy one). WIKI: the condition rides a
   hit only. Its own item; the repro is in the S14 review. Also open: IMMUNE-3, the #1957
   sentence on the ranged, area and burst sites (they refuse the condition silently).
-- The five test reds this capture caused (test_wearmap, test_adrenwire, test_movesync,
+- ~~The five test reds this capture caused (test_wearmap, test_adrenwire, test_movesync,
   test_routerbench, test_weaponcensus; test_npcdefs §8 would add two) are all confirming evidence
-  breaking exact pins; the owner chose server diffs first, and they stay open.
+  breaking exact pins; the owner chose server diffs first, and they stay open.~~
+  **2026-09-30:** the three files this tape left red on `main` at `e18d67f3` (test_adrenwire,
+  test_npcdefs, test_movesync) were classified per connection and repaired there (`05e9392a`,
+  merge `a7086a94`, PLAN-LOG "RANGERPRE's corpus reds"; the bare-machine skip is `8061941b`),
+  and `rangerpre` took them at `30923224`. **The other three are still red** on `rangerpre` at
+  `41e5032a`, re-run for this record: test_wearmap (1 check: 34 worn items not declared first on
+  their own connection), test_routerbench (2: one click of 149 unanswered) and
+  test_weaponcensus (1: WEAPONS-Q8, bow intervals of 2.63-2.72 s beside the pinned 2.476). They
+  are unclassified, whether this tape is their cause is UNVERIFIED, and they stay open.
+- **RANGERPRE-S19** (SECONDARY-B) is not built. It waits on the owner's `0x00B6` ruling: the
+  secondary-unlock mask, which we never send ([studies/profession/RUNS.md](../profession/RUNS.md)
+  §13).
+- **The hand restore ships ON** (S21; `bc8f409b`). The client accepted the doubled `0x0147` on
+  three relaunch loads and two zone loads ([CONFIRM-2026-09-30.md](CONFIRM-2026-09-30.md) §1),
+  so `HAND_RESTORE` defaults to True, and `--no-hand-restore` is the known-bad arm. The fallback,
+  which refuses an item another set's record names, is not built. Still NOT OBSERVED: what
+  retail does to set k's record when set k's item is equipped into set 0.
+- **The loopback confirmation's findings** ([CONFIRM](CONFIRM-2026-09-30.md) §10), each OBSERVED
+  on our client:
+  - **RANGERLOOP-F8, a defect**: MOVECODE-1z-dj's avoid halt cancels an S15 pickup beside a
+    standing NPC (3 of 3 by default) while the client walks on and reaches the pile; under
+    `--no-model-avoid-halt` 2 of 2 serve. So S15's pickup fails by default near a standing
+    body until this is fixed. A fix task is spawned.
+  - **RANGERLOOP-F9**: after S16's halt the AgTrack mirror walks the follow in (it never sees
+    the `0x0028`), and a re-approach then halts late and 134 u inside range, after a 688 u
+    `APPROACH RE-PIN`. The link from the one to the other is RECONSTRUCTION, n = 1.
+  - **RANGERLOOP-F2**: quest-granted items draw an unresolved name. `content/items.toml`
+    `starter_shield`'s "name id 8582" disagrees with `codedstr`'s 8326 for unit `0x2186`.
+  - **RANGERLOOP-F3**: `'anim'` draws neutral, not WIKI's green (retail's colour is
+    UNVERIFIED), and space on it sends ATTACK.
+  - **RANGERLOOP-F5**: a flags-0 quest's log heading reads as its own name (which field is
+    UNVERIFIED).
+  - **RANGERLOOP-F6**: our accept re-unlocks skills the account holds, and the client shows a
+    toast retail never draws.
+  - **RANGERLOOP-F1** (no backpack grid under `--party slice`) is CLOSED: HEROINV fixed it on
+    `main` (`5960cc68`, CONFIRMED on the client), and `rangerpre` took it at `30923224`. F4 (the
+    client's re-select follows an allegiance change, CORROBORATED) and F7 (no PARTYMAX display
+    issue) close questions rather than open them.
+- The owner's eyes are owed on S13's body visual and S8's quest-complete visual
+  ([CONFIRM](CONFIRM-2026-09-30.md) §11).
+- The step reviews' named follow-ups are listed in [CONFIRM](CONFIRM-2026-09-30.md) §11 and are
+  not scheduled: PARTYMAX, the animal's create batch, speed and strike, the pickup mid-swing,
+  the held interact's expiry, the replayed marker and `0x004D`, the weapon reward line, and the
+  persisted quest item.

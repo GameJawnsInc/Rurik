@@ -28,6 +28,89 @@ move back.
 
 ---
 
+### RANGERPRE's loopback confirmation -- 2026-09-30 -- **S10, S12, S15-S18, S20 and S21 landed and run on our client: seven CONFIRMED, and S15's pickup FAILS by default beside a standing NPC; six shipped steps confirmed beside them; the hand restore ships ON; nine findings (RANGERLOOP-F1..F9)**
+
+**Landed** on lanes `rp2-a`..`rp2-d`, merged into `rangerpre` at `e968131a` and `d2fc95e1`.
+Each step was reviewed by an independent reviewer who re-ran its tests and its
+fails-without-fix check; S16's and S20's last rounds changed only their run sheets. The commit
+is each step's first, and each carries a known-bad flag:
+- S10: an NPC's maximum rides the player's first landed word, not its create (`316a026b`,
+  `--npc-max-at-create`).
+- S12: a charmable animal stands passive under `'anim'`, and the first landed hit turns it
+  `'anin'` in retail's order (`3bce62ed`, `--no-animal-token-flip`). Its content row
+  `npc.animal_1343` moves PLAN.md 3.2's tracked npc census 10 -> 11.
+- S15: a kill drops gold in retail's frame, and a click walks to it (`3e0851cf`, only under
+  `--drop-table`; `--no-drops`).
+- S16: a ranged approach's first start halts the body with `[4]`, `[8, me, 1]` and `0x0028`
+  (`c26ecec5`, `--no-approach-start-halt`).
+- S17: a held interact is served at the follow disc (`1c1bc840`, `--held-interact-at-range`).
+- S18: the accept's log flags and home; accept-time grants before the `0x0049`; the marker on
+  the objective or on its exit (`55f7d0fc`).
+- S20: the hand-in takes the quest item back and grants the reward into that cell
+  (`1c512339`, `--no-quest-items`).
+- S21: a hand change persists across loads (`3ab6b017`). After its run the default flipped ON
+  (`bc8f409b`, `--no-hand-restore`).
+- **S19 is not built.** It waits on the owner's `0x00B6` ruling.
+
+**The runs** ([studies/presearing/CONFIRM-2026-09-30.md](studies/presearing/CONFIRM-2026-09-30.md)):
+37 agent-piloted loopback launches, `20260930T102526` to `134310`, build 38797, owner hands
+off, with every question pre-registered on its card. Every known-bad arm that launched
+separated from its treatment.
+- **S21 CONFIRMED.** The client accepts a load that names one item in two weapon sets (Q1:
+  3 relaunches and 2 zone loads, where 0 of 21 retail loads do it), the F-keys, the swing and
+  the re-equip. **`HAND_RESTORE` now defaults ON** (`bc8f409b`).
+- **S18 CONFIRMED.** The grants' order holds. The marker sits at the scout and at the portal,
+  against `--quest-marker-at-player`'s centre. The flags and the home move the log, against
+  `--no-retail-quest-log`.
+- **S20 CONFIRMED.** The reward goes into the NAMED cell while the lowest free cell was
+  another. That run was launched without `--party` (RANGERLOOP-F1). S8's visual word follows
+  the `0x004A`.
+- **S10 CONFIRMED.** The 42 comes immediately before the first word, a revive restores
+  without a new declaration, and a hero's hits carry none.
+- **S12 CONFIRMED.** The turn is exactly retail's `[9F/65, 9B, 9F/36, 9F/42, A3, 1E, 2F, 2B,
+  2A]`, n = 2, one of them from the client's own attack.
+- **S16 CONFIRMED.** The client's own first report after the halt sits 2.8 u from the
+  approach's end, 1500.8 u from the target, against `--no-approach-start-halt`'s walk-in to
+  224 u. The hold survives the launch, a keyboard move releases it with no freeze, and it does
+  not eat a mouse click. The re-approach halted late (RANGERLOOP-F9). The frame correction is
+  written into [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §21.
+- **S17 CONFIRMED, n = 2.** A held interact is served at 80.0 u, on arrival, after 9/69/69
+  ticks, against `--held-interact-at-range`'s 142.4/137.6/133.1 u after 4/63/63.
+- **S15: the drop CONFIRMED** (3 of 3 kill blocks in retail's order, against `--no-drops`),
+  and the click and its straight walk. **The pickup FAILED under the default:** MOVECODE-1z-dj's
+  avoid halt cancelled 3 of 3 beside the revived practice Hatcher, while the client walked on
+  and reached each pile (RANGERLOOP-F8). Under `--no-model-avoid-halt`, 2 of 2 served in
+  retail's eight messages, purse 0 -> 6 -> 12.
+- **The shipped S2, S3, S4, S11, S13 and S14** are CONFIRMED on the client for the first time:
+  #1985 and #1957 in retail's order with their sentences drawn; the bar before the library;
+  +0.0; and the HUD at 155/140/155 against `--no-held-health`'s 140. S13's body visual and
+  S8's look are for the owner's eyes.
+
+**Found** (CONFIRM §10):
+- RANGERLOOP-F1: no backpack grid under `--party slice`. CLOSED by HEROINV on `main`
+  (`5960cc68`), merged into `rangerpre` at `30923224` before lane b ran.
+- RANGERLOOP-F2: quest-granted items draw an unresolved name.
+- RANGERLOOP-F3: `'anim'` draws neutral, not WIKI's green, and space on it attacks.
+- RANGERLOOP-F4: the client's re-select follows an allegiance change (CORROBORATED, with a
+  control).
+- RANGERLOOP-F5: a flags-0 quest's heading is its own name.
+- RANGERLOOP-F6: our accept re-unlocks held skills, and the client shows a toast retail
+  never draws.
+- RANGERLOOP-F7: no PARTYMAX display issue.
+- RANGERLOOP-F8, a defect: MOVECODE-1z-dj's avoid halt cancels an S15 pickup beside a
+  standing NPC. A fix task is spawned.
+- RANGERLOOP-F9: the server's mirror walks the follow in after S16's halt, and a re-approach
+  then halts late, 134 u inside range.
+
+**Also re-run for this record:** test_wearmap, test_routerbench and test_weaponcensus, the
+three reds of the tape's five that `main`'s corpus-reds landing did not name, are still red on
+`rangerpre` at `41e5032a` (4 checks). They are unclassified (RANGERPRE.md §5).
+
+**Open** (PLAN.md 8.1): S19 on the owner; F8 and F9; F2, F5 and F6; those three reds. The
+owner's eyes on S13's and S8's visuals are listed in CONFIRM §11.
+
+---
+
 ### HEROINV's drag, corrected -- 2026-09-30 -- **the hand-off line was stale when written: `rangerpre` already had HEROINV**
 
 The entry below ("HEROINV's drag") ends by saying `rangerpre` lacks HEROINV. It was written

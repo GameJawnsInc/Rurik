@@ -599,9 +599,10 @@ Both are now graded against an enumerated content surface:
   skill_effect 113 — was map 10, npc 56 on 2026-08-14 and map 15, npc 56 on 2026-08-27).
   **The tracked census** (`content/*.toml` and `content/overrides/` alone, no vault, which
   `toolkit/test_checks.py` recomputes and reddens on when this line disagrees): map 19,
-  npc 10 (2026-09-29: + `stone_elemental`, definition 1414, RANGERPRE-S14). **Read the NPC
-  figure carefully before scoring R4c-1 against it**: only **10** of the 64 are tracked in
-  `content/npcs.toml`; the other **54** are the gitignored
+  npc 11 (2026-09-29: + `stone_elemental`, definition 1414, RANGERPRE-S14; 2026-09-30: +
+  `animal_1343`, definition 1343, RANGERPRE-S12). **Read the NPC figure carefully before
+  scoring R4c-1 against it**: only **11** of the 65 are tracked in `content/npcs.toml`; the
+  other **54** are the gitignored
   `vault/content/npcs.toml` overlay `npcdefs.py` emits, with no name, armor, energy or
   allegiance (that module's own header says so). So the "≥15 NPC templates" bar is met on
   the count and **not** on the content, which is the distinction this criterion exists to
@@ -2307,9 +2308,17 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **The Reforged pre-Searing run, 2026-09-29** — [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md) §4-§5
 
-* **RANGERPRE-S10, S12, S15-S21** are open, each specified; they need one pre-registered
-  loopback run. Also open there: an attack skill's condition landing on a miss; serving
-  the Reforged effect 3434, and a wire-derived game_mode that can contradict a manifest.
+* **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
+  owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
+  serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest;
+  three corpus tests still red (test_wearmap, test_routerbench, test_weaponcensus).
+* **RANGERLOOP-F8, a defect:** MOVECODE-1z-dj's avoid halt cancels an S15 pickup beside a
+  standing NPC while the client reaches the pile
+  ([CONFIRM-2026-09-30.md](studies/presearing/CONFIRM-2026-09-30.md) §7, §10).
+* **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
+  late, inside range.
+* **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a
+  flags-0 quest's heading; our accept re-unlocks skills the account holds.
 
 ### 8.2 Waiting on the owner, or on a live capture
 
