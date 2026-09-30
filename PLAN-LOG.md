@@ -28,6 +28,49 @@ move back.
 
 ---
 
+### REVIVE-HEAL, the player's half -- 2026-09-30 -- **the player's rise is retail's one segment (status, `[43]`, `[8, me, 0]`, `[52]`, `[54]`, `0x00A2 [55, me, 1.0]`, flags 5). Landed and run at n = 1: 0 complaints, both pools full 0.1 s after the rise**
+
+**Retail:** 25 player rises on the live corpus.
+- **The shape:** 24 are that one segment. The 25th is the flags alone.
+- **The heal:** the 55 is 1.0 on all 24, the Resurrection Signet's rises included, whose
+  energy is 0.24-0.27.
+- **The maximum:** no `[42]` at any rise. The death batch carried the reduced maxima
+  (MORALE-Q8), and `kill_player` sends them.
+- **Ours:** status and flags 5, then a tick later `[42]` + `[34]` + the energy half, and the
+  death's hold left set until the player moved.
+
+**The change** (`c4127340`): `PLAYER_REVIVE_HEAL_GAIN` sends retail's segment from
+`revive_player`, so the timer, the shrine and a resurrection skill alike.
+`--no-player-revive-heal-gain` restores the defer.
+- **The hold release:** `restore_player_energy` gains an `after_rate` hook, which puts
+  `[8, me, 0]` between `[43]` and `[52]`.
+- **The fractions:** the 55 is the raise's health fraction, the energy half its energy
+  fraction.
+- **Tests:** `test_morale` §6 pins retail's seven-message order after a real death, and §6b
+  the known-bad arm plus the switch (floor 63 → 65, vaulted and bare). `test_guards` §6
+  counts the segment.
+- **Proved red:** the arm disabled in the source reddens §6's two and `test_guards` §6.
+- **All green:** `test_morale` 65, `test_guards` 45, `test_pools` 154, `test_agentlife` 704
+  (+1 skip), `test_mechanics` 384, `test_loot` 62, and srclint. Not the full suite.
+
+**The run**, `20260930T171127`: `--enemy --no-enemy-skills --enemy-weapon starter_hammer
+--enemy-hit 0.35`, with no input past Play. **n = 1, and the rig is why:** the hostile's
+weapon replaced `--enemy-hit` with its own 1-2 per swing against AR 45, so one death took
+200 s. The next run should drop `--enemy-weapon`, since `ENEMY_HIT_FRACTION` sizes the swing
+of a body with no item.
+- **The wire:** the rise was the seven messages in retail's order, the death's hold released,
+  and no deferred refill.
+- **The complaint:** 0 `Health non-zero on resurrect`, against 13 of 13 for the old burst on
+  the same exe (`20260813T200814`).
+- **The pools:** the HUD read health 10 before the death, 0/0 dead, then **100 and energy 25**
+  with the regen arrows 0.1 s after the rise, and 89 on the next swings.
+- **The verdict:** `PASS`, and the store hash is unchanged.
+
+**Open (`PLAN.md` §8.1):**
+- The player's re-run for n.
+- A party body's rise (`revive_party_body`) still sends `[42]` + `[34]`, where retail's hero
+  rises carry the 55.
+
 ### REVIVE-HEAL -- 2026-09-30 -- **an NPC's revive heals in the status's own segment with retail's `0x00A2 [55, agent, 1.0]`. Landed and run: 0 resurrect complaints in 5, against my registered prediction of 5**
 
 **Retail** (every in-place revive on the live corpus, 88):

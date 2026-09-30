@@ -700,3 +700,13 @@ This does not need settling for the server. Shipped: `REVIVE_HEAL_GAIN`, reverte
 `--no-revive-heal-gain` (the §1f defer). **The player's rise is not changed yet.** Retail's
 shape for it (the 55 plus energy 43 and 52) is the obvious next step, and §1f's 13-of-13
 player burst is the control that step would have to beat.
+
+**The player's half, 2026-09-30 (later) [OBSERVED, n = 1].** `revive_player` now sends retail's
+rise as one segment: status, `[43]`, `[8, me, 0]`, `[52]`, `[54]`, `0x00A2 [55, me, 1.0]`,
+flags 5. That is 24 of 25 live rises, and the 25th is the flags alone.
+- **Run `20260930T171127`:** one rise, 0 `Test Warrior: Health non-zero on resurrect`. The
+  §1f player burst drew 13 of 13 on the same exe (`20260813T200814`).
+- **The pools:** the HUD read health 100 and energy 25, regen arrows back, 0.1 s after the
+  rise, from 0/0 while dead.
+- **Why n = 1:** `--enemy-weapon` replaced the hit fraction with the weapon's 1-2 per swing,
+  so a death took 200 s. The re-run without it is registered in `PLAN.md` §8.1.

@@ -14591,6 +14591,13 @@ REVIVE_HEAL_GAIN = True   # --no-revive-heal-gain reverts
 # One arm covers all three ways up: the timer, the shrine and a resurrection
 # skill (revive_player). The 55 carries the raise's health fraction, and the
 # energy half carries its energy fraction.
+#   * RESULT, 20260930T171127, n = 1 (the rig's --enemy-weapon swapped
+#     --enemy-hit for the weapon's own 1-2 per swing, so one death took 200 s):
+#     the rise was the seven messages in order, the death's hold released,
+#     and the client logged 0 `Health non-zero on resurrect`. The HUD read
+#     health 10 -> 0 at the death, then 100 and energy 25 with its regen arrows
+#     0.1 s after the rise, and 89 on the next swings. A point estimate: the
+#     NPC's 0 of 5 is the n that carries it.
 # --no-player-revive-heal-gain restores the defer.
 PLAYER_REVIVE_HEAL_GAIN = True   # --no-player-revive-heal-gain reverts
 

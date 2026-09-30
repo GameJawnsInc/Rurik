@@ -2311,10 +2311,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **REVIVE-HEAL, the player's half** (PLAN-LOG "REVIVE-HEAL"; agentprops §1g): the NPC revive
-  now heals with retail's in-segment `0x00A2 [55, agent, 1.0]`, 0 complaints in 5. The player's
-  rise still defers a `[42]` + `[34]` refill. Retail's rise is status, the 55, energy 43 and 52,
-  then flags 5, 25 of 25. The control it must beat is §1f's 13-of-13 player burst.
+* **REVIVE-HEAL, the rest** (PLAN-LOG "REVIVE-HEAL, the player's half"; agentprops §1g):
+  - **The player's rise** ships retail's seven-message segment, but its client run is n = 1.
+    A re-run without `--enemy-weapon` gives about 6 rises in 200 s.
+  - **A party body's rise** (`revive_party_body`, heroes) still sends `[42]` + `[34]`, where
+    retail's hero rises carry the 55 too.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a
