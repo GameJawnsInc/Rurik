@@ -6901,7 +6901,37 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `party_cap(state)` BEFORE the check and never compares `OUTPOST_PARTY_CAP` directly,
   with the constant restored as the mutation. Drives the real
   handlers with a fake send and a scratch store like `test_herokick.py`. Floor 48 ->
-  78 -> 86 from the green run, ~3 s),
+  78 -> 86 from the green run, ~3 s. **2026-09-30, HEROINV:** §5's re-declared pair is
+  now 0x0144 [2, 1] -- the load's own bytes since the fix below; count unchanged),
+  `toolkit/authsrv/test_heroinvorder.py` (**2026-09-30, HEROINV — the heroes' inventory
+  container goes out as retail's 0x0144 [key, 1], after the first party hero's 0x0073**,
+  `studies/pvpui/FINDINGS.md` §35. The defect: under `--party` the client drew no
+  backpack, because our [2, 0] (field 2 = 0: "this is the local player's") re-pointed
+  the client's local inventory at the hero's container; it went out in the REQUEST_ITEMS
+  reply between the player's 0x0144 and its bags. §1 RETAIL, vault-gated on captures
+  `20260914T005758` and `20260916T150306` (the live root absent is a declared skip;
+  present without them is a FAIL): 6 named connections, origin live, decoding closed; on
+  the 4 with a hero in the party the player's [P, 0] opens with its nine bags after it, the
+  hero's [H, 1] follows all nine, the 0x0073 and precedes its own 0x013F [H, 2, 21, _, 9,
+  0], the hero agent's 0x0037 and a 0x0072 naming H (`RETAIL_HERO_ORDER`, 4 of 4); the 2
+  with an owned, unpartied hero (:56865, :50807 after the kick) carry 0x0073, no 0x0072
+  and one 0x0144; CONTROL, the party-hero predicate says no on those two; KNOWN-BAD, a
+  connection with the hero's field 2 set to 0 fails it. §2 the client model (static,
+  38797: 0x84A060 writes [itemctx+0xF8] only for field 2 == 0, last wins) and
+  `INVENTORY_LOCAL/OTHER` = 0/1. §3 OURS, the real `_handle_request_players` under the
+  commander rig at the MODULE'S DEFAULT flag: one 0x0144 [2, 1], the hero's 0x013F right
+  behind it, the hero's five in retail's order, 0x0072 naming 2, the model keeping key 1
+  local over the composed full load; the legacy rig's [2, 1] ahead of every 0x0072; a load
+  with the hero kicked sends 0x0073 and no container and marks the key absent, and
+  `handle_hero_add` then declares [2, 1] + 0x013F first; KNOWN-BAD ARM
+  `--hero-inv-legacy`: no 0x0144 in the players burst, [1, 0] then [2, 0], the order
+  predicate rejecting it and the model making key 2 local. §4 SOURCE: the REQUEST_ITEMS
+  arm opens with [1, INVENTORY_LOCAL] and calls the declaration once, under `if not
+  HERO_INV_RETAIL:` (un-guarding it reddens the lock); `_handle_request_players` calls it
+  once; the flag True at module level; `--hero-inv-legacy` parsing and `main()` setting the
+  global False. With the default flipped to False, 9 of 23 go red. 23 checks, floor 23,
+  from the green run; a bare machine runs §2 + §4 and declares §1 / §3 skipped (the load
+  needs the overlay's attribute rows). Read-only on the vault; no client. ~60 s),
   `toolkit/authsrv/test_heroskilltoggle.py` (**2026-09-23, DESKWORK-D1 step 6: the hero
   panel's SUPPRESS click, c2s 0x0019 HERO_SKILL_TOGGLE**, `studies/cmsg/FINDINGS.md`
   §DESKWORK-D1 "The hero skill toggle". RECONSTRUCTION end to end -- no retail tape and

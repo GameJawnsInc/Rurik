@@ -1568,7 +1568,10 @@ count was 20 when first measured and 38 by the time the tool landed the same day
 the vault grew under the session — rerun it rather than quoting either number). Every
 decodable live connection carries exactly
 one `0x0144 [key, 0]`: field 2 is always 0, and all nine `0x013F` bags on that connection
-cite the connection's key as their field 1. And the key is an **arbitrary per-connection
+cite the connection's key as their field 1. **(Corrected 2026-09-30, §35: true of a
+corpus with no hero in any party. The four connections since that have one carry a
+SECOND `0x0144 [H, 1]`, sent after the hero's `0x0073`. Field 2 is "not the local
+player's", and a 0 there is what cost the backpack under `--party`.)** And the key is an **arbitrary per-connection
 handle**, not a character id — the same character drew 1, 23, 184, 188, and 4 on different
 connections, including three distinct keys inside one capture (`20260817T183756`). That
 refutes `studies/smsg/FINDINGS.md`'s INFERRED reading of `0x013F` field 1 ("consistent
@@ -3306,3 +3309,108 @@ renders.
 
 `test_attribspend.py` §10 adds seven checks, including the exact nine-element column array
 retail sent in `20260817T231139`, byte for byte. Floor 42 → 49.
+
+## 35. The missing backpack under `--party`: 0x0144's field 2 is "not the local player's", and retail sends the hero's container later (HEROINV, 2026-09-30)
+
+**The symptom** (loopback harness, build 38797, 2026-09-30; both archives). With `--party
+slice` the inventory opened with grey silhouettes in the bag row under the doll and **no
+Backpack grid**: the backpack icon did nothing, and a scripted drag from a backpack cell
+(0.0475, 0.577) came back as c2s `0x003E` MOVE_TO_COORD, a world click. Meanwhile the server
+went on granting items into "backpack slot N" that nobody could see
+(`vault/captures/harness/20260930T110231`, `…110001`, and the S18 runs `…104548` on the
+slice exe). Without `--party` (`…102526`, `…102914`) the icon is coloured, shows its badge,
+and the grid is open. **The one load-time difference** in `gamesrv.log`: under `--party`,
+`--hero-bags` sent `ITEM_STREAM_CREATE(hero inv 2)` = `0x0144 [2, 0]` and the hero's
+`0x013F` right after the player's `0x0144 [1, 0]`, ahead of `CREATE_NAMED_ITEM(backpack)` and
+the player's nine bags. That had been the pair's position since §26.3.
+
+### 35.1 Retail's load order with a hero in the party — OBSERVED (tape, n = 4)
+
+The inventory census (`invcensus.py`, re-run today over 127 whole live connections) finds
+**four** connections carrying a second `0x0144`: `20260914T005758` :56011, :51659 and
+:56881, and `20260916T150306` :62321. They are exactly the four with a `0x0072`. §26.1's
+"exactly one per connection, field 2 always 0" was true of the 38 connections measured on
+2026-08-18, none of which had a hero in its party. All four agree message for message
+(pinned by `test_heroinvorder.py` §1):
+
+| # | message | reading |
+|---|---|---|
+| 4 | `0x0144 [P, 0]` | the player's container, opening the REQUEST_ITEMS reply |
+| 6–45 | backpack `0x0161`, `0x013F [P, 1, 0, _, 20, item]`, … the other eight | all nine keyed P |
+| 50 | `0x0140 [P, 164]` | the purse |
+| *next batch* | … `0x0073` HERO_INFO … the player's block … | |
+| h | **`0x0144 [H, 1]`** | the hero's container: **field 2 = 1** |
+| h+1 | `0x013F [H, 2, 21, _, 9, 0]` | its equipped bag; then its seven items into it |
+| | `0x0037 [hero agent, …]` … `0x003A` | the hero agent's block |
+| | `0x0072 [6, agent, H, mode]` | HeroActivate naming H |
+
+`:62321` in full: 0x0144 [43, 0] at message 4 (t = 0.223), 0x0073 at 157, **0x0144 [96, 1]
+at 179**, 0x013F [96, 2, 21, 226, 9, 0] at 180, the hero's 0x0037 at 201, 0x0072 [6, 379,
+96, 2] at 211, all at t = 0.760 and ahead of the first `0x0020`.
+
+**And the container belongs to a PARTY hero.** OBSERVED, n = 2: `20260916T150306` :56865
+(hero 6 owned, never partied) and :50807 (the reload after the kick at :62321's t = 7.73)
+each carry `0x0073` for hero 6, no `0x0072`, no `0x01C2`, and **one** `0x0144`: the
+player's.
+
+### 35.2 What field 2 does — OBSERVED (static, 38797)
+
+`msghandler.py 0x0144 --follow --annotate`: the handler (`0x00846260`) asserts
+`ItCliApi:2010 !inventory` on the key, then calls the insert `0x84A060` as
+`(key, field2)` with `ecx = [globals+0x40]+0xD4`. The insert allocates the 0xAC-byte
+inventory, stores `key` at +0, stores `field2 != 0` at **+0x8C**, links it into the table,
+and ends:
+
+```
+0x0084a17a  cmp  dword ptr [ebp + 0xc], 0     ; field 2
+0x0084a180  jne  0x84a185
+0x0084a182  mov  dword ptr [edi + 0x24], esi  ; edi = itemctx+0xD4 -> [itemctx+0xF8]
+```
+
+So **a field-2-zero container becomes `[itemctx+0xF8]`, and the last one declared wins.**
+`[itemctx+0xF8]` is the "local inventory" that §26.2's `0x845890` returns (asserting `:687`)
+and that the purse reads (`studies/newopcodes` 2026-08-19: `ItemCliGetGold` reaches it
+through `[ctx+0x40]+0xF8`). `0x845890` has 17 direct callers. By nearest assert site, five
+sit inside **`VnPlayerInventory`** (between its `:120` and `:676`), two in `GmItemHelpers`,
+and one each in `InvSalvage`, `GmDye`, `VnElementCache` and `CrContext`. That attribution is
+approximate by construction (codescan `--in`'s caveat), so "the inventory window draws
+`[itemctx+0xF8]`" is **RECONSTRUCTION**, strongly constrained.
+
+**The retrodiction.** Our `[1, 0]` then `[2, 0]` left `[itemctx+0xF8]` on the hero's
+container: one 9-slot equipped bag, no backpack. The window drew that, so the bag row was
+grey, there was no grid and a drag had no cell to leave from. The player's nine bags sat
+under key 1, correctly keyed and never shown. Every symptom in the opening paragraph
+follows, and so does the one prior loopback pattern: the grid worked with `--hero-bags` off
+and failed with it on.
+
+### 35.3 The fix, and its arms
+
+`authsrv.py` HEROINV (`HERO_INV_RETAIL`, default on):
+
+- `hero_inventory_declare` sends **`[key, 1]`** (`INVENTORY_OTHER`). Under the retail rig
+  it goes after the **first party hero's `0x0073`** and ahead of that hero's
+  `hero_character_block`, which is retail's position. The legacy rig has no `0x0073`, so
+  there it goes at the head of the roster sequence, ahead of every `0x0072`. It is collected
+  into `_seq`, so `--hero-late` holds it with the `0x0072` that names it.
+- **No party hero at load → nothing declared**, as on :56865 and :50807.
+  `state["hero_inv_destroyed"]` is set so that an in-game ADD declares it first
+  (`handle_hero_add`'s existing gate). The `ItCliApi:2010` / `ItCliInv:129` declared-once
+  guards are unchanged: one load site, one ADD site, both behind the same state.
+- **`--hero-inv-legacy`** is the known-bad arm: `[key, 0]` in the REQUEST_ITEMS burst,
+  every `--hero-bags` run from 2026-08-18 to 2026-09-30.
+- The ADD's re-declaration now carries field 2 = 1 as well. Under the old 0 a kick →
+  add mid-session would have re-pointed the player's inventory at the hero's container the
+  same way. No run exercised that; it follows from 35.2.
+
+`test_heroinvorder.py` pins §35.1 against the tape, the §35.2 model and the real players
+burst in both arms. It reddens 9 of 23 with the default flipped.
+
+**Prediction for the loopback confirmation**, stated before the run:
+`session.py --game-args "--map 148 --party slice"`, press I. The bag row is coloured, the
+Backpack grid is open under it, and the granted items are visible in it. `gamesrv.log` shows
+`ITEM_STREAM_CREATE(hero inv 2, field 2 = 1) [HEROINV …]` after `HERO_INFO` and before the
+hero's `AGENT_ATTRIBUTE_POINTS`, and no hero `0x0144` in the REQUEST_ITEMS burst. Under
+`--hero-inv-legacy` the grey row returns. **One separating arm the static read makes cheap
+but that is not built:** field 2 alone, left in the old place, should also restore the grid,
+because the order is retail's but the static read says the flag is the mechanism. It would
+need a second flag, and nothing needs it yet.

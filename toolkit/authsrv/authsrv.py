@@ -13234,18 +13234,57 @@ HERO_PIPELINE_FIRST = False
 # cited) is a DIFFERENT reader of the SAME table, so that prediction stands
 # too, it just is not the equip path. studies/pvpui/FINDINGS.md 26.
 HERO_INVENTORY = 0
-# Declare HERO_INVENTORY's key to the item client: 0x0144 [key, 0] (the
-# container 0x0144's handler inserts into inventoryTable; retail sends exactly
-# one per connection, field 2 always 0, n=20/20) plus the equipped-items bag
-# 0x013F for the same key. The bag is NOT what clears ItCliApi:488 -- the
-# slot walker 0x84AA50 returns empty cleanly when [inventory+0x58] is null --
-# it is there so a cleared panel has somewhere to draw gear from later. Off by
-# default: with it off and --hero-inventory 0, the click stops at ItCliApi:488
-# (the control arm, measured 2026-08-17); with both on, the RECONSTRUCTION is
-# that the click clears the item gate. One inventory serves all --hero slots,
-# which is enough for a one-hero rig and wrong past that -- a per-hero key
-# wants plumbing only after the single-hero click survives.
+# Declare HERO_INVENTORY's key to the item client: 0x0144 [key, 1] (the
+# container 0x0144's handler inserts into inventoryTable) plus the
+# equipped-items bag 0x013F for the same key. The bag is NOT what clears
+# ItCliApi:488 -- the slot walker 0x84AA50 returns empty cleanly when
+# [inventory+0x58] is null -- it is there so a cleared panel has somewhere to
+# draw gear from later. Off by default: with it off and --hero-inventory 0, the
+# click stops at ItCliApi:488 (the control arm, measured 2026-08-17); with both
+# on, the RECONSTRUCTION is that the click clears the item gate. One inventory
+# serves all --hero slots, which is enough for a one-hero rig and wrong past
+# that -- a per-hero key wants plumbing only after the single-hero click
+# survives. (This comment said "retail sends exactly one per connection, field 2
+# always 0, n=20/20" from 2026-08-18: true of a corpus with no hero in any
+# party, and false of the four connections since that have one --
+# HERO_INV_RETAIL below.)
 HERO_BAGS = False
+# WHERE the heroes' container is declared and WHAT field 2 says (HEROINV,
+# 2026-09-30, studies/pvpui/FINDINGS.md 35). THE DEFECT IT FIXES: under
+# --party (which sets --hero-bags) the client drew NO backpack -- grey
+# silhouettes in the bag row, no Backpack grid, a drag from a backpack cell
+# landing on the world as 0x003E -- while the server granted items into
+# backpack slots the player could not see. Without --party the grid was there.
+#
+# FIELD 2 IS "NOT THE LOCAL PLAYER'S", and 0 is what broke it. OBSERVED
+# (static, 38797): 0x0144's handler hands field 2 to the insert 0x84A060,
+# which stores (field2 != 0) at [inventory+0x8C] and, when field 2 is 0 ONLY,
+# writes the new container to [itemctx+0xF8] -- the local-inventory slot
+# 0x845890 returns (pvpui 26.2), which five callers inside VnPlayerInventory
+# read. Last one wins. We declared the player's [1, 0] and then the hero's
+# [2, 0], so the inventory window drew the hero's container: one 9-slot
+# equipped bag, no backpack. OBSERVED (tape): retail sends the hero's
+# container as [key, 1], 4 of 4 connections with a hero in the party
+# (20260914T005758 x3, 20260916T150306 :62321), and the player's as [key, 0].
+#
+# AND IT GOES WHERE RETAIL PUTS IT. OBSERVED, the same 4 of 4: the player's
+# 0x0144 opens the REQUEST_ITEMS reply (message 4) with its nine bags behind
+# it; the hero's rides the NEXT batch, after the connection's 0x0073 HERO_INFO
+# and immediately ahead of its own 0x013F, then the hero agent's block (0x0037
+# first), then 0x0072 naming the key. And the container belongs to a PARTY
+# hero: :56865 (owned, never partied) and :50807 (the reload after the kick)
+# carry 0x0073 and ONE 0x0144 -- the player's. So the retail rig declares it
+# after the first party hero's 0x0073 and ahead of its block; the legacy rig,
+# which sends no 0x0073, at the head of the roster sequence, ahead of every
+# 0x0072; and a load with no hero in the party declares nothing and marks the
+# key absent, so the ADD declares it (hero_inventory_declare). RECONSTRUCTION
+# for more than one hero (one shared key; no retail tape has two).
+# --hero-inv-legacy is every run 2026-08-18..09-30: [key, 0] in the
+# REQUEST_ITEMS burst, between the player's 0x0144 and its bags.
+HERO_INV_RETAIL = True
+# 0x0144 field 2: 0 = the local player's inventory (the one write to
+# [itemctx+0xF8]), non-zero = anyone else's. Retail's own two values.
+INVENTORY_LOCAL, INVENTORY_OTHER = 0, 1
 # Register each hero's agent id in the char client's char-by-id table (one
 # 0x009A per hero slot, value 100<<24 as retail sends it). This is the floor
 # AFTER ItCliApi:488: the cleared click reached GmAgentDoll::CharBy(agentId),
@@ -29939,26 +29978,34 @@ def handle_hero_command(values, send, state, conn_id, opcode):
 
 def hero_inventory_declare(send, state, why):
     """Declare the heroes' inventory container to the item client: 0x0144
-    [HERO_INVENTORY, 0] then the equipped-items bag 0x013F for that key -- the
-    load's REQUEST_ITEMS pair (studies/pvpui/FINDINGS.md 26), in ONE place so
-    the hero ADD's re-declaration is byte for byte the load's.
+    [HERO_INVENTORY, 1] then the equipped-items bag 0x013F for that key --
+    retail's pair (studies/pvpui/FINDINGS.md 26, 35), in ONE place so the hero
+    ADD's re-declaration is byte for byte the load's.
+
+    FIELD 2 IS 1, NOT 0 (HERO_INV_RETAIL's comment): a 0 makes the client
+    adopt this container as the PLAYER's inventory ([itemctx+0xF8]), and the
+    inventory window then draws the hero's one bag and no backpack. Retail's
+    hero containers are [key, 1], 4 of 4. --hero-inv-legacy sends the 0.
 
     Declared ONCE per key: 0x0144's handler asserts ItCliApi:2010 `!inventory`
     and 0x013F's asserts ItCliInv:129 `!m_bagEquip` (both read statically on
     38797, msghandler --follow), so this is called only for a key the client
-    does not hold -- at load, and from handle_hero_add after a kick's 0x0145
-    destroyed it, which is what `state["hero_inv_destroyed"]` records (set by
-    the kick that sent the 0x0145, cleared here). Without it the re-added
-    hero's 0x0072 names a key the table no longer has and the party window's
-    next equip walk asserts ItCliApi:488 (pvpui 26.2 -- the model that
+    does not hold -- at load (after the first party hero's 0x0073, or in the
+    REQUEST_ITEMS burst under --hero-inv-legacy), and from handle_hero_add when
+    `state["hero_inv_destroyed"]` says the client lacks it: set by the kick that
+    sent the 0x0145, and by a load that had no hero in its party and so
+    declared nothing (retail's :56865 and :50807); cleared here. Without it the
+    re-added hero's 0x0072 names a key the table does not have and the party
+    window's next equip walk asserts ItCliApi:488 (pvpui 26.2 -- the model that
     retrodicted the 2026-08-17 crash; the 2026-09-23 review's R1/ENG-B1).
     Sends nothing when --hero-bags is off or the key is 0: nothing to declare.
     Returns whether it sent.
     """
     if not (HERO_BAGS and HERO_INVENTORY):
         return False
-    send(GAME_SMSG_ITEM_STREAM_CREATE, [HERO_INVENTORY, 0],
-         f"ITEM_STREAM_CREATE(hero inv {HERO_INVENTORY}){why}")
+    _whose = INVENTORY_OTHER if HERO_INV_RETAIL else INVENTORY_LOCAL
+    send(GAME_SMSG_ITEM_STREAM_CREATE, [HERO_INVENTORY, _whose],
+         f"ITEM_STREAM_CREATE(hero inv {HERO_INVENTORY}, field 2 = {_whose}){why}")
     send(GAME_SMSG_INVENTORY_CREATE_BAG,
          [HERO_INVENTORY, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED, EQUIPPED_BAG_ID,
           EQUIPPED_SLOT_COUNT, 0],
@@ -30296,14 +30343,17 @@ def handle_hero_add(values, send, state, conn_id):
                                                 kicked=False)
         print(f"[c{conn_id}] PERSIST: hero {hid} re-added -- the stored kick is "
               f"cleared, so the next zone-in parties it [SANDBOX-N2]", flush=True)
-    # 0. the inventory container a kick destroyed, back first (retail's load
-    #    declares the hero's container before its block).
+    # 0. the inventory container the client lacks, back first (retail's load
+    #    declares the hero's container before its block): a kick's 0x0145
+    #    destroyed it, or the load had no hero in its party and declared none
+    #    (HEROINV).
     if HERO_BAGS and HERO_INVENTORY and state.get("hero_inv_destroyed"):
-        hero_inventory_declare(send, state, " [HERO_ADD: re-declared after the "
-                                            "kick's 0x0145]")
-        print(f"[c{conn_id}] HERO_ADD: inventory key {HERO_INVENTORY} re-declared "
-              f"(0x0144 + 0x013F) -- the kick's 0x0145 destroyed it and 0x0072 "
-              f"is about to name it (ItCliApi:488) [SANDBOX-N2]", flush=True)
+        hero_inventory_declare(send, state, " [HERO_ADD: declared -- the client "
+                                            "does not hold the key]")
+        print(f"[c{conn_id}] HERO_ADD: inventory key {HERO_INVENTORY} declared "
+              f"(0x0144 + 0x013F) -- a kick's 0x0145 destroyed it or the load "
+              f"declared none, and 0x0072 is about to name it (ItCliApi:488) "
+              f"[SANDBOX-N2]", flush=True)
     # 1. the character block (the load pipeline's own).
     for op, vals, label in hero_character_block(state, _haid, _hid):
         send(op, vals, label + " [HERO_ADD]")
@@ -37261,6 +37311,29 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # sets a bit nothing is left to read".
     _seq = []
     _inside = ()
+    # THE HEROES' INVENTORY CONTAINER (HEROINV, HERO_INV_RETAIL's comment):
+    # built here, placed where retail puts it -- after the first PARTY hero's
+    # 0x0073 in the retail rig (the loop below takes it from `_hinv`), at the
+    # head of the roster sequence in any other rig, where it still precedes
+    # every 0x0072 (--hero-activate-first's included). Collected into `_seq`,
+    # so --hero-late holds it with the 0x0072 that names it. No hero in the
+    # party -> no container, as retail's :56865 and :50807; the key is then
+    # marked absent so an in-game ADD declares it before its 0x0072.
+    _hinv = []
+    if HERO_INV_RETAIL and HERO_BAGS and HERO_INVENTORY:
+        if party_hero_slots(state):
+            hero_inventory_declare(
+                lambda op, vals, label=None: _hinv.append((op, vals, label)),
+                state, " [HEROINV: retail's place, after the hero's 0x0073]")
+        else:
+            state["hero_inv_destroyed"] = True
+            print(f"[c{conn_id}] HEROINV: no hero in the party -- inventory key "
+                  f"{HERO_INVENTORY} is not declared at load (retail declares a "
+                  f"hero's container only for a party hero); an ADD declares "
+                  f"it", flush=True)
+        if not (HERO_RIG_RETAIL and HERO_ACTIVATE) or HERO_ACTIVATE_FIRST:
+            _seq.extend(_hinv)
+            del _hinv[:]
     if HENCHMAN is not None:
         _hench = agents.npc_template(HENCHMAN)
         # THE DISCRIMINATOR. With the defaults, 0x01BF and
@@ -37408,6 +37481,11 @@ def _handle_request_players(send, state, conn_id, stop, rec):
                 else hero_bar_ids(_hid)))               # SANDBOX-B3: per hero
             if hero_kicked(state, _hid):
                 continue                                # SANDBOX-N2: owned (0x0073 sent) but kicked -> no character block, no 0x0072
+            # HEROINV: the container, once, after the first party hero's
+            # 0x0073 and ahead of its block -- retail's 0x0073, 0x0144 [key,
+            # 1], 0x013F, then 0x0037 (4 of 4 hero connections).
+            _seq.extend(_hinv)
+            del _hinv[:]
             _seq.extend(hero_character_block(state, _haid, _hid))
             _seq.append(agents.hero_activate(
                 HERO_ACTIVATE_ID
@@ -39427,21 +39505,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Skipped: inventory, max factions and hard mode. Those
                         # need player state we do not model yet; if the client
                         # stalls again they are the next candidates.
-                        send(GAME_SMSG_ITEM_STREAM_CREATE, [1, 0],
+                        send(GAME_SMSG_ITEM_STREAM_CREATE, [1, INVENTORY_LOCAL],
                              "ITEM_STREAM_CREATE")
-                        # The hero's container, keyed to what 0x0072 will
-                        # carry in field 3. 0x0144's handler is the ONLY
-                        # caller of the inventoryTable insert, so this is
-                        # the one message that can make the party window's
-                        # equip walk find the hero (ItCliApi:488). The bag
-                        # id reuses EQUIPPED_BAG_ID legally: ItCliBag:167's
-                        # collision search walks the OWNING inventory's
-                        # m_bagArray, so ids are per-inventory.
-                        # studies/pvpui/FINDINGS.md 26. The pair lives in
-                        # hero_inventory_declare, shared with the hero ADD,
-                        # which re-declares it after a kick's 0x0145
-                        # (SANDBOX-N2); off or key 0 sends nothing, as before.
-                        hero_inventory_declare(send, state, "")
+                        # The hero's container is NOT declared here any more
+                        # (HEROINV, 2026-09-30): retail sends it in the NEXT
+                        # batch, after the hero's 0x0073, as [key, 1] --
+                        # _handle_request_players does that. This site sent
+                        # [key, 0] between the player's 0x0144 and its bags
+                        # from 2026-08-18, and the 0 made the client adopt
+                        # the hero's container as the player's inventory: no
+                        # backpack under --party (HERO_INV_RETAIL's comment).
+                        # Kept ONLY as --hero-inv-legacy, the known-bad arm.
+                        # The bag id reuses EQUIPPED_BAG_ID legally:
+                        # ItCliBag:167's collision search walks the OWNING
+                        # inventory's m_bagArray, so ids are per-inventory
+                        # (studies/pvpui/FINDINGS.md 26).
+                        if not HERO_INV_RETAIL:
+                            hero_inventory_declare(send, state,
+                                                   " [--hero-inv-legacy]")
                         # THE PLAYER'S BAGS, and they belong HERE rather than
                         # in a probe. Sending 0x013F AFTER spawn produced no
                         # grid at all (`20260819T141246`, a backpack sent 40 s
@@ -44192,6 +44273,13 @@ def main():
         HERO_UNLOCK_MASK = False
         print("[party] --no-hero-unlock-mask: 0x0018 carries OpenTyria's eight "
               "all-ones dwords, as every run before 2026-09-23.", flush=True)
+    if a.hero_inv_legacy:
+        global HERO_INV_RETAIL
+        HERO_INV_RETAIL = False
+        print("[party] --hero-inv-legacy: the heroes' container goes out as "
+              "0x0144 [key, 0] in the REQUEST_ITEMS burst, as every run "
+              "2026-08-18..09-30 -- KNOWN-BAD: the client adopts it as the "
+              "player's inventory and draws no backpack (HEROINV).", flush=True)
     if a.party_size_no_heroes:
         global PARTY_SIZE_COUNTS_HEROES
         PARTY_SIZE_COUNTS_HEROES = False

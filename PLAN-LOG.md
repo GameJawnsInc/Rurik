@@ -28,6 +28,32 @@ move back.
 
 ---
 
+### HEROINV -- 2026-09-30 -- **the missing backpack under `--party`: the heroes' container went out as `0x0144 [2, 0]`, and a 0 in field 2 makes it the PLAYER's inventory**
+
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35. Under `--party slice` the
+client drew grey silhouettes and no Backpack grid (harness `20260930T110231`,
+`…110001`, `…104548`), while the server granted items into backpack slots nobody could
+see. The one load difference was `--hero-bags`'s pair (§26.3, 2026-08-18): `0x0144
+[2, 0]` + the hero's `0x013F` between the player's `0x0144 [1, 0]` and its bags.
+
+- **OBSERVED (tape, 4 of 4):** retail's hero container is `0x0144 [H, 1]`, sent in the
+  batch AFTER the items reply. The order is the hero's `0x0073`, then `0x0144 [H, 1]`,
+  then its own `0x013F [H, 2, 21, _, 9, 0]`, then the hero agent's block, then `0x0072`
+  naming H (`20260914T005758` ×3, `20260916T150306` :62321). An owned hero that is not in
+  the party gets no container (:56865, :50807, 2 of 2).
+- **OBSERVED (static, 38797):** the insert `0x84A060` writes the new container to
+  `[itemctx+0xF8]`, the local inventory, when field 2 is 0 and only then, and the last
+  one wins. Five of `0x845890`'s 17 callers sit in `VnPlayerInventory`. Our `[2, 0]` made
+  the hero's one-bag container the player's.
+- **Shipped:** `HERO_INV_RETAIL`, on by default. The pair is `[key, 1]`, sent after the
+  first party hero's `0x0073` (the legacy rig puts it at the head of the roster sequence).
+  With no party hero at load, nothing is declared and the key is marked absent, so the
+  ADD declares it. `--hero-inv-legacy` is the known-bad arm. `test_heroinvorder.py` is new
+  (23 checks; 9 go red with the default flipped). `test_heroadd` §5's re-declared pair is
+  now `[2, 1]`.
+- **Open:** the client confirmation (press I under `--party slice`, see the grid). The
+  prediction is on record in §35.3.
+
 ### RANGERPRE's corpus reds -- 2026-09-30 -- **three tests red on `main` from the Reforged pre-Searing tape; each classified per connection; all three were the tests, and two carried findings**
 
 The live capture `20260929T150923` (RANGERPRE, [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md))

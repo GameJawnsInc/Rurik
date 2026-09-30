@@ -39,8 +39,8 @@ that it refuses where it cannot be.
     kick-then-add re-creates at the same agent id; a town sends no create.
   * §5 THE SANDBOX RIG (--hero-bags, --hero-inventory 2, --hero-char): a kick
     of the last hero destroys key 2 (0x0145) and records it; the add
-    RE-DECLARES it FIRST (0x0144 [2, 0] + the equipped bag 0x013F, the load's
-    own pair) before the block, registers the agent (0x009A), and a second kick
+    RE-DECLARES it FIRST (0x0144 [2, 1] + the equipped bag 0x013F, the load's
+    own pair -- field 2 = 1 since HEROINV, 2026-09-30) before the block, registers the agent (0x009A), and a second kick
     destroys the live key again -- while kick -> kick never sends a second
     0x0145 (the guard's known-bad), a hero still naming the key keeps it, and
     with bags off nothing is re-declared.
@@ -471,11 +471,12 @@ try:
            "(retail's load declares the hero's container before its block; without "
            "it 0x0072 names a key the table lost -- ItCliApi:488, R1/ENG-B1)",
            f"{[hex(o) for o in gb[:6]]}")
-    led.ok(sb2[0][1] == [2, 0]
+    led.ok(sb2[0][1] == [2, authsrv.INVENTORY_OTHER] == [2, 1]
            and sb2[1][1] == [2, authsrv.BAG_TYPE_EQUIPPED, authsrv.BAG_MODEL_EQUIPPED,
                              authsrv.EQUIPPED_BAG_ID, authsrv.EQUIPPED_SLOT_COUNT, 0],
-           "...and the pair is the load's own bytes: 0x0144 [2, 0], 0x013F [2, type, "
-           "model, bag 1, 9 slots, 0]", f"{sb2[:2]}")
+           "...and the pair is the load's own bytes: 0x0144 [2, 1] (retail's field 2 "
+           "for a hero's container -- a 0 would make it the PLAYER's inventory, "
+           "HEROINV), 0x013F [2, type, model, bag 1, 9 slots, 0]", f"{sb2[:2]}")
     led.ok(dict(sb2).get(HERO_ACTIVATE) == [6, 200, 2, 0]
            and stb.get("hero_inv_destroyed") is False,
            "0x0072 names key 2 and the connection no longer holds it as destroyed")
