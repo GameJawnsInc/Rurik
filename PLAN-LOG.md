@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### HEROINV -- 2026-09-30 -- **the missing backpack under `--party`: the heroes' container went out as `0x0144 [2, 0]`, and a 0 in field 2 makes it the PLAYER's inventory; its bag must not reuse a player bag's id**
+
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35. Under `--party slice` the
+client drew grey silhouettes and no Backpack grid (harness `20260930T110231`,
+`…110001`, `…104548`), while the server granted items into backpack slots nobody could
+see. The one load difference was `--hero-bags`'s pair (§26.3, 2026-08-18): `0x0144
+[2, 0]` + the hero's `0x013F` between the player's `0x0144 [1, 0]` and its bags.
+
+- **OBSERVED (tape, 4 of 4):** retail's hero container is `0x0144 [H, 1]`, sent in the
+  batch AFTER the items reply. The order is the hero's `0x0073`, then `0x0144 [H, 1]`,
+  then its own `0x013F [H, 2, 21, _, 9, 0]`, then the hero agent's block, then `0x0072`
+  naming H (`20260914T005758` ×3, `20260916T150306` :62321). An owned hero that is not in
+  the party gets no container (:56865, :50807, 2 of 2).
+- **OBSERVED (static, 38797):** the insert `0x84A060` writes the new container to
+  `[itemctx+0xF8]`, the local inventory, when field 2 is 0 and only then, and the last
+  one wins. Five of `0x845890`'s 17 callers sit in `VnPlayerInventory`. Our `[2, 0]` made
+  the hero's one-bag container the player's.
+- **Shipped:** `HERO_INV_RETAIL`, on by default. The pair is `[key, 1]`, sent after the
+  first party hero's `0x0073` (the legacy rig puts it at the head of the roster sequence).
+  With no party hero at load, nothing is declared and the key is marked absent, so the
+  ADD declares it. `--hero-inv-legacy` is the known-bad arm.
+- **The first cut's loopback run (`20260930T120612`, `6194a5ba`) drew the Backpack grid
+  and an EMPTY doll** (§35.4). OBSERVED (static): `0x013F` keeps ONE bag array per
+  connection (`[globals+0x40]+0x24`), and a repeated bag id evicts the earlier bag
+  (`0x848fb0`, `ItCliBag:167`). The hero's bag had always reused id 1. Sent first, it was
+  the one evicted, which nobody noticed. Sent after the player's, it evicted the player's
+  equipped bag. The "ids are per-inventory" readings in `authsrv.py` and
+  `studies/smsg` are corrected. The fix is `HERO_EQUIPPED_BAG_ID`, one past `PLAYER_BAGS`
+  (10), like retail's unique ids (4 of 4).
+- `test_heroinvorder.py` is new: 27 checks. With the default flipped, 11 go red; with the
+  bag back on id 1, 2 go red. `test_heroadd` §5's re-declared pair is now `[2, 1]` plus
+  the hero's own bag id.
+- **CONFIRMED on the client** (harness `20260930T122945`, `0f6e1f91`): under `--party slice`
+  the Backpack grid is open and the doll wears its gear. Nothing about this is left open.
+  The field-2-alone separating arm in §35.3 is optional and unbuilt.
+
 ### RANGERPRE's corpus reds -- 2026-09-30 -- **three tests red on `main` from the Reforged pre-Searing tape; each classified per connection; all three were the tests, and two carried findings**
 
 The live capture `20260929T150923` (RANGERPRE, [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md))

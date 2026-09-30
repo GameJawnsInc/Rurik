@@ -142,7 +142,13 @@ GRANDFATHERED = {
     # `ItCliApi:485/488` bound ITEM_EQUIP_SLOTS and name the new blocker. Same
     # proportion as the entries above, and the same check applies -- read them and ask
     # whether any argues for nothing.
-    os.path.join("studies", "pvpui", "FINDINGS.md"): 30,      # 13: the assert-by-assert walk of GmView's commander case
+    # 31 on 2026-09-30, one over 30 on the day HEROINV (35) landed. Ruled on by the
+    # session that raised it: the two new ones are single quotes pinning single facts --
+    # `ItCliApi:2010 !inventory` is 0x0144's declared-once guard (35.2), `ItCliBag:167` is
+    # the routine that EVICTS a bag whose id repeats, the fact that emptied the doll and
+    # fixed it (35.4). Take either out and the claim beside it needs the binary. 40, not
+    # 32, for the reason newopcodes' row gives: two of headroom fires on the next commit.
+    os.path.join("studies", "pvpui", "FINDINGS.md"): 40,      # 13: the assert-by-assert walk of GmView's commander case
     # 16 on 2026-08-19, and it was ALREADY over the newcomer ceiling at 15 before
     # this session touched the file -- the tripwire had fired and nobody had ruled
     # on it, which is exactly the state it exists to make visible. The ruling: this

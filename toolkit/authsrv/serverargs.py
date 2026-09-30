@@ -3169,11 +3169,21 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "non-zero key with --hero-bags, which declares it.")
     ap.add_argument("--hero-bags", action="store_true",
                     help="Declare --hero-inventory's key to the item client: "
-                         "0x0144 [key, 0] plus the equipped-items bag 0x013F, "
-                         "sent in the REQUEST_ITEMS burst beside the player's "
-                         "own. Refused for keys 0 and 1 -- 0 declares nothing "
-                         "and 1 is the player's key, which 0x0144's handler "
-                         "asserts against re-declaring (ItCliApi:2010).")
+                         "0x0144 [key, 1] plus the equipped-items bag 0x013F, "
+                         "after the first party hero's 0x0073 (retail's place "
+                         "and field 2, 4 of 4 hero connections). Refused for "
+                         "keys 0 and 1 -- 0 declares nothing and 1 is the "
+                         "player's key, which 0x0144's handler asserts against "
+                         "re-declaring (ItCliApi:2010).")
+    ap.add_argument("--hero-inv-legacy", action="store_true",
+                    help="THE REVERT ARM for HEROINV (2026-09-30): declare the "
+                         "hero's container as 0x0144 [key, 0] in the "
+                         "REQUEST_ITEMS burst, between the player's 0x0144 and "
+                         "its bags, as every --hero-bags run 2026-08-18..09-30. "
+                         "KNOWN-BAD: field 2 = 0 makes the client adopt the "
+                         "hero's container as the player's inventory, so the "
+                         "inventory window draws no backpack (studies/pvpui/"
+                         "FINDINGS.md 35).")
     ap.add_argument("--hero-char", action="store_true",
                     help="Register each hero agent id in the char client's "
                          "char-by-id table (0x009A, one per hero slot). The "
