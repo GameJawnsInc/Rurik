@@ -28,6 +28,28 @@ move back.
 
 ---
 
+### HEROINV's drag, corrected -- 2026-09-30 -- **the hand-off line was stale when written: `rangerpre` already had HEROINV**
+
+The entry below ("HEROINV's drag") ends by saying `rangerpre` lacks HEROINV. It was written
+at 13:05 from a 12:26 look. `rangerpre` had merged `main` at 12:50 (`30923224`), and
+`test_heroinvorder.py` passes in that tree (27 checks). The hand-off it asked for is done;
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35.5 is corrected in place.
+
+---
+
+### HEROINV's drag -- 2026-09-30 -- **the backpack drag under `--party` works on `main`; it needed the grid, nothing else**
+
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35.5. The report's `0x003E` from a
+backpack drag (`20260930T110231`) was HEROINV's missing grid, so the press landed on the
+world. Harness `20260930T130248` (`main` at `5960cc68`, `--party slice --weapon-set
+1=starter_spear`): the drag from cell 1 to cell 2 sends c2s `0x0072` ITEM_MOVE_BY_ID, is
+answered by `0x014B`, and the spear redraws in cell 2. No code change. The run before it,
+`…125236`, dragged the empty cell 0 (the shield's reserved home) and is zero exposure.
+**Hand-off:** the `rangerpre` branch lacks HEROINV, so its S18/S20 quest grants stay
+invisible under `--party` until it takes `main`.
+
+---
+
 ### HEROINV -- 2026-09-30 -- **the missing backpack under `--party`: the heroes' container went out as `0x0144 [2, 0]`, and a 0 in field 2 makes it the PLAYER's inventory; its bag must not reuse a player bag's id**
 
 [studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35. Under `--party slice` the

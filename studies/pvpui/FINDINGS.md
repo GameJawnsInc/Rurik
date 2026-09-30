@@ -3476,3 +3476,34 @@ in this run and in the first cut alike, because this configuration credits no go
 regression. Not run: the `--hero-inv-legacy` arm on the client (the test pins its bytes), and
 the field-2-alone separating arm (35.3).
 
+### 35.5 The backpack drag under `--party` — CONFIRMED on the client, no further change (2026-09-30)
+
+The original report's third symptom: a scripted drag from a backpack cell
+(`drag:0.0475,0.577,0.068,0.577`) came back as c2s `0x003E` MOVE_TO_COORD, a world click
+(harness `20260930T110231`, the `rangerpre` branch, after its quest grant had put the sword
+in backpack cell 1). **That was 35.2's defect, not a separate one.** With no Backpack grid
+drawn, the press at (84, 600) landed on the world.
+
+**Desk first:** on `main`, under the commander rig, the server answers a backpack
+`0x0072` ITEM_MOVE_BY_ID with `0x014B [1, item, 2, 2]`. The hero container plays no part in
+the player's move path (`handle_item_move_by_id`, `PLAYER_INVENTORY_KEY`).
+
+**Then the client, on `main` at `5960cc68`**, with `--map 148 --party slice --weapon-set
+1=starter_spear` so the backpack holds an item at load (the quest grant is on `rangerpre`
+only):
+
+- `20260930T125236`: **zero exposure, not a result.** The spear loads into cell **1**, because
+  cell 0 is the shield's reserved home (set 0's off hand), so the drag from cell 0 grabbed
+  nothing and the client sent nothing. My prediction ("cell 0") was wrong, and the run
+  answered nothing about the drag.
+- `20260930T130248`, drag from cell 1 to cell 2: c2s **`0x0072` ITEM_MOVE_BY_ID** (gamesrv
+  line 237), then s2c **`0x014B`** `ITEM_CHANGE_LOCATION(item 11: bag 2 slot 1 -> bag 2
+  slot 2)` (238). The frames show the spear in cell 1, then in cell 2. No `0x003E`.
+
+**`rangerpre`'s quest grants** (RANGERPRE-S18/S20) put items into the backpack. By desk
+reading, its `grant_item` registers the item in the item store (`itemstore.place`), which
+is all the move handler needs. **Corrected the same day:** this paragraph said `rangerpre`
+"does not yet contain HEROINV". It was written at 13:05 from a 12:26 look, and `rangerpre`
+had merged `main` at 12:50 (`30923224`, HEROINV included). `test_heroinvorder.py` passes in
+that tree (27 checks). The quest-grant drag itself has not been run on the client.
+
