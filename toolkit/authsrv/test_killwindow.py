@@ -164,13 +164,17 @@ def main():
           f"{len(rewarded)} of them carry a reward",
           "agent 38's SECOND death carries neither reward nor flags -- a "
           "repeated EFFECT_DEAD on an already-dead agent awards nothing (n=1)")
-    # The clean ones: a kill whose tick has no 0x009C burst marker.
+    # The clean ones: a kill whose tick has no 0x009C -- its award crossed no
+    # multiple of 75 since the load, so no 75-XP tick rides it (RANGERPRE-S7;
+    # OBSERVED, test_killxp.py's TICK_TAPES pins all four of these kills).
     clean = [k for k in rewarded
              if not any(o == 0x009C for o, _v in k[4])]
     check(len(clean) == 3,
-          f"{len(clean)} are CLEAN (no 0x009C burst on the tick)",
-          "the fourth is the Wolf, whose tick carries the burst marker AND the "
-          "pair -- which is what identifies it as a coincidence")
+          f"{len(clean)} are CLEAN (no 0x009C on the tick: their 26s crossed "
+          f"no multiple of 75)",
+          "the fourth is the Wolf, whose 126 crossed 75, so its frame carries "
+          "the 75-XP tick (0x009C + [10, 0]) ahead of the award -- read until "
+          "RANGERPRE-S7 as a burst coincidence, REFUTED")
     for stamp, _conn, t, agent, window in clean:
         rewards = [v for o, v in window if o == 0x00EE]
         check(rewards == [[0, 26]],
