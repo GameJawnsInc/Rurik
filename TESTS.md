@@ -3414,7 +3414,114 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
+  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
+  hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
+  0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`
+  minted, kind `reward`; never a dressed item) and its `reward_items` granted through the
+  shared `grant_item` (0x0161 then 0x013E) into the cell a taken item VACATED, all BEFORE
+  the first 0x0052 -- retail's q62 (20260929T150923 :53880 727.4875: 0x014D [92, 3359],
+  the quest item the 700.7599 load put at [92, 3359, 452, 0], then the shield 1607 into
+  [92, 1607, 452, 0]; the corpus's ONLY hand-in with a 0x014D, OBSERVED) and q440
+  (20260819T132414 :52606 145.487, a reward item and no quest item). The offer and turn-in
+  screens draw a SHIELD's line after the reward (`questdefs.reward_item_run`: ref 10735,
+  the item's own name units, template 2438 with label 2372 and its 572 argument); a weapon
+  is granted but NOT drawn (587's damage-type string table NOT FOUND) and the log says so.
+  `--no-quest-items` is the pre-S20 hand-in, the KNOWN-BAD arm. The rules:
+  `items_before_remove` (an item line; every one before the first 0x0052; the 0x014D before
+  the 0x0161; each 0x013E after its 0x0161) and `vacated_refilled` (the first 0x013E lands
+  in the first 0x014D's cell). §13 OURS (bare): `DEL ITEM IADD RM EE0 GOLD UNL`; the bytes
+  (0x014D [key, 5000], the shield declared as item 5001, placed at slot 5 -- the vacated
+  cell, NOT the lowest free 1); the store and the merchant's map; the quest item not held
+  (no 0x014D, the lowest cell, the log line); a weapon set's same-key sword never taken;
+  `grant_item`'s occupied named cell falling back; KNOWN-BAD `RM EE0 GOLD UNL` and the rule
+  red; VACUITY; `_quest_prose`'s shield line exact, `--no-quest-items` and a sword reward
+  drawing none; `reward_item_run`'s and `check_handin_items`' refusals, `load` naming the
+  row; the flag and `main()`'s flip. §14 THE TAPE (vault-gated): q62's batch reduces to
+  exactly `DEL ITEM IADD RM EE0 GOLD RM UNL` and 3359's cell is refilled by 1607;
+  `reward_item_run(1607's name units, its 572 argument 4)` EQUALS the turn-in screen's
+  0x0080 (726.6797) and the hand-in's q62 0x004C from the 0x0002 before ref 10735 to the
+  end (armour 5 unequal); OURS vs TAPE equal (the doubled 0x0052 collapsed) and the
+  known-bad arm unequal; a sabotaged tape (the 0x013E after the 0x0052, or one slot off)
+  red; q440 reduces to `ITEM IADD RM EE0 GOLD RM UNL` at (8, 0); the CORPUS: every
+  item-bearing hand-in (2, floor 2; 1 with a 0x014D, floor 1) takes and grants first.
+  Floor 48 → 61 from the bare green run (115 vaulted).**
+  **2026-09-30, RANGERPRE-S18 review: the accept's
+  grants summary (`quest Q accept grants, BEFORE the 0x0049: ...`, a run-sheet readout) named
+  a skill `grant_skill` had REFUSED -- an id past the served skill table, nothing sent,
+  nothing stored. `accept_quest` now names a skill only below `SKILL_TABLE_ROWS`, the bound
+  `grant_skill` applies (its None return also means "bar full, learned", so it cannot be the
+  test). §9 +1: `[382, SKILL_TABLE_ROWS]` sends 382's three lines, the 0x0049 and the 0x0081,
+  and the summary ends `skill 382 (RANGERPRE-S18, QUESTFLOW-A3)`; `[SKILL_TABLE_ROWS]` alone
+  sends `ADD SHOW` and prints no summary; each prints REFUSED once. Floor 47 → 48 from the
+  bare green run (94 vaulted).**
+  **2026-09-30, RANGERPRE-S18 (QUESTFLOW-A2): the
+  accept marker is on the OBJECTIVE -- retail's 0x0049 marks an NPC's exact 0x0020 create spot
+  with its plane on 5 of 20260929T150923's 12 accepts (q80 and q89 on agent 40 at (11715,
+  3517) PLANE 26; OBSERVED) and, on 5, the exit toward the objective's map labelled with that
+  map (CORROBORATED: the player's last position before the transfer to that map is 168 / 202
+  / 387 u from the marker). Ours marked the player's own position; `--quest-marker-at-player`
+  keeps that as the KNOWN-BAD arm. `quest_accept_marker`: the objective / kill spawn row, else
+  the giver's, else the probe's live body; on this map its x, y with the live body's plane
+  (0 when not live), on another map the first portal of `portal_route` (BFS, ties by key)
+  labelled with the target's map; no target / no route / a bad key: the placeholder and a
+  printed why. The rule `marker_placed`: on this map exactly a body's (x, y, plane), on
+  another an exit of this map at plane 0. §11 OURS (bare): the errand's 0x0049 is `[1463,
+  (8933.0, 7752.0), 0, 148, 32, nm, nm, nm, 148]`, the bandits' `[1464, (9326.0, 8077.0), 0,
+  168, ...]`; the rule holds on both; plane 3 from a live scout, 0 when not live; a synthetic
+  148 → 146 → 168 route marks exit 'a' labelled 168, `portal_route` [] for here and None when
+  unreachable; the three placeholder causes each say why; the probe's body (plane 5) and the
+  giver fallback; KNOWN-BAD both at (9826, 8077) on 148 and the rule red; VACUITY (four near
+  misses); the flag parses and `main()` flips `QUEST_MARKER_AT_OBJECTIVE`. §12 THE TAPE
+  (vault-gated): the 12 markers split 5 create-spot / 5 cross-map / 2 neither, pinned by qid;
+  the rule on the five create-spot markers, q80 / q89 on plane 26; the cross-map markers whose
+  connection then transferred to the marker's map at 202 / 387 / 168 / 168 u; :53880's 0x0051
+  markers naming another map all on the ONE exit (7311, 5438), for 146, 160 and 164. Floor 37
+  → 47 from the bare green run (93 vaulted, ~28 s; the corpus walk reads a connection's map only
+  where it holds an accept).**
+  **2026-09-30, RANGERPRE-S18 (QUESTFLOW-A3): the
+  accept-time grants -- a quest row's `accept_items` (content item keys, through the new
+  shared `grant_item`: 0x0161 then 0x013E into the lowest free backpack cell, a per-session id
+  from the purchase counter, kind `reward`) and `accept_skills` (through `grant_skill`) go out
+  BEFORE the 0x0049, retail's order on 2 of 2 grant-carrying accepts (OBSERVED: q75 on
+  20260929T150923 :56064 921.1613, q270 on 20260819T132414 :52606 228.313).
+  `--no-accept-rewards` is the pre-S18 accept, the KNOWN-BAD arm. The rule `grants_before_add`:
+  one 0x0049, at least one grant, every grant before it, each 0x013E after its 0x0161. §9 OURS
+  (bare): {starter_sword, skills 382 and 384} reduces to `ITEM IADD SKC SKB SKU SKC SKB SKU ADD
+  SHOW`; the 0x0161 is `named_item(5000, the sword row)`, the 0x013E `[key, 5000, backpack, 0]`,
+  the merchant's map and the item store hold it (kind `reward`, key `starter_sword`, type 27);
+  the cell skips the store's and the merchant's occupied slots; a full backpack sends no item
+  line and the skills and accept still go; a known skill sends no 0x001C; KNOWN-BAD `ADD SHOW`
+  and the rule red; VACUITY (four near misses refused, q75's batch accepted);
+  `questdefs.check_accept_grants` refusals and `load` naming the row; `_item_moves_commit` under
+  `--persist` writes a plain item's moved cell and NOT a reward's; the flag parses and `main()`
+  flips `ACCEPT_REWARDS`. §10 THE TAPE (vault-gated): q75's batch reduces to exactly `ITEM IADD
+  SKC:382 SKB:2:382 SKC:384 SKB:3:384 SKU:384 SKC:1 SKB:4:1 ADD SHOW`, the 0x013E placing the
+  0x0161's item (704, type 27); OURS vs TAPE equal (bar slots 0-1 held, the account holding 382
+  and 1), the known-bad arm unequal, a sabotaged tape red; the CORPUS: every grant-carrying
+  accept (2, floor 2) grants first. Floor 26 → 37 from the bare green run (79 vaulted).**
+  **2026-09-29, RANGERPRE-S18 (QUESTFLOW-A1): the
+  quest-log words -- 0x0049's flags are a per-quest constant, 0 or 32 (0 on 5 of
+  20260929T150923's 12 accepts, OBSERVED), its home the accepting map (12 of 12), and every
+  0x0050 replay repeats both (37 of 37 on home, 27 of them on a load of ANOTHER map; 36 of 37
+  exact on flags, the 37th q79's 34 = 32 | bit 1 after a 0x004D). Ours sent 32 and the loaded
+  map; `--no-retail-quest-log` keeps that as the KNOWN-BAD arm. The rule `log_words_hold`
+  reads the tape's positions, never our constants. §6 OURS (bare): `accept_quest` (moved out of
+  the 0x003B dispatch so it runs without a socket) sends the errand's 32 / home 148 and records
+  `quest_home`; a `quest_log_flags = 0` copy accepts with 0 and its `_replay_quests` on 168
+  sends `[1463, 0, nm, nm, nm, 148]`; a held quest with no recorded home replays the loaded map;
+  KNOWN-BAD 32 / 168 and the rule red; VACUITY (four near misses refused, the exact shape and
+  bit 1 accepted); `questdefs.log_flags` (absent 32; 0 / 32 / 0x40 pass; 1, 2, 3, 34, -1,
+  2^32, a bool, a str, a float refused) and `questdefs.load` refusing a flags-2 row by name;
+  the flag parses and `main()` flips `QUEST_LOG_RETAIL`. §7 THE TAPE 20260929T150923
+  (vault-gated): 11 connections decode; the 12 accepts pinned by port, t, qid and flags; home
+  = `tape.client_version` map 12 of 12; 37 replays, 36 exact, the odd one pinned; the rule on
+  all 8 replayed quests, 27 cross-map; OURS vs TAPE 12 of 12 accepts and 36 of 37 replays
+  (the odd one the 34), the known-bad arm 7 and 3. §8 THE CORPUS (vault-gated): 30 accepts
+  (floor 30), flags only 0 / 32 (11 zeros, floor 11), one value per quest over 21 quests,
+  home = the accepting map on all 30, and 90 replays of an accepted quest (floor 90) carrying
+  its flags (87 exactly, floor 87; the rest add only bit 1) and its home. §5 and §8 now share
+  one corpus decode (`corpus()`). Floor 15 → 26 from the bare green run (61 vaulted).**
+  **2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
   quest-complete visual -- the message right after a hand-in's closing `0x004A` is `0x009F
   [20, own agent, 7]`, OBSERVED on 22 of 22 live hand-ins; what 7 draws is UNREAD. The
   predicate `visual_after_unlist` spells 0x009F / 20 / 7 as the tape's numbers, never our

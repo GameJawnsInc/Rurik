@@ -252,6 +252,114 @@ def quest_agent(row, which):
     return None if v is None else int(v)
 
 
+def spawn_row_map(row, here):
+    """The map a spawn row is FOR: its own `map`, else its area's map_id,
+    else `here` -- spawn_row_on_map's rule, as a value."""
+    if row.get("map") is not None:
+        return int(row["map"])
+    try:
+        arow = agents.WORLD.get("area", str(row.get("area")))
+    except Exception:                                          # noqa: BLE001
+        return int(here)
+    return int(here) if arow.get("map_id") is None else int(arow["map_id"])
+
+
+def portal_route(here, target, rows_of=None):
+    """[(portal key, portal row)] -- the fewest enabled portal hops from map
+    `here` to map `target`, ties broken by portal key; [] when here IS the
+    target, None when no route exists. `rows_of(map_id)` is portal_rows by
+    default (a test passes its own)."""
+    from collections import deque
+    rows_of = rows_of or portal_rows
+    here, target = int(here), int(target)
+    prev = {here: None}
+    queue = deque([here])
+    while queue and target not in prev:
+        m = queue.popleft()
+        for key, prow in rows_of(m):
+            nxt = int(prow["to_map"])
+            if nxt not in prev:
+                prev[nxt] = (m, key, prow)
+                queue.append(nxt)
+    if target not in prev:
+        return None
+    hops, m = [], target
+    while prev[m] is not None:
+        m, key, prow = prev[m]
+        hops.append((key, prow))
+    return hops[::-1]
+
+
+def quest_accept_marker(state, row, rows_of=None):
+    """(pos, plane, map, why) for a quest's 0x0049 marker -- RANGERPRE-S18
+    (QUESTFLOW-A2). Retail puts it ON THE OBJECTIVE, never at the player.
+
+    OBSERVED on 20260929T150923's 12 accepts: 5 sit exactly (0.0 u) on an
+    NPC's 0x0020 create spot with its plane -- q80 (:59969 184.441) and q89
+    (:59427 1244.849) on agent 40 at (11715, 3517) PLANE 26, q79 on 41, q86 on
+    43, q54 on 142. 5 name ANOTHER map: the point is the EXIT on the current
+    map and the map is where the objective is -- CORROBORATED on the three
+    connections that then left: the player's last position before the
+    transfer sits 168 u (:59969), 202 u (:53880) and 387 u (:55934) from the
+    marker, and each transfer's destination is the marker's map. A route of
+    more than one hop keeps the FIRST exit and names the FINAL map: :53880's
+    0x0051 markers use the same (7311, 5438) exit to 146 for objectives on 146,
+    160 and 164 (CORROBORATED, positional). 2 sit on no agent (q52, q75).
+
+    THE TARGET, in this order: the row's `objective_spawn` or
+    `objective_kill` spawn row; else its `giver_spawn` (RECONSTRUCTION: q79's
+    marker sat on its giver, n = 1); else the probe world's live
+    `objective_agent` / `giver_agent` body. A spawn row on THIS map marks its
+    x, y with the live body's plane (plane 0 when the body is not live:
+    RECONSTRUCTION); a kill target marks its spawn point, not its body
+    (RECONSTRUCTION: q75's marker is 34 u off agent 30, n = 1). A spawn row
+    on ANOTHER map marks the first portal of portal_route toward it, plane
+    0, and names the target's map. No target, or no route: the pre-S18
+    placeholder (the player's own position, plane 0, this map), and `why`
+    says which."""
+    here = int(state["map_id"])
+    placeholder = (tuple(state["pos"]), 0, here)
+    target = None
+    for col in ("objective_spawn", "objective_kill", "giver_spawn"):
+        key = row.get(col)
+        if not key:
+            continue
+        try:
+            target = (col, str(key), agents.WORLD.get("spawn", str(key)))
+        except Exception as exc:                              # noqa: BLE001
+            return placeholder + (f"{col} = {key!r} names no spawn row "
+                                  f"({exc}); the marker stays at the player",)
+        break
+    if target is None:
+        for col in ("objective_agent", "giver_agent"):
+            aid = row.get(col)
+            body = (state.get("agents") or {}).get(aid) if aid is not None else None
+            if body is not None and body.get("pos") is not None:
+                x, y = body["pos"]
+                return ((float(x), float(y)), int(body.get("plane", 0) or 0),
+                        here, f"{col} {aid}'s live body (the probe binding)")
+        return placeholder + ("the row names no objective or giver the "
+                              "marker could point at; it stays at the player",)
+    col, key, srow = target
+    tmap = spawn_row_map(srow, here)
+    x, y = float(srow["x"]), float(srow["y"])
+    if tmap == here:
+        body = (state.get("agents") or {}).get(int(srow.get("agent_id", -1)))
+        plane = int(body.get("plane", 0) or 0) if body is not None else 0
+        return ((x, y), plane, here,
+                f"{col} {key!r} on this map"
+                + ("" if body is not None else " (no live body: plane 0)"))
+    route = portal_route(here, tmap, rows_of)
+    if not route:
+        return placeholder + (f"{col} {key!r} is on map {tmap} and no portal "
+                              f"route leads there from {here}; the marker "
+                              f"stays at the player",)
+    pkey, prow = route[0]
+    return ((float(prow["x"]), float(prow["y"])), 0, tmap,
+            f"{col} {key!r} is on map {tmap}: the exit {pkey!r}, hop 1 of "
+            f"{len(route)}, labelled with the objective's map")
+
+
 def _quest_lines(state):
     """[(quest_id, code, row)] this NPC can act on, given what the player holds.
 
@@ -479,7 +587,37 @@ def turn_in_quest(send, state, qid, row, conn_id):
     (QUEST_COMPLETE_VISUAL_ID; what it draws is UNREAD). It follows the 0x004A
     under either --no-reward-in-frame arm, so pass 1's order keeps it there too;
     --no-quest-complete-visual drops it, as every run before S8.
+
+    THE ITEMS COME FIRST (RANGERPRE-S20, QUESTFLOW-H4), ahead of the 0x0052:
+    the row's `handin_items` are taken back (take_quest_item: 0x014D), then
+    its `reward_items` are granted (grant_item: 0x0161 then 0x013E), each
+    reward into the cell a taken item vacated, in order, while one is left.
+    Retail puts both before the first 0x0052 on 2 of 2 item-bearing hand-ins
+    (OBSERVED): 20260929T150923 :53880 727.4875 (q62: 0x014D [92, 3359], then
+    0x0161 [1607, type 24] and 0x013E [92, 1607, 452, 0] -- the cell 3359
+    had held) and 20260819T132414 :52606 145.487 (q440: no quest item; 0x0161
+    [652, type 30], 0x013E [4, 652, 8, 0]). They are not reward LINES, so they
+    stay ahead of the 0x0052 under --no-reward-in-frame too. The objective
+    and chat lines retail sends around the 0x014D on q62 are not sent here:
+    q1462's and q62's 0x0054 + 0x0051, a 0x005D + 0x005E and two 0x009F
+    before it; q1462's objective lines, two 0x005D + 0x005E and q62's 0x004D +
+    0x004C (the objective met at the hand-in NPC) between it and the 0x0161.
+    --no-quest-items takes and grants nothing, as every run before S20.
     """
+    if QUEST_ITEMS_ENABLED:
+        vacated = []
+        for key in row.get("handin_items") or ():
+            cell = take_quest_item(send, state, conn_id, str(key),
+                                   f"quest {qid} handed in")
+            if cell is not None:
+                vacated.append(cell)
+        for key in row.get("reward_items") or ():
+            grant_item(send, state, conn_id, str(key), f"quest {qid} reward",
+                       slot=vacated.pop(0) if vacated else None)
+    elif row.get("handin_items") or row.get("reward_items"):
+        print(f"[c{conn_id}] quest {qid}: handin_items / reward_items NOT "
+              f"taken or granted (--no-quest-items, as every run before "
+              f"RANGERPRE-S20)", flush=True)
     send(GAME_SMSG_QUEST_REMOVE, [qid],
          f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
     state.setdefault("quests", set()).discard(qid)
@@ -496,6 +634,217 @@ def turn_in_quest(send, state, qid, row, conn_id):
              f"player (RANGERPRE-S8, OBSERVED 22 of 22; its look UNREAD)")
     if not REWARD_IN_FRAME:
         grant_quest_reward(send, state, qid, row, conn_id)
+
+
+def grant_item(send, state, conn_id, key, why, slot=None):
+    """Put one content item (content/items.toml `key`) in the player's
+    backpack: mint a per-session id, declare it (0x0161), then place it
+    (0x013E [key, id, backpack, slot]) -- RANGERPRE-S18 (QUESTFLOW-A3), the
+    one helper every server-side grant shares (the quest accept's, and since
+    RANGERPRE-S20 the hand-in's reward; LOOT's pickup is meant to reuse it).
+
+    `slot` NAMES A CELL (RANGERPRE-S20): the hand-in passes the backpack cell
+    its quest item just vacated, retail's q62 cell (20260929T150923 :53880
+    727.4875: 0x014D [92, 3359] took the item the load had put at [92, 3359,
+    452, 0], and the shield went to [92, 1607, 452, 0]; OBSERVED, n = 1). It is
+    used when it is inside the backpack and free by the same test the lowest
+    cell passes; otherwise the rule below decides, and says so. On that one
+    witness the vacated cell was also the lowest free one, so which rule
+    retail follows is RECONSTRUCTION -- this one says what the tape shows.
+
+    THE SHAPE IS RETAIL'S: 0x0161 then 0x013E, declared before placed -- the
+    q75 accept's sword, 20260929T150923 :56064 921.1613, 0x0161 [704, type
+    27, model 2982] then 0x013E [2, 704, 4, 2] (OBSERVED; the purchase's
+    mint-then-place is the same order). The CELL is ours: the lowest backpack slot
+    free of the merchant's map, the item store and the off hands' reserved
+    homes -- the purchase's rule (merchant.handle_item_purchase) -- because
+    retail's choice of slot 2 on that tape cannot be read off one sample
+    (RECONSTRUCTION). THE ID is minted from the purchase counter
+    (next_purchased_item), so a grant and a purchase never collide, and the
+    item is PER-SESSION like a purchase: the dress never re-declares it and
+    _item_moves_commit does not persist its cell (a stated limitation, not a
+    claim about retail). It is registered in the merchant's backpack map (so
+    it can be sold) and in the item store under its content key (so an equip
+    drives the swing model from the row).
+
+    A FULL BACKPACK grants nothing: printed, None returned. Retail's answer
+    there is NOT FOUND. An unknown key raises (agents.item_template); the
+    quest loader refuses one at startup first."""
+    row = agents.item_template(key)
+    items = state.get("items")
+    held = state.setdefault("backpack", {})
+    size = player_bags().get(BACKPACK_BAG_ID, merchant.BACKPACK_SLOT_COUNT)
+    avoid = set(held) | reserved_backpack_slots(state)
+    used = set(itemstore.in_bag(items or {}, BACKPACK_BAG_ID)) | avoid
+    named = slot
+    if named is not None and 0 <= int(named) < size and int(named) not in used:
+        slot = int(named)
+    else:
+        slot = itemstore.first_free(items or {}, BACKPACK_BAG_ID, size,
+                                    avoid=avoid)
+        if named is not None:
+            print(f"[c{conn_id}] ITEM GRANT {key!r}: the named cell {named} is "
+                  f"not a free backpack cell -- the lowest free one instead "
+                  f"[RANGERPRE-S20]", flush=True)
+    if slot is None:
+        print(f"[c{conn_id}] ITEM GRANT {key!r} ({why}) NOT granted: the "
+              f"backpack is full ({size} slots) -- nothing sent; retail's "
+              f"answer to a full backpack is NOT FOUND [RANGERPRE-S18]",
+              flush=True)
+        return None
+    new_id = state.get("next_purchased_item", merchant.PURCHASED_ITEM_ID_BASE)
+    state["next_purchased_item"] = new_id + 1
+    held[slot] = new_id
+    if items is not None:
+        itemstore.place(items, new_id, BACKPACK_BAG_ID, slot, key=key,
+                        kind="reward", item_type=row["item_type"])
+    send(GAME_SMSG_CREATE_NAMED_ITEM, agents.named_item(new_id, row),
+         f"CREATE_NAMED_ITEM({key} as item {new_id}; {why})")
+    send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+         [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
+         f"ITEM_MOVED_TO_LOCATION({new_id} -> backpack slot {slot})")
+    print(f"[c{conn_id}] ITEM GRANT {key!r} as item {new_id} into backpack "
+          f"slot {slot}"
+          + (" -- the named cell" if named is not None and slot == named else "")
+          + f" ({why}) [RANGERPRE-S18]", flush=True)
+    return new_id
+
+
+def take_quest_item(send, state, conn_id, key, why):
+    """Take one quest item back out of the player's backpack at a hand-in:
+    0x014D [key, id] -- RANGERPRE-S20 (QUESTFLOW-H4). Returns the backpack
+    slot it vacated, or None when nothing was taken.
+
+    RETAIL'S SHAPE, OBSERVED n = 1 (the only hand-in batch in the live corpus
+    carrying a 0x014D): 20260929T150923 :53880 727.4875, q62 -- 0x014D [92,
+    3359] removes the quest item (type 21) the load had declared at [92, 3359,
+    452, 0], ahead of the reward item's 0x0161 / 0x013E and of the first
+    0x0052 -- first of the REDUCED batch (test_questflow's reduce_handin);
+    objective and chat lines for q1462 and q62 precede it in the same segment.
+    It is the 9th of the 57 s2c lines sharing that stamp: 0x0054 + 0x0051 for
+    q1462, 0x005D + 0x005E, 0x0054 + 0x0051 for q62 and two 0x009F [11, 41,
+    5] come first, so it is NOT the head of the batch, and a follow-on that
+    sends those lines must not put the 0x014D ahead of them. The same message
+    the merchant's sale sends (merchant.handle_item_sale; 8 of 8 sales), and
+    like a sale nothing moves: the item ceases to exist.
+
+    WHICH ITEM IS OURS (RECONSTRUCTION): the lowest-id item in the BACKPACK
+    whose content key is `key` and whose kind is "reward" -- one grant_item
+    minted, the accept's accept_items being how a quest hands one over today.
+    Never a dressed item (a weapon set's backpack sword carries the same key
+    and kind "set k lead"), never an equipped one. Not held -- never granted,
+    sold, moved out of the backpack, or lost with the per-session connection
+    that granted it -- takes nothing and says so; retail's hand-in without
+    its quest item is NOT FOUND."""
+    items = state.get("items") or {}
+    mine = sorted(iid for iid, r in items.items()
+                  if r.get("key") == key and r.get("kind") == "reward"
+                  and r.get("bag") == BACKPACK_BAG_ID)
+    if not mine:
+        print(f"[c{conn_id}] QUEST ITEM {key!r} ({why}) NOT taken: no granted "
+              f"{key!r} in the backpack -- nothing sent; retail's hand-in "
+              f"without its quest item is NOT FOUND [RANGERPRE-S20]", flush=True)
+        return None
+    iid = mine[0]
+    slot = int(items[iid]["slot"])
+    items.pop(iid)
+    held = state.setdefault("backpack", {})
+    for s in [s for s, h in held.items() if h == iid]:
+        del held[s]
+    send(merchant.GAME_SMSG_ITEM_REMOVED, [PLAYER_INVENTORY_KEY, iid],
+         f"ITEM_REMOVED({key} item {iid} from backpack slot {slot}; {why})")
+    print(f"[c{conn_id}] QUEST ITEM {key!r} item {iid} taken out of backpack "
+          f"slot {slot} ({why}) [RANGERPRE-S20]", flush=True)
+    return slot
+
+
+def accept_quest(send, state, qid, row, conn_id):
+    """The accept batch for one quest: the accept-time grants, 0x0049, the
+    state add, the marker batch, the bare 0x0081 -- the dispatch's
+    SERVICE_ACCEPT arm calls this (RANGERPRE-S18 moved it here from inline in
+    the 0x003B dispatch, so it can be driven without a socket).
+
+    THE GRANTS COME FIRST (RANGERPRE-S18, QUESTFLOW-A3). A quest may hand
+    over items and skills when it is ACCEPTED, and retail sends them BEFORE
+    the 0x0049 on 2 of 2 grant-carrying accepts in the live corpus, none
+    after: 20260929T150923 :56064 921.1613 (q75: a sword 0x0161 + 0x013E,
+    then 0x00DC/0x00D9 for 382, 384 (+ 0x001C) and 1, then 0x0049) and
+    20260819T132414 :52606 228.313 (q270: two skills, each with its
+    0x001C). The row's `accept_items` (content/items.toml keys, through
+    grant_item) go before its `accept_skills` (grant_skill, whose 0x001C
+    rides only a skill new to the account), q75's order. --no-accept-rewards
+    grants nothing, as every run before S18.
+
+    0x0049 is [qid, marker pos, marker plane, marker map, FLAGS, s1, s2, s3,
+    HOME]. THE FLAGS ARE THE ROW'S (RANGERPRE-S18, QUESTFLOW-A1): retail sends
+    0 or 32 as a per-quest constant -- 0 on 5 of 20260929T150923's 12 accepts
+    (questdefs.log_flags has them) -- and ours sent 32 for every quest.
+    THE HOME IS THE ACCEPTING MAP, and it is RECORDED: retail's is the
+    accepting connection's own map on 12 of 12, and every 0x0050 replay
+    carries that map, never the one being loaded (37 of 37; q62 accepted on
+    146 replays home 146 on 146, 148 and 164). state["quest_home"] carries it
+    across connections for _replay_quests. --no-retail-quest-log sends 32
+    and records nothing, as every run before S18.
+
+    THE MARKER IS ON THE OBJECTIVE (RANGERPRE-S18, QUESTFLOW-A2): the
+    objective NPC's spot and plane, or the exit toward the objective's map
+    labelled with that map -- quest_accept_marker has the tape and the
+    rules. It needs no marker column: the point is the objective's own spawn
+    row or the portal row, both already content. Until S18 it was the
+    player's own position on the instance's map, a placeholder;
+    --quest-marker-at-player keeps that as the known-bad arm.
+    """
+    granted = []
+    if ACCEPT_REWARDS:
+        for key in row.get("accept_items") or ():
+            if grant_item(send, state, conn_id, str(key),
+                          f"quest {qid} accepted") is not None:
+                granted.append(str(key))
+        for sid in row.get("accept_skills") or ():
+            grant_skill(send, state, int(sid), conn_id,
+                        unlocked=int(sid) in state.get("skills_known", set()))
+            # grant_skill REFUSES an id past the served skill table (nothing
+            # sent, nothing stored) and says so; the summary below names only
+            # what went out. Its None return cannot tell this apart -- None
+            # is also "the bar was full, learned" -- so the table bound is
+            # the test, the same one grant_skill applies.
+            if int(sid) < SKILL_TABLE_ROWS:
+                granted.append(f"skill {int(sid)}")
+    elif row.get("accept_items") or row.get("accept_skills"):
+        print(f"[c{conn_id}] quest {qid}: accept_items / accept_skills NOT "
+              f"granted (--no-accept-rewards, as every run before "
+              f"RANGERPRE-S18)", flush=True)
+    if granted:
+        print(f"[c{conn_id}] quest {qid} accept grants, BEFORE the 0x0049: "
+              f"{', '.join(granted)} (RANGERPRE-S18, QUESTFLOW-A3)", flush=True)
+    mid = state["map_id"]
+    nm = questdefs.enc_string(row.get("enc_name") or [])
+    flags = questdefs.log_flags(row) if QUEST_LOG_RETAIL else 32
+    if QUEST_MARKER_AT_OBJECTIVE:
+        mpos, mplane, mmap, why = quest_accept_marker(state, row)
+    else:
+        mpos, mplane, mmap, why = (tuple(state["pos"]), 0, mid,
+                                   "--quest-marker-at-player: the pre-S18 "
+                                   "placeholder")
+    print(f"[c{conn_id}] quest {qid} accept marker: ({mpos[0]:.0f}, "
+          f"{mpos[1]:.0f}) plane {mplane} map {mmap} -- {why} "
+          f"(RANGERPRE-S18, QUESTFLOW-A2)", flush=True)
+    send(GAME_SMSG_QUEST_ADD,
+         [qid, tuple(mpos), mplane, mmap, flags, nm, nm, nm, mid],
+         f"QUEST_ADD[{qid}] (accepted; marker map {mmap}, log flags {flags}, "
+         f"home {mid})")
+    state.setdefault("quests", set()).add(qid)
+    if QUEST_LOG_RETAIL:
+        state.setdefault("quest_home", {})[qid] = mid
+    print(f"[c{conn_id}] quest {qid} accepted: log flags {flags}"
+          + (f", home map {mid} recorded (RANGERPRE-S18, QUESTFLOW-A1)"
+             if QUEST_LOG_RETAIL else
+             " (--no-retail-quest-log: always 32, no home recorded)"),
+          flush=True)
+    # The marker moves in the SAME batch as the quest message that caused it
+    # -- never on a later tick -- and then the window closes.
+    _send_markers(send, state, " (accepted)")
+    _close_dialog(send, state["interacting"], "accepted")
 
 
 def kill_completes_objective(send, state, dead_id, conn_id):
@@ -872,14 +1221,57 @@ def _quest_prose(row, text):
     framing = row.get("wire_framing", "template")
     xp = row.get("reward_experience")
     if xp is None:
+        if QUEST_ITEMS_ENABLED and row.get("reward_items"):
+            print(f"[quests] quest {row.get('quest_id')}: reward_items are NOT "
+                  f"drawn -- the row has no reward_experience, so there is no "
+                  f"reward block to carry an item line (a header with items "
+                  f"alone is NOT FOUND on tape) [RANGERPRE-S20]", flush=True)
         return questdefs.coded_literal(text, framing,
                                        limit=questdefs.DIALOG_UNITS)
     # SLOT B FOLLOWS THE FLAG (the D9 fix pass, ENG-9): --no-quest-gold is
     # "as before this arc", and before this arc the screen drew no gold line;
     # a promise the server then refuses to pay is the worse half of a revert.
     gold = row.get("reward_gold") if QUEST_GOLD_ENABLED else None
+    # THE ITEM LINES FOLLOW THEIR FLAG the same way (RANGERPRE-S20):
+    # --no-quest-items grants nothing, so it draws nothing.
+    items = quest_item_lines(row) if QUEST_ITEMS_ENABLED else ()
     return questdefs.with_reward(text, int(xp), gold,
-                                 framing, limit=questdefs.DIALOG_UNITS)
+                                 framing, limit=questdefs.DIALOG_UNITS,
+                                 items=items)
+
+
+# The wire's shield type byte: quest 62's delivered reward 1607 is type 24
+# (0x0161 at 20260929T150923 :53880 727.4875), the Warrior henchman's shield
+# too (F33). OBSERVED; holds_shield's literal 24 is the same number.
+SHIELD_ITEM_TYPE = 24
+
+
+def quest_item_lines(row):
+    """[(name units, armour)] -- the reward_items this row's screens DRAW
+    (questdefs.reward_item_run), RANGERPRE-S20 (QUESTFLOW-H4).
+
+    A SHIELD ONLY: an item of wire type 24 carrying an armour-rating (572)
+    word, drawn as its name and `Armor: <572's argument>` -- the one line on
+    tape (quest 62's shield, 21 strings; its numeric equal to the delivered
+    shield's own 572 argument, n = 1). Every other reward item is GRANTED at
+    the hand-in but NOT DRAWN, and this prints why: a weapon's line needs a
+    damage-type string id from 587's argument, a table NOT FOUND in this repo
+    (0x08DE / 0x08E4 are the two seen); anything else has no stat template
+    observed for it."""
+    out = []
+    for key in row.get("reward_items") or ():
+        item = agents.item_template(str(key))
+        rating = item_word(item, ARMOR_RATING_MODIFIER)
+        if int(item.get("item_type", -1)) == SHIELD_ITEM_TYPE and rating is not None:
+            out.append(([ord(c) for c in item["enc_name"]], int(rating[0])))
+            continue
+        why = ("a weapon: its line's damage-type string (from 587's argument) "
+               "is NOT FOUND" if item_word(item, ITEM_WORD_DAMAGE_TYPE)
+               else "no observed line template for its type")
+        print(f"[quests] quest {row.get('quest_id')}: reward item {key!r} "
+              f"(type {item.get('item_type')}) is granted but NOT DRAWN on the "
+              f"screen -- {why} [RANGERPRE-S20]", flush=True)
+    return out
 
 
 def _quest_screen(send, agent_id, qid, code, row):
@@ -1047,8 +1439,12 @@ def _quest_markers(state):
 # here, so the giver stops offering it and its marker stays clear. Before this a
 # completed quest was simply un-held, which made every quest repeatable and put
 # the '!' straight back on the giver the moment the reward window closed.
+# `quest_home` since RANGERPRE-S18: {quest id: the map it was accepted on},
+# written by accept_quest and read by _replay_quests -- retail's 0x0050 carries
+# the ACCEPTING map on every replay (37 of 37 on 20260929T150923), so the map
+# has to outlive the connection that accepted the quest.
 QUEST_PROGRESS = {"quests": set(), "objectives_done": set(),
-                  "quests_completed": set()}
+                  "quests_completed": set(), "quest_home": {}}
 
 
 def bind_progress(state):
@@ -1077,16 +1473,31 @@ def _replay_quests(send, state):
     objectives line it sent went nowhere. Copying the order verbatim would
     reproduce a bug we can see, and the failure is invisible: the client shows
     an empty objective and looks like it ignored us.
+
+    0x0050 is [qid, FLAGS, s1, s2, s3, HOME], and since RANGERPRE-S18 both
+    words are the accept's: the row's log flags (36 of 20260929T150923's 37
+    replays repeat the accept's value; the 37th adds bit 1 after a 0x004D we
+    do not send) and the map the quest was ACCEPTED on (37 of 37 -- q75,
+    accepted on 160, replays home 160 on 146 and 160). A quest held with no
+    recorded home (accepted before S18 in this process, or under the flag)
+    falls back to the map being loaded, which is what every replay sent
+    before. --no-retail-quest-log sends 32 and the loaded map, as before S18.
     """
     held = sorted(state.setdefault("quests", set()))
     if not held:
         return
     mid = state["map_id"]
+    homes = state.get("quest_home") or {}
     for qid in held:
         row = quest_rows()[qid]
         nm = questdefs.enc_string(row.get("enc_name") or [])
-        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, 32, nm, nm, nm, mid],
-             f"QUEST_ADD_NO_MARKER[{qid}] (instance load)")
+        if QUEST_LOG_RETAIL:
+            flags, home = questdefs.log_flags(row), int(homes.get(qid, mid))
+        else:
+            flags, home = 32, mid
+        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, flags, nm, nm, nm, home],
+             f"QUEST_ADD_NO_MARKER[{qid}] (instance load; log flags {flags}, "
+             f"home {home})")
     for qid in held:
         row = quest_rows()[qid]
         _send_description(send, state, qid, row)
@@ -13039,6 +13450,40 @@ QUEST_COMPLETE_VISUAL = True   # False (--no-quest-complete-visual): a hand-in
                                # turn_in_quest sends it right after the 0x004A
                                # -- retail's next message on 22 of 22 hand-ins
                                # (OBSERVED; QUEST_COMPLETE_VISUAL_ID).
+QUEST_LOG_RETAIL = True        # False (--no-retail-quest-log): the accept's
+                               # 0x0049 and every 0x0050 replay send log flags
+                               # 32 and the replay's home is the map being
+                               # loaded, as every run before RANGERPRE-S18.
+                               # Default ON: the row's flags (questdefs.
+                               # log_flags; 0 on 5 of 20260929T150923's 12
+                               # accepts) and the ACCEPTING map as home on
+                               # every replay (37 of 37) -- OBSERVED.
+ACCEPT_REWARDS = True          # False (--no-accept-rewards): a quest row's
+                               # accept_items / accept_skills are NOT granted
+                               # (the print names them), as every run before
+                               # RANGERPRE-S18. Default ON: accept_quest grants
+                               # them BEFORE the 0x0049 -- retail's order on 2
+                               # of 2 grant-carrying accepts (OBSERVED;
+                               # 20260929T150923 :56064 921.161, q75).
+QUEST_ITEMS_ENABLED = True     # False (--no-quest-items): a hand-in takes no
+                               # handin_items back and grants no reward_items,
+                               # and the screens draw no item line, as every
+                               # run before RANGERPRE-S20. Default ON:
+                               # turn_in_quest sends 0x014D per taken item, then
+                               # 0x0161 + 0x013E per reward (into the vacated
+                               # cell) BEFORE the first 0x0052 -- 2 of 2 retail
+                               # item-bearing hand-ins (OBSERVED; 20260929T150923
+                               # :53880 727.4875, q62) -- and _quest_prose draws
+                               # a shield's line (questdefs.reward_item_run).
+QUEST_MARKER_AT_OBJECTIVE = True  # False (--quest-marker-at-player): the
+                               # accept's 0x0049 marker is the player's own
+                               # position on this map, plane 0, as every run
+                               # before RANGERPRE-S18. Default ON: the
+                               # objective's spot and plane, or the exit toward
+                               # its map labelled with that map
+                               # (quest_accept_marker; retail's 5 of 12 on a
+                               # create spot, 5 of 12 cross-map, OBSERVED /
+                               # CORROBORATED on 20260929T150923).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -31164,8 +31609,10 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
-            if (items[iid].get("kind") or "") == "bought":
+            if (items[iid].get("kind") or "") == "bought" \
+                    or (items[iid].get("kind") or "") == "reward":
                 continue        # per-session: the dress never re-declares a purchase
+                                # or a grant (grant_item, RANGERPRE-S18)
             store.set_item_location(state.get("char_uuid", ""), iid,
                                     items[iid]["bag"], items[iid]["slot"])
     where = ", ".join(f"item {i} -> bag {items[i]['bag']} slot {items[i]['slot']}"
@@ -39786,25 +40233,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"{qid} code 0x{code:02X}"
                                   + ("" if row else " -- NOT IN content/quests.toml"))
                             if row and code == questdefs.SERVICE_ACCEPT:
-                                # The marker goes at the player's own position
-                                # and the map ids are the instance's, which is
-                                # a PLACEHOLDER: a real giver would put it at
-                                # the objective. The quest row has no marker
-                                # column yet, and inventing coordinates it does
-                                # not carry would be a number nobody measured.
-                                mid = state["map_id"]
-                                nm = questdefs.enc_string(row.get("enc_name") or [])
-                                send(GAME_SMSG_QUEST_ADD,
-                                     [qid, tuple(state["pos"]), 0, mid, 32,
-                                      nm, nm, nm, mid],
-                                     f"QUEST_ADD[{qid}] (accepted)")
-                                state.setdefault("quests", set()).add(qid)
-                                # The marker moves in the SAME batch as the
-                                # quest message that caused it -- never on a
-                                # later tick -- and then the window closes.
-                                _send_markers(send, state, " (accepted)")
-                                _close_dialog(send, state["interacting"],
-                                              "accepted")
+                                # THE ACCEPT BATCH is accept_quest's: 0x0049
+                                # with the row's log flags and the accepting
+                                # map as home (RANGERPRE-S18), the state add,
+                                # the markers, the bare 0x0081.
+                                accept_quest(send, state, qid, row, conn_id)
                             elif row and code == questdefs.SERVICE_TURN_IN:
                                 # THE HAND-IN BATCH is turn_in_quest's: one
                                 # 0x0052 (the party-broadcast experiment), the
@@ -44328,6 +44761,41 @@ def main():
               "RANGERPRE-S8. KNOWN-BAD against the tape: retail sends it right "
               "after the 0x004A on 22 of 22 hand-ins (turn_in_quest).",
               flush=True)
+    if a.no_retail_quest_log:
+        global QUEST_LOG_RETAIL
+        QUEST_LOG_RETAIL = False
+        print("[quests] --no-retail-quest-log: the accept's 0x0049 and every "
+              "0x0050 replay send log flags 32, and a replay's home is the map "
+              "being loaded, as every run before RANGERPRE-S18. KNOWN-BAD "
+              "against the tape: retail sends the quest's own flags (0 on 5 of "
+              "12 accepts) and the accepting map on 37 of 37 replays "
+              "(accept_quest, _replay_quests).", flush=True)
+    if a.no_accept_rewards:
+        global ACCEPT_REWARDS
+        ACCEPT_REWARDS = False
+        print("[quests] --no-accept-rewards: a quest row's accept_items and "
+              "accept_skills are NOT granted at the accept, as every run "
+              "before RANGERPRE-S18. KNOWN-BAD against the tape: retail grants "
+              "them before the 0x0049 on 2 of 2 grant-carrying accepts "
+              "(accept_quest).", flush=True)
+    if a.no_quest_items:
+        global QUEST_ITEMS_ENABLED
+        QUEST_ITEMS_ENABLED = False
+        print("[quests] --no-quest-items: a hand-in takes no handin_items back "
+              "(no 0x014D), grants no reward_items (no 0x0161 / 0x013E), and "
+              "the screens draw no item line, as every run before "
+              "RANGERPRE-S20. KNOWN-BAD against the tape: retail removes the "
+              "quest item and adds the reward item into its cell before the "
+              "first 0x0052 (q62, 20260929T150923 :53880 727.4875) "
+              "(turn_in_quest).", flush=True)
+    if a.quest_marker_at_player:
+        global QUEST_MARKER_AT_OBJECTIVE
+        QUEST_MARKER_AT_OBJECTIVE = False
+        print("[quests] --quest-marker-at-player: the accept's 0x0049 marker "
+              "is the player's own position on this map, plane 0, as every run "
+              "before RANGERPRE-S18. KNOWN-BAD against the tape: retail marks "
+              "the objective's spot and plane, or the exit toward its map "
+              "(quest_accept_marker).", flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
