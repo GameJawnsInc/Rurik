@@ -14540,6 +14540,31 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # values and both transitions are OBSERVED. --no-revive-flags reverts to the
 # status alone, the known-bad arm.
 REVIVE_SENDS_ALIVE_FLAGS = True   # --no-revive-flags reverts
+# REVIVE-HEAL (2026-09-30): THE REVIVE HEALS IN ITS OWN SEGMENT, AS A GAIN.
+# RETAIL, census of every in-place revive on the live corpus (both life-state
+# tracks, 88 revives): EVERY one carries 0x00A2 [55, agent, f] in the status's
+# own segment -- 63 of 63 NPC revives (status, the 55, flags 9) and 25 of 25
+# player rises (status, the 55, energy 43 and 52, flags 5). f = 1.0 on 86, and
+# 0.5892 on 2 NPCs. Within 1.5 s of any of them, retail sends NO 0x00A3 [34]
+# bar-setter, and a 0x009F [42] maximum ONCE, 1.1 s later on the first hit.
+# That is PVPMAX's "the first word after a rise declares the maximum".
+# OURS until now: the status, then ONE TICK later 0x009F [42] + 0x00A3
+# [34, 1.0] (REVIVE_REFILL_DEFER, agentprops 1f). The burst of those two had
+# tripped the client's resurrect check, `min(+0x130, +0x134) == 0.0` logged as
+# `Health non-zero on resurrect`: 3 of 3 NPC revives, 13 of 13 player rises.
+# Deferring them a tick stopped it. Retail's gain rides the SAME segment, so
+# whether IT trips the check on our client is the open question.
+#   * PREDICTION (registered 2026-09-30, before any run): it DOES. Property 55
+#     is byte-identical to damage's record path (agentprops 1a), and a -1.0 on
+#     it emptied the bar at once on our client (1b), so +1.0 writes the pool
+#     before the deferred check reads it. Our client is retail's binary fed
+#     retail's bytes. So a complaint here would be retail's own (severity 2,
+#     nothing drawn), and not a defect of ours. No retail Gw.log survives from
+#     a session with revives: NOT FOUND in the vault.
+#   * The maximum: none is sent, and the tracker goes stale, so the next landed
+#     word declares it (declare_body_max_on_hit), as retail's does.
+# --no-revive-heal-gain restores the deferred [42] + [34] refill.
+REVIVE_HEAL_GAIN = True   # --no-revive-heal-gain reverts
 
 
 # WEAPON DAMAGE moved to combatmath.py (REFACTOR-A12), banner and all; its lazy
@@ -28554,6 +28579,7 @@ def revive_due(send, state, conn_id):
         # The refill itself may still be deferred below -- validating a value
         # the defer branch won't use this tick is the cheap direction.
         frac = _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")
+        gain = _fraction(1.0, agents.GV_HEALTH_GAIN, "the revive's heal")
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
@@ -28565,6 +28591,25 @@ def revive_due(send, state, conn_id):
             agent_energy(agent).refill()
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
+        # REVIVE-HEAL: retail's heal rides the revive's own segment, as a GAIN.
+        # REVIVE_HEAL_GAIN's comment has the census. No 0x009F [42] goes out: the
+        # maximum is stale after a rise, and the next landed word declares it
+        # (PVPMAX), which is the one [42] retail sent near a revive, 1.1 s on.
+        if REVIVE_HEAL_GAIN:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                 [agents.GV_HEALTH_GAIN, agent_id, gain],
+                 f"the revive's heal on agent {agent_id}: property 55, +1.0 of its "
+                 f"maximum [REVIVE-HEAL]")
+            agent["max_declared_on_hit"] = None
+            agent["refill_due_at"] = None
+            if REVIVE_SENDS_ALIVE_FLAGS:
+                send(GAME_SMSG_AGENT_UPDATE_FLAGS, [agent_id, AGENT_FLAGS_BODY_ALIVE],
+                     f"flags {AGENT_FLAGS_BODY_ALIVE} on the revived agent {agent_id} "
+                     f"[RANGERLOOP-F10]")
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up: "
+                  f"status, the heal +1.0, flags {AGENT_FLAGS_BODY_ALIVE} in one segment "
+                  f"[REVIVE-HEAL]", flush=True)
+            continue
         # ONE TICK before the refills, the same as the player path. The client's
         # resurrect check is on the CHARACTER and does not care whose it is: 2 of the
         # vault's 49 `Health non-zero on resurrect` lines name `Corpse of Hatcher
@@ -45724,6 +45769,13 @@ def main():
               "pickup walk is NOT parked, and the pickup is served at its eta wherever "
               "the body stopped -- 20260930T154533 credited 2 of 2 piles 47 u and 100 u "
               "from the body. KNOWN-BAD arm [RANGERLOOP-F8, withdrawn]", flush=True)
+    if a.no_revive_heal_gain:
+        global REVIVE_HEAL_GAIN
+        REVIVE_HEAL_GAIN = False
+        print("[combat] --no-revive-heal-gain: an NPC's timer revive heals by the "
+              "deferred 0x009F [42] + 0x00A3 [34] refill a tick after the status, not "
+              "retail's 0x00A2 [55, agent, 1.0] in the status's own segment (88 of 88). "
+              "KNOWN-BAD arm on the wire [REVIVE-HEAL revert]", flush=True)
     if a.no_revive_flags:
         global REVIVE_SENDS_ALIVE_FLAGS
         REVIVE_SENDS_ALIVE_FLAGS = False

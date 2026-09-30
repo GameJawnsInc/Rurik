@@ -7527,7 +7527,7 @@ def section_pool_fraction():
     early = [v for op, v, _l in sent
              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
     LEDGER.ok(not early,
-              "the agent revive does NOT refill in the same burst",
+              "the agent revive sends no 0x00A3 bar-setter in the same burst (REVIVE-HEAL: its heal is retail's 0x00A2 [55] gain; the setter is the deferred refill's)",
               f"{early} -- the burst is what the client complained about")
     state["agents"][10]["refill_due_at"] = time.time() - 1.0
     authsrv.agent_refill_due(

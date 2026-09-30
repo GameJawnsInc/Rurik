@@ -31,7 +31,9 @@ A''s coordinates -- the halt must not cancel the pickup, the known-bad arm must,
 park must still take everything that is not a pickup walk; 8 the revive's life-state byte
 (RANGERLOOP-F10): 0x0026 [agent, 9] behind the status, the byte whose absence left section
 7's revived Hatcher non-colliding in the client. Sections 1-5, 7 and 8 need no vault, no
-socket and no client.
+socket and no client; 9 the revive's heal (REVIVE-HEAL): retail's 0x00A2 [55, agent,
+1.0] in the status's own segment, the maximum declared on the next landed word, and the
+deferred refill as the known-bad arm.
 """
 import math
 import os
@@ -62,7 +64,9 @@ from codec import Codec                                        # noqa: E402  (au
 # with the capture. Section 7 (RANGERLOOP-F8, fixture-free) adds 8: 45 bare, 54 with
 # the capture, both from the green runs of 2026-09-30. Section 8 (RANGERLOOP-F10, the
 # revive's life-state byte, fixture-free) adds 4: 49 bare, 58 with the capture.
-LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=49)
+# Section 9 (REVIVE-HEAL, the revive's in-segment heal, fixture-free) adds 4: 53 bare,
+# 62 with the capture.
+LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=53)
 check = checks.adopt(LEDGER)
 
 STAMP = "20260929T150923"
@@ -1097,18 +1101,22 @@ def section_beside():
 OP_STAT, OP_FLAGS26, OP_MAXINT, OP_BAR = 0x00F1, 0x0026, 0x009F, 0x00A3
 
 
-def revive_sends(defer, flags):
-    """revive_due on a long-dead practice body (agent 10), under the two switches."""
+def revive_sends(defer, flags, heal=False):
+    """revive_due on a long-dead practice body (agent 10), under the three switches.
+    Section 8 pins `heal` OFF: it reads the flags byte on the two REFILL arms."""
     agent = foe_entry(HATCHER_AT)
-    agent.update(dead=True, died_at=0.0, health=0.0)
+    agent.update(dead=True, died_at=0.0, health=0.0, max_declared_on_hit=10.0)
     st = fresh(agents={10: agent})
     sent, send = collect()
-    saved = (authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS)
-    authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS = defer, flags
+    saved = (authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS,
+             authsrv.REVIVE_HEAL_GAIN)
+    (authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS,
+     authsrv.REVIVE_HEAL_GAIN) = defer, flags, heal
     try:
         authsrv.revive_due(send, st, 0)
     finally:
-        authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS = saved
+        (authsrv.REVIVE_REFILL_DEFER, authsrv.REVIVE_SENDS_ALIVE_FLAGS,
+         authsrv.REVIVE_HEAL_GAIN) = saved
     return sent, agent
 
 
@@ -1118,9 +1126,9 @@ def section_revive_flags():
     sent, agent = revive_sends(0.05, True)
     check(sent == [(OP_STAT, [10, 0]), (OP_FLAGS26, [10, authsrv.AGENT_FLAGS_BODY_ALIVE])]
           and authsrv.AGENT_FLAGS_BODY_ALIVE == 9 and agent["dead"] is False,
-          "8a. HEADLINE, the shipped arm (the refill deferred a tick): the revive sends "
-          "the status [10, 0] and then 0x0026 [10, 9], retail's in-place revive, status "
-          "first, one tick -- the life-state byte back to alive",
+          "8a. HEADLINE, the refill arm deferred a tick (--no-revive-heal-gain): the "
+          "revive sends the status [10, 0] and then 0x0026 [10, 9], retail's in-place "
+          "revive, status first, one tick -- the life-state byte back to alive",
           f"{[(hex(o), v) for o, v in sent]}")
     sent, _a = revive_sends(0.0, True)
     check([o for o, _v in sent] == [OP_STAT, OP_MAXINT, OP_BAR, OP_FLAGS26]
@@ -1145,9 +1153,62 @@ def section_revive_flags():
           and authsrv.capture_flags().get("REVIVE_SENDS_ALIVE_FLAGS") is True
           and '"--no-revive-flags"' in sa and 0 < i_main < i_flag
           and "REVIVE_SENDS_ALIVE_FLAGS = False" in src[i_flag:i_flag + 120]
-          and src[i_rev:i_end].count("if REVIVE_SENDS_ALIVE_FLAGS:") == 2,
+          and src[i_rev:i_end].count("if REVIVE_SENDS_ALIVE_FLAGS:") == 3,
           "8d. ships ON, on the capture's flags row, with its revert --no-revive-flags "
-          "wired in main(), read by both of revive_due's arms")
+          "wired in main(), read by all three of revive_due's arms (the heal, the "
+          "deferred refill, the inline refill)")
+
+
+# --------------------------------------------------------------------------- 9
+# REVIVE-HEAL: retail heals a revived body in the status's own segment, as a GAIN --
+# 0x00A2 [55, agent, 1.0] between the status and the flags, 88 of 88 retail revives
+# (63 NPC, 25 player), no 0x00A3 [34] setter within 1.5 s of any, and a [42] maximum
+# only on the first landed word after the rise (PVPMAX). Ours was the deferred [42] +
+# [34] refill a tick later (agentprops 1f). The census is authsrv's comment on
+# REVIVE_HEAL_GAIN.
+OP_FLOAT = 0x00A2
+
+
+def section_revive_heal():
+    print("\n9. the revive's heal (REVIVE-HEAL): 0x00A2 [55, agent, 1.0] in the status's "
+          "own segment")
+    one = authsrv._f32(1.0)
+    sent, agent = revive_sends(0.05, True, heal=True)
+    check(sent == [(OP_STAT, [10, 0]), (OP_FLOAT, [agents.GV_HEALTH_GAIN, 10, one]),
+                   (OP_FLAGS26, [10, 9])]
+          and agents.GV_HEALTH_GAIN == 55 and agent["dead"] is False
+          and not agent.get("refill_due_at") and agent.get("max_declared_on_hit") is None,
+          "9a. HEADLINE, the shipped arm: status [10, 0], the heal 0x00A2 [55, 10, 1.0] "
+          "and flags [10, 9] -- retail's segment, 88 of 88 -- with no 0x009F [42], no "
+          "0x00A3 [34] and no refill armed; the maximum's tracker goes stale",
+          f"{[(hex(o), v) for o, v in sent]} refill_due_at {agent.get('refill_due_at')} "
+          f"tracker {agent.get('max_declared_on_hit', 'absent')}")
+    decl, send = collect()
+    told = authsrv.declare_body_max_on_hit(send, agent, 10, PLAYER, "the first word")
+    check(told is True and decl and decl[0][0] == OP_MAXINT
+          and decl[0][1][0] == 42 and decl[0][1][1] == 10,
+          "9b. the next landed word declares the maximum, 0x009F [42, 10, max] -- "
+          "PVPMAX's first word after a rise, and the one [42] retail sent near a "
+          "revive, 1.1 s after it on the first hit",
+          f"told {told} {decl}")
+    got = [revive_sends(d, True, heal=False)[0] for d in (0.05, 0.0)]
+    check(OP_FLOAT not in [o for o, _v in got[0] + got[1]]
+          and [o for o, _v in got[1]] == [OP_STAT, OP_MAXINT, OP_BAR, OP_FLAGS26],
+          "9c. KNOWN-BAD ARM (--no-revive-heal-gain): no gain on either arm -- the "
+          "deferred arm sends the status and the flags now and the [42] + [34] refill "
+          "a tick later, the inline arm the refill between them",
+          f"{[[(hex(o), v) for o, v in g] for g in got]}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    import serverargs
+    sa = open(serverargs.__file__, encoding="utf-8").read()
+    i_main = src.find("\ndef main():")
+    i_flag = src.find("    if a.no_revive_heal_gain:", i_main)
+    check(authsrv.REVIVE_HEAL_GAIN is True
+          and authsrv.capture_flags().get("REVIVE_HEAL_GAIN") is True
+          and '"--no-revive-heal-gain"' in sa and 0 < i_main < i_flag
+          and "REVIVE_HEAL_GAIN = False" in src[i_flag:i_flag + 120],
+          "9d. ships ON, on the capture's flags row, with its revert "
+          "--no-revive-heal-gain wired in main()")
 
 
 def main():
@@ -1160,6 +1221,7 @@ def main():
     section_tape(codec)
     section_beside()
     section_revive_flags()
+    section_revive_heal()
     return LEDGER.verdict()
 
 

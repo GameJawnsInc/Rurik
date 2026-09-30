@@ -3490,7 +3490,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   sends the status alone on both arms (8c); the flag, its capture row and both of revive_due's
   reads (8d). Proved red: both sends disabled in the source reddens 8a, 8b, 8d and
   `test_guards.py` §5's control; 8c stays green, being that server.
-  Floor 49 from the bare green run (the tape adds 9: 58 vaulted). No socket, no client.
+  **§9, REVIVE-HEAL (2026-09-30): the revive's heal.** Retail heals a revived body in the
+  status's own segment with a GAIN, `0x00A2 [55, agent, 1.0]`, 88 of 88 retail revives (63 NPC,
+  25 player), with no `0x00A3 [34]` setter near any and a `[42]` maximum only on the first
+  landed word after the rise (PVPMAX). 9a, the shipped arm: status, the heal, flags 9, no
+  refill armed, the maximum's tracker stale. 9b: the next landed word declares `[42, 10, max]`.
+  9c, the KNOWN-BAD arm `--no-revive-heal-gain`: no gain, the deferred / inline `[42]` + `[34]`
+  refill. 9d: the flag, its capture row, its wiring. §8's helper now pins the heal OFF, so 8a-8c
+  read the flags byte on the two refill arms. Proved red: the heal arm disabled in the source
+  reddens 9a, 9b and `test_guards.py` §5's control (which now wants 3 messages on the heal
+  arm); 9c and 9d stay green.
+  Floor 53 from the bare green run (the tape adds 9: 62 vaulted). No socket, no client.
   ~20 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
@@ -14170,7 +14180,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   and the controls are the two that a label-blind reading gets wrong:
   `Health degeneration` is a real variable in a live bonus slot and is not a
   condition, and an attack with no bonus slot inflicts nothing. Floor 25 → 40),
-  `toolkit/authsrv/test_guards.py` (**2026-09-30, RANGERLOOP-F10: §5's in-range control counts the revive's life-state byte -- 2 messages with the refill deferred, 4 inline (status, max, bar, then `0x0026 [agent, 9]`), 1 / 3 under `--no-revive-flags`; 45 checks, floor unchanged.** **2026-09-27, SKILLS-HX (skills §61): §9's `hit_enemy` caller census gains `hex_end_burst` (`effect_tick`'s and `strip_effects`'s helper — `strip_effects` pinned to `kill_agent` + `kill_player`, `effect_tick` to `handle`) and `adjacent_player_spell` (cast_tick's; `adjacent_body_spell` land_skill's); the same two tick sites, no new one; 45 checks, floor unchanged.** **2026-09-14 (late night), DAMAGE-INT / SLICE-H18: §9 pins the truncation to whole points as f32 literals — 3.5 → `0xBCF5C28F` (−0.03), 5.25 → `0xBD4CCCCD` (−0.05), 0.7 → `0x80000000` (−0.0, retail's floor is zero) — and `_whole_points`' NaN/negative pass-through; +4, floor 41 → 45.** the guard contract for combat's computed
+  `toolkit/authsrv/test_guards.py` (**2026-09-30 (later), REVIVE-HEAL: §5's control wants 3 messages on the heal arm (status, `0x00A2 [55]`, flags) and the F10 counts on the refill arm (`--no-revive-heal-gain`); 45 checks, floor unchanged.** **2026-09-30, RANGERLOOP-F10: §5's in-range control counts the revive's life-state byte -- 2 messages with the refill deferred, 4 inline (status, max, bar, then `0x0026 [agent, 9]`), 1 / 3 under `--no-revive-flags`; 45 checks, floor unchanged.** **2026-09-27, SKILLS-HX (skills §61): §9's `hit_enemy` caller census gains `hex_end_burst` (`effect_tick`'s and `strip_effects`'s helper — `strip_effects` pinned to `kill_agent` + `kill_player`, `effect_tick` to `handle`) and `adjacent_player_spell` (cast_tick's; `adjacent_body_spell` land_skill's); the same two tick sites, no new one; 45 checks, floor unchanged.** **2026-09-14 (late night), DAMAGE-INT / SLICE-H18: §9 pins the truncation to whole points as f32 literals — 3.5 → `0xBCF5C28F` (−0.03), 5.25 → `0xBD4CCCCD` (−0.05), 0.7 → `0x80000000` (−0.0, retail's floor is zero) — and `_whole_points`' NaN/negative pass-through; +4, floor 41 → 45.** the guard contract for combat's computed
   values: a `_fraction` refusal must land BEFORE any send or state change, not
   after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
   server-side symptom, and on the connection thread an escaping ValueError

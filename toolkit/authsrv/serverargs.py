@@ -1381,6 +1381,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "stopped. On 20260930T154533 that credited 2 of 2 piles "
                          "whose bodies halted 47 u and 100 u short, at a colliding "
                          "NPC's disc. DEFAULT OFF: 1z-dj parks and the pickup cancels.")
+    ap.add_argument("--no-revive-heal-gain", action="store_true",
+                    help="REVIVE-HEAL REVERT: an NPC's timer revive heals by the "
+                         "pre-2026-09-30 refill -- 0x009F [42] + 0x00A3 [34, 1.0] one "
+                         "tick after the status -- instead of retail's 0x00A2 [55, "
+                         "agent, 1.0] in the status's own segment (88 of 88 retail "
+                         "revives). Known-bad arm on the wire.")
     ap.add_argument("--no-revive-flags", action="store_true",
                     help="RANGERLOOP-F10 REVERT: an NPC's timer revive sends the "
                          "0x00F1 status ALONE, without the 0x0026 [agent, 9] that "

@@ -411,12 +411,15 @@ def section_revive_due():
         authsrv.revive_due(send, state, 0)
     revived_ops = [op for op, _, _ in sent]
     # RANGERLOOP-F10: the life-state byte 0x0026 [agent, 9] closes the revive's
-    # tick, one more message on either arm.
-    want = (2, 4) if authsrv.REVIVE_SENDS_ALIVE_FLAGS else (1, 3)
+    # tick, one more message on either arm. REVIVE-HEAL: retail's heal rides the
+    # status's own segment (status, 0x00A2 [55], flags), with no refill after it.
+    flags = 1 if authsrv.REVIVE_SENDS_ALIVE_FLAGS else 0
+    want = ((2 + flags,) if authsrv.REVIVE_HEAL_GAIN else (1 + flags, 3 + flags))
     check(agent["dead"] is False and len(sent) in want,
           "control: the in-range revive stands the body up",
-          f"dead={agent['dead']}, ops={revived_ops} ({want[0]} with the refill "
-          f"deferred, {want[1]} with it inline -- REVIVE_REFILL_DEFER decides)")
+          f"dead={agent['dead']}, ops={revived_ops} (want {want}: the heal arm "
+          f"sends one segment; the refill arm {1 + flags} deferred or {3 + flags} "
+          f"inline -- REVIVE_REFILL_DEFER decides)")
 
 
 def section_player_revive_due():
