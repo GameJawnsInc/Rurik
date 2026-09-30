@@ -1449,6 +1449,18 @@ PLAYER_BAGS = (
     (8, 4, 11, 25, 0),                          # storage pane 5
     (9, 5, 5, 42, 0),                           # material storage
 )
+# THE HEROES' equipped bag takes its OWN id (HEROINV, 2026-09-30,
+# studies/pvpui/FINDINGS.md 35.4), never EQUIPPED_BAG_ID. OBSERVED (static,
+# 38797): 0x013F's handler (0x00846040) searches the ITEM CONTEXT's bag array
+# ([globals+0x40]+0x24, one per connection -- not the owning inventory's) for
+# field 4, and on a hit REMOVES that bag (0x00848fb0, ItCliBag:167) before
+# creating the new one. So a repeated id evicts the other inventory's bag. The
+# hero's bag reused id 1 for six weeks: sent BEFORE the player's it was the one
+# evicted (unnoticed -- the hero's equip walk returns empty cleanly), and the
+# first cut of HEROINV sent it AFTER, which evicted the PLAYER's equipped bag
+# and emptied the doll (harness 20260930T120612). Retail's ids are unique per
+# connection, 4 of 4 (the hero's 226 against the player's 987..743 on :62321).
+HERO_EQUIPPED_BAG_ID = max(_b[0] for _b in PLAYER_BAGS) + 1
 # agent_id + NINE item ids. The message that puts equipment on a BODY, as
 # opposed to CREATE_NAMED_ITEM which only declares an item's bytes and
 # ITEM_WEAPON_SET which fills the weapon-swap UI.
@@ -13279,8 +13291,12 @@ HERO_BAGS = False
 # 0x0072; and a load with no hero in the party declares nothing and marks the
 # key absent, so the ADD declares it (hero_inventory_declare). RECONSTRUCTION
 # for more than one hero (one shared key; no retail tape has two).
-# --hero-inv-legacy is every run 2026-08-18..09-30: [key, 0] in the
-# REQUEST_ITEMS burst, between the player's 0x0144 and its bags.
+# AND ITS BAG TAKES ITS OWN ID (HERO_EQUIPPED_BAG_ID): bag ids are one
+# namespace per connection, and the first cut of this fix -- right place,
+# right field 2, bag id 1 -- evicted the player's equipped bag and emptied the
+# doll (harness 20260930T120612; pvpui 35.4).
+# --hero-inv-legacy is every run 2026-08-18..09-30: [key, 0] and bag id 1 in
+# the REQUEST_ITEMS burst, between the player's 0x0144 and its bags.
 HERO_INV_RETAIL = True
 # 0x0144 field 2: 0 = the local player's inventory (the one write to
 # [itemctx+0xF8]), non-zero = anyone else's. Retail's own two values.
@@ -30004,12 +30020,15 @@ def hero_inventory_declare(send, state, why):
     if not (HERO_BAGS and HERO_INVENTORY):
         return False
     _whose = INVENTORY_OTHER if HERO_INV_RETAIL else INVENTORY_LOCAL
+    # Its own bag id: a repeated one evicts the player's equipped bag
+    # (HERO_EQUIPPED_BAG_ID's comment). The legacy arm keeps its old 1.
+    _bag = HERO_EQUIPPED_BAG_ID if HERO_INV_RETAIL else EQUIPPED_BAG_ID
     send(GAME_SMSG_ITEM_STREAM_CREATE, [HERO_INVENTORY, _whose],
          f"ITEM_STREAM_CREATE(hero inv {HERO_INVENTORY}, field 2 = {_whose}){why}")
     send(GAME_SMSG_INVENTORY_CREATE_BAG,
-         [HERO_INVENTORY, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED, EQUIPPED_BAG_ID,
+         [HERO_INVENTORY, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED, _bag,
           EQUIPPED_SLOT_COUNT, 0],
-         f"INVENTORY_CREATE_BAG(hero equipped){why}")
+         f"INVENTORY_CREATE_BAG(hero equipped, bag {_bag}){why}")
     state["hero_inv_destroyed"] = False
     return True
 
@@ -39516,10 +39535,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the hero's container as the player's inventory: no
                         # backpack under --party (HERO_INV_RETAIL's comment).
                         # Kept ONLY as --hero-inv-legacy, the known-bad arm.
-                        # The bag id reuses EQUIPPED_BAG_ID legally:
-                        # ItCliBag:167's collision search walks the OWNING
-                        # inventory's m_bagArray, so ids are per-inventory
-                        # (studies/pvpui/FINDINGS.md 26).
+                        # Its bag reuses EQUIPPED_BAG_ID, which this comment
+                        # called legal ("ids are per-inventory") until
+                        # 2026-09-30: they are per CONNECTION, and the
+                        # player's bag 1 below evicts it
+                        # (HERO_EQUIPPED_BAG_ID's comment).
                         if not HERO_INV_RETAIL:
                             hero_inventory_declare(send, state,
                                                    " [--hero-inv-legacy]")

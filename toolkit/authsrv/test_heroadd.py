@@ -40,7 +40,8 @@ that it refuses where it cannot be.
   * §5 THE SANDBOX RIG (--hero-bags, --hero-inventory 2, --hero-char): a kick
     of the last hero destroys key 2 (0x0145) and records it; the add
     RE-DECLARES it FIRST (0x0144 [2, 1] + the equipped bag 0x013F, the load's
-    own pair -- field 2 = 1 since HEROINV, 2026-09-30) before the block, registers the agent (0x009A), and a second kick
+    own pair -- field 2 = 1 and the hero's own bag id since HEROINV,
+    2026-09-30) before the block, registers the agent (0x009A), and a second kick
     destroys the live key again -- while kick -> kick never sends a second
     0x0145 (the guard's known-bad), a hero still naming the key keeps it, and
     with bags off nothing is re-declared.
@@ -473,10 +474,12 @@ try:
            f"{[hex(o) for o in gb[:6]]}")
     led.ok(sb2[0][1] == [2, authsrv.INVENTORY_OTHER] == [2, 1]
            and sb2[1][1] == [2, authsrv.BAG_TYPE_EQUIPPED, authsrv.BAG_MODEL_EQUIPPED,
-                             authsrv.EQUIPPED_BAG_ID, authsrv.EQUIPPED_SLOT_COUNT, 0],
+                             authsrv.HERO_EQUIPPED_BAG_ID, authsrv.EQUIPPED_SLOT_COUNT, 0]
+           and authsrv.HERO_EQUIPPED_BAG_ID not in [b[0] for b in authsrv.PLAYER_BAGS],
            "...and the pair is the load's own bytes: 0x0144 [2, 1] (retail's field 2 "
            "for a hero's container -- a 0 would make it the PLAYER's inventory, "
-           "HEROINV), 0x013F [2, type, model, bag 1, 9 slots, 0]", f"{sb2[:2]}")
+           "HEROINV), 0x013F [2, type, model, the hero's OWN bag id, 9 slots, 0] (a "
+           "player bag's id would evict it)", f"{sb2[:2]}")
     led.ok(dict(sb2).get(HERO_ACTIVATE) == [6, 200, 2, 0]
            and stb.get("hero_inv_destroyed") is False,
            "0x0072 names key 2 and the connection no longer holds it as destroyed")
@@ -732,7 +735,7 @@ inv_fn = _func(TREE, "hero_inventory_declare")
 led.ok(inv_fn is not None and "hero_inventory_declare" in _calls(add_fn)
        and "hero_inventory_declare" in _calls(_func(TREE, "handle"))
        and SRC.count("ITEM_STREAM_CREATE(hero inv") == 1
-       and SRC.count("INVENTORY_CREATE_BAG(hero equipped)") == 1,
+       and SRC.count("INVENTORY_CREATE_BAG(hero equipped") == 1,
        "LOCK: hero_inventory_declare exists, the REQUEST_ITEMS arm and the add both "
        "call it, and the pair's labels appear once (moved, not copied)")
 kick_fn = _func(TREE, "handle_hero_kick")

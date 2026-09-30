@@ -929,7 +929,7 @@ Reached: `ItCliApi.cpp`, `ItCliBag.cpp`, `ItCliInv.cpp`
 | 1 | key of the owning inventory; hashed into the item client's inventory table (ItCliApi:1942 asserts the result). Constant within a session. The "consistent with the local character's id" reading that used to end this cell is REFUTED — a 38-connection census (`toolkit/authsrv/invcensus.py`) found it is an arbitrary per-connection handle (the same character drew 1, 23, 184, 188 and 4 on different connections), always equal to that connection's `0x0144` field 1, which is the message that registers the key (studies/pvpui/FINDINGS.md §26.1). | OBSERVED |
 | 2 | bagType | SOURCED |
 | 3 | bagSlot -- used verbatim for types 1 and 4, ignored for 2, 3 and 5 where the client derives 21, 6 and 5 | SOURCED |
-| 4 | bag id; any existing bag carrying it is destroyed first, so it is unique within the inventory | OBSERVED |
+| 4 | bag id; any existing bag carrying it is destroyed first, so it is unique within the inventory. **Corrected 2026-09-30:** the array searched is the item CONTEXT's (`[globals+0x40]+0x24`), so the id is unique per CONNECTION: a repeat evicts the earlier bag even when another inventory owns it. That cost the doll its gear on loopback (studies/pvpui/FINDINGS.md §35.4). | OBSERVED |
 | 5 | capacity in item slots -- the length of the bag's item-pointer array | SOURCED |
 | 6 | index of the item that IS this container, 0 = none; the handler links item->bag both ways and sets item flag 4 | SOURCED |
 

@@ -28,7 +28,7 @@ move back.
 
 ---
 
-### HEROINV -- 2026-09-30 -- **the missing backpack under `--party`: the heroes' container went out as `0x0144 [2, 0]`, and a 0 in field 2 makes it the PLAYER's inventory**
+### HEROINV -- 2026-09-30 -- **the missing backpack under `--party`: the heroes' container went out as `0x0144 [2, 0]`, and a 0 in field 2 makes it the PLAYER's inventory; its bag must not reuse a player bag's id**
 
 [studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35. Under `--party slice` the
 client drew grey silhouettes and no Backpack grid (harness `20260930T110231`,
@@ -48,11 +48,20 @@ see. The one load difference was `--hero-bags`'s pair (§26.3, 2026-08-18): `0x0
 - **Shipped:** `HERO_INV_RETAIL`, on by default. The pair is `[key, 1]`, sent after the
   first party hero's `0x0073` (the legacy rig puts it at the head of the roster sequence).
   With no party hero at load, nothing is declared and the key is marked absent, so the
-  ADD declares it. `--hero-inv-legacy` is the known-bad arm. `test_heroinvorder.py` is new
-  (23 checks; 9 go red with the default flipped). `test_heroadd` §5's re-declared pair is
-  now `[2, 1]`.
-- **Open:** the client confirmation (press I under `--party slice`, see the grid). The
-  prediction is on record in §35.3.
+  ADD declares it. `--hero-inv-legacy` is the known-bad arm.
+- **The first cut's loopback run (`20260930T120612`, `6194a5ba`) drew the Backpack grid
+  and an EMPTY doll** (§35.4). OBSERVED (static): `0x013F` keeps ONE bag array per
+  connection (`[globals+0x40]+0x24`), and a repeated bag id evicts the earlier bag
+  (`0x848fb0`, `ItCliBag:167`). The hero's bag had always reused id 1. Sent first, it was
+  the one evicted, which nobody noticed. Sent after the player's, it evicted the player's
+  equipped bag. The "ids are per-inventory" readings in `authsrv.py` and
+  `studies/smsg` are corrected. The fix is `HERO_EQUIPPED_BAG_ID`, one past `PLAYER_BAGS`
+  (10), like retail's unique ids (4 of 4).
+- `test_heroinvorder.py` is new: 27 checks. With the default flipped, 11 go red; with the
+  bag back on id 1, 2 go red. `test_heroadd` §5's re-declared pair is now `[2, 1]` plus
+  the hero's own bag id.
+- **Open:** the re-run on the client. The grid and the doll's gear should both be drawn;
+  the prediction is in §35.4.
 
 ### RANGERPRE's corpus reds -- 2026-09-30 -- **three tests red on `main` from the Reforged pre-Searing tape; each classified per connection; all three were the tests, and two carried findings**
 

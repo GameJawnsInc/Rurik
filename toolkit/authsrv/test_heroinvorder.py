@@ -1,5 +1,5 @@
-"""The heroes' inventory container: retail's PLACE and retail's FIELD 2 --
-HEROINV (studies/pvpui/FINDINGS.md 35).
+"""The heroes' inventory container: retail's PLACE, retail's FIELD 2 and a bag
+id of its own -- HEROINV (studies/pvpui/FINDINGS.md 35).
 
     python toolkit/authsrv/test_heroinvorder.py
 
@@ -20,19 +20,28 @@ WHAT THIS PINS, and what each part rests on:
     OWNED but unpartied hero (20260916T150306 :56865, and :50807 after the
     kick) carry 0x0073, no 0x0072 and ONE 0x0144. The two sets are each
     other's control: the same predicate says yes on one and no on the other.
+    And every bag id on a connection is distinct -- the hero's among them.
   * §2 THE CLIENT MODEL (static, build 38797; no vault). 0x0144's insert
     0x84A060 writes the container to [itemctx+0xF8] -- the local inventory the
     inventory window reads -- when field 2 is 0 and ONLY then; last one wins.
-    `local_key` replays a send list under that rule. It is a model of a static
-    read, labelled as one: the KNOWN-BAD arm is that it retrodicts the
-    observed failure (the legacy order leaves the HERO's key local).
+    0x013F's handler keeps ONE bag array per connection and evicts a bag whose
+    id a later 0x013F repeats. `local_key` and `bag_owners` replay a send list
+    under those rules. Models of static reads, labelled as such: the KNOWN-BAD
+    arms are that they retrodict both observed failures -- the legacy order
+    leaves the HERO's key local (no backpack), and the first cut of the fix
+    (retail's place and field 2 with the hero's bag on id 1) hands the
+    player's equipped bag to the hero (the empty doll, harness
+    20260930T120612).
   * §3 OURS: the REAL _handle_request_players under the commander rig
     (test_secondary's drive_load "retail" rig). One 0x0144 in the players
     burst, [2, 1], in retail's relative order; the legacy rig's lands ahead of
     every 0x0072; a load with no party hero declares nothing and marks the key
-    absent, and the ADD then declares it first. KNOWN-BAD ARM:
-    --hero-inv-legacy (HERO_INV_RETAIL False) puts none in the players burst,
-    field 2 goes back to 0, and every order predicate above REJECTS it.
+    absent, and the ADD then declares it first; the hero's bag has its own id
+    and, over the composed full load, every player bag stays the player's.
+    KNOWN-BAD ARMS: --hero-inv-legacy (HERO_INV_RETAIL False) puts none in the
+    players burst, field 2 goes back to 0, and every order predicate above
+    REJECTS it; the first cut (HERO_EQUIPPED_BAG_ID forced to 1) gives the
+    player's equipped bag to the hero.
   * §4 SOURCE: the REQUEST_ITEMS arm's hero call sits under `if not
     HERO_INV_RETAIL:` only (mutation reddens it); that arm opens with the
     player's [1, INVENTORY_LOCAL]; _handle_request_players calls the
@@ -41,9 +50,10 @@ WHAT THIS PINS, and what each part rests on:
 
 The REQUEST_ITEMS reply is inline in handle()'s socket loop and cannot be
 driven, so §3 composes the full load as the player's [1, 0] (§4 pins it as
-that arm's first send), the legacy arm's pair when the flag says so, then the
-driven players burst -- the client requests the items before the players, so
-that is the wire order.
+that arm's first send), the legacy arm's pair when the flag says so, the nine
+PLAYER_BAGS rows as that arm's loop sends them (test_playerbags pins the loop),
+then the driven players burst -- the client requests the items before the
+players, so that is the wire order.
 """
 import ast
 import contextlib
@@ -63,8 +73,8 @@ if os.path.join(os.path.dirname(HERE), "schema") not in sys.path:
 import checks                                                # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the heroes' inventory container: place and field 2 (HEROINV)",
-                    floor=23)   # 2026-09-30: 23 from the first green run with the vault (§1 6, §2 2, §3 9, §4 6); with HERO_INV_RETAIL's default flipped to False the same run fails 9. a bare machine runs §2 + §4 (8), declares §1 / §3 skipped and reports the shortfall against this floor -- §3's load needs the overlay's attribute rows, as test_skillloadorder's does
+led = checks.Ledger("the heroes' inventory container: place, field 2, bag id (HEROINV)",
+                    floor=27)   # 2026-09-30: 27 from the green run with the vault (§1 6, §2 3, §3 12, §4 6); with HERO_INV_RETAIL's default flipped to False the same run fails 11, with HERO_EQUIPPED_BAG_ID set back to 1 (the first cut) it fails 2. A bare machine runs §2 + §4 (9), declares §1 / §3 skipped and reports the shortfall against this floor -- §3's load needs the overlay's attribute rows, as test_skillloadorder's does
 
 INV_CREATE, BAG_CREATE, HERO_INFO, ATTR_POINTS, HERO_ACTIVATE = (
     0x0144, 0x013F, 0x0073, 0x0037, 0x0072)
@@ -117,11 +127,13 @@ def hero_container_row(msgs):
         seq = sorted([(i73, HERO_INFO), (h, INV_CREATE), (h + 1, BAG_CREATE),
                       (i37, ATTR_POINTS), (act[0], HERO_ACTIVATE)])
         order = [op for _i, op in seq]
+    ids = [v[4] for _t, op, v in msgs[:h + 2] if op == BAG_CREATE]
     out.update(player=(P, pf), hero=(H, hf), nbags=len(bags_p),
                bag=(tuple(nxt[2][2:4]) + tuple(nxt[2][5:7])) if nxt and nxt[1] == BAG_CREATE else None,
-               order=order, act_key=act[1][3] if act else None)
+               order=order, act_key=act[1][3] if act else None,
+               unique_ids=len(ids) == 10 and len(set(ids)) == 10)
     out["ok"] = (pf == 0 and hf == 1 and P != H and len(bags_p) == 9
-                 and p < min(bags_p)
+                 and p < min(bags_p) and out["unique_ids"]
                  and nxt is not None and nxt[1] == BAG_CREATE and nxt[2][1] == H
                  and out["bag"] == RETAIL_HERO_BAG
                  and order == RETAIL_HERO_ORDER and out["act_key"] == H)
@@ -178,8 +190,9 @@ def section_retail():
            "PARTY HERO, 4 of 4: player's 0x0144 [P, 0] first with its nine bags "
            "after it, then the hero's 0x0144 [H, 1] after all nine, after the 0x0073, "
            "immediately ahead of its own 0x013F [H, 2, 21, _, 9, 0], then the hero "
-           "agent's 0x0037, then 0x0072 naming H",
+           "agent's 0x0037, then 0x0072 naming H; the ten bag ids all distinct",
            "; ".join(f"{c[11:17]} P{r.get('player')} H{r.get('hero')} bags {r.get('nbags')} "
+                     f"ids-unique {r.get('unique_ids')} "
                      f"bag {r.get('bag')} order {[hex(o) for o in (r.get('order') or [])]}"
                      for (_n, c), r in party.items()))
     led.ok(all(r["order"] == RETAIL_HERO_ORDER for r in party.values()),
@@ -222,6 +235,19 @@ def local_key(sent):
     return local
 
 
+def bag_owners(sent):
+    """{bag id: owning inventory key} after a send list, under the static
+    model of 0x013F's handler (38797, 0x00846040): the bag array is the ITEM
+    CONTEXT's ([globals+0x40]+0x24), one per connection, and a 0x013F whose
+    field 4 is already there REMOVES that bag first (0x00848fb0, ItCliBag:167),
+    whichever inventory held it; last one wins."""
+    owners = {}
+    for op, vals in sent:
+        if op == BAG_CREATE:
+            owners[vals[3]] = vals[0]
+    return owners
+
+
 def section_model():
     print("\n2. the client model: which container the inventory window draws")
     led.ok(local_key([(INV_CREATE, [1, 0])]) == 1
@@ -229,6 +255,12 @@ def section_model():
            and local_key([(INV_CREATE, [1, 0]), (INV_CREATE, [2, 1])]) == 1,
            "the model: [1, 0] alone -> 1; then [2, 0] -> 2 (last wins); then "
            "[2, 1] -> still 1 (a non-zero field 2 writes nothing)")
+    led.ok(bag_owners([(BAG_CREATE, [1, 2, 21, 1, 9, 0]),
+                       (BAG_CREATE, [2, 2, 21, 1, 9, 0])]) == {1: 2}
+           and bag_owners([(BAG_CREATE, [1, 2, 21, 1, 9, 0]),
+                           (BAG_CREATE, [2, 2, 21, 10, 9, 0])]) == {1: 1, 10: 2},
+           "the bag model: two inventories on bag id 1 -> the LATER owns it (the "
+           "earlier is evicted); on ids 1 and 10 -> each keeps its own")
     led.ok((authsrv.INVENTORY_LOCAL, authsrv.INVENTORY_OTHER) == (0, 1),
            "INVENTORY_LOCAL, INVENTORY_OTHER are 0 and 1 -- retail's two values of "
            "field 2 (the player's, a hero's)")
@@ -240,7 +272,8 @@ _saved = {k: getattr(authsrv, k) for k in
            "HERO", "HERO_IDS", "HERO_AGENT_ID", "HERO_ROWS", "HERO_BODY",
            "HERO_BODY_NPC", "HERO_ACTIVATE", "HERO_PIPELINE_FIRST", "HERO_CHAR",
            "HERO_INVENTORY", "HERO_BAGS", "HERO_RIG_RETAIL", "HERO_INV_RETAIL",
-           "HERO_ACTIVATE_FIRST", "HERO_KICK_ENABLED", "PARTY_COMMANDS")}
+           "HERO_ACTIVATE_FIRST", "HERO_KICK_ENABLED", "PARTY_COMMANDS",
+           "HERO_EQUIPPED_BAG_ID")}
 
 
 def rig(*, retail_inv=None, retail_rig=True):
@@ -264,9 +297,12 @@ def rig(*, retail_inv=None, retail_rig=True):
         authsrv.HERO_INV_RETAIL = retail_inv
 
 
-def drive_load(*, retail_inv=None, retail_rig=True, kicked=None):
-    """The REAL players burst under the commander rig. [(op, vals)], state."""
+def drive_load(*, retail_inv=None, retail_rig=True, kicked=None, hero_bag=None):
+    """The REAL players burst under the commander rig. [(op, vals)], state.
+    `hero_bag` forces HERO_EQUIPPED_BAG_ID (the first cut's known-bad arm)."""
     rig(retail_inv=retail_inv, retail_rig=retail_rig)
+    if hero_bag is not None:
+        authsrv.HERO_EQUIPPED_BAG_ID = hero_bag
     st = {"agents": {}, "char_uuid": UUID, "map_id": 148}
     if kicked:
         st["kicked_heroes"] = set(kicked)
@@ -291,11 +327,20 @@ def items_arm_hero_rows():
 
 def full_load(retail_inv, players):
     """The wire order: the player's [1, 0] (the REQUEST_ITEMS arm's first
-    send), the arm's hero pair when the flag sends one there, then the
-    players burst. `retail_inv` as rig()."""
+    send), the arm's hero pair when the flag sends one there, the nine
+    PLAYER_BAGS rows as the arm's loop sends them, then the players burst.
+    `retail_inv` as rig()."""
     rig(retail_inv=retail_inv)
+    bags = [(BAG_CREATE, [1, t, m, b, n, it])
+            for b, t, m, n, it in authsrv.PLAYER_BAGS]
     return ([(INV_CREATE, [1, authsrv.INVENTORY_LOCAL])]
-            + ([] if authsrv.HERO_INV_RETAIL else items_arm_hero_rows()) + players)
+            + ([] if authsrv.HERO_INV_RETAIL else items_arm_hero_rows())
+            + bags + players)
+
+
+def player_bags_kept(owners):
+    """Every PLAYER_BAGS id still owned by the player's key 1."""
+    return all(owners.get(b[0]) == 1 for b in authsrv.PLAYER_BAGS)
 
 
 def hero_order(sent, agent=200):
@@ -316,7 +361,7 @@ def section_ours():
     print("\n3. ours: the real players burst, the fix and the known-bad arm")
     if not authsrv.agents.WORLD.rows("attribute"):
         led.skip("3. our load burst", "no attribute cost rows in the content "
-                 "(clientscan/attribpoints.py --emit-content) -- 9 checks")
+                 "(clientscan/attribpoints.py --emit-content) -- 12 checks")
         return
     on, st_on = drive_load()                    # the module's default
     creates = [(i, v) for i, (op, v) in enumerate(on) if op == INV_CREATE]
@@ -326,11 +371,13 @@ def section_ours():
     i44 = creates[0][0] if len(creates) == 1 else None
     led.ok(i44 is not None and i44 + 1 < len(on) and on[i44 + 1] == (
                BAG_CREATE, [2, authsrv.BAG_TYPE_EQUIPPED, authsrv.BAG_MODEL_EQUIPPED,
-                            authsrv.EQUIPPED_BAG_ID, authsrv.EQUIPPED_SLOT_COUNT, 0])
+                            authsrv.HERO_EQUIPPED_BAG_ID, authsrv.EQUIPPED_SLOT_COUNT, 0])
            and (authsrv.BAG_TYPE_EQUIPPED, authsrv.BAG_MODEL_EQUIPPED,
-                authsrv.EQUIPPED_SLOT_COUNT, 0) == RETAIL_HERO_BAG,
+                authsrv.EQUIPPED_SLOT_COUNT, 0) == RETAIL_HERO_BAG
+           and authsrv.HERO_EQUIPPED_BAG_ID not in [b[0] for b in authsrv.PLAYER_BAGS],
            "...immediately followed by the hero's 0x013F, retail's (type 2, model "
-           "21, 9 slots, item 0)", f"{on[i44 + 1] if i44 is not None else None}")
+           "21, 9 slots, item 0), on a bag id of its OWN (no PLAYER_BAGS id)",
+           f"{on[i44 + 1] if i44 is not None else None}")
     led.ok(hero_order(on) == RETAIL_HERO_ORDER,
            "...and the hero's five run in retail's order: 0x0073, 0x0144, 0x013F, "
            "0x0037 (hero agent 200), 0x0072",
@@ -342,6 +389,17 @@ def section_ours():
     led.ok(local_key(full_load(None, on)) == 1,
            "THE DEFECT, FIXED (§2's model over the full load): the player's key 1 "
            "stays the local inventory -- the window draws the player's bags")
+    own = bag_owners(full_load(None, on))
+    led.ok(player_bags_kept(own) and own.get(authsrv.HERO_EQUIPPED_BAG_ID) == 2,
+           "...and §2's bag model over the full load: all nine player bags still "
+           "the player's (the doll keeps its gear), the hero's bag the hero's",
+           f"{own}")
+    first, _st = drive_load(hero_bag=authsrv.EQUIPPED_BAG_ID)
+    own1 = bag_owners(full_load(None, first))
+    led.ok(own1.get(authsrv.EQUIPPED_BAG_ID) == 2 and not player_bags_kept(own1),
+           "KNOWN-BAD ARM, the FIRST CUT (retail's place and field 2, the hero's bag "
+           "on id 1): the player's equipped bag goes to the hero -- the empty doll "
+           "of harness 20260930T120612", f"bag 1 -> key {own1.get(authsrv.EQUIPPED_BAG_ID)}")
 
     off, st_off = drive_load(retail_inv=False)
     full_off = full_load(False, off)
@@ -353,6 +411,11 @@ def section_ours():
            "retail-order predicate REJECTS it, and the model makes key 2 -- the "
            "hero's -- the local inventory: the observed no-backpack",
            f"{[v for op, v in full_off if op == INV_CREATE]}, local {local_key(full_off)}")
+    own_off = bag_owners(full_off)
+    led.ok(player_bags_kept(own_off) and 2 not in own_off.values(),
+           "...and under it the PLAYER's bag 1 evicts the hero's (the doll kept its "
+           "gear on the old wire, the hero kept no bag) -- the model retrodicts "
+           "20260930T110231's full doll", f"{own_off}")
 
     leg, _st = drive_load(retail_rig=False)
     ops_leg = [op for op, _v in leg]

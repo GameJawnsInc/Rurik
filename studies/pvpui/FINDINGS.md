@@ -3402,8 +3402,9 @@ and failed with it on.
   add mid-session would have re-pointed the player's inventory at the hero's container the
   same way. No run exercised that; it follows from 35.2.
 
-`test_heroinvorder.py` pins §35.1 against the tape, the §35.2 model and the real players
-burst in both arms. It reddens 9 of 23 with the default flipped.
+`test_heroinvorder.py` pins §35.1 against the tape, the §35.2 and §35.4 models and the
+real players burst in both arms. It reddens 11 of 27 with the default flipped, and 2 with
+the hero's bag put back on id 1.
 
 **Prediction for the loopback confirmation**, stated before the run:
 `session.py --game-args "--map 148 --party slice"`, press I. The bag row is coloured, the
@@ -3414,3 +3415,52 @@ hero's `AGENT_ATTRIBUTE_POINTS`, and no hero `0x0144` in the REQUEST_ITEMS burst
 but that is not built:** field 2 alone, left in the old place, should also restore the grid,
 because the order is retail's but the static read says the flag is the mechanism. It would
 need a second flag, and nothing needs it yet.
+
+### 35.4 The first cut emptied the doll: bag ids are one namespace per CONNECTION — OBSERVED (client + static)
+
+**The loopback run of the first cut** (`vault/captures/harness/20260930T120612`, commit
+`6194a5ba`: retail's place and field 2, the hero's bag still on id 1). The prediction held
+for what it predicted. The bag row is coloured with its badge, the 20-cell Backpack grid is
+open, and `gamesrv.log` has `ITEM_STREAM_CREATE(hero inv 2, field 2 = 1)` at line 165,
+between `HERO_INFO` (164) and the hero's `AGENT_ATTRIBUTE_POINTS` (167). **But the doll was
+empty**: grey silhouettes in every equipment slot and a bare body. The world body wore the
+armour, and the log equips it (`ITEM_MOVED_TO_LOCATION(warrior_body -> equipped 2)` …, lines
+123–135). The failing run `20260930T110231` had drawn that same gear on the doll. So the move
+cost something the old order had, and the prediction had not named it. A green prediction
+that misses a behaviour is still a miss.
+
+**The mechanism — OBSERVED (static, 38797; `msghandler.py 0x013F --follow --annotate`).**
+The `0x013F` handler (`0x00846040`) takes `ctx = [globals+0x40]` and works on
+**`ctx+0x24`**, the item context's own bag array, *before* it looks the owning inventory up
+at `ctx+0xD4` (`ItCliApi:1942`). `0x849160(field 4)` walks that array comparing
+`[bag+8]` against the new bag id. On a hit, `0x848fb0(bag)` finds the bag's slot, asserting
+`ItCliBag:167 slot != m_bagArray.Count()`, **zeroes it and returns the slot to the free
+list**. Only then does `0x848bb0`/`0x8491f0` allocate and fill the new bag, and
+`0x849de0` insert it into the inventory. **A repeated bag id evicts the earlier bag,
+whichever inventory owned it.** Bag ids are per connection, not per inventory.
+
+That corrects two statements. `authsrv.py`'s comment at the REQUEST_ITEMS arm said
+"ItCliBag:167's collision search walks the OWNING inventory's m_bagArray, so ids are
+per-inventory", and `studies/smsg/FINDINGS.md`'s 0x013F table said the bag id is "unique
+within the inventory" (corrected there with a pointer here). The handler's own `ecx`
+refutes both. **Retail agrees:** on all four hero connections the ten bag ids are distinct.
+The hero's 226 sits beside the player's 987, 1129, 487, 651, 1048, 340, 1034, 312 and 743 on
+:62321 (`test_heroinvorder.py` §1).
+
+**It retrodicts both dolls.**
+
+| run | order of the two `bag 1` rows | who owns bag 1 | doll |
+|---|---|---|---|
+| `…110231` (pre-fix) | hero's, then the player's | player — the hero's is evicted | full |
+| `…120612` (first cut) | player's, then the hero's | **hero** — the player's equipped bag is evicted | **empty** |
+
+For six weeks the hero's equipped bag was being evicted on every `--hero-bags` load, and
+nobody noticed. The hero's equip walk returns empty cleanly when `[inventory+0x58]` has
+nothing behind it (§26.2), so the loss was silent.
+
+**The fix:** `HERO_EQUIPPED_BAG_ID`, one past the highest `PLAYER_BAGS` id (10),
+under the same `HERO_INV_RETAIL` flag. `--hero-inv-legacy` keeps id 1, so the known-bad
+arm's bytes are unchanged. **Prediction for the re-run**, stated before it: the Backpack
+grid AND the doll's equipment slots are both drawn, the latter as in
+`20260930T110231`.
+
