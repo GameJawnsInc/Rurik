@@ -39,7 +39,9 @@ import archive                                                 # noqa: E402
 # Floor from the 2026-08-26 green run on the owner's machine (48 checks:
 # 28 synthetic + 11 census + 2 meshcheck + 7 scoring). The vault-dependent
 # sections skip loudly on a bare machine and the floor names the shortfall.
-LEDGER = checks.Ledger("routerbench", floor=50)
+# 2026-09-30: 50 -> 58 from the green run, the action hold's five synthetic
+# checks and section 2's three (33 synthetic + 16 census + 2 + 7).
+LEDGER = checks.Ledger("routerbench", floor=58)
 check = checks.adopt_named(LEDGER)
 
 
@@ -61,6 +63,10 @@ def c2s_stop(t, pt, plane=0):
 
 def c2s_click(t, pt, plane=0):
     return (t, "c2s", rb.OP_CLICK, [32830, pt, plane])
+
+
+def s2c_hold(t, agent, value):
+    return (t, "s2c", rb.OP_PROP_INT, [159, rb.PROP_HOLD, agent, value])
 
 
 def section1():
@@ -209,6 +215,46 @@ def section1():
     check("phantom truncation disagrees",
                  r["n_clipped"] == 2 and r["agree10"] == 1)
 
+    # hold_at / hold_verdict (2026-09-30): the action hold's four outcomes,
+    # every answer known by construction -- including the one retail has not
+    # been seen to do, which must NOT read as any of the other three.
+    P, B = 7, 8
+    merged = [
+        s2c_hold(1.0, P, 1), s2c_hold(1.1, B, 0),          # another body's
+        c2s_click(1.5, (100.0, 0.0)),                      # A: in the hold
+        s2c_hold(2.0, P, 0), s2c_grant(2.0, P, (40.0, 0.0)),   # release == grant
+        c2s_click(3.0, (100.0, 0.0)),                      # B: free
+        s2c_grant(3.03, P, (100.0, 0.0)),
+        s2c_hold(5.0, P, 1), s2c_hold(5.1, P, 1),          # a re-arm
+        c2s_click(5.2, (200.0, 0.0)),                      # C: superseded ...
+        c2s_click(5.4, (300.0, 0.0)),                      # D: ... by D
+        s2c_hold(6.0, P, 0), s2c_grant(6.0, P, (250.0, 0.0)),
+        s2c_hold(8.0, P, 1),
+        c2s_click(8.1, (400.0, 0.0)),                      # E: the bad arm
+        s2c_grant(8.15, P, (400.0, 0.0)),                  # a grant IN the hold
+        s2c_hold(9.0, P, 0),
+    ]
+    rows = {t: rb.click_row(merged, P, t, pt) for t, pt, _pl in rb.click_rows(merged)}
+    v = {t: rb.hold_verdict(r) for t, r in rows.items()}
+    check("hold_at: set, released at the first clear, a re-arm is not a release, "
+          "another body's clear is not this one's",
+          rb.hold_at(merged, P, 1.5) == (True, 2.0)
+          and rb.hold_at(merged, P, 5.2) == (True, 6.0)
+          and rb.hold_at(merged, P, 3.0) == (False, None)
+          and rb.hold_at(merged, B, 1.5) == (False, None))
+    check("a click inside a hold answered at the release reads answered-at-release, "
+          "and its first grant is 0.5 s late -- past one RTT",
+          v[1.5] == "answered-at-release" and rows[1.5]["kind"] == "no-answer",
+          f"{v[1.5]}, {rows[1.5]['kind']}")
+    check("a click outside one reads free",
+          v[3.0] == "free" and rows[3.0]["kind"] == "verbatim")
+    check("a held click superseded before the release reads superseded-in-hold, and "
+          "the release answers the click that superseded it",
+          v[5.2] == "superseded-in-hold" and v[5.4] == "answered-at-release",
+          f"{v[5.2]}, {v[5.4]}")
+    check("the known-bad arm: a grant INSIDE the hold reads held-other, not "
+          "answered-at-release", v[8.1] == "held-other", v[8.1])
+
 
 # ---------------------------------------------------------------------------
 # Sections 2-4 -- the real corpus (vault + dat), each skipping loudly
@@ -221,6 +267,12 @@ ANCHOR_63805 = ("20260817T231139",
                 "game-10.0.0.210_63805-to-52.3.40.244_80.jsonl")
 ANCHOR_62994 = ("20260807T143055",
                 "game-10.0.0.210_62994-to-54.198.7.73_80.jsonl")
+# The first click the census found unanswered (2026-09-30): RANGERPRE's tape,
+# 0.44 s into the player's hold after a pickup's arrival (0x009F [8, 9, 1],
+# 0x0159, 0x0028), superseded by a second click at +0.482, which the release at
+# +0.552 answered. It is also the pin: every click before this capture was
+# answered within one RTT.
+HOLD_WITNESS = ("20260929T150923", "_53756-", 1126.006)
 
 
 def _have_corpus():
@@ -244,14 +296,64 @@ def section2_census():
     superseded = sum(1 for r in rows if r["end"].startswith("superseded"))
     check("census finds the committed corpus (>=29 clicks)",
                  len(rows) >= 29, f"got {len(rows)}")
-    check("every click answered within one RTT window",
-                 within == len(rows), f"{within}/{len(rows)}")
+    # RE-SCOPED 2026-09-30, not loosened. RETHINK-QB's "every click answered
+    # within one RTT" held on 148 clicks and then met a click sent INSIDE the
+    # player's action hold (RANGERPRE's tape, HOLD_WITNESS): no grant for
+    # 0.55 s, then superseded. animref FINDINGS 30.4 had already measured the
+    # law: under property 8 retail grants nothing, and the release and the
+    # grant are one event. The corpus holds four held clicks. Three were
+    # answered AT the release, and it came inside one RTT only because they
+    # were sent late in their holds. So the RTT contract is about FREE clicks,
+    # and a held click owes something stricter: the release instant exactly.
+    free = [r for r in rows if not r["held"]]
+    within_free = sum(1 for r in free
+                      if r["first_dt"] is not None
+                      and r["first_dt"] <= rb.RTT_WINDOW)
+    pre = [r for r in rows if r["cap"] < HOLD_WITNESS[0]]
+    within_pre = sum(1 for r in pre
+                     if r["first_dt"] is not None
+                     and r["first_dt"] <= rb.RTT_WINDOW)
+    held = {}
+    for r in rows:
+        if r["held"]:
+            held.setdefault(rb.hold_verdict(r), []).append(r)
+    check("every click outside an action hold answered within one RTT window",
+                 within_free == len(free),
+                 f"{within_free}/{len(free)} free; {within}/{len(rows)} "
+                 f"of all clicks, {len(rows) - len(free)} inside a hold")
+    check(f"and before {HOLD_WITNESS[0]}, every click at all -- QB's claim "
+          f"exact on the captures it was pinned on",
+                 len(pre) >= 29 and within_pre == len(pre),
+                 f"{within_pre}/{len(pre)}")
+    check("a click inside a hold is answered AT the release, to the "
+          "microsecond (animref 30.4's one event), or superseded before it",
+                 "held-other" not in held
+                 and len(held.get("answered-at-release", ())) >= 3,
+                 str({k: [(r["cap"], round(r["t"], 3)) for r in v]
+                      for k, v in sorted(held.items())}))
     check("verbatim count at least the committed 16",
                  kinds.get("verbatim", 0) >= 16, f"got {kinds}")
     check("part-way count at least the committed 13",
                  kinds.get("part-way", 0) >= 13, f"got {kinds}")
-    check("no unanswered class survives (QB-4's refutation)",
-                 kinds.get("no-answer", 0) == 0, f"got {kinds}")
+    unanswered = [r for r in rows if r["kind"] == "no-answer"]
+    check("no unanswered class survives outside a hold (QB-4's refutation): "
+          "every no-answer is a click superseded inside its hold",
+                 all(rb.hold_verdict(r) == "superseded-in-hold"
+                     for r in unanswered),
+                 f"got {kinds}; "
+                 f"{[(r['cap'], round(r['t'], 3), rb.hold_verdict(r)) for r in unanswered]}")
+    wit = [r for r in rows
+           if r["cap"] == HOLD_WITNESS[0] and HOLD_WITNESS[1] in r["conn"]
+           and abs(r["t"] - HOLD_WITNESS[2]) < 0.01]
+    nxt = [r for r in rows
+           if wit and r["conn"] == wit[0]["conn"]
+           and r["t"] > wit[0]["t"]][:1]
+    check("the witness: RANGERPRE's pickup-hold click is superseded inside "
+          "its hold, and the release answers the click that superseded it",
+                 len(wit) == 1 and rb.hold_verdict(wit[0]) == "superseded-in-hold"
+                 and len(nxt) == 1
+                 and rb.hold_verdict(nxt[0]) == "answered-at-release",
+                 f"{[(round(r['t'], 3), rb.hold_verdict(r), r['release_dt']) for r in wit + nxt]}")
     check("the eight superseded chains found",
                  superseded >= 8, f"got {superseded}")
     # The two-controlled-agents click (20260914T180058, conn 55087). Its

@@ -249,7 +249,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q4 | Range per type in units, and what height does to it | RUN-2 — **read section 25.4 first**: the spear's walk-in parked at 755 u = 0.75 x the wiki's 1004, so RUN-2 must separate the park from the range (one press from the Isle's marked shortbow spot does it) |
 | WEAPONS-Q5 | Scythe: duration, how extra targets appear on the wire, the critical's size | **ANSWERED, section 25.3** (2026-09-19): 1.500 s, word at 0.650; an extra is a second word in the same instant, written BEFORE the target's, with its own roll and its own critical; attacker term 180 u confirmed at its edge (hit at 182, missed at 186); target term [78, 94) u centre-to-centre, NOT the 166 u "adjacent"; critical 1.0 < c < 1.40 from one sample, x2^0.5 refuted, x2^0.125 consistent; the cap untested |
 | WEAPONS-Q6 | Spear: duration, projectile id, arrow flag, with and without a shield | **ANSWERED, section 25.2** (2026-09-19): 1.500 s, launch at 0.650; projectile 143 by type (the item has no 617), flag 1, `0x00A7` kind 1 = its 587, 1594 u/s; the shield changes nothing |
-| WEAPONS-Q7 | A hostile's repeat delay (1.75 / 1.90 / 1.985 / 2.125) | monsterai, desk |
+| WEAPONS-Q7 | A hostile's repeat delay (1.75 / 1.90 / 1.985 / 2.125). **2026-09-30, a datum:** four class-1 hostile BOWS (told 2.475) put all 29 of their clean gaps in four clusters, 2.473 (10), 2.626 (9), 2.714 (8) and 2.852 (2). Those are the weapon plus 0, +0.151, +0.239 and +0.377 s, the offsets the 1.75 s hostiles show (+0.15, +0.235, +0.375). So the delay looks like the weapon's duration plus a weapon-independent term. OBSERVED, n = 4 bodies on 2 tapes (`20260915T155656`, `20260929T150923`); the mechanism is unclaimed | monsterai, desk |
 | WEAPONS-Q8 | ~~Which message names the OBSERVER's own weapon type~~ **closed §9: `0x006E` (and `0x0147`)** | — |
 | WEAPONS-Q9 | ~~What `634` beside every `633` holds~~ **closed §9: the required weapon's damage range (max, min), in place of `584`** | — |
 | WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus. **SHIPPED as W4's rest, section 30** (2026-09-19): the weapon's is the isle's measured divisor 3.098 (OBSERVED, one hammer at ranks 5–8, studies/isle 9.2), the shield's 8 / 5 and the focus's +3 are WIKI; what RUN-3 still owes is the divisor-vs-strike-level-drop split and a second weapon | RUN-3 |
@@ -330,6 +330,13 @@ NPC's. With both read, the 19 player attackers that §3 had as "no weapon row" j
 and cycle at 2.476 — so classes 1 and 3 are the longbow and the recurve in some order,
 and 0 / 2 / 4 are the flatbow, shortbow and hornbow. RUN-WEAPONS-1B settles the rest from
 `0x0035` alone.
+**2026-09-30: "cycle at 2.476" holds for the PLAYER's bow only.** The class-1 bow above is a
+hostile's (`0x006D`, `20260915T155656` agent 56), and its mode read 2.476 on 5 of its 10
+gaps. RANGERPRE's tape `20260929T150923` adds three more class-1 hostiles whose modes are
+2.714, 2.717 and 2.626, every one still told 2.475 by `0x0035`, and two player bows at 2.478
+and 2.479 (OBSERVED; `test_weaponcensus` WEAPONS-Q8 now scores player bows only). That is
+WEAPONS-C5, not a second bow duration, so the inference above stands, since it rests on
+`0x0035`. The hostile gaps are WEAPONS-Q7's datum.
 
 ## 10. WEAPONS-W1 — shipped 2026-09-18: one weapon table, a row and an item per type
 

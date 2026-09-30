@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=24)   # the BARE-MACHINE number: 24 without the vault (section 2 skips), 58 with it; from green runs (2026-09-29, CASTAI-Z2, the review's repair: +1 -- section 1c's orphan launch past SHOT_WINDOW in neither census, measured 24 bare / 58 with the vault; the shooters() cross-check per connection rides the partition signature, no new check; 2026-09-29, CASTAI-Z2: +3 -- section 1c, the tie wire and the retired rule's arm, measured 23 bare / 57 with the vault (+4 vault-only: the partition signature, the pin's and the second Zaishen tape's ties, the future-stamp plant); WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 50, the windup signature by the table, the activated rule swing_windup(activation) and its two fast-launch witnesses)
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=25)   # the BARE-MACHINE number: 25 without the vault (section 2 skips), 60 with it; from green runs (2026-09-30, RANGERPRE's corpus reds: +1 bare -- section 1's `player` flag; +1 vault -- WEAPONS-Q8 split into the pin literal and the players' signature, measured 25 bare / 60 with the vault; 2026-09-29, CASTAI-Z2, the review's repair: +1 -- section 1c's orphan launch past SHOT_WINDOW in neither census, measured 24 bare / 58 with the vault; the shooters() cross-check per connection rides the partition signature, no new check; 2026-09-29, CASTAI-Z2: +3 -- section 1c, the tie wire and the retired rule's arm, measured 23 bare / 57 with the vault (+4 vault-only: the partition signature, the pin's and the second Zaishen tape's ties, the future-stamp plant); WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 50, the windup signature by the table, the activated rule swing_windup(activation) and its two fast-launch witnesses)
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -154,6 +154,11 @@ def section_synthetic():
           and len(att[(WANDER, WAND)]["gaps"]) == 4,
           "a hostile's gaps are a MIXTURE: the mode is the densest cluster, 1.75 x3, "
           "not the mean that the 1.90 drags")
+    check(att[(ME, BOW)]["player"] and att[(ME, SWORD)]["player"]
+          and not att[(WANDER, WAND)]["player"],
+          "`player` is the hands message's: both of ME's rows (0x006E) are a player's, "
+          "WANDER's (0x006D) is not -- what WEAPONS-Q8 below splits the bows on",
+          str({k: r["player"] for k, r in sorted(att.items())}))
 
     sho = {r["agent"]: r for r in wc.shooters(s2c)}
     me = sho[ME]
@@ -329,7 +334,7 @@ def section_vault():
         c = None
         print(f"   (corpus unreadable: {exc!r})")
     if not c or not c["shooters"]:
-        LEDGER.skip("section 2", "no live corpus -- 34 checks")
+        LEDGER.skip("section 2", "no live corpus -- 35 checks")
         return
     check({2, 5, 15, 22, 26, 27, 32, 35, 36}.issubset(c["lead"]) and {1, 28}.issubset(c["lead"])
           and {12, 24}.issubset(c["off"]),
@@ -396,13 +401,31 @@ def section_vault():
           "launch + flight predicts the word, and every launch is closed by its 0x00A7",
           f"n {len(errs)} p50 {wc._p50(errs) * 1000:.1f} ms, closed "
           f"{sum(r['closed'] for r in sho)} of {shots}")
+    # RE-SCOPED 2026-09-30 (RANGERPRE's tape 20260929T150923), not loosened. "Both bow
+    # attackers" were two bodies on 2026-09-18: the owner's Ranger (0x006E) and a
+    # 609-class-1 HOSTILE (0x006D, 20260915T155656 agent 56), whose mode read 2.476 on
+    # 5 of its 10 gaps. The other five sat at 2.625-2.852. The tape added two player
+    # bows (2.478, 2.479) and three hostile ones whose modes landed on those other
+    # clusters (2.714, 2.717, 2.626). Every hostile was still TOLD 2.475 by 0x0035,
+    # the check above. The check had pooled players and hostiles, and WEAPONS-C5 says
+    # "never calibrate a weapon's clock on a hostile". The literal stays exact on the
+    # captures before PIN; over the whole corpus the claim is the PLAYERS'.
     players = [r for r in c["attackers"] if r["type"] == 27 and len(r["gaps"]) >= 200]
     bows = [r for r in c["attackers"] if r["type"] == 5]
+    pin_bows = [r for r in bows if r["capture"] < PIN]
     check(len(players) >= 2 and all(abs(r["mode"] - 1.33) < 0.005 for r in players)
-          and len(bows) >= 2 and all(abs(r["mode"] - 2.476) < 0.01 for r in bows),
+          and all(r["player"] for r in players)
+          and len(pin_bows) == 2 and all(abs(r["mode"] - 2.476) < 0.01 for r in pin_bows),
           "WEAPONS-Q8: players join through 0x006E -- the sword tapes read type 27 at "
-          "1.330, and both bow attackers 2.476",
-          f"{len(players)} sword players, bows {[round(r['mode'], 3) for r in bows]}")
+          f"1.330, and both bow attackers 2.476 (the captures at the pin, before {PIN})",
+          f"{len(players)} sword players, bows {[round(r['mode'], 3) for r in pin_bows]}")
+    pbows = [r for r in bows if r["player"]]
+    check(len(pbows) >= 3 and all(abs(r["mode"] - 2.476) < 0.01 for r in pbows),
+          "and every PLAYER's bow (0x006E) over the whole corpus cycles at its weapon's "
+          "2.476; a hostile's (0x006D) is the AI's pacing (WEAPONS-C5), reported and not "
+          "scored",
+          f"players {[(r['capture'], round(r['mode'], 3)) for r in pbows]}, hostiles "
+          f"{[(r['capture'], round(r['mode'], 3)) for r in bows if not r['player']]}")
     d = _launch_detail()
     _gapped(d)                                               # the corpus's one gapped connection
     _partition(d)                                            # CASTAI-Z2: one census per launch
