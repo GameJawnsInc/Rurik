@@ -9295,7 +9295,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   than a census of nothing), then scored "run" as membership of a section-1 LIST
   CELL, which every record is in. Needs `vault/captures/live/` for §§3–5 and the
   study archive for §§4–5, skips declared; a whole green run is 40 and the floor is
-  **20**, its MANDATORY CORE -- lowered from 36, which sat above it, so a machine
+  **16**, its MANDATORY CORE (2026-09-30: it was 20, which counted §2's four checks
+  as core, but §2 needs the pinned client and the pinned client lives in the vault, so a
+  bare run failed "ONLY 16 OF A DECLARED FLOOR OF 20" with both skips declared; 16 bare
+  at a nonexistent and at an empty vault) -- lowered from 36, which sat above it, so a machine
   without a vault would have failed on the shortfall instead of reading the skip the
   vault block already declares),
   `toolkit/authsrv/test_msgmix.py` (the tool that ranks what to build next, and the

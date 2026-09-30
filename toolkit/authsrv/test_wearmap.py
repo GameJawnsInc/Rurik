@@ -35,7 +35,14 @@ import wearmap      # noqa: E402
 # `test_compositetrap.py` the same day, which had the same latent bug for the
 # same reason -- a floor read off a full green run on a machine that always
 # has the vault.
-LEDGER = checks.Ledger("wear mapping", floor=20)
+#
+# AND THE CORE IS 16, NOT 20 (2026-09-30, measured with RURIK_VAULT at a path
+# that does not exist): section 2's four checks need the PINNED client, and
+# the pinned client lives in the vault -- section 2's own comment has said so
+# since 2026-08-31. So the correction above made the same mistake one section
+# later, and a bare run failed "ONLY 16 OF A DECLARED FLOOR OF 20" while
+# declaring both skips. With the vault: 40.
+LEDGER = checks.Ledger("wear mapping", floor=16)
 check = checks.adopt(LEDGER)
 
 W = wearmap
