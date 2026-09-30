@@ -8301,7 +8301,74 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   reddens which section — the first pass's ten and the fix pass's, including the
   reviewers' nine inversions that had survived). Needs the content overlay's skill and
   attribute rows (this machine's); no client. 152 checks, floor 152, from the green run
-  (108 before the fix pass). ~13 s),
+  (108 before the fix pass). ~13 s. **2026-09-29, RANGERPRE-S4:** §7's three drives pin
+  `SKILL_LOAD_RETAIL_ORDER` False and `_saved` restores it, because `BASE_OPS_*` and the
+  two digests are 57e89956's recording and the default load now sends 0x00DA before
+  0x00DB (`test_skillloadorder.py`); unpinned, ops44 / digest44 / ops0 / digest0 go red
+  (the lists at index 19 / 18). Count unchanged),
+  `toolkit/authsrv/test_skillloadorder.py` (**2026-09-29, RANGERPRE-S4 (SECONDARY-A) — the
+  load's skill block sends the bar 0x00DA BEFORE the character library 0x00DB**,
+  `studies/presearing/RANGERPRE.md` §4. Retail's order on 126 of 126 live connections
+  carrying both; ours was the reverse from 04bafc1f (2026-08-06) on. §1 RETAIL, vault-gated
+  on capture `20260929T150923` (the live root absent is a declared skip; present without
+  this capture is a FAIL): 11 game connections, origin live, all decoding closed; the
+  first 0x00DA precedes the first 0x00DB on 11 of 11, and it is the OWN agent's bar (the
+  agent of the first 0x00B7) on 11 of 11; POSITIVE CONTROL — the same first-index reader sees 0x001D
+  before the pair on :59969 and after it on :63359; the literal `RETAIL_PLAYER_BLOCK` is
+  :53756's player block at t=998.208 (0x0037 … 0x00EF, 14 opcodes). §2 OURS: the real
+  `_handle_request_players` burst with the module defaults (no hero rig) in a town and a
+  field — one player 0x00DA and one 0x00DB, the bar first; 0x001D still ahead of both;
+  restricted to the opcodes both player blocks carry, ours in `RETAIL_PLAYER_BLOCK`'s
+  order; the burst equal, values included, to the revert's with its one 0x00DB moved to
+  right after the player's 0x00DA; KNOWN-BAD ARM `--no-retail-skill-order`: 0x00DB before
+  the bar and the retail-order predicate rejecting it. §3 SOURCE: exactly two 0x00DB
+  sites, the revert's under `not SKILL_LOAD_RETAIL_ORDER` ahead of the SKILLBAR_UPDATE
+  send and the default's under the flag after it; the flag True at module level;
+  `--no-retail-skill-order` parsing through `serverargs.build_parser` (default off) and
+  `main()` setting the global False under it. With the send hunk reverted to 57e89956's
+  order, §2's first, third and fourth checks go red in both regimes and §3's site lock
+  goes red. 18 checks, floor 18, from the green run on this machine; a bare machine runs
+  §3's 3 and declares §1 / §2 skipped (the load needs the overlay's attribute rows, as
+  `test_secondary`'s drives do). Read-only on the vault; no client. ~10 s),
+  `toolkit/authsrv/test_maxdeclare.py` (**2026-09-29, RANGERPRE-S11 (MAXHP-2) — a held
+  item's 564 word (+N maximum health, `combatmath.HEALTH_MODIFIER`) moves the player's
+  0x009F 42**, `studies/presearing/RANGERPRE.md`. Retail's shield (item 696, 564 arg 15)
+  took the Ranger from 120 to 135 in its equip batch; ours had no equipment term in
+  `player_max_health` and sent the planned item batch alone. §1 RETAIL, vault-gated on
+  capture `20260929T150923` (the live root absent is a declared skip; present without this
+  capture is a FAIL): 11 game connections, origin live, all decoding closed; on :56064 the
+  c2s 0x0030 [696] answered at t=932.526 by exactly 0x014B [2, 696, 5, 1], 0x006F [9, 1,
+  696], 0x009F [42, 9, 135] (the closing 0x001E tick aside) — the 42 LAST; item 696's
+  0x0161 words, from which the server's own `item_word` reads 564 arg 15, the exact rise
+  from the connection's earlier 120; NEGATIVE CONTROL — the sword 697 (no 564) equipped at
+  930.405, answered at 930.441 by exactly 0x0152 [2, 698, 697], 0x006F [9, 0, 697]; every
+  load after the equip declares 135 (3 of 3) and every load before 100 or 120 (8 of 8).
+  §2 OURS (the tracked starter_sword / starter_shield rows; the shield given retail's
+  0x23480F00 by a patched `agents.item_template` for the drive): `held_health_bonus` 15 on
+  `player_max_health` and nothing on `player_full_max_health` (land_swing's blow); VACUITY,
+  the content shield carries no 564; `held_max_moved` sends one 42, moves a seeded book by
+  the signed delta, seeds a fresh one once, and sends nothing on a zero delta; the REAL
+  `handle_equip_item` in a field sends 0x014B, 0x006F, then [42, player, base+15] with
+  health following; the drag back out declares base again (RECONSTRUCTION, no retail
+  unequip of a 564 item); NEGATIVE CONTROL, the plain shield's equip sends the planned two;
+  KNOWN-BAD ARM `--no-held-health`, the 564 shield's equip sends the two and moves nothing;
+  `select_weapon_set` onto the 564 shield ends with [42, player, base+15] in the batch it
+  returns (after the energy pair, INFERRED) and back with [42, player, base], the plain
+  shield's switch none; the real `_handle_request_players` burst after the dress declares
+  base+15 with the 564 shield in set 0 and base with the plain one (needs the overlay's
+  attribute rows, as `test_skillloadorder`'s drive does; a declared skip without them).
+  §3 SOURCE: the bonus a term of `player_max_health` only; `held_max_moved` once in
+  `_item_moves_commit` after `_item_hands_mirror` with the bonus read before the batch, and
+  once in `select_weapon_set` through `_send` after the energy pair with the bonus read
+  before the hands change; `HELD_HEALTH` True at module level; `--no-held-health` parsing
+  through `serverargs.build_parser` and `main()` setting the global False under it. With
+  the three code hunks reverted (the bonus term, the two `held_max_moved` calls), 10 of 20
+  go red: §2's bonus, both `held_max_moved` checks, the equip, the drag-out, the switch and
+  the load, and §3's three locks; each hunk alone reddens its own (term 7, equip 3, switch
+  2), while §1, the negative controls and the KNOWN-BAD arm stay green. 20 checks, floor 20, from the green run on this
+  machine; a bare machine runs 14 and declares §1 and the load's check skipped, under the
+  floor on purpose. MAXHP-1 (an NPC's maximum on the player's first landed hit) is a later
+  step and not pinned here. Read-only on the vault; no client. ~15 s),
   `toolkit/authsrv/test_recharge.py` (**2026-09-28, CASTAI-Z1: §2 went red on the
   Zaishen tape, 3 of 19 (the six, P3 AS WRITTEN, the six pooled). The pinned numbers are
   scored as of the pin (`rechargeprobe.upto`, stamps before 20260928T103123): the six
@@ -8513,7 +8580,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   machine with both fixtures a dropped section would still clear 10, so §4's
   capture/connection/message pin and §8's printed image are the real "did it run" guards
   and the floor is the fixture-less backstop),
-  `toolkit/authsrv/test_chatdefs.py` (**2026-09-23, DESKWORK-D5 step 7 — §6 the refusal block as a table of IDS and OUR labels, never text: exactly the 60 ids 1934..1993 contiguous; 60 distinct snake_case labels; 1960 / 1961 / 1985 resolve to their labels; exactly three ids OBSERVED (1934, 1960, 1961) and every other RECONSTRUCTION; an id outside the block raises; a label resolves back to its id; the two TEMPLATED ids (1942, 1943) are refused as bare bodies; an unknown label raises; #1985's body is codedstr's one coded word. §7 the archive (declared skip without it): all 60 ids are PLAIN records and non-empty, the 13 neighbours 1928–1933 / 1994–2000 are ENCRYPTED (the block's edges), and the two ids this server sends are plain; +12 unconditional, +4 behind the archive, floor 28 → 40.** **Fix pass the same day (skills §57's note): FOUR ids OBSERVED — 1988 joins as the recharge refusal witnessed once on `20260913T210901` (the sentence between the ack and the release, prop 57 between), 1961 now with 17 wire witnesses beside the screen — and 1964, the other id with the recharging sentence, pinned RECONSTRUCTION; `refusal_body` refuses a templated id (1942) on the SEND path and still builds the one-word body for a plain one (+3); §7 catches `SystemExit` (textrec's refusal on a bare machine) so a bare run declares its skip instead of dying with no verdict — a regression from main; floor 40 → 43, the bare run's own count (52 with the vault).** the chat echo — `studies/chat/FINDINGS.md`'s
+  `toolkit/authsrv/test_chatdefs.py` (**2026-09-29, RANGERPRE-S2 (WEAPONREFUSE-A): §6 — FIVE ids OBSERVED, 1985 joins: retail answered a bow skill (394) pressed with a sword in hand with `0x005D #1985`, `0x005E [1, 7]`, `0x00E2` on `20260929T150923` :53756 t=1056.002, and #1985 answers 0 of the corpus's 184 weapon-satisfied presses; `refusal_evidence(1985) == "OBSERVED"` joins the same check, count unchanged (52 with the vault; floor 43).** **2026-09-23, DESKWORK-D5 step 7 — §6 the refusal block as a table of IDS and OUR labels, never text: exactly the 60 ids 1934..1993 contiguous; 60 distinct snake_case labels; 1960 / 1961 / 1985 resolve to their labels; exactly three ids OBSERVED (1934, 1960, 1961) and every other RECONSTRUCTION; an id outside the block raises; a label resolves back to its id; the two TEMPLATED ids (1942, 1943) are refused as bare bodies; an unknown label raises; #1985's body is codedstr's one coded word. §7 the archive (declared skip without it): all 60 ids are PLAIN records and non-empty, the 13 neighbours 1928–1933 / 1994–2000 are ENCRYPTED (the block's edges), and the two ids this server sends are plain; +12 unconditional, +4 behind the archive, floor 28 → 40.** **Fix pass the same day (skills §57's note): FOUR ids OBSERVED — 1988 joins as the recharge refusal witnessed once on `20260913T210901` (the sentence between the ack and the release, prop 57 between), 1961 now with 17 wire witnesses beside the screen — and 1964, the other id with the recharging sentence, pinned RECONSTRUCTION; `refusal_body` refuses a templated id (1942) on the SEND path and still builds the one-word body for a plain one (+3); §7 catches `SystemExit` (textrec's refusal on a bare machine) so a bare run declares its skip instead of dying with no verdict — a regression from main; floor 40 → 43, the bare run's own count (52 with the vault).** the chat echo — `studies/chat/FINDINGS.md`'s
   decode turned into a consumer. The framing check that matters is run against
   **ArenaNet's bytes, not ours**: it pulls the multi-part advert out of live capture
   `20260817T183756`, extracts the literal text, re-frames it with `chatdefs.all_chat_body`
@@ -12536,7 +12603,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
   replay continued the other's condition) -- both reddened unrun by that arc.
-  `toolkit/authsrv/test_castcycle.py` (**2026-09-27, the attack-target gate: §2f, an attack
+  `toolkit/authsrv/test_castcycle.py` (**2026-09-29, RANGERPRE-S2 (WEAPONREFUSE-A): §2f's AHEAD-OF-THE-WEAPON-GATE check re-pinned — the named press with the wrong weapon now draws `#1985`, `[1, 7]`, `0x00E2` (retail's OBSERVED weapon-mismatch answer), not the bare release; count unchanged (63 with the vault, floor 57).** **2026-09-27, the attack-target gate: §2f, an attack
   skill pressed with TARGET 0 is refused with retail's #1934 before the first send. The
   referent is one press whose n was re-counted that day (159 live attack-skill presses, all on
   0x0027; 1 at target 0 — 20260819T132414 t=238.496 — answered #1934, [1, 7], 0x00E2, no E4;
@@ -13324,7 +13391,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   through 0x006E; WEAPONS-C9 added 0x00A7's third field against the held weapon's 587
   damage type (the verdict CAN say MISMATCH; <= 5 % in the corpus). Floor 16 bare, 30
   with the vault),
-  `toolkit/authsrv/test_daggers.py` (**2026-09-23, DESKWORK-D5 step 7: §4 — under `--refusal-reasons` the weapon gate's refusal is retail's three-message shape with the RECONSTRUCTED id #1985 (`chatdefs.REFUSE_WEAPON_TYPE`, its coded body, channel 7, then the release), and with the flag OFF (the default) the bare release again — the two arms differ; +2, floor 103 → 105.** **2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
+  `toolkit/authsrv/test_daggers.py` (**2026-09-29, RANGERPRE-S2 (WEAPONREFUSE-A): §4 re-pinned — the weapon gate's default answer is `#1985` on channel 7 then the release (OBSERVED 1 of 1), `--refusal-reasons` sends the SAME three messages (the flag no longer carries it), and the id is labelled OBSERVED; §4b NEW, vault-gated on `20260929T150923`: the witness connection :53756 decodes closed (present capture, absent connection = FAIL), retail's `0x0027 [394, 0, 22, 0]` answered by exactly `0x005D #1985`, `0x005E [1, 7]`, `0x00E2 [9, 394, 0]` with no E4/E3, the refused agent held a sword (27) and a shield (24) with OUR mask failing 394 on a sword and passing it on a bow, and OUR handler fed retail's press values verbatim sends the same opcodes, body, channel and echo; +4, floor 105 → 109 from the green run.** **2026-09-23, DESKWORK-D5 step 7: §4 — under `--refusal-reasons` the weapon gate's refusal is retail's three-message shape with the RECONSTRUCTED id #1985 (`chatdefs.REFUSE_WEAPON_TYPE`, its coded body, channel 7, then the release), and with the flag OFF (the default) the bare release again — the two arms differ; +2, floor 103 → 105.** **2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
   and the Assassin's attack chain.** The verbatim part is §5's FAILED-STEP BATCH, checked
   against retail's own order off 20260819T132414 -- the owner's cold off-hand at 236.303
   read beside an armed press of the same skill at 255.343: `0x00E5` with the recharge, the

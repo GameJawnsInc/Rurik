@@ -1010,6 +1010,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(turn_in_quest) -- retail's relative order on 10 of 10 "
                          "hand-ins, where 0x004A is the last quest-family message "
                          "of the batch. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-retail-skill-order", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S4's load order: send the "
+                         "character library 0x00DB BEFORE the bar 0x00DA, as "
+                         "57e89956 did. The default sends the bar first -- "
+                         "retail's order on 126 of 126 live connections carrying "
+                         "both (20260929T150923: 11 of 11). 0x001D does not move "
+                         "either way. KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "
@@ -2434,6 +2441,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "adds nothing to the player's maximum energy -- the pool "
                          "every run before 2026-09-18 had. The party row's typed "
                          "player_energy stays either way.")
+    ap.add_argument("--no-held-health", action="store_true",
+                    help="RANGERPRE-S11 REVERT: a held item's 564 word (+N maximum "
+                         "health, retail's shield 120 -> 135) adds nothing to the "
+                         "player's maximum, and an equip or a set switch sends no "
+                         "0x009F 42 -- the maximum every run before 2026-09-29 had.")
     ap.add_argument("--no-projectiles", action="store_true",
                     help="land a bow's, wand's or staff's word at the swing's WINDUP "
                          "from melee reach, with no 0x00A4 / 0x00A7 -- every run "
@@ -2729,13 +2741,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "only RECONSTRUCT from the client's own refusal block "
                          "(chatdefs.REFUSAL_REASONS, string ids 1934-1993; "
                          "DESKWORK-D5 step 7). Today its one consumer is the "
-                         "weapon gate (DAGGERS-B4), which sends #1985 with the "
-                         "0x00E2 release instead of the bare release. DEFAULT "
-                         "OFF: what retail sends on a weapon mismatch is NOT "
-                         "OBSERVED (the client very likely never sends the "
-                         "press), so the bare release -- retail's own shape "
+                         "party-target gate, which sends #1986 with the 0x00E2 "
+                         "release on a foe spell at a party body instead of "
+                         "the bare release. DEFAULT OFF: #1986 is on no wire "
+                         "we hold, so the bare release -- retail's own shape "
                          "for 3 of 43 refusals -- stays the default. The "
-                         "OBSERVED ids 1960 and 1961 are sent either way.")
+                         "OBSERVED ids 1934, 1960, 1961 and 1985 are sent "
+                         "either way; the weapon gate's #1985 (DAGGERS-B4) "
+                         "rode this flag until RANGERPRE-S2 (2026-09-29) "
+                         "observed it on retail's wire, 20260929T150923.")
     ap.add_argument("--no-skill-labels", action="store_true",
                     help="drop the LABEL tier at startup: every skill_effect "
                          "row carrying tier = \"label\" (vault/content/"

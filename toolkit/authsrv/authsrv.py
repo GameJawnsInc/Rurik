@@ -3078,6 +3078,7 @@ def select_weapon_set(send, state, k, conn_id):
     s = WEAPON_SETS[k]
     player_pools(state)
     old_max_energy = player_max_energy(state)
+    _held_hp = held_health_bonus(state)          # RANGERPRE-S11: the hands' 564, before
     old_base = WEAPON_ATTACK_SPEED
     agents.PLAYER_OFFHAND = None
     # DESKWORK-D1 step 8 (the fix pass, ENG-B4): the swing model follows WHAT
@@ -3130,6 +3131,11 @@ def select_weapon_set(send, state, k, conn_id):
                _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43,
                                           agents.PLAYER_ENERGY, new_max_energy))],
               "energy regeneration, rescaled to the new pool [WEAPONS-W9]")
+    # RANGERPRE-S11: a set whose 564 differs moves the health maximum too, after
+    # the energy pair -- the morale batch's 41, 43, 42 order. INFERRED: the
+    # equip's 42 is OBSERVED (:56064 t=932.526), but no switch on any tape
+    # moved a 564 item (the design lane's census: 15 switches, no 564, no 42).
+    held_max_moved(_send, state, held_health_bonus(state) - _held_hp, f"weapon set {k}")
     print(f"[c{conn_id}] weapon set {old} -> {k}: {', '.join(changed)}; "
           f"{len(out)} messages [WEAPONS-W9]", flush=True)
     return out
@@ -4034,10 +4040,15 @@ def agent_health_fraction(state, target_id):
 # (daggers F6); the handler and the 0..3 bound are studies/newopcodes'.
 GAME_SMSG_AGENT_COMBO_STATE = 0x005C
 # B4. No profession's attack skills were held to a weapon before this. WHAT
-# RETAIL SENDS on a mismatch is NOT OBSERVED (the client very likely never
-# sends the press): the answer is the bare release, the shape the press
-# handler's own comment prescribes for "a refusal we cannot name a reason
-# for". RECONSTRUCTION. --no-weapon-gate is the control.
+# RETAIL SENDS on a mismatch is OBSERVED 1 of 1 (RANGERPRE-S2, 2026-09-29):
+# the client DOES send the press -- this banner's "very likely never sends
+# it" is REFUTED -- and retail answers #1985, [1, 7], 0x00E2 with no E4
+# (20260929T150923 :53756 t=1056.002, bow skill 394 with a sword in hand);
+# the gate sends exactly that (handle_skill_press). That the refusal is
+# caused by the weapon rather than something else about that press is
+# CORROBORATED, not isolated: 0 of 184 weapon-satisfied corpus presses draw
+# #1985, and sword skills 382 / 384 pressed at the same target 0.85 s and
+# 2.36 s later were accepted. --no-weapon-gate is the control.
 WEAPON_GATE = True
 # B5. --no-chain-state is the control: no 0x005C, and an off-hand or a dual
 # lands whatever it follows (the behaviour before today).
@@ -11861,12 +11872,16 @@ GAME_SMSG_SKILL_REFUSED = 0x00E2
 REFUSAL_SILENT = False
 # Set from --refusal-reasons (DESKWORK-D5 step 7). OFF by default: the table
 # `chatdefs.REFUSAL_REASONS` names the client's whole refusal block by id, but
-# only 1934, 1960, 1961 and 1988 are OBSERVED answering a condition (the fix
-# pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988 x1);
-# every other row is RECONSTRUCTION from the sentence's own statement, and a
-# reconstructed sentence on the warning panel is invented traffic until a tape
-# shows it. The two OBSERVED resource refusals are sent regardless of this
-# flag. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
+# only 1934, 1960, 1961, 1985 and 1988 are OBSERVED answering a condition (the
+# fix pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988
+# x1; RANGERPRE-S2 added the weapon gate's 1985 x1, 20260929T150923 :53756
+# t=1056.002); every other row is RECONSTRUCTION from the sentence's own
+# statement, and a reconstructed sentence on the warning panel is invented
+# traffic until a tape shows it. Every OBSERVED id this server sends (1934,
+# 1960, 1961, 1985; nothing here sends 1988) goes out regardless of this flag
+# -- the weapon gate's #1985 since 2026-09-29, when it stopped riding the flag
+# -- so its one consumer left is the party-target gate's #1986 on a foe
+# spell. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
 REFUSAL_REASON_IDS = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
@@ -12928,6 +12943,14 @@ REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
                                # 0x0052 and 0x004A -- retail's relative order on
                                # 10 of 10 hand-ins (the xp 0x00EE, then the gold,
                                # then 0x0052 · 0x004A close the quest family).
+SKILL_LOAD_RETAIL_ORDER = True # False (--no-retail-skill-order): the load sends
+                               # the character library 0x00DB BEFORE the bar
+                               # 0x00DA, as every tree since 04bafc1f
+                               # (2026-08-06) did. Default ON: the bar
+                               # first, then 0x00DB --
+                               # retail's order on 126 of 126 live connections
+                               # carrying both (OBSERVED, RANGERPRE-S4;
+                               # 20260929T150923, 11 of 11). 0x001D does not move.
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -23083,20 +23106,22 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
 
     # ---- DAGGERS-B4: THE WEAPON GATE, ahead of the resource gate ---------
     # The skill record's own mask against what the character holds: a dagger
-    # attack with a sword in hand begins nothing and costs nothing. The bare
-    # release, no chat line -- the refusal's sentence is not observed (see
-    # WEAPON_GATE). DESKWORK-D5 step 7: under --refusal-reasons the release
-    # carries #1985 (chatdefs.REFUSE_WEAPON_TYPE, the label
-    # skill_needs_different_weapon_type -- RECONSTRUCTION from the sentence's
-    # own condition, no tape shows it).
+    # attack with a sword in hand begins nothing and costs nothing. The
+    # answer is retail's, OBSERVED 1 of 1 (RANGERPRE-S2, 2026-09-29):
+    # 20260929T150923 :53756, c2s 0x0027 [394, 0, 22, 0] at t=1055.952 -- a
+    # bow skill pressed with a sword and a shield in hand -- answered at
+    # 1056.002 by 0x005D #1985 ([0x08C1]), 0x005E [1, 7], 0x00E2 [9, 394, 0]
+    # and nothing else: no E4, no E3. #1985 is chatdefs.REFUSE_WEAPON_TYPE
+    # (skill_needs_different_weapon_type) and answers 0 of the corpus's 184
+    # weapon-satisfied presses, so it is sent always, as #1960 is; until
+    # today it rode --refusal-reasons and the default was the bare release.
     if WEAPON_GATE and not weapon_satisfies(skill_id):
         print(f"[c{conn_id}] REFUSED skill {skill_id}: its weapon_req "
               f"{skill_chain_fields(skill_id)[2]:#04x} is not what the player "
               f"holds (item_type "
               f"{(agents.PLAYER_WEAPON or {}).get('item_type') if EQUIP_WEAPON else None}) "
               f"[DAGGERS-B4]", flush=True)
-        refuse_press(send, skill_id, copy, conn_id,
-                     chatdefs.REFUSE_WEAPON_TYPE if REFUSAL_REASON_IDS else None)
+        refuse_press(send, skill_id, copy, conn_id, chatdefs.REFUSE_WEAPON_TYPE)
         return
 
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
@@ -27114,11 +27139,71 @@ def player_full_max_health(state):
 
 
 def player_max_health(state):
-    """Maximum health as the client should currently see it -- morale, and a
-    live Deep Wound's reduction, because that is the number the client holds
-    after our own `0x009F 42` and every wire fraction divides by it."""
-    return (player_full_max_health(state)
+    """Maximum health as the client should currently see it -- morale, a held
+    item's 564 (RANGERPRE-S11) and a live Deep Wound's reduction, because that
+    is the number the client holds after our own `0x009F 42` and every wire
+    fraction divides by it."""
+    return (player_full_max_health(state) + held_health_bonus(state)
             - float((state.get("deep_wound") or {}).get(PLAYER_AGENT_ID, 0)))
+
+
+# ---- RANGERPRE-S11 (MAXHP-2, 2026-09-29): A HELD ITEM'S MAXIMUM HEALTH -------
+#
+# OBSERVED n=1 (20260929T150923 :56064): the pre-Searing shield, item 696,
+# carries 564 arg 15 (combatmath.HEALTH_MODIFIER), and its equip at t=932.489
+# was answered at 932.526 by exactly [0x014B [2, 696, 5, 1], 0x006F [9, 1,
+# 696], 0x009F [42, 9, 135]] -- the player's maximum from the load's 120 to
+# 135, the 42 LAST and nothing else (no fraction, no regen: the client moves
+# its own current health by the delta, agents.PROP_HEALTH_MAX). The sword the
+# same connection equipped two seconds earlier (697, no 564) drew no 42, and
+# so did the corpus's other 9 equips and 15 set switches (the design lane's
+# census; none of the items they moved carried 564). Later loads holding
+# the shield declare 135 (:53753 994.024, :53756 998.208, :59427 1217.429),
+# which the load's 42 does through player_max_health.
+#
+# Kept OUT of player_full_max_health: land_swing scales the enemy's blow from
+# that, and a shield must not grow the blow. Morale scales the base only, the
+# way morale.effective_max treats a rune. --no-held-health is the control:
+# the maximum every run before today had.
+HELD_HEALTH = True               # --no-held-health reverts
+
+
+def held_health_bonus(state=None):
+    """The maximum health the HELD set adds: the 564 word on the lead item and
+    on the off hand -- 0 with the feature off, nothing held (--no-weapon), or
+    no 564 on either (every content item today)."""
+    if not (HELD_HEALTH and EQUIP_WEAPON):
+        return 0
+    total = 0
+    for item in (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND):
+        found = item_word(item, combatmath.HEALTH_MODIFIER)
+        if found is not None:
+            total += int(found[0])
+    return total
+
+
+def held_max_moved(send, state, delta, why):
+    """A hand change moved held_health_bonus by `delta`: the player's 42, and
+    current health by the same delta -- the client's own `health += (new_max -
+    old_max)` (agents.PROP_HEALTH_MAX), so the two books stay one number.
+    Nothing is sent for a zero delta, which is every hand change of an item
+    without 564 (retail's 24 negative controls).
+
+    THE DELTA IS SIGNED AND UNCLAMPED, deep_wound_open's precedent: taking a
+    564 item off below its bonus leaves the books at or under zero, as the
+    client's signed store does. RECONSTRUCTION -- retail's unequip of a 564
+    item is NOT FOUND on any tape. push_morale clamps a shrinking pool at
+    max(1, max) instead; the two paths disagree on purpose until a tape
+    decides the unequip."""
+    if not delta:
+        return False
+    had = "player_health" in state
+    player_pools(state)          # a fresh book seeds at the NEW maximum already
+    if had:
+        state["player_health"] = float(state["player_health"]) + delta
+    declare_player_max(send, state, f"maximum health {int(player_max_health(state))} "
+                                    f"({delta:+d}, {why}) [RANGERPRE-S11]", force=True)
+    return True
 
 
 # ---- WEAPONS-W5 (2026-09-18): A STAFF'S OR A FOCUS'S ENERGY -----------------
@@ -30706,6 +30791,7 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     and the store current, and mirror the hands."""
     items = state["items"]
     before = itemstore.hand_items(items, EQUIPPED_BAG_ID)
+    _held_hp = held_health_bonus(state)         # RANGERPRE-S11: the hands' 564, before
     # Every consumer of the item batch passes here, so the display mode
     # gates the batch's 0x006F ONCE (visible_slot_writes; the fix pass). The
     # count below is what the gate RETURNED, not what was planned (the
@@ -30729,6 +30815,17 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
             if row["bag"] == BACKPACK_BAG_ID:
                 held[row["slot"]] = iid
     _item_hands_mirror(state, conn_id, before)
+    # RANGERPRE-S11: a 564 item entering or leaving the hands moves the maximum,
+    # the batch's LAST message. OBSERVED in a FIELD only: retail's one 564 equip
+    # (20260929T150923 :56064 t=932.526, 0x0199 is_explorable=1) sent 0x014B,
+    # 0x006F, then the 42. A TOWN equip sends the 42 too -- INFERRED: retail's
+    # four town equips (20260819T132414 :53419, map 242, is_explorable=0, bare
+    # 0x0152 batches with no 0x006F) moved no 564 item, so no tape shows a 564
+    # equip in a town; there visible_slot_writes drops the hand 0x006F, and our
+    # move-then-42 batch is a shape no tape shows. Gated on the BONUS changing,
+    # never on declare_player_max's tracker, so a hand change of an item
+    # without 564 sends exactly the planned batch.
+    held_max_moved(send, state, held_health_bonus(state) - _held_hp, what)
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
@@ -37231,15 +37328,25 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              f"AGENT_PROFESSION_BITS"
              f"(0x{_offer:04X}) [--secondary-bits at 57e89956's "
              f"site, under --no-secondary-change]")
-    # The skill block. Upstream's SendSkillsAndAttributes
-    # sends the bar (218) BEFORE the unlock list (219); we
-    # send the unlocks first, deliberately. Upstream never
-    # puts a real id on a bar -- it sends eight zeros -- so
-    # its ordering is not evidence about a POPULATED bar,
-    # and if the client gates drawing on unlock state then
-    # having that state already in hand is the ordering that
-    # can work. If the bar draws, try upstream's order too:
-    # a difference there is a real finding either way.
+    # The skill block: THE BAR 0x00DA, THEN THE CHARACTER LIBRARY
+    # 0x00DB (RANGERPRE-S4). OBSERVED on the live corpus: the first
+    # 0x00DA precedes the first 0x00DB on 126 of 126 connections that
+    # carry both (127 decoded; one carries neither, 20260807T133758
+    # :54560; a 128th, 20260928T103123 :65009, is set aside by its
+    # manifest), and on 11 of 11 in 20260929T150923, where :53756's
+    # player block at t=998.208 runs 0x0037, 0x00B7, 0x00B6, 0x00DA,
+    # 0x009F [41], 0x009F [42], 0x009C, 0x0041, 0x008B, 0x008A,
+    # 0x00B5, 0x00DB, 0x00E9, 0x00EF. 0x001D is NOT part of the pair's
+    # order -- the same capture carries it before (:59969) and after
+    # (:63359) -- so it stays where it was. We sent the unlocks first
+    # from 04bafc1f (2026-08-06) on, deliberately: upstream's
+    # SendSkillsAndAttributes sends the bar first but only ever with
+    # eight zeros, so its order was no evidence about a POPULATED bar,
+    # and the fear was that the client gates drawing on unlock state.
+    # It does not -- studies/skills/FINDINGS.md §9 (bar contents are
+    # the server's, the bitmap gates only the picker) -- and the tape
+    # now answers the order itself. --no-retail-skill-order is that
+    # order, the one 57e89956 (test_secondary §7's recording) sent.
     # THE SKILL LIBRARY IS TWO SETS, and they are retail's two, not ours.
     # Until 2026-09-15 this server sent the SAME flag-built bitmap in both
     # messages, which worked but modelled one library where the game has
@@ -37261,8 +37368,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         UNLOCKED, UNLOCK_LABEL, seen=state.setdefault("skills_withheld", set()))
     send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_acct_words],
          f"PVP_UPDATE_UNLOCKED_SKILLS({_acct_label})")
-    send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
-         f"UPDATE_UNLOCKED_SKILLS({_char_label})")
+    if not SKILL_LOAD_RETAIL_ORDER:                     # 57e89956's order
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+             f"UPDATE_UNLOCKED_SKILLS({_char_label}) [--no-retail-skill-order]")
     # The bar the client is about to draw. Under --persist a stored bar wins,
     # so a slot the player dragged last session is still there this one --
     # 0x005C writes it and this reads it back. SKILLBAR is rebound to match so
@@ -37273,6 +37381,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
          [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
           SKILLBAR_TRAILER],
          f"SKILLBAR_UPDATE{skills}")
+    if SKILL_LOAD_RETAIL_ORDER:                         # RANGERPRE-S4, OBSERVED
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+             f"UPDATE_UNLOCKED_SKILLS({_char_label}) [after the bar: retail, "
+             f"126 of 126 live connections]")
     # A BAR SKILL OUTSIDE THE ACCOUNT LIBRARY IS A DELAYED CRASH, and the
     # delay is why this warns rather than trusting the screen. OBSERVED
     # (38797, static): GmSkSlot bit-tests the ACCOUNT container --
@@ -43855,6 +43967,14 @@ def main():
               "them. KNOWN-BAD against the tape: retail puts them between "
               "0x0052 and 0x004A on 10 of 10 hand-ins (turn_in_quest).",
               flush=True)
+    if a.no_retail_skill_order:
+        global SKILL_LOAD_RETAIL_ORDER
+        SKILL_LOAD_RETAIL_ORDER = False
+        print("[skills] --no-retail-skill-order: the load sends the character "
+              "library 0x00DB BEFORE the bar 0x00DA, as every tree from 04bafc1f "
+              "(2026-08-06) to RANGERPRE-S4 did. KNOWN-BAD against the tape: retail sends the "
+              "bar first on 126 of 126 live connections carrying both.",
+              flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
@@ -45031,6 +45151,11 @@ def main():
         WEAPON_ENERGY = False
         print("ENERGY: --no-weapon-energy -- a held staff or focus adds nothing to "
               "the pool [WEAPONS-W5 revert]", flush=True)
+    if a.no_held_health:
+        global HELD_HEALTH
+        HELD_HEALTH = False
+        print("HEALTH: --no-held-health -- a held item's 564 adds nothing to the "
+              "maximum and a hand change sends no 42 [RANGERPRE-S11 revert]", flush=True)
     if a.no_typed_armour:
         global TYPED_ARMOUR
         TYPED_ARMOUR = False
@@ -45416,9 +45541,9 @@ def main():
         global REFUSAL_REASON_IDS
         REFUSAL_REASON_IDS = True
         print("REFUSAL REASONS: RECONSTRUCTED reason ids from the client's refusal "
-              "block go out with the release (today: the weapon gate's #1985 and "
-              "the party-target gate's #1986 on a foe spell). The OBSERVED "
-              "1934/1960/1961 are sent either way.", flush=True)
+              "block go out with the release (today: the party-target gate's "
+              "#1986 on a foe spell). The OBSERVED 1934/1960/1961/1985 are "
+              "sent either way.", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION

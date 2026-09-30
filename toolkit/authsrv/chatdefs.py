@@ -170,7 +170,7 @@ REFUSAL_REASONS = {
     1982: "target_no_flesh",
     1983: "target_not_allied_minion",
     1984: "target_not_enemy_minion",
-    1985: "skill_needs_different_weapon_type",   # the weapon gate's consumer
+    1985: "skill_needs_different_weapon_type",   # OBSERVED 1 of 1 -- the weapon gate's id (below)
     1986: "invalid_spell_target",
     1987: "target_out_of_range",
     1988: "skill_recharging_2",              # OBSERVED 1 of 1 -- THE recharge refusal's id (below)
@@ -188,15 +188,21 @@ REFUSAL_REASONS = {
 # [9, 40, 0] -- the sentence AFTER the ack and BEFORE the release, an order no
 # 1960 refusal uses. 1964 carries the same sentence in the archive and has never
 # been on any wire we hold (skills 38.5); the id retail sends is 1988.
-REFUSAL_OBSERVED = {1934, 1960, 1961, 1988}   # every other id is RECONSTRUCTION
+REFUSAL_OBSERVED = {1934, 1960, 1961, 1985, 1988}   # every other id is RECONSTRUCTION
 REFUSAL_TEMPLATED = {1942, 1943}            # take arguments; never sent bare
 REFUSAL_BLOCK = (1934, 1993)                # inclusive; the plain span
 REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001))
-# THE WEAPON GATE'S REASON (DAGGERS-B4). What retail sends on a weapon mismatch
-# is NOT OBSERVED -- the client very likely never sends the press -- so this
-# id is RECONSTRUCTION from the sentence's own condition, and the gate sends it
-# only under --refusal-reasons (default OFF: the bare release, the shape
-# retail uses 3 of 43 for a refusal whose reason we cannot name).
+# THE WEAPON GATE'S REASON (DAGGERS-B4). OBSERVED 1 of 1 (RANGERPRE-S2,
+# 2026-09-29). This comment used to say the client "very likely never sends
+# the press" -- REFUTED: it sent it. 20260929T150923 :53756 t=1055.952, c2s
+# 0x0027 [394, 0, 22, 0] (skill 394, weapon_req 0x02 -- a bow) with a sword
+# (type 27) and a shield in hand, and retail answered at t=1056.002, one
+# segment: 0x005D [0x08C1] = #1985, 0x005E [1, 7], 0x00E2 [9, 394, 0] -- no
+# 0x00E4, no 0x00E3. The live corpus agrees in both directions: #1985 answers
+# 1 of the 1 weapon-mismatched presses and 0 of the 184 whose weapon satisfied
+# the mask (the 3 bare releases were all weapon-satisfied presses). Sent
+# always, as 1960 is; n = 1 does not isolate the cause (UNVERIFIED), and which
+# of the weapon and resource gates retail checks first is NOT OBSERVED.
 REFUSE_WEAPON_TYPE = 1985
 # THE PARTY-TARGET GATE'S REASONS (2026-09-26; authsrv.party_body's banner).
 # 1934 is the id OBSERVED answering the operator action that gate refuses:

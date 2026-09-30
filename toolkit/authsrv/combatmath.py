@@ -312,6 +312,17 @@ def armour_of_piece(item, damage_type, ARMOR_RATING_MODIFIER,
 # a party row that names its armour.
 ENERGY_BASE, PIPS_BASE = 20, 2
 ENERGY_MODIFIER, ENERGY_REGEN_MODIFIER = 556, 558
+# RANGERPRE-S11 (MAXHP-2): 564 is "+N maximum health". OBSERVED n=1: the
+# pre-Searing shield (item 696, words 0x21A83205 0x23480F00 0xA3C80400 -- the
+# middle one is 564 arg 15) equipped at 20260929T150923 :56064 t=932.489 drew
+# [0x014B, 0x006F, 0x009F [42, 9, 135]] from a declared 120; the sword beside
+# it, no 564, drew no 42. CORROBORATED: the owner's item_modifiers overlay
+# labels 564 with text id 2386, which the design lane resolved locally
+# (textrec) to the client's health label, and arg 15 is the delta. Its
+# census: 11 of 4,817 corpus 0x0161 carry it, by item type {24: 7, 8: 2,
+# 26: 1, 27: 1} -- 7 shields (arg 15 or 30), two type-8 declarations at arg
+# 10 (item 8675, in two captures), a staff (arg 30) and a sword (arg 30).
+HEALTH_MODIFIER = 564
 
 
 def armour_energy_bonus(keys):
