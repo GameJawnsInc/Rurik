@@ -598,8 +598,10 @@ def turn_in_quest(send, state, qid, row, conn_id):
     had held) and 20260819T132414 :52606 145.487 (q440: no quest item; 0x0161
     [652, type 30], 0x013E [4, 652, 8, 0]). They are not reward LINES, so they
     stay ahead of the 0x0052 under --no-reward-in-frame too. The objective
-    lines retail sends between the 0x014D and the 0x0161 on q62 (0x004D +
-    0x004C, the objective met at the hand-in NPC) are not sent here.
+    and chat lines retail sends around the 0x014D on q62 are not sent here:
+    q1462's and q62's 0x0054 + 0x0051, a 0x005D + 0x005E and two 0x009F
+    before it; q1462's objective lines, two 0x005D + 0x005E and q62's 0x004D +
+    0x004C (the objective met at the hand-in NPC) between it and the 0x0161.
     --no-quest-items takes and grants nothing, as every run before S20.
     """
     if QUEST_ITEMS_ENABLED:
@@ -716,10 +718,15 @@ def take_quest_item(send, state, conn_id, key, why):
     RETAIL'S SHAPE, OBSERVED n = 1 (the only hand-in batch in the live corpus
     carrying a 0x014D): 20260929T150923 :53880 727.4875, q62 -- 0x014D [92,
     3359] removes the quest item (type 21) the load had declared at [92, 3359,
-    452, 0], at the HEAD of the batch, before the reward item's 0x0161 /
-    0x013E and before the first 0x0052. The same message the merchant's sale
-    sends (merchant.handle_item_sale; 8 of 8 sales), and like a sale nothing
-    moves: the item ceases to exist.
+    452, 0], ahead of the reward item's 0x0161 / 0x013E and of the first
+    0x0052 -- first of the REDUCED batch (test_questflow's reduce_handin);
+    objective and chat lines for q1462 and q62 precede it in the same segment.
+    It is the 9th of the 57 s2c lines sharing that stamp: 0x0054 + 0x0051 for
+    q1462, 0x005D + 0x005E, 0x0054 + 0x0051 for q62 and two 0x009F [11, 41,
+    5] come first, so it is NOT the head of the batch, and a follow-on that
+    sends those lines must not put the 0x014D ahead of them. The same message
+    the merchant's sale sends (merchant.handle_item_sale; 8 of 8 sales), and
+    like a sale nothing moves: the item ceases to exist.
 
     WHICH ITEM IS OURS (RECONSTRUCTION): the lowest-id item in the BACKPACK
     whose content key is `key` and whose kind is "reward" -- one grant_item
