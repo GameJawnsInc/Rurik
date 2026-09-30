@@ -197,7 +197,7 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
 - ~~The five test reds this capture caused (test_wearmap, test_adrenwire, test_movesync,
   test_routerbench, test_weaponcensus; test_npcdefs §8 would add two) are all confirming evidence
   breaking exact pins; the owner chose server diffs first, and they stay open.~~
-  **2026-09-30:** the three files this tape left red on `main` at `e18d67f3` (test_adrenwire,
+  **2026-09-30:** the three files main's corpus-reds landing classified (test_adrenwire,
   test_npcdefs, test_movesync) were classified per connection and repaired there (`05e9392a`,
   merge `a7086a94`, PLAN-LOG "RANGERPRE's corpus reds"; the bare-machine skip is `8061941b`),
   and `rangerpre` took them at `30923224`. **The other three are still red** on `rangerpre` at
@@ -205,8 +205,8 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   their own connection), test_routerbench (2: one click of 149 unanswered) and
   test_weaponcensus (1: WEAPONS-Q8, bow intervals of 2.63-2.72 s beside the pinned 2.476).
   **test_wearmap's 34 all come from this tape**, `20260929T150923` :53880 (OBSERVED, a
-  per-connection scan of the live corpus); the test and its code are identical on `main`, so it
-  is red there too (inferred, not re-run on `main`). test_routerbench and test_weaponcensus are
+  per-connection scan of the live corpus); all three are red on `main` too, re-run
+  there at `75d6a1e3` with the same failures. test_routerbench and test_weaponcensus are
   unclassified, whether this tape is their cause is UNVERIFIED, and all three stay open.
 - **RANGERPRE-S19** (SECONDARY-B) is not built. It waits on the owner's `0x00B6` ruling: the
   secondary-unlock mask, which we never send ([studies/profession/RUNS.md](../profession/RUNS.md)
