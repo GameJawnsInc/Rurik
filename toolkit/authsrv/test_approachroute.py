@@ -1,9 +1,24 @@
-"""test_approachroute -- the out-of-reach approach (ROUTE). This step ships ROUTE-A only:
-a RANGED approach's first swing holds the walk gate and halts the body (RANGERPRE-S16,
-2026-09-30). ROUTE-B (where a held interact is served), ROUTE-C (corner routing),
-ROUTE-C2 and ROUTE-D are not built; each adds its own section here when it lands.
+"""test_approachroute -- the out-of-reach approach (ROUTE). Two pieces have shipped:
+ROUTE-A, a RANGED approach's first swing holds the walk gate and halts the body
+(RANGERPRE-S16, 2026-09-30, sections 1-3), and ROUTE-B, a HELD interact is served at the
+follow disc rather than at INTERACT_RANGE (RANGERPRE-S17, 2026-09-30, sections 4-5).
+ROUTE-C (corner routing), ROUTE-C2 and ROUTE-D are not built; each adds its own section
+here when it lands.
 
     python toolkit/authsrv/test_approachroute.py
+
+ROUTE-B, WHAT RETAIL DOES (section 5 re-derives every figure from the bytes). On
+20260929T150923 the two held interacts whose walk starts from an exact point are served
+at 67.8 u (:56064, the dialog at 979.1046, 1.850 s after the 0x002A left the last
+corner 600.7 u out) and at 75.2 u (:59969, the dialog at 202.6552, the model still
+42.3 u short of its last leg's end -- served on the way, a DISTANCE rule): 45.7 and
+20.0 ms after the model crosses 81 u, where a 144 u serve predicts 0.26 and 0.24 s
+early. Presses from exact stops 95.7 and 134.6 u out are answered at once; one from
+~167 u was walked. Ours walked to 100 u and served at the first tick inside 144 u. Now
+the walk stops at the follow disc (80 u) and the hold is served inside 81 u while the
+walk is in flight, or anywhere inside 144 u once it is over -- the slack fix, so a leg
+that ends outside the disc (a clip-fallback, a client report a few units off) cannot
+strand it.
 
 WHAT RETAIL SENDS (OBSERVED; section 3 re-derives every count from the bytes). On the
 four live connections whose player shoots, the FIRST own attack start after a server
@@ -29,8 +44,13 @@ the census, OURS == RETAIL on all 12 with the ids substituted, the known-bad bat
 matching none, the launches, what ends each hold, the at-rest control and the melee
 split. Section 3 is a declared skip on a machine with no captures/live; a vault that
 has captures but not these dies loudly in require_dir. Sections 1-2 need no vault, no
-socket and no client.
+socket and no client. 4 ROUTE-B on our server, offline, over an open-field stub mesh:
+the press, the walk driven tick by tick in world_tick's order, where it is served, the
+known-bad arm (--held-interact-at-range), the slack cases, the controls, the flag.
+5 ROUTE-B's TAPES: the two exact-start witnesses, ours against retail's dialog instant,
+and the immediate range -- a declared skip like section 3.
 """
+import math
 import os
 import sys
 import time
@@ -47,10 +67,11 @@ import agents                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
-# Floor from the green run of 2026-09-30 with RURIK_VAULT at an EMPTY directory (section 3
-# a declared skip): 21 (20 until the review follow-up added 1r). Section 3 adds 9 when
-# the captures are present (30).
-LEDGER = checks.Ledger("the approach (ROUTE-A)", floor=21)
+# Floor from the green run of 2026-09-30 with RURIK_VAULT at an EMPTY directory (sections 3
+# and 5 declared skips): 32 -- 21 for ROUTE-A (20 until the review follow-up added 1r) and
+# 11 for ROUTE-B's section 4 (RANGERPRE-S17). With the captures present section 3 adds 9
+# and section 5 adds 5 (46).
+LEDGER = checks.Ledger("the approach (ROUTE-A, ROUTE-B)", floor=32)
 check = checks.adopt(LEDGER)
 
 PLAYER, FOE, OTHER = authsrv.PLAYER_AGENT_ID, 10, 11
@@ -535,13 +556,425 @@ def section_tape(batches):
           "ends 338.1238's skill hold", str(releases))
 
 
+# --------------------------------------------------------------------------- 4
+NPC, NPC_AT = 99, (1000.0, 0.0)
+OP_SPEED, OP_LEG = 0x002B, 0x0029
+
+
+class OpenPM:
+    """An open field on plane 0: every point walkable, every line clear, every route one
+    straight leg -- the router's verbatim answer. `wall_x`, when set, is a line the mesh
+    ends at: route() finds nothing past it and the rays stop on it, so the router's
+    clip-fallback grants the leg only that far -- the approach point off our mesh, the
+    shape that strands a disc-only serve."""
+
+    def __init__(self, wall_x=None):
+        self.wall_x = wall_x
+
+    def walkable(self, x, y):
+        return self.wall_x is None or x <= self.wall_x
+
+    def containing(self, x, y):
+        return [1] if self.walkable(x, y) else []
+
+    def plane_at(self, x, y, prefer=None):
+        return 0
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        if self.wall_x is not None and x1 > self.wall_x >= x0:
+            f = (self.wall_x - x0) / (x1 - x0)
+            return (self.wall_x, y0 + f * (y1 - y0))
+        return (x1, y1)
+
+    def seam_clip(self, x0, y0, x1, y1, plane, step=2.0):
+        return self.clip(x0, y0, x1, y1, step)
+
+    def nearest_walkable(self, x, y, radius):
+        return (x, y, 0.0) if self.walkable(x, y) else None
+
+    def route(self, x0, y0, x1, y1, start_plane=None, goal_plane=None,
+              with_planes=False):
+        if not (self.walkable(x0, y0) and self.walkable(x1, y1)):
+            return None
+        pts = [(x0, y0), (x1, y1)]
+        return (pts, [0, 0]) if with_planes else pts
+
+
+def talk_world(pm=None, pos=(0.0, 0.0)):
+    """The state the interact path reads, the NPC 1000 u out on +x."""
+    st = {"pos": tuple(pos), "plane": 0, "agent_pos": {NPC: NPC_AT}, "agents": {},
+          "quests": set(), "objectives_done": set(), "desc_sent": set(),
+          "kbd_moving_at": None}
+    if pm is not None:
+        st["pathmap"] = pm
+    return st
+
+
+def gap(st):
+    return math.hypot(NPC_AT[0] - st["pos"][0], NPC_AT[1] - st["pos"][1])
+
+
+def drive(st, send, ticks=600):
+    """world_tick's order, tick by tick: interact_pending_tick, then the integrator's step
+    toward `dest` (DEFAULT_RUN_SPEED x TICK_SECONDS; arrival lands ON dest and clears it).
+    -> the model's distance from the NPC when the hold was served, or None."""
+    step = authsrv.DEFAULT_RUN_SPEED * authsrv.TICK_SECONDS
+    for _ in range(ticks):
+        authsrv.interact_pending_tick(send, st, 1)
+        if st.get("pending_interact") is None:
+            return gap(st)
+        dest = st.get("dest")
+        if not dest:
+            continue
+        px, py = st["pos"]
+        dx, dy = dest[0] - px, dest[1] - py
+        d = math.hypot(dx, dy)
+        if d <= step:
+            st["pos"], st["dest"] = tuple(dest), None
+        else:
+            st["pos"] = (px + dx / d * step, py + dy / d * step)
+    return None
+
+
+def press(pm, pos=(0.0, 0.0)):
+    """A click on NPC from `pos`. -> (state, send, what the press sent)"""
+    st = talk_world(pm, pos)
+    sent, send = collect()
+    authsrv._handle_interact(send, st, 1, NPC)
+    return st, send, sent
+
+
+def section_route_b_server():
+    print("\n4. ROUTE-B on our server: where a held interact is served")
+    # Run under the arm in force (the module default), so a known-bad module flip
+    # reddens the headlines; 4d / 4e set each arm themselves and put it back.
+    saved = authsrv.HELD_INTERACT_AT_DISC
+    try:
+        disc = authsrv.follow_stop_radius() + authsrv.INTERACT_DISC_SLACK
+        p = authsrv.interact_approach_point(NPC_AT, (0.0, 0.0))
+        check(authsrv.INTERACT_STOP == authsrv.follow_stop_radius() == 80.0
+              and authsrv.interact_stop() == authsrv.INTERACT_STOP
+              and p == (NPC_AT[0] - 80.0, 0.0) and disc == 81.0,
+              "4a. the interact walk stops at the FOLLOW DISC: INTERACT_STOP == "
+              "follow_stop_radius() == 80 u (12 + 12 + 56), the approach point 80 u short, "
+              "and the serve disc 81 u", f"stop {authsrv.INTERACT_STOP}, point {p}, disc {disc}")
+
+        st, send, sent = press(OpenPM())
+        check(ops(sent) == [OP_SPEED, OP_LEG] and sent[1][1][1] == [920.0, 0.0]
+              and st.get("pending_interact") == (NPC, 0) and st.get("dest") == (920.0, 0.0)
+              and st.get("interact_walk") == st.get("click_moving_at") is not None
+              and authsrv.interact_walk_live(st),
+              "4b. a press from 1000 u on an open field is HELD and walked: 0x002B then "
+              "0x0029 [me, (920, 0)] -- the router's verbatim leg to the disc -- and the walk "
+              "is recorded as the click latch's stamp and live", show(sent))
+        served = drive(st, send)
+        check(served is not None and abs(served - 80.0) < 1e-6
+              and st.get("interacting") == NPC,
+              "4c. HEADLINE: driven tick by tick, the hold is served when the model reaches "
+              "the walk's end, 80.0 u -- NOT on the way in: every in-flight tick inside "
+              "144 u serves nothing (retail: 67.8 / 75.2 u, section 5)", f"served at {served}")
+
+        authsrv.HELD_INTERACT_AT_DISC = False
+        st_b, send_b, sent_b = press(OpenPM())
+        served_b = drive(st_b, send_b)
+        check(sent_b[1][1][1] == [900.0, 0.0] and served_b is not None
+              and 144.0 - 14.4 < served_b <= 144.0,
+              "4d. KNOWN-BAD, --held-interact-at-range: the walk stops 100 u short and the "
+              "hold is served at the first tick inside INTERACT_RANGE -- this server until "
+              "today; retail's dialog comes 0.24-0.26 s later than that rule puts it",
+              f"leg {sent_b[1][1][1]}, served at {served_b}")
+
+        # 4e: the spec's direct check -- the model 100 u out, the walk still in flight
+        arms = {}
+        for arm in (True, False):
+            authsrv.HELD_INTERACT_AT_DISC = arm
+            st_e, send_e, _s = press(OpenPM())
+            st_e["pos"] = (900.0, 0.0)
+            authsrv.interact_pending_tick(send_e, st_e, 1)
+            arms[arm] = st_e.get("pending_interact") is None
+        check(arms == {True: False, False: True},
+              "4e. the model 100 u out with the walk in flight is NOT served; the known-bad "
+              "arm serves it there", f"served {arms}")
+        authsrv.HELD_INTERACT_AT_DISC = saved
+
+        # 4f-4h: the slack (the critic's ERROR against a disc-only serve)
+        st_f, send_f, sent_f = press(OpenPM(wall_x=890.0))
+        served_f = drive(st_f, send_f)
+        check(sent_f[1][1][1] == [890.0, 0.0] and served_f is not None
+              and abs(served_f - 110.0) < 1e-6 and st_f.get("interacting") == NPC,
+              "4f. SLACK, the router's word: the approach point is off our mesh, so the "
+              "clip-fallback grants the leg only to (890, 0), 110 u out, 29 u outside the "
+              "disc -- and the hold is served at the walk's END, not stranded (a disc-only "
+              "serve never fires: this tick has no expiry)",
+              f"leg {sent_f[1][1][1]}, served at {served_f}")
+        st_g, send_g, _s = press(OpenPM())
+        st_g["pos"], st_g["dest"], st_g["click_moving_at"] = (917.0, 0.0), None, None
+        authsrv.interact_pending_tick(send_g, st_g, 1)
+        check(st_g.get("pending_interact") is None and st_g.get("interacting") == NPC,
+              "4g. SLACK, the client's word: a stop reported 3 u beyond the modelled end "
+              "(83 u; the 0x0047 arm writes pos, clears dest and the click latch) is served "
+              "on the next tick", f"pending {st_g.get('pending_interact')}")
+        st_h, send_h, sent_h = press(OpenPM(wall_x=800.0))
+        served_h = drive(st_h, send_h)
+        check(sent_h[1][1][1] == [800.0, 0.0] and served_h is None
+              and st_h.get("pending_interact") == (NPC, 0) and gap(st_h) == 200.0,
+              "4h. a walk that ends BEYOND INTERACT_RANGE (200 u) keeps the hold, served by "
+              "nothing, as it always was -- retail's expiry is unmeasured",
+              f"served {served_h}, pending {st_h.get('pending_interact')}, at {gap(st_h)}")
+
+        # 4i-4j: the controls
+        st_i, send_i, sent_i = press(None)
+        walked_i = list(sent_i)
+        st_i["pos"] = (900.0, 0.0)
+        authsrv.interact_pending_tick(send_i, st_i, 1)
+        check(walked_i == [] and "interact_walk" not in st_i
+              and st_i.get("interacting") == NPC,
+              "4i. CONTROL, no mesh: no walk goes out and the hold is served at "
+              "INTERACT_RANGE as before (100 u) -- test_interact section 3 unchanged",
+              f"sent {show(walked_i)}, interacting {st_i.get('interacting')}")
+        now_at = {}
+        for d in (100.0, 134.6, 145.0):
+            st_j, _send_j, sent_j = press(OpenPM(), pos=(NPC_AT[0] - d, 0.0))
+            now_at[d] = (st_j.get("interacting") == NPC, OP_LEG in ops(sent_j),
+                         st_j.get("pending_interact") is not None)
+        check(now_at == {100.0: (True, False, False), 134.6: (True, False, False),
+                         145.0: (False, True, True)},
+              "4j. CONTROL, the IMMEDIATE range is untouched: presses from 100 u and from "
+              "134.6 u (retail's :56025 780.6734) are served at once with nothing walked; "
+              "one from 145 u is held and walked", str(now_at))
+
+        import serverargs
+        ap = serverargs.build_parser(
+            doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+            GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+            HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+            TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+            GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+            VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        i_main = src.find("\ndef main():")
+        i_flip = src.find("    if a.held_interact_at_range:", i_main)
+        check(ap.parse_args([]).held_interact_at_range is False
+              and ap.parse_args(["--held-interact-at-range"]).held_interact_at_range is True
+              and 0 < i_main < i_flip
+              and "HELD_INTERACT_AT_DISC = False" in src[i_flip:i_flip + 120]
+              and saved is True and "HELD_INTERACT_AT_DISC" in authsrv.capture_flags(),
+              "4k. the revert --held-interact-at-range parses (default off), main() flips "
+              "HELD_INTERACT_AT_DISC, the default is ON and the capture header records it")
+    finally:
+        authsrv.HELD_INTERACT_AT_DISC = saved
+
+
+# --------------------------------------------------------------------------- 5
+V_RUN = 288.0
+# (stamp, port, own agent, press t, NPC, dialog t) -- the two exact-start held interacts
+HELD_CORNER = ("20260929T150923", "56064", 9, 968.0936, 10, 979.1046)
+HELD_LEGS = ("20260929T150923", "59969", 123, 190.9224, 40, 202.6552)
+# (port, press t, NPC, the answer) -- exact 0x0047 stops answered at once, and the
+# dead-reckoned press that was walked
+IMMEDIATE = (("55934", 628.2476, 142), ("56025", 780.6734, 38))
+WALKED = ("55934", 630.7047, 176)
+
+
+def near(t, want, tol=0.0006):
+    return abs(t - want) <= tol
+
+
+def our_serve_radius():
+    """The farthest a held interact is served from while its walk is still in flight,
+    ASKED of interact_pending_tick itself (bisection to well under 0.01 u) rather than
+    read off a constant -- so the arm in force is what gets compared with retail."""
+    import contextlib
+    import io
+    lo, hi = 0.0, 1000.0                   # lo is served, hi is not
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        st = talk_world()
+        st["pos"] = (NPC_AT[0] - mid, 0.0)
+        st["pending_interact"] = (NPC, 0)
+        st["interact_walk"] = st["click_moving_at"] = 1.0
+        st["dest"] = (NPC_AT[0] - authsrv.INTERACT_STOP, 0.0)
+        _sent, send = collect()
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.interact_pending_tick(send, st, 1)
+        if st.get("pending_interact") is None:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def where(merged, agent, before):
+    """An agent's last announced position before `before`: its 0x0020 create's point,
+    or a later 0x0029 / 0x002A / 0x002C naming it."""
+    w = None
+    for t, d, op, v in merged:
+        if t >= before:
+            break
+        if d == "s2c" and op == 0x0020 and v[1] == agent:
+            w = tuple(v[5])
+        elif d == "s2c" and op in (0x0029, 0x002A, 0x002C) and v[1] == agent:
+            w = tuple(v[2])
+    return w
+
+
+def crossing(p0, p1, npc, r):
+    """How far along p0 -> p1 the body first comes within `r` of npc, or None."""
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    length = math.hypot(dx, dy)
+    ux, uy = dx / length, dy / length
+    fx, fy = p0[0] - npc[0], p0[1] - npc[1]
+    b = fx * ux + fy * uy
+    disc = b * b - (fx * fx + fy * fy - r * r)
+    if disc < 0:
+        return None
+    s = -b - math.sqrt(disc)
+    return s if 0.0 <= s <= length else None
+
+
+def held_case(case, legs_want):
+    """One exact-start held interact off the tape. -> dict, or a reason string."""
+    stamp, port, me_want, t_press, npc, t_dlg = case
+    _conn, merged, ok = decode(stamp, port)
+    import adrenjoin
+    me = adrenjoin.whose_agent([(t, op, v) for t, d, op, v in merged if d == "s2c"])
+    pr = [r for r in merged if r[1] == "c2s" and r[2] == 0x0039 and near(r[0], t_press)]
+    dlg = [r for r in merged if r[1] == "s2c" and r[2] == 0x0081 and near(r[0], t_dlg)]
+    if not (ok and me == me_want and pr and pr[0][3][1] == npc and dlg
+            and dlg[0][3][1] == npc):
+        return f"ok {ok}, me {me}, press {pr[:1]}, dialog {dlg[:1]}"
+    between = [r for r in merged if pr[0][0] < r[0] < dlg[0][0]]
+    moves = [r for r in between if r[1] == "c2s" and r[2] in MOVE_C2S]
+    legs = [r for r in between if r[1] == "s2c" and r[2] == 0x0029 and r[3][1] == me]
+    fol = [r for r in between if r[1] == "s2c" and r[2] == OP_FOLLOW and r[3][1] == me]
+    first_dlg = min((r[0] for r in between if r[1] == "s2c" and r[2] == 0x0081
+                     and r[3][1] == npc), default=None)
+    if moves or len(legs) != legs_want or first_dlg is not None:
+        return f"moves {len(moves)}, legs {len(legs)}, an earlier dialog {first_dlg}"
+    return {"merged": merged, "me": me, "legs": legs, "follow": fol, "t_dlg": dlg[0][0],
+            "t_press": pr[0][0]}
+
+
+def section_route_b_tape():
+    print("\n5. ROUTE-B's TAPES: where retail serves a held interact, and the immediate range")
+    if not os.path.isdir(vaultpath.vault_path("captures", "live")):
+        LEDGER.skip("ROUTE-B's tapes", f"no {vaultpath.vault_path('captures', 'live')} "
+                                       "(bare machine)")
+        return
+    serve_r = our_serve_radius()       # 81 u under ROUTE-B, 144 under the known-bad arm
+    lead = {}                          # case -> (ours ms, known-bad ms) before the dialog
+
+    a = held_case(HELD_CORNER, 4)
+    corner = {}
+    if isinstance(a, dict):
+        prev, last = a["legs"][-2][3][2], a["legs"][-1][3][2]
+        eta = a["legs"][-1][0] + math.hypot(last[0] - prev[0], last[1] - prev[1]) / V_RUN
+        fol = a["follow"]
+        spot = tuple(fol[0][3][2]) if fol else None
+        if fol and list(fol[0][3][1:]) == [9, spot, 0, 0, 10] and spot == (21195.0, 13076.0):
+            d0 = math.hypot(spot[0] - last[0], spot[1] - last[1])
+            walk = a["t_dlg"] - fol[0][0]
+            corner = {"eta_ms": round(1e3 * (fol[0][0] - eta), 1), "d0": round(d0, 1),
+                      "at_dialog": round(d0 - V_RUN * walk, 1)}
+            lead["56064"] = tuple(round(1e3 * (a["t_dlg"] - (fol[0][0] + (d0 - r) / V_RUN)), 1)
+                                  for r in (serve_r, authsrv.INTERACT_RANGE))
+    check(isinstance(a, dict) and len(a["follow"]) == 1 and corner
+          and abs(corner["eta_ms"]) < 10.0 and corner["d0"] == 600.7,
+          "5a. :56064 (own agent 9) decodes whole: the press at 968.0936 on agent 10 is "
+          "walked by four 0x0029 corners, then 0x002A [9, (21195, 13076), 0, 0, 10] at "
+          "977.2544 within 10 ms of the last corner's ETA -- the body at (21120, 12480), "
+          "600.7 u out -- and the dialog 0x0081 [10] at 979.1046, no client movement between",
+          f"{a if not isinstance(a, dict) else corner}")
+    check(bool(corner) and 60.0 <= corner["at_dialog"] <= 85.0,
+          "5b. :56064: the model stands 67.8 u from the NPC at the dialog -- inside the "
+          "follow disc, far inside 144", f"{corner}")
+
+    b = held_case(HELD_LEGS, 3)
+    legs = {}
+    if isinstance(b, dict):
+        merged = b["merged"]
+        stop = [r for r in merged if r[1] == "c2s" and r[2] == 0x0047
+                and b["t_press"] - 1.5 < r[0] < b["t_press"]]
+        after = [r for r in merged if stop and stop[-1][0] < r[0] < b["t_press"]
+                 and r[1] == "c2s" and r[2] in MOVE_C2S]
+        npc = where(merged, 40, b["t_press"])
+        if stop and not after and npc == (11715.0, 3517.0):
+            pts = [tuple(stop[-1][3][1])] + [tuple(r[3][2]) for r in b["legs"]]
+            p0, p1 = pts[-2], pts[-1]
+            length = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+            s = (b["t_dlg"] - b["legs"][-1][0]) * V_RUN
+            pos = (p0[0] + (p1[0] - p0[0]) * s / length, p0[1] + (p1[1] - p0[1]) * s / length)
+            legs = {"stop_t": round(stop[-1][0], 4), "at_dialog": round(math.hypot(
+                npc[0] - pos[0], npc[1] - pos[1]), 1), "short_of_end": round(length - s, 1),
+                "end_to_npc": round(math.hypot(npc[0] - p1[0], npc[1] - p1[1]), 1)}
+            cr = [crossing(p0, p1, npc, r) for r in (serve_r, authsrv.INTERACT_RANGE)]
+            if None not in cr:
+                lead["59969"] = tuple(round(1e3 * (b["t_dlg"] - (b["legs"][-1][0] + c / V_RUN)),
+                                            1) for c in cr)
+    check(bool(legs) and legs["stop_t"] == 189.9401 and 60.0 <= legs["at_dialog"] <= 85.0
+          and legs["short_of_end"] > 30.0,
+          "5c. :59969 (own agent 123): the press at 190.9224 on agent 40 (11715, 3517), from "
+          "the EXACT 0x0047 stop at 189.9401, walked by three 0x0029 legs; at the dialog "
+          "(202.6552) the model is 75.2 u from the NPC and still 42.3 u short of its last "
+          "leg's end -- served ON THE WAY, a distance rule, not an arrival",
+          f"{b if not isinstance(b, dict) else legs}")
+    check(set(lead) == {"56064", "59969"}
+          and all(0.0 <= ours <= 50.0 and bad >= 200.0 for ours, bad in lead.values()),
+          "5d. OURS == RETAIL to one tick: our serve instant -- the model crossing the "
+          f"radius interact_pending_tick itself serves from with a walk in flight "
+          f"({serve_r:.1f} u) -- precedes retail's dialog by 0-50 ms on both (45.7, 20.0); "
+          "KNOWN-BAD: the INTERACT_RANGE rule precedes it by >= 0.2 s on both (264.5, "
+          "238.8)", f"(ours ms, known-bad ms) {lead}")
+
+    import adrenjoin
+    got = {}
+    for port, t_press, npc in IMMEDIATE + (WALKED,):
+        _c, merged, ok = decode("20260929T150923", port)
+        me = adrenjoin.whose_agent([(t, op, v) for t, d, op, v in merged if d == "s2c"])
+        pr = next(r for r in merged if r[1] == "c2s" and r[2] == 0x0039
+                  and near(r[0], t_press))
+        rep = [r for r in merged if r[1] == "c2s" and r[2] in (0x003D, 0x0047)
+               and r[0] < pr[0]][-1]
+        grants = [r for r in merged if rep[0] < r[0] < pr[0] and r[1] == "s2c"
+                  and r[2] in (0x0029, OP_FOLLOW) and r[3][1] == me]
+        body = tuple(rep[3][1])
+        if rep[2] == 0x003D and grants:     # RECONSTRUCTION: along the report's own grant
+            g = grants[-1][3][2]
+            dd = math.hypot(g[0] - body[0], g[1] - body[1])
+            f = min(1.0, (pr[0] - rep[0]) * V_RUN / dd) if dd else 0.0
+            body = (body[0] + (g[0] - body[0]) * f, body[1] + (g[1] - body[1]) * f)
+        w = where(merged, npc, pr[0])
+        ans = next((r for r in merged if pr[0] < r[0] < pr[0] + 0.25 and r[1] == "s2c"
+                    and ((r[2] in (0x0029, OP_FOLLOW) and r[3][1] == me)
+                         or (r[2] == 0x0081 and r[3][1] == npc))), None)
+        got[port + "@" + str(t_press)] = (
+            ok, "stop" if rep[2] == 0x0047 and not grants else "reckoned",
+            round(math.hypot(w[0] - body[0], w[1] - body[1]), 1),
+            None if ans is None else (hex(ans[2]), round(ans[0] - pr[0], 3)))
+    exact = [got[p + "@" + str(t)] for p, t, _n in IMMEDIATE]
+    walked = got[WALKED[0] + "@" + str(WALKED[1])]
+    check([e[:3] for e in exact] == [(True, "stop", 95.7), (True, "stop", 134.6)]
+          and all(e[3] is not None and e[3][0] == "0x81" and e[3][1] < 0.06 for e in exact)
+          and all(e[2] <= authsrv.INTERACT_RANGE for e in exact)
+          and walked[3] is not None and walked[3][0] == "0x2a"
+          and walked[2] > authsrv.INTERACT_RANGE,
+          "5e. the IMMEDIATE range: presses from exact stops 95.7 u (:55934 628.2476) and "
+          "134.6 u (:56025 780.6734) are answered with the dialog inside 60 ms and no walk, "
+          "both inside INTERACT_RANGE; one from ~167 u (:55934 630.7047, RECONSTRUCTION -- "
+          "dead-reckoned from a keyboard report 0.32 s old) is walked -- so 144 sits in "
+          "(134.6, ~167]", str(got))
+
+
 def main():
     print("test_approachroute -- ROUTE-A: a ranged approach's swing holds the walk gate "
-          "and halts the body (RANGERPRE-S16)")
+          "and halts the body (RANGERPRE-S16); ROUTE-B: a held interact is served at the "
+          "follow disc (RANGERPRE-S17)")
     t0 = time.time()
     batches = section_server()
     section_flag()
     section_tape(batches)
+    section_route_b_server()
+    section_route_b_tape()
     print(f"\n({time.time() - t0:.1f} s)")
     return LEDGER.verdict()
 

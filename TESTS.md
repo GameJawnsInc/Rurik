@@ -13450,7 +13450,36 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   through the primary hit. §17 (WEAPONS-W8): modifier 585 scales the range -- 15-22 with
   (585, 120) reads 18-26, order-free, a 100 changes nothing, no repo item carries it.
   Floor 129 (114 + 15)),
-  `toolkit/authsrv/test_approachroute.py` (**2026-09-30, RANGERPRE-S16 (ROUTE-A, the
+  `toolkit/authsrv/test_approachroute.py` (**2026-09-30, RANGERPRE-S17 (ROUTE-B): a HELD
+  interact is served at the FOLLOW DISC, not at INTERACT_RANGE.** Retail (OBSERVED on the
+  wire, RECONSTRUCTED as a 288 u/s walk): the two exact-start held interacts on
+  20260929T150923 are served at 67.8 u (:56064, the dialog at 979.1046, 1.850 s after the
+  `0x002A` left the last corner 600.7 u out) and 75.2 u (:59969, the dialog at 202.6552 with
+  the model still 42.3 u short of its last leg's end -- served on the way, a distance rule),
+  45.7 and 20.0 ms after the model crosses 81 u; a 144 u serve predicts both 0.26 / 0.24 s
+  early. Ours walked to 100 u and served at the first tick inside 144. Now the walk stops at
+  `follow_stop_radius()` (80 u) and the hold is served inside 81 u while the walk is in
+  flight, or inside 144 once it is over (the slack fix -- a leg ending outside the disc
+  cannot strand it). §4 (offline, an open-field stub mesh, world_tick's order driven tick by
+  tick): the stop pinned to the disc (4a); the press held and walked by the router's
+  verbatim leg to (920, 0) (4b); **served at 80.0 u, nothing on the way in (headline 4c)**;
+  the KNOWN-BAD arm `--held-interact-at-range` walks to 100 and serves at 136 (4d); 100 u in
+  flight not served, served by the known-bad arm (4e); the slack -- a clip-fallback leg
+  ending 110 u out served at its end (4f), a client stop report 83 u out served (4g), a walk
+  ending 200 u out keeps the hold (4h); no mesh serves at 144 as before (4i); the immediate
+  range untouched at 100 / 134.6 / 145 u (4j); the flag (4k). §5 THE TAPES (a declared
+  skip without `captures/live`): the :56064 corner walk and its 67.8 u (5a, 5b), the :59969
+  exact-stop walk served 42.3 u short of its end at 75.2 u (5c), **our serve radius -- asked
+  of `interact_pending_tick` itself by bisection -- crossing 0-50 ms before retail's dialog
+  on both while the INTERACT_RANGE rule is >= 0.2 s early (5d)**, and the immediate range
+  (5e: exact stops 95.7 and 134.6 u answered at once, ~167 u dead-reckoned walked). Proved
+  red on a git-archive export of the parent overlaid with the change, each hunk mutated and
+  restored (sha256 checked): the module arm `HELD_INTERACT_AT_DISC = False`, 4a 4b 4c 4f 4k
+  5d; the disc rule off, 4c 4e 4f 5d; the slack branch removed (the spec as written,
+  disc-only -- the critic's ERROR), 4f 4g 4i; the stop left at 100, 4a 4b 4c; the walk's
+  identity not recorded, 4b 4c 4e 4f; the parent's own `authsrv.py` dies on the missing flag.
+  Floor 21 -> 32 from the bare green run (vaulted: 46).
+  **2026-09-30, RANGERPRE-S16 (ROUTE-A, the
   out-of-reach approach's first piece): a RANGED approach's first swing holds the walk gate
   and halts the body.** Retail (OBSERVED): on the four live connections whose player shoots,
   the first own attack start after a server `0x002A` follow carries `0x00A0 [4, me, T, 0]`,
@@ -13483,8 +13512,8 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   461.5991), re-approach x1 (337.5687), skill press x2 (338.1238, 517.4328), the target's
   death x2 (:55934 384.3644, :62994 86.2717), never the launch (the review follow-up: the
   first commit cited :55934 339.4568 as the keyboard end, and that release ends 338.1238's
-  SKILL hold, not the approach's). ROUTE-B / C / C2 / D are not built and add their
-  sections when they land. Proved red, each hunk of `authsrv.py` reverted in place and
+  SKILL hold, not the approach's). ROUTE-C / C2 / D are not built and add their
+  sections when they land (ROUTE-B is §4-§5, above). Proved red, each hunk of `authsrv.py` reverted in place and
   restored (sha256 checked): the `attack_tick` halt disabled, 5 (1b, 1c, 1g, 1r, 3d);
   `approach_tick`'s arrival marker removed, the same 5; the launch gate removed, 1d and 1r;
   the re-approach release removed, 1f and 1g (the start then carries `[4]`, `0x0028` with

@@ -599,12 +599,92 @@ def _objective_quests(state, agent):
 # NPC conversation uses exactly touch range is not on that page -- so this is
 # the ladder's shortest rung as the best-supported number, not a measured
 # dialog range, and 250/144 = 1.7 is what "probably 2x" looks like.
+#
+# RANGERPRE-S17 (2026-09-30): CORROBORATED as the IMMEDIATE range -- the
+# distance a press is answered from at once, with no walk -- and that is all
+# it gates now: where a HELD interact is served is HELD_INTERACT_AT_DISC's
+# (below). 20260929T150923 (build 38888), positions from EXACT c2s 0x0047
+# stops: :55934 628.2476, 95.7 u from agent 142, the dialog +45 ms; :56025
+# 780.6734, 134.6 u from agent 38, +53 ms. A press from ~167 u (:55934
+# 630.7047, dead-reckoned from a keyboard report 0.32 s old -- RECONSTRUCTION)
+# was answered with a 0x002A walk instead. Retail's immediate range is in
+# (134.6, ~167], and 144 is inside it (test_approachroute section 5).
 INTERACT_RANGE = 144.0
 
-# Where the routed interact-walk stops: this far from the NPC, on the
-# player's side, inside INTERACT_RANGE with room for the model and the
-# client's report to disagree by a body's width.
-INTERACT_STOP = 100.0
+# Where the routed interact-walk stops, centre to centre: the FOLLOW DISC,
+# `follow_stop_radius()` -- 12 + 12 + 56 = 80 u for the radii this server
+# sends. A literal because this line runs before BOUNDING_RADIUS exists;
+# test_approachroute section 4 pins the equality. RANGERPRE-S17: it was 100,
+# "inside INTERACT_RANGE with room for the model and the client's report to
+# disagree by a body's width" -- ours. Retail's walk-in is a 0x002A FOLLOW
+# naming the NPC, and a follow ends at the disc; the held interact is served
+# there (HELD_INTERACT_AT_DISC). The revert arm walks to
+# INTERACT_STOP_AT_RANGE, the old 100 (`interact_stop()` picks).
+INTERACT_STOP = 80.0
+INTERACT_STOP_AT_RANGE = 100.0
+
+# RANGERPRE-S17 (ROUTE-B): A HELD INTERACT IS SERVED AT THE FOLLOW DISC, not at
+# INTERACT_RANGE. What retail does, OBSERVED on the wire and RECONSTRUCTED as a
+# 288 u/s walk (test_approachroute section 5 re-derives every figure from the
+# bytes, own agents by adrenjoin.whose_agent):
+#   * 20260929T150923 :56064 (agent 9). The press at 968.0936 on agent 10 is
+#     walked by four 0x0029 corners; the 0x002A [9, (21195, 13076), 0, 0, 10]
+#     goes out at 977.2544, 3.6 ms after the last corner's ETA, so the body
+#     stands at that corner (21120, 12480), 600.7 u from the NPC. The dialog
+#     (0x0080 + 0x0081 [10]) comes at 979.1046, with no client packet between:
+#     1.850 s of walking, 67.8 u by the model -- 45.7 ms after the model
+#     crosses 81 u. A 144 u serve predicts 978.8401, 0.26 s early.
+#   * :59969 (agent 123). The press at 190.9224 on agent 40, from an EXACT stop
+#     (the 0x0047 (10448.0, 320.3) at 189.9401), is walked by three 0x0029 legs
+#     on retail's own cadence. The dialog at 202.6552 finds the model 75.2 u
+#     from the NPC and still 42.3 u short of its last leg's end: served ON THE
+#     WAY, not on arrival -- a DISTANCE rule. 20.0 ms after the 81 u crossing;
+#     a 144 u serve predicts it 0.24 s early.
+# So retail serves inside ~75-82 u: 75.2 is :59969's floor, and ~82 is what a
+# serve tick of <= 50 ms allows :56064. That is the follow disc. RECONSTRUCTION,
+# n = 2 exact starts (the design lane's eight dead-reckoned walks land at 53-82 u).
+#
+# THE SLACK, and why this is not "serve inside the disc" alone (the orchestrator
+# critic's ERROR against the spec): the disc is follow_stop_radius() + 1 = 81 u
+# and our walk stops at 80, so any leg end more than 1 u outside the disc -- the
+# router's clip-fallback stopping short of an off-mesh approach point, a client
+# stop report a few units off the modelled end, an NPC that stepped after the
+# walk was planned -- would strand the hold for good, because this tick has no
+# expiry. So a hold whose walk is OVER (`interact_walk_live` false: the model
+# arrived, the client reported, another order replaced it, or no walk went out
+# at all) is served anywhere inside INTERACT_RANGE -- the range the same press
+# would have been answered from at once. Retail's walk always ends at the disc,
+# so on its shape the two rules are one instant. A walk that ends beyond
+# INTERACT_RANGE keeps the hold, as it always did (retail's expiry is
+# unmeasured -- the spec's open question). Where no walk went out (no mesh, or
+# --no-interact-route) the hold is served at INTERACT_RANGE as before: OURS --
+# retail always walks.
+HELD_INTERACT_AT_DISC = True     # False (--held-interact-at-range): 144 u, the walk stops at 100
+# The disc's float slack (SEAM_TOL-sized): the integrator lands exactly on the
+# walk's end, 80.0 u, and this keeps that landing inside the disc.
+INTERACT_DISC_SLACK = 1.0
+
+
+def interact_stop():
+    """Where the routed interact-walk stops, centre to centre (RANGERPRE-S17):
+    the follow disc, or the old 100 u under --held-interact-at-range."""
+    return INTERACT_STOP if HELD_INTERACT_AT_DISC else INTERACT_STOP_AT_RANGE
+
+
+def interact_walk_live(state):
+    """Is the held interact's own walk still in flight? -> bool (RANGERPRE-S17)
+
+    The walk is `interact_route`'s, and its identity is the click-latch stamp
+    it set (`state["interact_walk"]`). It is live while the latch still carries
+    that stamp -- a c2s 0x003D / 0x0047 clears the latch, another click or
+    approach re-stamps it -- AND the router still has something for the body to
+    walk: a chain with legs left to grant, or a leg the integrator has not
+    finished (`dest`, which the integrator clears on arrival). Read-only; the
+    same cross-thread reads `_player_body_moving` makes."""
+    t0 = state.get("interact_walk")
+    if t0 is None or state.get("click_moving_at") != t0:
+        return False
+    return state.get("router_chain") is not None or bool(state.get("dest"))
 
 
 def _order_walk(send, state, conn_id, agent_id, spot):
@@ -632,13 +712,15 @@ def _order_walk(send, state, conn_id, agent_id, spot):
 
 
 def interact_approach_point(spot, pos, stop=None):
-    """The point INTERACT_STOP short of the NPC, on the player's side. -> (x, y)
+    """The point `interact_stop()` short of the NPC (INTERACT_STOP, the follow
+    disc; the old 100 u under --held-interact-at-range), on the player's side.
+    -> (x, y)
 
     A player already inside `stop` gets the NPC's own spot back -- there is
     nothing to walk -- and a player at exactly the NPC's position too, so the
     division below never sees zero.
     """
-    stop = INTERACT_STOP if stop is None else float(stop)
+    stop = interact_stop() if stop is None else float(stop)
     dx, dy = float(pos[0]) - float(spot[0]), float(pos[1]) - float(spot[1])
     gap = math.hypot(dx, dy)
     if gap <= stop:
@@ -668,7 +750,13 @@ def interact_route(send, state, conn_id, agent_id, spot):
     comment); this is OUR walk, on OUR mesh, and it says so. Returns False --
     hold only, no walk -- where the router has nothing to route over (no mesh,
     no position belief) or the arm is off.
+
+    RANGERPRE-S17: the walk's identity -- the click-latch stamp it sets -- is
+    recorded as `state["interact_walk"]`, and cleared on the no-walk returns,
+    so interact_pending_tick can tell a walk still in flight from one that is
+    over (`interact_walk_live`).
     """
+    state.pop("interact_walk", None)
     if not INTERACT_ROUTE or not ROUTER:
         return False
     pm, pos = state.get("pathmap"), state.get("pos")
@@ -687,12 +775,13 @@ def interact_route(send, state, conn_id, agent_id, spot):
     state["heading_hold"] = None
     prev = state.get("click_moving_at")
     state["click_moving_at"] = now
+    state["interact_walk"] = now
     _click_leg_arm(state, dest, now, silent=prev is not None)
     routed = router_answer_click(send, state, conn_id, None, dest, dest_plane,
                                  cur_plane, dest_plane, cur_plane)
     if routed:
         print(f"[c{conn_id}] INTERACT-WALK: routed the player to "
-              f"({dest[0]:.0f}, {dest[1]:.0f}), {INTERACT_STOP:.0f} u short of "
+              f"({dest[0]:.0f}, {dest[1]:.0f}), {interact_stop():.0f} u short of "
               f"agent {agent_id}, over our mesh (OURS; --no-interact-route "
               f"reverts to the hold alone)", flush=True)
     return bool(routed)
@@ -706,6 +795,13 @@ def interact_pending_tick(send, state, conn_id):
     duplicating its body -- that function is already the whole consequence of an
     interact and is identical whoever asks, which is the property its own
     docstring is about.
+
+    WHERE (RANGERPRE-S17, the evidence at HELD_INTERACT_AT_DISC): inside the
+    follow disc, follow_stop_radius() + INTERACT_DISC_SLACK (81 u), while our
+    walk is in flight -- retail's ~75-82 u; or anywhere inside INTERACT_RANGE
+    once that walk is over (arrived, reported, replaced, or never sent), so a
+    leg that ends outside the disc cannot strand the hold. Under
+    --held-interact-at-range: inside INTERACT_RANGE, walk or no walk.
     """
     pending = state.get("pending_interact")
     if not pending:
@@ -721,11 +817,27 @@ def interact_pending_tick(send, state, conn_id):
               f"the agent is gone", flush=True)
         return
     px, py = state["pos"]
-    if math.hypot(spot[0] - px, spot[1] - py) > INTERACT_RANGE:
+    gap = math.hypot(spot[0] - px, spot[1] - py)
+    if HELD_INTERACT_AT_DISC:
+        disc = follow_stop_radius() + INTERACT_DISC_SLACK
+        if gap <= disc:
+            why = f"inside the {disc:.0f} u follow disc"
+        elif gap <= INTERACT_RANGE and not interact_walk_live(state):
+            why = ("our walk is over" if state.get("interact_walk") is not None
+                   else "no walk went out")
+            why += f", inside INTERACT_RANGE ({INTERACT_RANGE:.0f} u)"
+        else:
+            return
+    elif gap > INTERACT_RANGE:
         return
+    else:
+        why = (f"inside INTERACT_RANGE ({INTERACT_RANGE:.0f} u), "
+               f"--held-interact-at-range")
     state.pop("pending_interact", None)
+    state.pop("interact_walk", None)
     print(f"[c{conn_id}] held INTERACT for agent {agent_id} ARRIVES -- "
-          f"answering it now", flush=True)
+          f"answering it now: the model stands {gap:.1f} u from it, {why} "
+          f"[RANGERPRE-S17]", flush=True)
     _handle_interact(send, state, conn_id, agent_id, interact_byte)
 
 
@@ -771,11 +883,16 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             how = ("routed over our mesh" if routed
                    else ("0x002A walk order (--interact-walk)" if INTERACT_WALK
                          else "NO walk -- the player walks over themselves"))
+            # RANGERPRE-S17: where the hold will be served -- the follow disc
+            # while our walk is in flight, INTERACT_RANGE otherwise.
+            _serve = (follow_stop_radius() + INTERACT_DISC_SLACK
+                      if HELD_INTERACT_AT_DISC and interact_walk_live(state)
+                      else INTERACT_RANGE)
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
                   f"HOLDING the interact; {how} "
-                  f"(~{max(0.0, gap - INTERACT_RANGE) / DEFAULT_RUN_SPEED:.1f} s "
-                  f"at run speed)", flush=True)
+                  f"(~{max(0.0, gap - _serve) / DEFAULT_RUN_SPEED:.1f} s "
+                  f"at run speed to the {_serve:.0f} u serve)", flush=True)
             return
     # Serving any interact cancels a held one: the player changed their mind,
     # and firing the stale one on arrival would open a window they no longer
@@ -45981,6 +46098,13 @@ def main():
         print("APPROACH: --no-approach-start-halt -- a ranged approach's first swing "
               "is [4] alone, no [8, me, 1] and no 0x0028 [me]: KNOWN-BAD against "
               "retail's 12 of 12 [RANGERPRE-S16 revert]", flush=True)
+    if a.held_interact_at_range:
+        global HELD_INTERACT_AT_DISC
+        HELD_INTERACT_AT_DISC = False
+        print("INTERACT: --held-interact-at-range -- a held interact is served "
+              "inside INTERACT_RANGE (144 u) and the routed walk stops 100 u "
+              "short: KNOWN-BAD against retail's 67.8 / 75.2 u "
+              "[RANGERPRE-S17 revert]", flush=True)
     if a.no_preparation_splash:
         global PREPARATION_SPLASH
         PREPARATION_SPLASH = False

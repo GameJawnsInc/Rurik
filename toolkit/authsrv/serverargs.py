@@ -2337,6 +2337,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "range. KNOWN-BAD: retail's start batch carries both on 12 "
                          "of 12 ranged approaches (20260929T150923 :55934 335.0923 "
                          "and four more; three older captures).")
+    ap.add_argument("--held-interact-at-range", action="store_true",
+                    help="RANGERPRE-S17 REVERT (ROUTE-B): a HELD interact is "
+                         "served as soon as the model is inside INTERACT_RANGE "
+                         "(144 u) and the routed interact-walk stops 100 u short, "
+                         "as every run before 2026-09-30 did -- instead of walking "
+                         "to the 80 u follow disc and serving inside 81 u (or "
+                         "inside 144 u once the walk is over). KNOWN-BAD: retail "
+                         "serves at 67.8 and 75.2 u on its two exact-start walks "
+                         "(20260929T150923 :56064 979.1046, :59969 202.6552), "
+                         "which a 144 u serve predicts 0.26 and 0.24 s early.")
     ap.add_argument("--no-scythe-extras", action="store_true",
                     help="WEAPONS-W3 REVERT: a scythe swing lands on its target only. "
                          "Retail's scythe hits up to two more bodies inside ~80 u of the "
