@@ -316,6 +316,37 @@ def hand_items(items, equipped_bag):
             at(items, equipped_bag, SLOT_OFFHAND) or 0)
 
 
+def hands_legal(lead, off, types, hands_of_type):
+    """None when (lead, off) is a pair of hands the dress can put back, else the
+    reason (RANGERPRE-S21, WEAPONREFUSE-B: restore's `hand_ok`). `types` is
+    {item id: wire type}, `hands_of_type` {wire type: "one" / "two" / "off" /
+    "npc"} (the server's WEAPON_TYPE_ROW rows, as plan_equip reads them).
+
+    RECONSTRUCTION -- the limits are this server's, not retail's: retail's one
+    witness restored a sword and a shield (20260929T150923, the three loads
+    after :56064's two equips), and every pair below is one no tape shows at a
+    load. Refused: an EMPTY lead (an unarmed player is not modelled at the
+    dress -- the in-session mirror's open edge); a lead that is not a one- or
+    two-handed weapon; an off hand that is not an off-hand item; an off hand
+    beside a two-handed lead (plan_equip refuses that pair in session too)."""
+    def _hands(iid):
+        t = (types or {}).get(int(iid))
+        return (hands_of_type or {}).get(int(t)) if t is not None else None
+    if not lead:
+        return "an EMPTY lead hand (an unarmed player is not modelled at the dress)"
+    lh = _hands(lead)
+    if lh not in ("one", "two"):
+        return (f"lead item {int(lead)} (wire type {(types or {}).get(int(lead))}) is "
+                f"not a one- or two-handed weapon")
+    if off:
+        if _hands(off) != "off":
+            return (f"off-hand item {int(off)} (wire type {(types or {}).get(int(off))}) "
+                    f"is not an off-hand item")
+        if lh == "two":
+            return f"an off hand ({int(off)}) beside a two-handed lead ({int(lead)})"
+    return None
+
+
 def _plans(visuals, visual_slot):
     """Does this batch plan the 0x006F into `visual_slot`? `visuals` is a bool
     (every slot or none) or a callable visual slot -> bool (the CLEANUP-3
@@ -579,7 +610,8 @@ def apply(items, changes):
     return moved
 
 
-def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None):
+def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None,
+            hand_ok=None):
     """The login layout: `defaults` {item: (bag, slot)} for this launch's
     items, `stored` the character's saved cells. Returns (decided, notes).
 
@@ -590,6 +622,22 @@ def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None):
     a restored hand change is an open edge, said in `notes`. A stored cell
     outside the declared bags, or two items on one cell, discards the WHOLE
     store for this login (the defaults stand) with the reason in `notes`.
+
+    `hand_ok` (RANGERPRE-S21, WEAPONREFUSE-B): None keeps the rule above byte
+    for byte -- the KNOWN-BAD arm, every dress before it. A callable
+    (lead, off) -> None or a reason (hands_legal, bound by the caller) makes
+    the stored HAND change a candidate instead: every stored cell that
+    differs from its default and touches a hand cell is collected, and they
+    are applied TOGETHER -- the hands are one unit -- when the trial layout
+    puts at most one item in each hand cell, `hand_ok` accepts the pair, and
+    no collected item lands outside the declared bags, in a non-hand
+    equipped cell, or on another decided cell. Otherwise NONE of them is
+    applied and every hand item keeps its default, with the reason in
+    `notes` -- the rest of the store still applies (a refused pair of hands
+    never discards the armour's cells). OBSERVED shape it serves: retail's
+    three loads after an in-field sword + shield equip dressed set 0 = [sword,
+    shield] with the bow at the sword's old backpack cell (20260929T150923
+    :53753, :53756, :59427).
 
     THE EQUIPPED BAG'S OTHER CELLS ARE DECIDED BY THE DRESS, NEVER BY A
     STORED CELL (the owner's confirmation pass, 2026-09-23): an armour piece
@@ -608,6 +656,7 @@ def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None):
     decided = dict(defaults)
     eq = int(equipped_bag)
     hand_cells = {(eq, SLOT_WEAPON), (eq, SLOT_OFFHAND)}
+    hand_moves = {}
     for iid, cell in (stored or {}).items():
         iid = int(iid)
         if iid not in defaults:
@@ -615,9 +664,12 @@ def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None):
         cell = (int(cell[0]), int(cell[1]))
         if keep_hands and (cell in hand_cells or tuple(defaults[iid]) in hand_cells):
             if cell != tuple(defaults[iid]):
-                notes.append(f"item {iid}: stored at bag {cell[0]} slot {cell[1]}, "
-                             f"default {defaults[iid]} -- a HAND cell, not restored "
-                             f"(the weapon sets own slots 0/1; open edge)")
+                if hand_ok is not None:
+                    hand_moves[iid] = cell          # RANGERPRE-S21: decided below, as one unit
+                else:
+                    notes.append(f"item {iid}: stored at bag {cell[0]} slot {cell[1]}, "
+                                 f"default {defaults[iid]} -- a HAND cell, not restored "
+                                 f"(the weapon sets own slots 0/1; open edge)")
             continue
         if cell[0] == eq and cell != tuple(defaults[iid]):
             notes.append(f"item {iid}: stored at equipped slot {cell[1]}, but its "
@@ -629,6 +681,9 @@ def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None):
                 stale.append((iid, cell))
             continue
         decided[iid] = cell
+    if hand_moves:
+        decided, why_note = _restore_hands(decided, hand_moves, bags, eq, hand_cells, hand_ok)
+        notes.append(why_note)
     for iid, (bag, slot) in decided.items():
         if bag not in bags or not 0 <= slot < int(bags[bag]):
             notes.append(f"item {iid}: bag {bag} slot {slot} is not a cell of this "
@@ -642,3 +697,44 @@ def restore(defaults, stored, bags, equipped_bag, keep_hands=True, stale=None):
             return dict(defaults), notes
         seen[cell] = iid
     return decided, notes
+
+
+def _restore_hands(decided, hand_moves, bags, eq, hand_cells, hand_ok):
+    """restore's hand step (RANGERPRE-S21): (layout, note). The collected hand
+    moves go in together or not at all; `decided` comes back untouched on a
+    refusal, so the hand items keep their defaults and nothing else moves."""
+    trial = dict(decided)
+    trial.update(hand_moves)
+    on = {c: sorted(i for i, cell in trial.items() if cell == c) for c in hand_cells}
+    lead = (on[(eq, SLOT_WEAPON)] or [0])[0]
+    off = (on[(eq, SLOT_OFFHAND)] or [0])[0]
+    why = None
+    for iid, (bag, slot) in sorted(hand_moves.items()):
+        if bag not in bags or not 0 <= slot < int(bags[bag]):
+            why = f"item {iid}'s stored cell bag {bag} slot {slot} is not a cell of this launch"
+            break
+        if bag == eq and (bag, slot) not in hand_cells:
+            why = (f"item {iid}'s stored cell is equipped slot {slot}, which is not a hand "
+                   f"(a hand item in another piece's cell)")
+            break
+    if why is None:
+        crowded = {c: ids for c, ids in on.items() if len(ids) > 1}
+        if crowded:
+            c, ids = sorted(crowded.items())[0]
+            why = f"equipped slot {c[1]} would hold items {ids} at once"
+    if why is None:
+        why = hand_ok(lead, off)
+    if why is None:
+        for iid, cell in sorted(hand_moves.items()):
+            if cell in hand_cells:
+                continue
+            clash = sorted(j for j, cj in trial.items() if j != iid and cj == cell)
+            if clash:
+                why = (f"item {iid}'s stored cell bag {cell[0]} slot {cell[1]} is item "
+                       f"{clash[0]}'s too")
+                break
+    if why is None:
+        return trial, (f"the stored HANDS restored: lead {lead}, off {off} (items "
+                       f"{sorted(hand_moves)} at their stored cells; RANGERPRE-S21)")
+    return decided, (f"the stored hands (lead {lead}, off {off}) NOT restored: {why}; "
+                     f"every hand item keeps its default (RANGERPRE-S21)")

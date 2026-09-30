@@ -6,6 +6,26 @@ docstring for the tapes).
 
     python toolkit/authsrv/test_itemmoves.py
 
+  * THE HANDS PERSIST (RANGERPRE-S21, WEAPONREFUSE-B, 2026-09-29; --hand-restore,
+    DEFAULT OFF until a loopback run): §3b itemstore.hands_legal's limits and
+    restore's `hand_ok` -- retail's swap stored is restored as ONE unit; a
+    doubly occupied hand, the shield beside the two-handed bow, an EMPTY lead,
+    a hand move onto another stored item's cell, into a non-hand equipped cell
+    or outside its bag each revert ONLY the hands (the head's stored cell still
+    applies); hand_ok=None is the old rule byte for byte (KNOWN-BAD). §7 the
+    server: set 0 = the bow, set 1 = sword + shield, --persist; the two equips
+    are retail's two shapes; the next dress with the arm OFF is the bow again
+    (KNOWN-BAD, the default), with it ON item 1 is still CREATED as the bow
+    (ENG-B4) and item_hands_at_dress leaves hands (11, 12), 0x0147 set 0 =
+    (11, 12), the bow at the sword's old cell, 0x006E [11, 12], the swing model
+    the sword + shield -- load 3 identical; the bow re-equipped persists and the
+    call is then a no-op; an EMPTY stored lead reverts the hands and keeps the
+    head's cell; no store without --persist. Locks: the hand_ok gate, the ONE
+    call between the creates and the 0x0148/0x0147 rows, the function's gate,
+    main()'s wiring (mutation reddens). §7b (vault-gated) retail from
+    20260929T150923: :56064's load held the bow and equipped [697] then [696];
+    :53753, :53756, :59427 each dressed set 0 = [sword, shield] with the bow at
+    the backpack's slot 1.
   * §1c RETAIL'S BAG ORDER FROM EVERY TAPE (vault-gated): livewire.decode_conn
     over every live game connection; each armour wire type's equipped-bag slot
     from the load's 0x013E/0x014B rows into the type-2 bag (items typed by
@@ -114,7 +134,7 @@ import charstore                                             # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=160)   # 2026-09-24 (CLEANUP-3, the town armour: +1, the KNOWN-BAD arm beside the re-cut town check), from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass -> 160); §1b's 17 and §1c's 8 ride the vault (185 vaulted)
+led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=183)   # 2026-09-29 (RANGERPRE-S21, the hands persist: +23 bare -- §3b 9, §7 9, its locks 5), from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass -> 160 at CLEANUP-3 -> 183); §1b's 17, §1c's 8 and §7b's 3 ride the vault (211 vaulted)
 
 CHG, SWAP, VIS = 0x014B, 0x0152, 0x006F
 MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
@@ -489,12 +509,72 @@ led.ok(dec == defaults and notes and "both stored" in notes[0],
 dec, notes = itemstore.restore(defaults, {}, bags5, 1)
 led.ok(dec == defaults and notes == [], "an empty store leaves the defaults")
 
+# §3b THE STORED HANDS AS ONE UNIT (RANGERPRE-S21, WEAPONREFUSE-B): restore's
+# hand_ok. Our ids for retail's shape (20260929T150923 :56064 -> :53753/:53756/
+# :59427): set 0's bow is item 1, set 1's sword 11 and shield 12; the head 7.
+TYPES8 = {1: 5, 11: 27, 12: 24, 7: 16, 13: 15, 14: 27}
+
+
+def HL(lead, off):
+    return itemstore.hands_legal(lead, off, TYPES8, HANDS)
+
+
+led.ok(HL(11, 12) is None and HL(11, 0) is None and HL(1, 0) is None
+       and "EMPTY lead" in (HL(0, 12) or "") and "EMPTY lead" in (HL(0, 0) or "")
+       and "two-handed lead" in (HL(1, 12) or "")
+       and "not a one- or two-handed weapon" in (HL(7, 0) or "")
+       and "not an off-hand item" in (HL(11, 14) or ""),
+       "hands_legal: sword + shield, a sword alone and the bow alone pass; an EMPTY lead, the "
+       "shield beside the two-handed bow, the head as a lead and a second sword as the off hand "
+       "are refused, each with its reason (RECONSTRUCTION: this server's limits)",
+       f"{[HL(0, 12), HL(1, 12), HL(7, 0), HL(11, 14)]}")
+defaults8 = {1: (1, 0), 11: (2, 0), 12: (2, 1), 7: (1, 4)}
+dec, notes = itemstore.restore(defaults8, {1: (2, 0), 11: (1, 0), 12: (1, 1)}, bags5, 1,
+                               hand_ok=HL)
+led.ok(dec == {1: (2, 0), 11: (1, 0), 12: (1, 1), 7: (1, 4)} and len(notes) == 1
+       and "HANDS restored: lead 11, off 12" in notes[0],
+       "hand_ok: retail's swap stored (the sword into the bow's hand, the bow at the sword's old "
+       "cell, the shield into the empty off hand) is RESTORED as one unit, with one note",
+       f"{dec} {notes}")
+dec, notes = itemstore.restore(defaults8, {1: (2, 0), 11: (1, 0), 12: (1, 1)}, bags5, 1)
+led.ok(dec == defaults8 and len(notes) == 3 and all("a HAND cell, not restored" in n for n in notes),
+       "KNOWN-BAD ARM (hand_ok=None, every dress before today): the same store keeps all three at "
+       "their defaults, a note each -- byte for byte the old rule", f"{dec} {notes}")
+dec, notes = itemstore.restore(defaults8, {11: (1, 0), 7: (2, 5)}, bags5, 1, hand_ok=HL)
+led.ok(dec == {1: (1, 0), 11: (2, 0), 12: (2, 1), 7: (2, 5)} and len(notes) == 1
+       and "NOT restored" in notes[0] and "would hold items [1, 11]" in notes[0],
+       "a DOUBLY OCCUPIED hand (the sword stored in hand, the bow's row absent) reverts ONLY the "
+       "hands -- the head's stored backpack cell in the same store is still applied, never the "
+       "whole store", f"{dec} {notes}")
+dec, notes = itemstore.restore(defaults8, {12: (1, 1)}, bags5, 1, hand_ok=HL)
+led.ok(dec == defaults8 and notes and "two-handed lead" in notes[0],
+       "the shield stored beside the two-handed bow is refused by hands_legal; the defaults stand",
+       f"{notes}")
+dec, notes = itemstore.restore(defaults8, {1: (2, 4)}, bags5, 1, hand_ok=HL)
+led.ok(dec == defaults8 and notes and "EMPTY lead" in notes[0],
+       "the bow stored in the backpack with nothing in its place (an EMPTY lead) is refused -- "
+       "an unarmed player is not modelled at the dress", f"{notes}")
+dec, notes = itemstore.restore(defaults8, {1: (2, 5), 11: (1, 0), 7: (2, 5)}, bags5, 1, hand_ok=HL)
+led.ok(dec == {1: (1, 0), 11: (2, 0), 12: (2, 1), 7: (2, 5)} and notes
+       and "is item 7's too" in notes[0],
+       "a hand move whose backpack cell another stored item holds (the bow and the head both at "
+       "backpack 5) reverts the HANDS and keeps the head's cell -- not the whole store",
+       f"{dec} {notes}")
+dec, notes = itemstore.restore(defaults8, {1: (1, 3), 11: (1, 0)}, bags5, 1, hand_ok=HL)
+led.ok(dec == defaults8 and notes and "not a hand" in notes[0],
+       "a hand item stored in a NON-hand equipped cell (the bow in the legs' slot 3) is refused",
+       f"{notes}")
+dec, notes = itemstore.restore(defaults8, {1: (2, 99), 11: (1, 0)}, bags5, 1, hand_ok=HL)
+led.ok(dec == defaults8 and notes and "not a cell of this launch" in notes[0] and len(notes) == 1,
+       "a hand item stored outside its bag is refused as a hand change (the rest of the store is "
+       "not discarded for it)", f"{notes}")
+
 # ---- §4 the server -----------------------------------------------------------------------
 _saved = {k: getattr(authsrv, k) for k in
           ("PERSIST", "ITEM_MOVES_ENABLED", "EXPLORABLE", "OUTPOST", "EQUIP_WEAPON",
            "EQUIP_ARMOUR", "EQUIP_COSTUME", "EQUIP_COSTUME_HEAD", "WEAPON_SETS",
            "PLAYER_SWING_DAMAGE", "WEAPON_ATTACK_SPEED", "ATTACK_INTERVAL",
-           "EQUIPPED_VISUAL_ORDER", "ITEM_MOVE_BY_ID_ENABLED")}
+           "EQUIPPED_VISUAL_ORDER", "ITEM_MOVE_BY_ID_ENABLED", "HAND_RESTORE")}
 _saved_off = authsrv.agents.PLAYER_OFFHAND
 _saved_wpn = authsrv.agents.PLAYER_WEAPON
 _saved_slots = dict(authsrv.WEAPON_SET_BACKPACK_SLOTS)
@@ -1181,6 +1261,128 @@ try:
     authsrv._assign_backpack_slots()
     authsrv.SET_ITEMS_OVERRIDE.clear()
 
+    # ---- §7 THE HANDS PERSIST (RANGERPRE-S21, WEAPONREFUSE-B; --hand-restore) -------------
+    # Retail, 20260929T150923 (§7b pins it from the vault): :56064's load held the
+    # bow (set 0 = [2, 0, 698, 0]); c2s 0x0030 [697] was answered by 0x0152 [2, 698,
+    # 697] + 0x006F [9, 0, 697] and [696] by 0x014B [2, 696, 5, 1] + 0x006F [9, 1,
+    # 696]; the next three loads dressed set 0 = [sword, shield] with the bow at the
+    # sword's old backpack cell. Ours, the same shape: set 0 = the bow (item 1), set
+    # 1 = sword + shield (11, 12), a field, --persist, a temporary store.
+    UUID7 = "77777777777777777777777777777777"
+    P = authsrv.PLAYER_AGENT_ID
+    authsrv.PERSIST, authsrv.ITEM_MOVES_ENABLED = True, True
+    authsrv.EXPLORABLE, authsrv.OUTPOST = True, False
+    authsrv.WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
+    authsrv.SET_ITEMS_OVERRIDE.clear()
+    authsrv.agents.PLAYER_OFFHAND = None
+    authsrv.apply_party_character({"player_weapon": "starter_bow"})
+    authsrv.configure_weapon_sets(["1=starter_sword+starter_shield"])
+    store7 = charstore.Store.open("hands@rurik.invalid", base=base)
+    store7.ensure_character(UUID7, "Hands", "ee" * 37)
+
+    def dress7(map_id=146):
+        """One load's item half, in the dress's own order: the layout, the creates
+        (they read agents.PLAYER_WEAPON / PLAYER_OFFHAND -- set 0's RECORD), the
+        other sets' placements, then item_hands_at_dress before the 0x0147 rows."""
+        s = {"agents": {}, "char_uuid": UUID7, "map_id": map_id,
+             "charstore_game": charstore.Store.open("hands@rurik.invalid", base=base)}
+        it = authsrv.item_layout_begin(s, 0)
+        created = ((authsrv.agents.PLAYER_WEAPON or {}).get("item_type"),
+                   authsrv.agents.PLAYER_OFFHAND is not None)
+        snt, snd = fake_send_factory()
+        authsrv.declare_weapon_sets(snd, s)
+        ret = authsrv.item_hands_at_dress(s, 0)
+        placed = {v[1]: v[2:] for op, v in snt if op == authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION}
+        return s, it, created, placed, ret
+
+    st7 = {"agents": {}, "char_uuid": UUID7, "map_id": 160, "charstore_game": store7}
+    authsrv.item_layout_begin(st7, 0)
+    authsrv.player_pools(st7)
+    home7 = authsrv.WEAPON_SET_BACKPACK_SLOTS[11]
+    e1, s_e1 = fake_send_factory()
+    authsrv.handle_equip_item([EQUIP, 11], s_e1, st7, 0)
+    e2, s_e2 = fake_send_factory()
+    authsrv.handle_equip_item([EQUIP, 12], s_e2, st7, 0)
+    stored7 = charstore.Store.open("hands@rurik.invalid", base=base).item_locations(UUID7)
+    led.ok(e1 == [(SWAP, [1, W, 11]), (VIS, [P, 0, 11])] and e2 == [(CHG, [1, 12, EQ, 1]), (VIS, [P, 1, 12])]
+           and stored7 == {W: (BP, home7), 11: (EQ, 0), 12: (EQ, 1)},
+           "the session's two equips are retail's two shapes with our ids (0x0152 [1, bow, sword] + "
+           "0x006F [player, 0, sword]; 0x014B [1, shield, 1, 1] + 0x006F [player, 1, shield]) and the "
+           "store holds the bow at the sword's old cell, the sword and shield in the hands",
+           f"{e1} {e2} {stored7}")
+    # KNOWN-BAD ARM FIRST (the store is unchanged by a dress): --hand-restore off
+    authsrv.HAND_RESTORE = False
+    s7k, it7k, created7k, placed7k, ret7k = dress7()
+    led.ok(itemstore.hand_items(it7k, EQ) == (W, 0) and authsrv.weapon_set_items(0) == (W, 0)
+           and ret7k is None and authsrv.agents.PLAYER_WEAPON.get("item_type") == 5
+           and authsrv.player_worn_array(s7k)[:2] == [W, 0],
+           "KNOWN-BAD ARM (the default, every dress before today): the next load is the bow again -- "
+           "hands (1, 0), 0x0147 set 0 = (1, 0), 0x006E [bow, 0] -- where retail's three loads named "
+           "the sword and the shield", f"hands {itemstore.hand_items(it7k, EQ)} set0 {authsrv.weapon_set_items(0)}")
+    authsrv.HAND_RESTORE = True
+    s72, it72, created72, placed72, ret72 = dress7()
+    led.ok(created72 == (5, False),
+           "--hand-restore, load 2: item 1 is still CREATED from set 0's record, the bow (type 5), and "
+           "no off hand is created -- the swing model is re-applied from the record before the creates "
+           "(ENG-B4: moving the mirror into item_layout_begin would create item 1 as a sword)",
+           f"{created72}")
+    cells72 = [(r["bag"], r["slot"]) for r in it72.values()]
+    led.ok(ret72 == (11, 12) and itemstore.hand_items(it72, EQ) == (11, 12)
+           and authsrv.weapon_set_items(0) == (11, 12) and authsrv.weapon_set_items(1) == (11, 12)
+           and (it72[W]["bag"], it72[W]["slot"]) == (BP, home7)
+           and placed72.get(11) == [EQ, 0] and placed72.get(12) == [EQ, 1]
+           and len(cells72) == len(set(cells72)),
+           "--hand-restore, load 2: the hands are (11, 12), the 0x0147 row for set 0 names them (and set "
+           "1's own row too -- the UNVERIFIED two-sets exposure), the bow sits at the sword's old cell "
+           "(retail's bow at (4, 1)), declare_weapon_sets places 11 and 12 into equipped 0 and 1, and "
+           "every item has a cell of its own",
+           f"ret {ret72} sets {[authsrv.weapon_set_items(k) for k in range(4)]} bow {it72[W]} placed {placed72}")
+    led.ok(authsrv.player_worn_array(s72)[:2] == [11, 12]
+           and authsrv.agents.PLAYER_WEAPON.get("item_type") == 27
+           and (authsrv.agents.PLAYER_OFFHAND or {}).get("item_type") == 24
+           and authsrv.WEAPON_SETS[0] == {"lead": "starter_bow", "off": None},
+           "...the load's 0x006E carries [sword, shield], the swing model is the sword's with the "
+           "shield (retail's later loads: 0x006E [31, 527, 528], [9, 696, 697]), and the LAUNCH record "
+           "is still the bow (ENG-B4)", f"worn {authsrv.player_worn_array(s72)[:2]} rec {authsrv.WEAPON_SETS[0]}")
+    s73, it73, created73, placed73, ret73 = dress7()
+    led.ok(created73 == (5, False) and ret73 == (11, 12) and itemstore.hand_items(it73, EQ) == (11, 12)
+           and authsrv.weapon_set_items(0) == (11, 12) and (it73[W]["bag"], it73[W]["slot"]) == (BP, home7),
+           "load 3 is identical (retail: three loads, the same hands)", f"{created73} {ret73}")
+    authsrv.player_pools(s73)
+    e3, s_e3 = fake_send_factory()
+    authsrv.handle_equip_item([EQUIP, W], s_e3, s73, 0)                 # the two-handed bow back
+    s74, it74, created74, placed74, ret74 = dress7()
+    _shield_to = e3[0][1][3] if e3 and len(e3[0][1]) == 4 else None
+    led.ok(e3 == [(CHG, [1, 12, BP, _shield_to]), (VIS, [P, 1, 0]), (SWAP, [1, 11, W]), (VIS, [P, 0, W])]
+           and ret74 is None and itemstore.hand_items(it74, EQ) == (W, 0)
+           and authsrv.weapon_set_items(0) == (W, 0) and authsrv.SET_ITEMS_OVERRIDE == {}
+           and authsrv.agents.PLAYER_WEAPON.get("item_type") == 5,
+           "the bow re-equipped in load 3's session (the shield leaves first, then the swap) persists "
+           "too: load 4's hands are the RECORD's (1, 0) and item_hands_at_dress is a no-op (returns None, "
+           "the override map stays empty -- a dress with no hand change is byte-identical)",
+           f"{e3} ret {ret74} hands {itemstore.hand_items(it74, EQ)}")
+    charstore.Store.open("hands@rurik.invalid", base=base).set_item_location(UUID7, W, BP, 9)
+    charstore.Store.open("hands@rurik.invalid", base=base).set_item_location(UUID7, 7, BP, 8)
+    s75, it75, created75, placed75, ret75 = dress7()
+    led.ok(ret75 is None and itemstore.hand_items(it75, EQ) == (W, 0)
+           and (it75[7]["bag"], it75[7]["slot"]) == (BP, 8),
+           "a store forced to an EMPTY lead (the bow at backpack 9, nothing in hand) reverts the HANDS to "
+           "the record's with a note, while the head's stored backpack cell 8 still applies",
+           f"hands {itemstore.hand_items(it75, EQ)} head {it75[7]}")
+    authsrv.PERSIST = False
+    charstore.Store.open("hands@rurik.invalid", base=base).set_item_location(UUID7, W, BP, home7)
+    charstore.Store.open("hands@rurik.invalid", base=base).set_item_location(UUID7, 11, EQ, 0)
+    s76, it76, created76, placed76, ret76 = dress7()
+    led.ok(ret76 is None and itemstore.hand_items(it76, EQ) == (W, 0),
+           "CONTROL: --hand-restore without --persist reads no store -- the constants' hands (the "
+           "repo's rule: no item cell survives a load without --persist)")
+    authsrv.HAND_RESTORE = False
+    authsrv.WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
+    authsrv._assign_backpack_slots()
+    authsrv.SET_ITEMS_OVERRIDE.clear()
+    authsrv.agents.PLAYER_OFFHAND = None
+    authsrv.apply_party_character({"player_weapon": "starter_hammer"})
+
     # ---- §5 source locks ---------------------------------------------------------------------
     with open(os.path.join(HERE, "authsrv.py"), encoding="utf-8") as f:
         SRC = f.read()
@@ -1363,6 +1565,111 @@ try:
            and 'held = state.get("backpack")' in imc and '== "bought"' in imc,
            "LOCK: the merchant wrapper hands the purchase the store's `place` and the reserved cells, "
            "and the commit re-keys the merchant's map and never persists a bought item's cell (ENG-2)")
+    # §7's locks (RANGERPRE-S21, WEAPONREFUSE-B)
+    led.ok("hand_ok=(_hands_legal_for(defaults)" in ilb and "if HAND_RESTORE else None)" in ilb
+           and "item_hands_at_dress" not in _calls(_func(TREE, "item_layout_begin"))
+           and "_item_hands_mirror" not in _calls(_func(TREE, "item_layout_begin")),
+           "LOCK: item_layout_begin hands restore the hand_ok only under HAND_RESTORE, and never mirrors "
+           "the hands itself (the creates after it read set 0's record -- ENG-B4)")
+    i_off = handle_src.find('"CREATE_NAMED_ITEM(the player\'s offhand)"')
+    i_dws = handle_src.find("declare_weapon_sets(send, state)")
+    i_hands = handle_src.find("item_hands_at_dress(state, conn_id)")
+    i_active = handle_src.find('"SET_ACTIVE_WEAPON_SET"')
+    i_rows = handle_src.find('f"WEAPON_SET[{slot}]"')
+    led.ok(handle_src.count("item_hands_at_dress(") == 1 and 0 < i_off < i_dws < i_hands < i_active < i_rows,
+           "LOCK: the dress calls item_hands_at_dress ONCE, after the weapon's and the off hand's creates "
+           "and declare_weapon_sets, before the 0x0148 and the 0x0147 rows",
+           f"off {i_off} dws {i_dws} hands {i_hands} active {i_active} rows {i_rows}")
+    ihd = ast.get_source_segment(SRC, _func(TREE, "item_hands_at_dress"))
+    led.ok('if not (HAND_RESTORE and EQUIP_WEAPON and state.get("items")):' in ihd
+           and "_item_hands_mirror" in _calls(_func(TREE, "item_hands_at_dress"))
+           and "before = weapon_set_items(0)" in ihd,
+           "LOCK: item_hands_at_dress is gated on HAND_RESTORE and mirrors the hands against set 0's "
+           "items -- the in-session door, so the launch records stand")
+    led.ok(main_wires("hand_restore", "HAND_RESTORE", True) and _saved["HAND_RESTORE"] is False
+           and '"--hand-restore"' in ARGS,
+           "LOCK: main() wires --hand-restore -> HAND_RESTORE = True, the module default is OFF (until "
+           "the loopback run), and serverargs defines the flag")
+    main_fn_saved = main_fn
+    main_fn = _func(ast.parse(SRC.replace("        HAND_RESTORE = True\n", "        HAND_RESTORE = False\n", 1)),
+                    "main")
+    led.ok(not main_wires("hand_restore", "HAND_RESTORE", True),
+           "KNOWN-BAD: a main() whose --hand-restore sets nothing fails the lock")
+    main_fn = main_fn_saved
+
+    # ---- §7b retail's hands across the loads (vault-gated) -------------------------------------
+    TAPE7 = "20260929T150923"
+    import vaultpath                                                  # noqa: E402
+    try:
+        vaultpath.require_dir("captures", "live", why="the hands-persist witness")
+        live7 = True
+    except (Exception, SystemExit) as exc:                            # noqa: BLE001
+        led.skip("§7b retail's hands across the loads", f"no live captures: {exc} -- 3 checks")
+        live7 = False
+    if live7:
+        import livewire                                               # noqa: E402
+        import weaponcensus                                           # noqa: E402
+        cap7 = vaultpath.vault_path("captures", "live", TAPE7)
+        files7 = livewire.connections(cap7) if os.path.isdir(cap7) else []
+
+        def load7(port):
+            """(set rows, active, hands {slot: type}, the bow's cell as (bag type, slot),
+            c2s 0x0030 items, own 0x006E hands) of one connection's load."""
+            g = [f for f in files7 if f"_{port}-" in f]
+            if len(g) != 1:
+                return None
+            _c, merged, ok = livewire.decode_conn(cap7, g[0])
+            if not ok:
+                return None
+            s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
+            items = weaponcensus.items_of(s2c)
+            bag_type = {v[4]: v[2] for _t, op, v in s2c if op == 0x013F}
+            eq_id = next((b for b, ty in bag_type.items() if ty == 2), None)
+            t147 = min((t for t, op, _v in s2c if op == 0x0147), default=None)
+            cells = {}
+            for t, op, v in s2c:
+                if t147 is not None and t <= t147 and op in (0x013E, 0x014B):
+                    cells[v[2]] = (v[3], v[4])
+            sets = [v[2:] for t, op, v in s2c if op == 0x0147 and t == t147]
+            active = [v[2:] for t, op, v in s2c if op == 0x0148 and t == t147]
+            hands = {c[1]: weaponcensus.held_type(items, i) for i, c in cells.items()
+                     if c[0] == eq_id and c[1] in (0, 1)}
+            bows = [(bag_type.get(c[0]), c[1]) for i, c in cells.items()
+                    if c[0] != eq_id and weaponcensus.held_type(items, i) == 5]
+            sword0 = [(bag_type.get(c[0]), c[1]) for i, c in cells.items()
+                      if c[0] != eq_id and weaponcensus.held_type(items, i) == 27]
+            c2s = [v[1] for t, d, op, v in merged if d == "c2s" and op == 0x0030]
+            return {"sets": sets, "active": active, "hands": hands, "bows": bows,
+                    "swords_bagged": sword0, "equips": c2s, "items": items}
+
+        L = {p: load7(p) for p in (56064, 53753, 53756, 59427)}
+        ok7 = all(L.values()) and len(files7) == 11
+        led.ok(ok7, f"the live root is present, so {TAPE7} must be in it with its 11 game connections "
+               f"and the four this pins decoding closed (a FAIL, never a skip)",
+               f"{len(files7)} files, {[p for p, x in L.items() if not x]} missing")
+        if ok7:
+            a = L[56064]
+            t_items = a["items"]
+            led.ok(a["hands"] == {0: 5} and len(a["sets"]) == 4 and a["sets"][0][0] == 0
+                   and a["sets"][0][2] == 0 and t_items[a["sets"][0][1]]["type"] == 5
+                   and a["active"] == [[0]]
+                   and a["equips"] == [697, 696] and (1, 1) in a["swords_bagged"],
+                   "OBSERVED :56064 (map 160, a field): the load held the BOW alone (set 0 = [0, bow, 0], "
+                   "0x0148 set 0), the sword sat at the backpack's slot 1, and the session's only equips "
+                   "were c2s 0x0030 [697] (the sword) then [696] (the shield)",
+                   f"hands {a['hands']} sets {a['sets'][:1]} equips {a['equips']} swords {a['swords_bagged']}")
+            later = [L[p] for p in (53753, 53756, 59427)]
+            led.ok(all(x["hands"] == {0: 27, 1: 24} and x["active"] == [[0]]
+                       and x["sets"][0][0] == 0 and x["items"][x["sets"][0][1]]["type"] == 27
+                       and x["items"][x["sets"][0][2]]["type"] == 24
+                       and all(r[1:] == [0, 0] for r in x["sets"][1:]) and len(x["sets"]) == 4
+                       and x["bows"] == [(1, 1)] and x["equips"] == []
+                       for x in later),
+                   "OBSERVED: each of the next three loads (:53753, :53756, :59427 -- two fields and an "
+                   "outpost) dressed set 0 = [sword, shield] into the hands, sets 1-3 empty, 0x0148 set 0, "
+                   "and the bow at the backpack's slot 1 -- the sword's old cell -- with no equip of its own: "
+                   "the ACTIVE set's record took the equipped items (what --hand-restore reproduces)",
+                   f"{[(x['hands'], x['sets'][:1], x['bows']) for x in later]}")
 finally:
     for k, v in _saved.items():
         setattr(authsrv, k, v)
