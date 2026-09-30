@@ -28,6 +28,85 @@ move back.
 
 ---
 
+### HEROINV -- 2026-09-30 -- **the missing backpack under `--party`: the heroes' container went out as `0x0144 [2, 0]`, and a 0 in field 2 makes it the PLAYER's inventory; its bag must not reuse a player bag's id**
+
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35. Under `--party slice` the
+client drew grey silhouettes and no Backpack grid (harness `20260930T110231`,
+`…110001`, `…104548`), while the server granted items into backpack slots nobody could
+see. The one load difference was `--hero-bags`'s pair (§26.3, 2026-08-18): `0x0144
+[2, 0]` + the hero's `0x013F` between the player's `0x0144 [1, 0]` and its bags.
+
+- **OBSERVED (tape, 4 of 4):** retail's hero container is `0x0144 [H, 1]`, sent in the
+  batch AFTER the items reply. The order is the hero's `0x0073`, then `0x0144 [H, 1]`,
+  then its own `0x013F [H, 2, 21, _, 9, 0]`, then the hero agent's block, then `0x0072`
+  naming H (`20260914T005758` ×3, `20260916T150306` :62321). An owned hero that is not in
+  the party gets no container (:56865, :50807, 2 of 2).
+- **OBSERVED (static, 38797):** the insert `0x84A060` writes the new container to
+  `[itemctx+0xF8]`, the local inventory, when field 2 is 0 and only then, and the last
+  one wins. Five of `0x845890`'s 17 callers sit in `VnPlayerInventory`. Our `[2, 0]` made
+  the hero's one-bag container the player's.
+- **Shipped:** `HERO_INV_RETAIL`, on by default. The pair is `[key, 1]`, sent after the
+  first party hero's `0x0073` (the legacy rig puts it at the head of the roster sequence).
+  With no party hero at load, nothing is declared and the key is marked absent, so the
+  ADD declares it. `--hero-inv-legacy` is the known-bad arm.
+- **The first cut's loopback run (`20260930T120612`, `6194a5ba`) drew the Backpack grid
+  and an EMPTY doll** (§35.4). OBSERVED (static): `0x013F` keeps ONE bag array per
+  connection (`[globals+0x40]+0x24`), and a repeated bag id evicts the earlier bag
+  (`0x848fb0`, `ItCliBag:167`). The hero's bag had always reused id 1. Sent first, it was
+  the one evicted, which nobody noticed. Sent after the player's, it evicted the player's
+  equipped bag. The "ids are per-inventory" readings in `authsrv.py` and
+  `studies/smsg` are corrected. The fix is `HERO_EQUIPPED_BAG_ID`, one past `PLAYER_BAGS`
+  (10), like retail's unique ids (4 of 4).
+- `test_heroinvorder.py` is new: 27 checks. With the default flipped, 11 go red; with the
+  bag back on id 1, 2 go red. `test_heroadd` §5's re-declared pair is now `[2, 1]` plus
+  the hero's own bag id.
+- **CONFIRMED on the client** (harness `20260930T122945`, `0f6e1f91`): under `--party slice`
+  the Backpack grid is open and the doll wears its gear. Nothing about this is left open.
+  The field-2-alone separating arm in §35.3 is optional and unbuilt.
+
+### RANGERPRE's corpus reds -- 2026-09-30 -- **three tests red on `main` from the Reforged pre-Searing tape; each classified per connection; all three were the tests, and two carried findings**
+
+The live capture `20260929T150923` (RANGERPRE, [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md))
+turned five checks in three files red on `main` at `e18d67f3`. Each was scanned per tape and per
+connection with and without that stamp before any check was touched; every moved number traces to
+that one tape, and nothing before it moved.
+
+- **`test_adrenwire` §12, the split (70/56 against 69/57): a SCANNER DEFECT, fixed in `adrenjoin.scan()`.**
+  The check was right. `:56064` (map 160) arms a dark `[394, 446]` with three `0x00D9` slot writes
+  (382, 384, 1) and no `0x00DA` after them; `by_connection` applied the writes, `scan()` read `0x00DA`
+  alone. `scan()` now reads both. The check is unchanged, and no damage row moved (0 hits, 0 damage there).
+- **`test_adrenwire` §12, THE TRANSITION: FAILED AS WRITTEN, re-scoped.** These are the corpus's first
+  mid-connection flips, three on two connections: `:56064` dark → armed at 14.33 s, and `:53756`
+  armed → dark → armed inside one batch at 193.41 s, where the secondary grant clears slots 2–4, sends
+  `0x00B7 [2, 1]` and refills them. Neither flip is fought across. So the fighting the gate's caveat
+  needs, a hit on the side opposite the one the bar opened on, is still UNOBSERVED. The check now pins
+  0 flips as of the tape, pins the tape's flips exactly, and holds that, corpus-wide, nothing is fought
+  on a flipped side. `by_connection` carries `opens` and damage per side.
+- **`test_npcdefs` §8, map 146: a SIZE PIN plus one FAILED AS WRITTEN.** The tape reaches map 146 in
+  four more connections and creates 15 hostile definitions there: all 13 pinned, plus 1434 and 1438.
+  "1434 is not created on any September map-146 tape" is refuted: the tape creates 1434 six times,
+  byte-identical to its July declaration, with max health 8. That is RANGERPRE-F1's "Recovered", and
+  `PLAN.md` §3.2's R4c-2 line now says so. Both checks are exact as of the pin, exact on the tape, and
+  a signature over the whole pool.
+- **`test_movesync` §16, the 2 s window: CONFIRMING evidence the predicate refused. It is not a teleport
+  or a zone.** `:56025` (map 146), t0 777.785, is 557.15 u in 1.934 s = 288.07 u/s. It is an interact's
+  auto-approach from rest: a `0x0047` stop, then `0x0039` on agent 38, which the server answers with a
+  `0x002A` follow. The body's speed is declared only by its own `0x0020` create (288.0 × 1.0), so the
+  predicate now reads that too. Even then the row is 0.137 u past 288 × dt, a start stamp 0.48 ms late.
+  Of 957 retail intervals of ≥ 1 s at 280–296 u/s, 392 read above 288.0 and 189 read faster than this
+  row. **A row that starts FROM REST may now start up to `LATE_STAMP_MAX` (67 ms) early. This widens the
+  bound for from-rest rows only, and it is the one judgement call in this landing.** The Zaishen
+  control's predecessor moved, so its zero-slack verdict and its +1 u arm are unchanged. Corpus-free
+  CONTROL and KNOWN-BAD arms cover both new terms.
+
+**Tests:** `test_adrenwire` 97 (floor 15), `test_npcdefs` 63 (floor 63), `test_movesync` 206 vaulted,
+floor 146 → 148 measured bare, all green. Future-stamp plants stay green; the known-bad plants redden.
+TESTS.md carries each. Not run: the full suite (only these three read the changed code; `adrenjoin` has
+no other importer but `test_gapreaders`, which was re-run). **Bare, `test_adrenwire` §3's off-grid cost
+census fails over 0 rows. HEAD fails it too; it is not this change and is left open.**
+
+---
+
 ### RANGERPRE, the Reforged pre-Searing Ranger -- 2026-09-29 -- **the owner's casual live run captured and read; Reforged Mode found ON the wire (every pre-Searing capture is Reforged); eleven desk-verifiable server diffs SHIPPED, each reviewed**
 
 **The run** ([studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md)): live capture

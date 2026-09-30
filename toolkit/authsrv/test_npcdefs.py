@@ -118,6 +118,9 @@ CAPTURES = ("20260807T133758", "20260807T143055", "20260810T235916")
 # pins were measured (2026-09-24): 20260928T103123, the Zaishen Challenge tape.
 SEPT_BUILD = "2026-09-01_44fbd68767a8"
 PIN_CUT = "20260928T103123"
+# The first September tape to reach map 146 after that pin (2026-09-30): the
+# Reforged pre-Searing Ranger, studies/presearing/RANGERPRE.md.
+RANGERPRE_TAPE = "20260929T150923"
 
 
 def main():
@@ -658,24 +661,72 @@ def main():
     # in for 1397 passed it. The roster is read per connection with its
     # VERSION frame's map_id, and the hostile definitions CREATED on map 146
     # must equal the 13 exactly.
+    # RE-SCOPED 2026-09-30 (RANGERPRE, studies/presearing/RANGERPRE.md F1). This
+    # read the WHOLE pool against an exact 13, and RANGERPRE's tape
+    # (20260929T150923, build 38888 under the September key) reached map 146 in
+    # four more connections and created 1434 and 1438 there: 9 connections, 15
+    # definitions -- every one of the 13 still among them, so it was a size pin
+    # reddening on confirming evidence. The 13 stay EXACT on the captures that
+    # existed at the pin (stamps before PIN_CUT: 5 connections of 4 captures);
+    # the tape's 12 are EXACT on the tape, as F1 lists them (its blind lane read
+    # the same set from the create bytes); the whole pool gets the SIGNATURE --
+    # nothing pinned is lost, and every definition created on map 146 is
+    # hostile in the build's own pool. A later map-146 tape adds, never reddens.
+    ON_146_RANGERPRE = {1346, 1397, 1420, 1421, 1428, 1431, 1432, 1433, 1434,
+                        1437, 1438, 1442}
     rosters = agentroster.read_roster(sept_caps)
     on146 = [r for r in rosters if r["map_id"] == 146]
-    created = {c["definition"] for r in on146 for c in r["creates"]
-               if c["tag"] == agentroster.TAG_NPC
-               and c["token"] in npcdefs.HOSTILE_TOKENS}
-    LEDGER.ok(len(on146) == 5 and len({r["capture"] for r in on146}) == 4
-              and created == ON_146,
+
+    def _created(rs):
+        return {c["definition"] for r in rs for c in r["creates"]
+                if c["tag"] == agentroster.TAG_NPC
+                and c["token"] in npcdefs.HOSTILE_TOKENS}
+    pin146 = [r for r in on146 if r["capture"] < PIN_CUT]
+    tape146 = [r for r in on146 if r["capture"] == RANGERPRE_TAPE]
+    created, created_pin, created_tape = (_created(on146), _created(pin146),
+                                          _created(tape146))
+    LEDGER.ok(len(pin146) == 5 and len({r["capture"] for r in pin146}) == 4
+              and created_pin == ON_146
+              and len(tape146) == 4 and created_tape == ON_146_RANGERPRE
+              and ON_146 <= created and created <= all_host,
               "the September tapes reach map 146 in 5 connections of 4 "
-              "captures, and the hostile definitions CREATED there (mon1/band "
-              "on an NPC-tag create) are EXACTLY the 13",
-              f"{len(on146)} connection(s); created - pinned = "
-              f"{sorted(created - ON_146)}, pinned - created = "
-              f"{sorted(ON_146 - created)}")
-    LEDGER.ok(1434 not in created and (ON_146 & HOSTILE) == HOSTILE - {1434}
-              and ON_146 <= set(sept_host),
-              "1434 is not created on any September map-146 tape; six of the "
-              "original seven are; all 13 are hostile in the build's own pool",
-              f"missing from the pool: {sorted(ON_146 - set(sept_host))}")
+              "captures as of the pin, and the hostile definitions CREATED there "
+              "(mon1/band on an NPC-tag create) are EXACTLY the 13; RANGERPRE's "
+              "tape adds 4 connections creating EXACTLY RANGERPRE-F1's 12; the "
+              "whole pool loses none of the 13 and creates nothing its own pool "
+              "does not call hostile",
+              f"as of the pin {len(pin146)} connection(s), created - pinned = "
+              f"{sorted(created_pin - ON_146)}, pinned - created = "
+              f"{sorted(ON_146 - created_pin)}; on {RANGERPRE_TAPE} "
+              f"{len(tape146)}, off F1 by {sorted(created_tape ^ ON_146_RANGERPRE)}; "
+              f"whole pool {len(on146)} connection(s), {len(created)} created, new "
+              f"past the pin {sorted(created - ON_146)}, lost "
+              f"{sorted(ON_146 - created)}, not hostile in the pool "
+              f"{sorted(created - all_host)}")
+    # FAILED AS WRITTEN 2026-09-30: "1434 is not created on any September
+    # map-146 tape" held for every tape before RANGERPRE's, which creates it six
+    # times -- byte-identical to its 2026-07-29-build declaration and with the
+    # same maximum health, 8 (F1, "Recovered"). The absence is kept EXACT as of
+    # the pin; past it the check is the recovery, so all seven of the original
+    # hostiles are now created on September map 146.
+    n1434 = sum(1 for r in tape146 for c in r["creates"] if c["definition"] == 1434)
+    s1434, j1434 = sept_all.get(1434), july.get(1434)
+    same = (s1434 is not None and j1434 is not None
+            and s1434.payload == j1434.payload)
+    LEDGER.ok(1434 not in created_pin and (ON_146 & HOSTILE) == HOSTILE - {1434}
+              and ON_146 <= set(sept_host)
+              and n1434 == 6 and HOSTILE <= created and same
+              and [h for _c, h in s1434.health] == [HEALTH[1434]],
+              "1434 is not created on any September map-146 tape AS OF THE PIN; "
+              "six of the original seven are; all 13 are hostile in the build's "
+              "own pool -- and RANGERPRE's tape recovers 1434 (6 creates, its "
+              "July declaration byte for byte, max health 8), so all seven are "
+              "now created on September map 146",
+              f"missing from the pool: {sorted(ON_146 - set(sept_host))}; 1434 "
+              f"on {RANGERPRE_TAPE}: {n1434} create(s), declaration "
+              f"{'==' if same else '!='} July's, health "
+              f"{s1434.health if s1434 is not None else None}; originals not created on "
+              f"September 146: {sorted(HOSTILE - created)}")
     LEDGER.ok(sept[1431].health and sept[1431].health[0][1] == 56
               and sept[1432].health and sept[1432].health[0][1] == 96
               and sept[1437].health and sept[1437].health[0][1] == 64

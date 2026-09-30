@@ -258,8 +258,10 @@ def main():
     ids = [b[0] for b in authsrv.PLAYER_BAGS]
     LEDGER.ok(len(set(ids)) == len(ids) == 9,
               "nine bags, nine distinct ids",
-              f"ids {ids}. ItCliBag:167's collision search walks the OWNING "
-              f"inventory's m_bagArray, so a duplicate is a real collision")
+              f"ids {ids}. 0x013F's handler searches the item context's "
+              f"m_bagArray -- one per CONNECTION -- for the id and evicts a hit "
+              f"(ItCliBag:167's remove path; pvpui 35.4), so a duplicate is a "
+              f"real collision")
     equipped = [b for b in authsrv.PLAYER_BAGS
                 if b[1] == authsrv.BAG_TYPE_EQUIPPED]
     LEDGER.ok(len(equipped) == 1

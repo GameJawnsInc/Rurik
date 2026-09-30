@@ -663,7 +663,11 @@ Both are now graded against an enumerated content surface:
     is a different creature in 2026-07-29 and 2026-09-01, the only one of 38 shared indices whose
     body differs); the September map-146 tapes (5 connections, build 38888) create **13 hostile
     definition slots** — six of the original seven (1434 absent) plus 1397, 1405, 1409, 1411,
-    1428, 1433, 1437 — **4 of them with a stat past the declaration**; the 40 hostile in the
+    1428, 1433, 1437 — **4 of them with a stat past the declaration**; **2026-09-30:**
+    RANGERPRE's tape adds four map-146 connections and RECOVERS 1434 (6 creates, its July
+    declaration byte for byte, max health 8) beside the new 1438, so **15 on map 146 and 18
+    across 146/160** ([RANGERPRE.md](studies/presearing/RANGERPRE.md) F1; `test_npcdefs` pins
+    the 13 as of the pin and F1's 12 on the tape); the 40 hostile in the
     whole September pool are mostly the Isle's and map 430's furniture, so "40 of 35" would be
     §6 item 9's error again (R4C2-FEASIBILITY §7.4). Full re-measurement
     and the stale-claim list: [studies/presearing/R4C2-FEASIBILITY.md](studies/presearing/R4C2-FEASIBILITY.md) §7. Coverage-blocked; a live capture

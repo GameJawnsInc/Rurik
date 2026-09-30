@@ -82,10 +82,14 @@ a check:
       any of its four terms (the death flag, a damage word at the agent, the
       order, the value) and it is `unexplained` again.
 
-Sections 1-3 need no captures and no client; 4-7 and 12 need
-`vault/captures/live/`; 8-11 and 13 need the pinned build-38797 image. The last two groups declare skips, the
-first does not, which is `test_pools`' split: the content overlay regenerates
-from the owner's install and a machine without it should go RED.
+Sections 1, 2 and 3b need nothing outside the repo; 3 needs the vault's
+content overlay (`vault/content/`); 4-7 and 12 need `vault/captures/live/`;
+8-11 and 13 need the pinned build-38797 image. Each of the last three declares
+a skip when its fixture's directory is absent, and only then. §3 went RED
+instead until 2026-09-30, citing `test_pools`' split; that split had moved on
+2026-08-31 (`3d1baba2`: `test_pools._needs_skill_rows` skips a section whose
+subject is a cost read from the overlay, because a stub would re-measure the
+stub), and §3's subject is exactly that.
 
 READ-ONLY throughout. The client image is opened, never launched and never
 written. Python 3 standard library only.
@@ -107,44 +111,50 @@ sys.path.insert(0, os.path.join(TOOLKIT, "schema"))
 sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
 import checks  # noqa: E402
 
-# FLOOR 15, and it is the MANDATORY CORE rather than the full count, which is
+# FLOOR 12, and it is the MANDATORY CORE rather than the full count, which is
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
-# BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
-# guess and neither is above what a run produces: a full green run on this
-# machine executes 72 (55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28;
+# BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED, neither is a guess and neither
+# is above what a run produces: a full green run on this machine executes 97
+# (72 on 2026-08-21; 55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28;
 # 95 since CASTAI-Z2, 2026-09-29: +3 for 3b's synthetic arms, +1 for the
 # Smiting Monks' tape pinned whole -- measured 95 on the green run; 96 since
 # the CASTAI-Z2 round-1 review, 2026-09-29: +1 for 3b's wordless-death arm,
 # measured 96; 97 since the round-2 review, 2026-09-29: +1 for 3b's
-# value-term arms, measured 97), and a run with neither the captures nor the
-# pinned image executes 15 (10 until CASTAI-Z2; 2026-09-29, CASTAI-Z2 + its
-# review: +4 -- 3b's synthetic arms run without fixtures, measured 14 with
-# `RURIK_VAULT` at an empty directory; 2026-09-29, CASTAI-Z2 round-2 review:
-# +1 -- 3b's value-term arms, measured 15 the same way -- and the floor
-# follows that measurement as the new mandatory core) -- forced by pointing
-# `RURIK_VAULT` at an empty directory,
-# which also turns §3 RED (a failure, not a skip: 3 failures when this was
-# written, 1 on the 2026-09-29 measurement -- the off-grid census over 0 rows;
-# the control and the width check pass on the content overlay alone) because
-# the content overlay is NOT
-# in the skippable half. That is `test_pools`' split and the reason for it: the
-# overlay regenerates from the owner's own install via
-# `skilltable.py --emit-content`, so a machine without it should go red rather
-# than quietly check the schema and stop.
+# value-term arms, measured 97), and a run with no vault executes 12 and
+# declares three skips -- §3, the live corpus, the pinned image -- measured
+# GREEN on 2026-09-30 with `RURIK_VAULT` at a nonexistent path and again at
+# an empty directory: §1's five, §2's two, §3b's five.
+#
+# IT WAS 15 UNTIL 2026-09-30, AND 15 WAS MEASURED ON A RED RUN (10 until
+# CASTAI-Z2, +4 and +1 for 3b's arms). It counted §3's three checks, and §3
+# went RED bare by design -- "the content overlay is NOT in the skippable
+# half ... a machine without it should go red rather than quietly check the
+# schema and stop", `test_pools`' split as it stood on 2026-08-21. That split
+# moved ten days later (see the module docstring) and this file never
+# followed. What a bare §3 read was not the overlay either: it was the
+# fourteen tracked rows in content/overrides/skills_38888.toml, which this
+# comment called "the content overlay" -- so the census failed "0 over 0
+# rows" on a selection, and the control and width check passed on it. §3 now
+# skips on the overlay's DIRECTORY (`section_cost_column` says why not a
+# fixture),
+# and a vault whose `content/` is present but empty still reddens §3:
+# measured the same day, 14 pass, 1 fail, the census.
 #
 # THE CAPTURES ARE SKIPPABLE because they are not regenerable at all -- six live
 # sessions against ArenaNet plus eight loopback-era ones, and no procedure in
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
+# THE OVERLAY is skippable for a third reason: it regenerates, but not from
+# anything in the repo, and §3's subject is the column itself.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 15 of 97 is a weak
-# backstop and a reader should not over-read it: on a machine that HAS both
-# fixtures, one section quietly ceasing to run would still clear 15. The guards
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 12 of 97 is a weak
+# backstop and a reader should not over-read it: on a machine that HAS the
+# fixtures, one section quietly ceasing to run would still clear 12. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
 # capture, connection and message counts, so a corpus walk that visited less
 # goes red instead of silent, and §8 prints the image it read and then makes
 # four assertions about it. The floor's job here is the fixture-less run.
-LEDGER = checks.Ledger("the adrenaline wire model", floor=15)
+LEDGER = checks.Ledger("the adrenaline wire model", floor=12)
 
 # ---------------------------------------------------------------------------
 # THE FAMILY. Ours: NOT FOUND in GWCA, OpenTyria, Headquarter, GWLP-R,
@@ -490,6 +500,18 @@ DARK_WARRIOR_FIGHTS = 4
 DARK_WARRIOR_HITS = 163
 DARK_LEARNED_FIGHTS = 14
 DARK_DEATHS = 11
+# THE FIRST MID-CONNECTION FLIPS (2026-09-30), on RANGERPRE's tape and nowhere
+# before it -- the Reforged pre-Searing Ranger that took Warrior as secondary
+# (studies/presearing/RANGERPRE.md). EXACT on the tape that witnessed them, as
+# connection -> each flip's direction in order: on map 160 :56064's dark
+# [394, 446] is armed 14.33 s in by three 0x00D9 writes (382, 384, 1), and
+# :53756's armed bar is cleared and refilled INSIDE ONE BATCH at t 193.41, the
+# secondary's grant (slots 4/2/3 zeroed, 0x00B7 [2, 1], 382/384/1 written back).
+# Neither is fought across: 0 hits and 0 damage on :56064, and :53756's 37 hits
+# and 15 damage words all land on the side it opened on.
+RANGERPRE_TAPE = "20260929T150923"
+RANGERPRE_FLIPS = {"10.0.0.210:53756->34.196.135.145:80": ["dark", "armed"],
+                   "10.0.0.210:56064->34.196.135.145:80": ["armed"]}
 # And the rounding rule, re-fitted on the armed rows alone -- the population
 # that is not selected on the outcome AND not contaminated by the gate.
 #
@@ -663,7 +685,8 @@ ASSERTS = {
 
 
 # ---------------------------------------------------------------------------
-# 1-3: no captures, no client. The mandatory core.
+# 1-3: no captures, no client. 1, 2 and 3b are the mandatory core; 3 reads the
+# vault's content overlay and declares a skip without it.
 
 
 def section_schema():
@@ -740,7 +763,27 @@ def section_cost_column():
     """
     print("\n3. the client's own adrenaline cost column, in raw units")
     import content
-    rows = content.load().rows("skills")
+    import vaultpath
+    # THE COLUMN IS THE SUBJECT, SO THIS SKIPS RATHER THAN STUBS (2026-09-30) --
+    # `test_pools._needs_skill_rows`' rule. The column is vault-only
+    # (`skilltable.py --emit-content`); the one tracked skills file,
+    # content/overrides/skills_38888.toml, holds the fourteen rows 38888 MOVED,
+    # every one onto the strike grid, so a bare census reads "0 over 0 rows" by
+    # selection, and a fixture carrying an 80 would only re-measure the fixture.
+    # Keyed on the overlay's DIRECTORY, never on a short column: an overlay that
+    # is present but thin still goes RED below, which is the half of the old
+    # "a machine without it should go red" that was worth keeping.
+    try:
+        overlay = vaultpath.require_dir("content", why="section 3, ArenaNet's "
+                                        "adrenaline cost column")
+    except SystemExit as ex:
+        LEDGER.skip("the client's adrenaline cost column (section 3)",
+                    f"no content overlay here ({ex}). The column is read out of "
+                    f"the owner's install by skilltable.py --emit-content; the "
+                    f"tracked rows are the 38888 moves, all on the grid, so the "
+                    f"census over them would be a statement about the selection")
+        return
+    rows = content.load(vault_dir=overlay).rows("skills")
 
     costs = collections.Counter()
     for _id, row in rows.items():
@@ -2623,7 +2666,10 @@ def section_bar_gate(agg):
     # ---- THE CONFOUND, BROKEN (2026-09-22; skills 34.11) -------------------
     # `by_connection` is a SECOND walk of the corpus with its own counters, so
     # its arm sizes and family totals must reproduce `scan()`'s before anything
-    # it says about professions is believed.
+    # it says about professions is believed. RED 2026-09-30 at 70/56 against
+    # 69/57, and it was right to be: the two walks disagreed on RANGERPRE's
+    # :56064, armed only by 0x00D9 slot writes, which `scan()` did not read.
+    # The fix is in `scan()` (it reads them now); this check is unchanged.
     conns = adrenjoin.by_connection()
     dark_c = [r for r in conns if r["arm"] == "dark"]
     armed_c = [r for r in conns if r["arm"] == "armed"]
@@ -2697,14 +2743,55 @@ def section_bar_gate(agg):
     # before the observer's first own 0x00DA, and no family message ever
     # arrives while the bar is dark. The first tape that breaks any of these
     # is the dark-to-armed transition witness the gate says it lacks.
-    LEDGER.ok(not any(r["flips"] for r in conns)
+    #
+    # FAILED AS WRITTEN 2026-09-30, and re-scoped rather than loosened.
+    # RANGERPRE's tape flips three times on two connections (RANGERPRE_FLIPS),
+    # so "0 mid-connection flips" is false -- and it was never the claim, only
+    # its proxy. What the gate's caveat needs is a hit or a damage word on a
+    # FLIPPED side: the side opposite the one the connection's bar opened on,
+    # where "the bar at gain time" and "the bar the connection opened with"
+    # predict different grants. Neither flip is fought across. So: 0 flips
+    # EXACT as of the tape (stamps before it), the tape's flips EXACT, and over
+    # the whole corpus no fighting on a flipped side. A later tape that flips
+    # without fighting across it stays green; the first that fights across one
+    # reddens this and IS the witness. POSITIVE CONTROL: the flipping
+    # connections are not quiet -- :53756 fought on its opening side.
+    pin_flips = [(r["capture"], r["connection"]) for r in conns
+                 if r["flips"] and r["capture"] < RANGERPRE_TAPE]
+    tape_flips = {r["connection"]: [f["to"] for f in r["flips"]] for r in conns
+                  if r["flips"] and r["capture"] == RANGERPRE_TAPE}
+
+    def _fought(r, side):
+        return r["hits_" + side] + r["damage_" + side]
+
+    flipped = [r for r in conns if r["flips"]]
+    crossed = [r for r in flipped
+               if _fought(r, "dark" if r["opens"] == "armed" else "armed")]
+    LEDGER.ok(not pin_flips
+              and tape_flips == RANGERPRE_FLIPS
+              and flipped and not crossed
+              and all(r["opens"] in ("armed", "dark") for r in flipped)
+              and any(_fought(r, r["opens"]) for r in flipped)
               and sum(r["hits_before_bar"] for r in conns) == 0
               and sum(r["family_dark"] + r["family_before_bar"] for r in conns) == 0,
-              "the dark-to-armed TRANSITION is UNOBSERVED: 0 mid-connection "
-              "flips, 0 hits before the bar, 0 family messages while dark",
-              f"over {len(conns)} connections. `bar_holds_adrenal` reads the "
+              "the dark-to-armed TRANSITION UNDER FIRE is UNOBSERVED: 0 "
+              f"mid-connection flips before {RANGERPRE_TAPE}, its "
+              f"{sum(len(v) for v in tape_flips.values())} flip(s) on "
+              f"{len(tape_flips)} connection(s) exactly as pinned, no hit or "
+              f"damage word on a flipped side, 0 hits before the bar, 0 family "
+              f"messages while dark",
+              f"over {len(conns)} connections; before the tape {pin_flips}; "
+              f"flips "
+              + "; ".join(f"{r['capture']} {r['connection'][-26:]} opens "
+                          f"{r['opens']}, {[(f['t'], f['to']) for f in r['flips']]}, "
+                          f"fought dark {_fought(r, 'dark')} / armed "
+                          f"{_fought(r, 'armed')}" for r in flipped)
+              + f"; crossed {[(r['capture'], r['connection']) for r in crossed]}. "
+              f"FAILED AS WRITTEN 2026-09-30: '0 mid-connection flips' held on "
+              f"every tape before {RANGERPRE_TAPE}. `bar_holds_adrenal` reads the "
               f"bar at gain time, so a mid-fight drag arms the sender on the "
-              f"next hit -- the smaller claim, said at the call site")
+              f"next hit -- the smaller claim, said at the call site, and still "
+              f"without a retail witness")
 
     # AND THE CLEAR IS GATED TOO: retail's dark connections hold player deaths
     # and not one 0x00D0, which is what puts the gate on `kill_player`'s clear.
