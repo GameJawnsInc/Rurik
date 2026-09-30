@@ -3414,7 +3414,29 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
+  `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S18 (QUESTFLOW-A1): the
+  quest-log words -- 0x0049's flags are a per-quest constant, 0 or 32 (0 on 5 of
+  20260929T150923's 12 accepts, OBSERVED), its home the accepting map (12 of 12), and every
+  0x0050 replay repeats both (37 of 37 on home, 27 of them on a load of ANOTHER map; 36 of 37
+  exact on flags, the 37th q79's 34 = 32 | bit 1 after a 0x004D). Ours sent 32 and the loaded
+  map; `--no-retail-quest-log` keeps that as the KNOWN-BAD arm. The rule `log_words_hold`
+  reads the tape's positions, never our constants. §6 OURS (bare): `accept_quest` (moved out of
+  the 0x003B dispatch so it runs without a socket) sends the errand's 32 / home 148 and records
+  `quest_home`; a `quest_log_flags = 0` copy accepts with 0 and its `_replay_quests` on 168
+  sends `[1463, 0, nm, nm, nm, 148]`; a held quest with no recorded home replays the loaded map;
+  KNOWN-BAD 32 / 168 and the rule red; VACUITY (four near misses refused, the exact shape and
+  bit 1 accepted); `questdefs.log_flags` (absent 32; 0 / 32 / 0x40 pass; 1, 2, 3, 34, -1,
+  2^32, a bool, a str, a float refused) and `questdefs.load` refusing a flags-2 row by name;
+  the flag parses and `main()` flips `QUEST_LOG_RETAIL`. §7 THE TAPE 20260929T150923
+  (vault-gated): 11 connections decode; the 12 accepts pinned by port, t, qid and flags; home
+  = `tape.client_version` map 12 of 12; 37 replays, 36 exact, the odd one pinned; the rule on
+  all 8 replayed quests, 27 cross-map; OURS vs TAPE 12 of 12 accepts and 36 of 37 replays
+  (the odd one the 34), the known-bad arm 7 and 3. §8 THE CORPUS (vault-gated): 30 accepts
+  (floor 30), flags only 0 / 32 (11 zeros, floor 11), one value per quest over 21 quests,
+  home = the accepting map on all 30, and 90 replays of an accepted quest (floor 90) carrying
+  its flags (87 exactly, floor 87; the rest add only bit 1) and its home. §5 and §8 now share
+  one corpus decode (`corpus()`). Floor 15 → 26 from the bare green run (61 vaulted).**
+  **2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
   quest-complete visual -- the message right after a hand-in's closing `0x004A` is `0x009F
   [20, own agent, 7]`, OBSERVED on 22 of 22 live hand-ins; what 7 draws is UNREAD. The
   predicate `visual_after_unlist` spells 0x009F / 20 / 7 as the tape's numbers, never our

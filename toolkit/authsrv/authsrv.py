@@ -498,6 +498,48 @@ def turn_in_quest(send, state, qid, row, conn_id):
         grant_quest_reward(send, state, qid, row, conn_id)
 
 
+def accept_quest(send, state, qid, row, conn_id):
+    """The accept batch for one quest: 0x0049, the state add, the marker
+    batch, the bare 0x0081 -- the dispatch's SERVICE_ACCEPT arm calls this
+    (RANGERPRE-S18 moved it here from inline in the 0x003B dispatch, so it
+    can be driven without a socket).
+
+    0x0049 is [qid, marker pos, marker plane, marker map, FLAGS, s1, s2, s3,
+    HOME]. THE FLAGS ARE THE ROW'S (RANGERPRE-S18, QUESTFLOW-A1): retail sends
+    0 or 32 as a per-quest constant -- 0 on 5 of 20260929T150923's 12 accepts
+    (questdefs.log_flags has them) -- and ours sent 32 for every quest.
+    THE HOME IS THE ACCEPTING MAP, and it is RECORDED: retail's is the
+    accepting connection's own map on 12 of 12, and every 0x0050 replay
+    carries that map, never the one being loaded (37 of 37; q62 accepted on
+    146 replays home 146 on 146, 148 and 164). state["quest_home"] carries it
+    across connections for _replay_quests. --no-retail-quest-log sends 32
+    and records nothing, as every run before S18.
+
+    The marker still goes at the player's own position and the map ids are
+    the instance's, which is a PLACEHOLDER: a real giver would put it at the
+    objective. The quest row has no marker column yet, and inventing
+    coordinates it does not carry would be a number nobody measured.
+    """
+    mid = state["map_id"]
+    nm = questdefs.enc_string(row.get("enc_name") or [])
+    flags = questdefs.log_flags(row) if QUEST_LOG_RETAIL else 32
+    send(GAME_SMSG_QUEST_ADD,
+         [qid, tuple(state["pos"]), 0, mid, flags, nm, nm, nm, mid],
+         f"QUEST_ADD[{qid}] (accepted; log flags {flags}, home {mid})")
+    state.setdefault("quests", set()).add(qid)
+    if QUEST_LOG_RETAIL:
+        state.setdefault("quest_home", {})[qid] = mid
+    print(f"[c{conn_id}] quest {qid} accepted: log flags {flags}"
+          + (f", home map {mid} recorded (RANGERPRE-S18, QUESTFLOW-A1)"
+             if QUEST_LOG_RETAIL else
+             " (--no-retail-quest-log: always 32, no home recorded)"),
+          flush=True)
+    # The marker moves in the SAME batch as the quest message that caused it
+    # -- never on a later tick -- and then the window closes.
+    _send_markers(send, state, " (accepted)")
+    _close_dialog(send, state["interacting"], "accepted")
+
+
 def kill_completes_objective(send, state, dead_id, conn_id):
     """A KILL meets an objective -- SLICE-B4, the manifest's `kill-count` verb.
 
@@ -1047,8 +1089,12 @@ def _quest_markers(state):
 # here, so the giver stops offering it and its marker stays clear. Before this a
 # completed quest was simply un-held, which made every quest repeatable and put
 # the '!' straight back on the giver the moment the reward window closed.
+# `quest_home` since RANGERPRE-S18: {quest id: the map it was accepted on},
+# written by accept_quest and read by _replay_quests -- retail's 0x0050 carries
+# the ACCEPTING map on every replay (37 of 37 on 20260929T150923), so the map
+# has to outlive the connection that accepted the quest.
 QUEST_PROGRESS = {"quests": set(), "objectives_done": set(),
-                  "quests_completed": set()}
+                  "quests_completed": set(), "quest_home": {}}
 
 
 def bind_progress(state):
@@ -1077,16 +1123,31 @@ def _replay_quests(send, state):
     objectives line it sent went nowhere. Copying the order verbatim would
     reproduce a bug we can see, and the failure is invisible: the client shows
     an empty objective and looks like it ignored us.
+
+    0x0050 is [qid, FLAGS, s1, s2, s3, HOME], and since RANGERPRE-S18 both
+    words are the accept's: the row's log flags (36 of 20260929T150923's 37
+    replays repeat the accept's value; the 37th adds bit 1 after a 0x004D we
+    do not send) and the map the quest was ACCEPTED on (37 of 37 -- q75,
+    accepted on 160, replays home 160 on 146 and 160). A quest held with no
+    recorded home (accepted before S18 in this process, or under the flag)
+    falls back to the map being loaded, which is what every replay sent
+    before. --no-retail-quest-log sends 32 and the loaded map, as before S18.
     """
     held = sorted(state.setdefault("quests", set()))
     if not held:
         return
     mid = state["map_id"]
+    homes = state.get("quest_home") or {}
     for qid in held:
         row = quest_rows()[qid]
         nm = questdefs.enc_string(row.get("enc_name") or [])
-        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, 32, nm, nm, nm, mid],
-             f"QUEST_ADD_NO_MARKER[{qid}] (instance load)")
+        if QUEST_LOG_RETAIL:
+            flags, home = questdefs.log_flags(row), int(homes.get(qid, mid))
+        else:
+            flags, home = 32, mid
+        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, flags, nm, nm, nm, home],
+             f"QUEST_ADD_NO_MARKER[{qid}] (instance load; log flags {flags}, "
+             f"home {home})")
     for qid in held:
         row = quest_rows()[qid]
         _send_description(send, state, qid, row)
@@ -13039,6 +13100,14 @@ QUEST_COMPLETE_VISUAL = True   # False (--no-quest-complete-visual): a hand-in
                                # turn_in_quest sends it right after the 0x004A
                                # -- retail's next message on 22 of 22 hand-ins
                                # (OBSERVED; QUEST_COMPLETE_VISUAL_ID).
+QUEST_LOG_RETAIL = True        # False (--no-retail-quest-log): the accept's
+                               # 0x0049 and every 0x0050 replay send log flags
+                               # 32 and the replay's home is the map being
+                               # loaded, as every run before RANGERPRE-S18.
+                               # Default ON: the row's flags (questdefs.
+                               # log_flags; 0 on 5 of 20260929T150923's 12
+                               # accepts) and the ACCEPTING map as home on
+                               # every replay (37 of 37) -- OBSERVED.
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -39786,25 +39855,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"{qid} code 0x{code:02X}"
                                   + ("" if row else " -- NOT IN content/quests.toml"))
                             if row and code == questdefs.SERVICE_ACCEPT:
-                                # The marker goes at the player's own position
-                                # and the map ids are the instance's, which is
-                                # a PLACEHOLDER: a real giver would put it at
-                                # the objective. The quest row has no marker
-                                # column yet, and inventing coordinates it does
-                                # not carry would be a number nobody measured.
-                                mid = state["map_id"]
-                                nm = questdefs.enc_string(row.get("enc_name") or [])
-                                send(GAME_SMSG_QUEST_ADD,
-                                     [qid, tuple(state["pos"]), 0, mid, 32,
-                                      nm, nm, nm, mid],
-                                     f"QUEST_ADD[{qid}] (accepted)")
-                                state.setdefault("quests", set()).add(qid)
-                                # The marker moves in the SAME batch as the
-                                # quest message that caused it -- never on a
-                                # later tick -- and then the window closes.
-                                _send_markers(send, state, " (accepted)")
-                                _close_dialog(send, state["interacting"],
-                                              "accepted")
+                                # THE ACCEPT BATCH is accept_quest's: 0x0049
+                                # with the row's log flags and the accepting
+                                # map as home (RANGERPRE-S18), the state add,
+                                # the markers, the bare 0x0081.
+                                accept_quest(send, state, qid, row, conn_id)
                             elif row and code == questdefs.SERVICE_TURN_IN:
                                 # THE HAND-IN BATCH is turn_in_quest's: one
                                 # 0x0052 (the party-broadcast experiment), the
@@ -44328,6 +44383,15 @@ def main():
               "RANGERPRE-S8. KNOWN-BAD against the tape: retail sends it right "
               "after the 0x004A on 22 of 22 hand-ins (turn_in_quest).",
               flush=True)
+    if a.no_retail_quest_log:
+        global QUEST_LOG_RETAIL
+        QUEST_LOG_RETAIL = False
+        print("[quests] --no-retail-quest-log: the accept's 0x0049 and every "
+              "0x0050 replay send log flags 32, and a replay's home is the map "
+              "being loaded, as every run before RANGERPRE-S18. KNOWN-BAD "
+              "against the tape: retail sends the quest's own flags (0 on 5 of "
+              "12 accepts) and the accepting map on 37 of 37 replays "
+              "(accept_quest, _replay_quests).", flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "

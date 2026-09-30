@@ -1055,6 +1055,18 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "hand-ins, e.g. 20260929T150923 :55934 293.809 "
                          "0x004A then 0x009F [20, 31, 7]; what visual 7 draws "
                          "is UNREAD. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-retail-quest-log", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S18's quest-log words "
+                         "(QUESTFLOW-A1): the accept's 0x0049 and every 0x0050 "
+                         "replay send log flags 32 for every quest, and a "
+                         "replay's home is the map being loaded, as every run "
+                         "before this step. The default sends the row's "
+                         "quest_log_flags (default 32; questdefs.log_flags) and "
+                         "the map the quest was ACCEPTED on -- OBSERVED on "
+                         "20260929T150923: flags 0 on 5 of 12 accepts (q80 "
+                         ":59969 184.441 among them), home = the accepting map "
+                         "12 of 12, and every replay carrying it, 37 of 37. "
+                         "KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

@@ -263,11 +263,56 @@ def option_kind(code):
             f"them. Measure one before sending it.")
 
 
+# THE QUEST-LOG FLAGS WORD -- 0x0049's field 5 and 0x0050's field 2 --
+# RANGERPRE-S18 (QUESTFLOW-A1). A PER-QUEST CONSTANT on retail, and it is not
+# always 32: OBSERVED on 20260929T150923, 12 accepts, 0 on five (q80 :59969
+# 184.441, q90 :53880 772.586, q52 :55934 632.056, q68 :56025 782.141, q75
+# :56064 921.161) and 32 on the other seven; the same quest carries the same
+# value on every capture that accepts it, and 36 of the tape's 37 0x0050
+# replays repeat the accept's value exactly. The 0x20 bit files the quest
+# under "Primary Quests" (studies/quests FINDINGS 1.4, seen on screen); what 0
+# files under on OUR client is UNVERIFIED. Ours sent 32 for every quest until
+# S18, so the DEFAULT stays 32 -- OURS, the value a row that says nothing has
+# always carried; a row declares 0 with `quest_log_flags = 0`.
+#
+# THE LOW TWO BITS ARE PROGRESS, NOT THE QUEST, and a row may not carry them.
+# Bit 0 is DESC_FILLED: 0x004C's body sets it and 0x0054's gate reads it
+# (0x0080F9CD; complete_objective's comment). Bit 1 follows the quest's 0x004D:
+# the tape's 37th replay is q79 at 34 = 32 | 2 (:59427 1216.783), the only one
+# after its 0x004D (:53756 1192.658) -- OBSERVED, n = 1. A row that set either
+# would declare a quest's progress as its constant, so log_flags refuses them.
+QUEST_LOG_FLAGS_DEFAULT = 32
+QUEST_LOG_PROGRESS_BITS = 0x03
+
+
+def log_flags(row):
+    """The row's quest-log flags word for 0x0049 / 0x0050, validated.
+
+    `quest_log_flags` when the row has it, QUEST_LOG_FLAGS_DEFAULT (32) when
+    not. Refuses a non-int (a bool included), a negative, anything past a u32,
+    and any of QUEST_LOG_PROGRESS_BITS -- the reasons are the block above."""
+    v = row.get("quest_log_flags", QUEST_LOG_FLAGS_DEFAULT)
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise ValueError(f"quest_log_flags = {v!r} is not an int")
+    if not 0 <= v <= 0xFFFFFFFF:
+        raise ValueError(f"quest_log_flags = {v} does not fit the u32 field")
+    if v & QUEST_LOG_PROGRESS_BITS:
+        raise ValueError(
+            f"quest_log_flags = {v} (0x{v:X}) sets bit 0 or 1, which the "
+            f"CLIENT's progress owns (0 = description filled by 0x004C, 1 = "
+            f"set after the quest's 0x004D) -- a row declaring them would "
+            f"send a quest's progress as its constant")
+    return v
+
+
 def load(world=None):
     """{quest_id: row} for every content quest row.
 
     Keyed by the u32 the WIRE uses, not by the TOML section name, because that
     is what arrives in GAME_CMSG 0x0012 and what the server has to look up.
+
+    A row's `quest_log_flags` is validated HERE (RANGERPRE-S18), so a bad one
+    stops the server at startup rather than at the first accept.
     """
     world = world or content.load()
     out = {}
@@ -281,6 +326,10 @@ def load(world=None):
                 f"{out[qid]['_name']!r} and {name!r}. The id is the client's "
                 f"only handle on a quest, so a duplicate is a row that can "
                 f"never be addressed.")
+        try:
+            log_flags(row)
+        except ValueError as exc:
+            raise ValueError(f"content quest row {name!r}: {exc}") from None
         row = dict(row)
         row["_name"] = name
         out[qid] = row

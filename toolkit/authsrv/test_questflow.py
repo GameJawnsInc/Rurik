@@ -36,8 +36,29 @@ WHAT THIS CHECKS:
       §5 (vault-gated, the live corpus): at least 22 hand-ins and 20 with a
          0x009C, the predicate on every one; every connection not declared
          gapped decodes, and the set-aside is capgaps.KNOWN_GAPPED.
+  * RANGERPRE-S18 (QUESTFLOW-A1), THE QUEST-LOG WORDS. 0x0049's flags are a
+    per-quest constant, 0 or 32 (0 on 5 of 20260929T150923's 12 accepts),
+    and its home is the accepting map; every 0x0050 replay repeats both, the
+    home included when the load is on another map (27 of that tape's 37
+    replays). Ours sent 32 always and replayed the LOADED map until S18;
+    --no-retail-quest-log is that, kept as the KNOWN-BAD arm. The rule
+    (log_words_hold) reads the tape's positions, never our constants.
+      §6 (bare): accept_quest / _replay_quests for the shipped errand and a
+         flags-0 copy, the missing-home fallback, the known-bad arm, the
+         rule's near misses, questdefs.log_flags' refusals and load's, the
+         flag and main()'s flip.
+      §7 (vault-gated on 20260929T150923): the 12 accepts pinned with their
+         flags, home = the connection's map 12 of 12, the 37 replays (36
+         exact, q79's 34 the one with bit 1), the rule on all 8 replayed
+         quests; OURS vs TAPE 12 of 12 accepts and 36 of 37 replays, the
+         known-bad arm 7 and 3.
+      §8 (vault-gated, the live corpus): at least 30 accepts, flags only 0 /
+         32, one value per quest, home = the accepting map on every accept,
+         and every replay of an accepted quest carrying its flags and home.
 
-Nothing binds a port, launches a client, or touches vault/state.
+§5 and §8 share ONE decode of the corpus (corpus()); §7 and on share one of
+20260929T150923 (tape_s18()). Nothing binds a port, launches a client, or
+touches vault/state.
 """
 
 import os
@@ -52,11 +73,11 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 15 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks and §3's six. §2 adds 15 with the four captures present, §4 7 and
-# §5 3 (40 in all), each declaring a LEDGER.skip for what is absent. Set from
-# the run, never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=15)
+# Floor 26 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
+# nine checks, §3's six and §6's eleven. §2 adds 15 with the four captures
+# present, §4 7, §5 3, §7 7 and §8 3 (61 in all), each declaring a LEDGER.skip
+# for what is absent. Set from the run, never above it.
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=26)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -493,37 +514,83 @@ def section_4():
            "the 0x004A -- FAILS the predicate")
 
 
-def section_5():
-    print("\n5. RANGERPRE-S8 (QUESTFLOW-H3): the live CORPUS -- every hand-in")
+ACCEPT = authsrv.GAME_SMSG_QUEST_ADD                   # 0x0049
+REPLAY = authsrv.GAME_SMSG_QUEST_ADD_NO_MARKER         # 0x0050
+_CORPUS = None
+
+
+def corpus():
+    """ONE walk of the live corpus for every corpus section (§5 and on), or
+    None when the vault holds no live captures. Each connection is decoded
+    once; what the sections read is kept, the decoded streams are not:
+    'handins' [(capture, file, t, qid, own, batch)], 'accepts' [(capture,
+    port, t, values, conn map, batch)] and 'replays' [(capture, port, t,
+    values, conn map)] -- values as decoded, header field in front."""
+    global _CORPUS
+    if _CORPUS is not None:
+        return _CORPUS or None
     import livewire
-    import capgaps
+    import tape
     root = vaultpath.vault_path("captures", "live")
     aside = []
     conns = (list(livewire.live_connections(set_aside=aside))
              if os.path.isdir(root) else [])
     if not conns:
-        led.skip("section 5, the live corpus", f"no live captures under {root}")
-        return
-    decoded, n, n_own, bad = 0, 0, 0, []
+        _CORPUS = {}
+        return None
+    out = {"root": root, "conns": conns, "aside": aside, "decoded": 0,
+           "handins": [], "accepts": [], "replays": []}
     for capdir, gf in conns:
-        _conn, merged, ok = livewire.decode_conn(capdir, gf)
-        decoded += 1 if ok else 0
+        conn, merged, ok = livewire.decode_conn(capdir, gf)
+        out["decoded"] += 1 if ok else 0
+        cap = os.path.basename(capdir)
+        port = gf.split("_")[1].split("-")[0]
+        try:        # None fails §8's home checks by name, never silently
+            cmap = tape.client_version(capdir, conn)["map_id"]
+        except tape.TapeError:
+            cmap = None
         for t, qid, own, batch in handins(merged):
-            n += 1
-            ops = [op for op, _v in batch]
-            k = max(i for i, op in enumerate(ops) if op == UNLIST)
-            nxt = batch[k + 1] if k + 1 < len(batch) else None
-            if own is not None:
-                n_own += 1
-                fine = visual_after_unlist(batch, own)
-            else:       # no 0x009C to name own: the shape, whoever it lands on
-                fine = nxt is not None and is_v7(*nxt)
-            if not fine:
-                bad.append((os.path.basename(capdir), gf, round(t, 4), qid,
-                            own, nxt))
-    led.ok(decoded == len(conns),
+            out["handins"].append((cap, gf, t, qid, own, batch))
+        by_t = {}
+        for t, d, op, v in merged:
+            if d == "s2c":
+                by_t.setdefault(t, []).append((op, v))
+        for t, d, op, v in merged:
+            if d == "s2c" and op == ACCEPT:
+                out["accepts"].append((cap, port, round(t, 4), v, cmap,
+                                       by_t[t]))
+            elif d == "s2c" and op == REPLAY:
+                out["replays"].append((cap, port, round(t, 4), v, cmap))
+    _CORPUS = out
+    return out
+
+
+def section_5():
+    print("\n5. RANGERPRE-S8 (QUESTFLOW-H3): the live CORPUS -- every hand-in")
+    import livewire
+    import capgaps
+    c = corpus()
+    if c is None:
+        led.skip("section 5, the live corpus", "no live captures under "
+                 f"{vaultpath.vault_path('captures', 'live')}")
+        return
+    conns, aside = c["conns"], c["aside"]
+    n, n_own, bad = 0, 0, []
+    for cap, gf, t, qid, own, batch in c["handins"]:
+        n += 1
+        ops = [op for op, _v in batch]
+        k = max(i for i, op in enumerate(ops) if op == UNLIST)
+        nxt = batch[k + 1] if k + 1 < len(batch) else None
+        if own is not None:
+            n_own += 1
+            fine = visual_after_unlist(batch, own)
+        else:       # no 0x009C to name own: the shape, whoever it lands on
+            fine = nxt is not None and is_v7(*nxt)
+        if not fine:
+            bad.append((cap, gf, round(t, 4), qid, own, nxt))
+    led.ok(c["decoded"] == len(conns),
            f"every live connection its manifest does not declare gapped decoded "
-           f"({decoded} of {len(conns)}, {len(aside)} set aside)")
+           f"({c['decoded']} of {len(conns)}, {len(aside)} set aside)")
     gap_ok, gap_detail = capgaps.audit(
         aside, [d for d, _w in livewire.live_captures()], livewire.refuses)
     led.ok(gap_ok, "and the connections set aside are EXACTLY the known "
@@ -534,12 +601,345 @@ def section_5():
            f"{n_own} (floor 20)", f"{bad}")
 
 
+# ---------------------------------------------------------------- S18 / A1
+TAPE_S18 = "20260929T150923"
+ERRAND, BANDITS = 1463, 1464
+# The tape's 12 accepts (client port, batch t, qid, log flags), OBSERVED with
+# livewire.decode_conn: every s2c 0x0049 on the 11 game connections.
+ACCEPTS_S18 = {("53880", 745.6235, 79, 32), ("53880", 772.5859, 90, 0),
+               ("55934", 231.7225, 86, 32), ("55934", 302.7059, 54, 32),
+               ("55934", 628.7834, 62, 32), ("55934", 632.0561, 52, 0),
+               ("56025", 782.1410, 68, 0), ("56064", 921.1613, 75, 0),
+               ("59427", 1244.8489, 89, 32), ("59969", 184.4414, 80, 0),
+               ("59969", 186.0757, 1462, 32), ("59969", 208.5508, 222, 32)}
+_TAPE18 = None
+
+
+def tape_s18():
+    """[(port, conn map, merged, ok)] for the 11 connections of TAPE_S18,
+    decoded once for §7 on; None on a bare machine."""
+    global _TAPE18
+    if _TAPE18 is not None:
+        return _TAPE18 or None
+    import livewire
+    import tape
+    capdir = vaultpath.vault_path("captures", "live", TAPE_S18)
+    if not os.path.isdir(capdir):
+        _TAPE18 = []
+        return None
+    out = []
+    for gf in livewire.connections(capdir):
+        conn, merged, ok = livewire.decode_conn(capdir, gf)
+        out.append((gf.split("_")[1].split("-")[0],
+                    tape.client_version(capdir, conn)["map_id"], merged, ok))
+    _TAPE18 = out
+    return out
+
+
+def log_words_hold(accept, accept_map, replays):
+    """The tape's rule for one quest's log words: the accept's home is the
+    map it was accepted on, and every replay carries the accept's flags (bit
+    1 aside -- the one the quest's 0x004D adds) and the accept's home. Values
+    read from the END, so the tape's header field and our bare list both fit:
+    0x0049 [.., flags, s1, s2, s3, home], 0x0050 [.., flags, s1, s2, s3,
+    home]. Vacuous without a replay: False."""
+    flags, home = accept[-5], accept[-1]
+    if home != accept_map or not replays:
+        return False
+    return all((r[-5] & ~2) == flags and r[-1] == home for r in replays)
+
+
+def rows_with(overrides):
+    """The shipped quest rows with {qid: {column: value}} laid over copies."""
+    import questdefs
+    rows = {q: dict(r) for q, r in questdefs.load().items()}
+    for qid, cols in overrides.items():
+        base = dict(rows.get(qid) or rows[ERRAND])
+        for k in ("giver_spawn", "objective_spawn", "objective_kill",
+                  "giver_agent", "objective_agent"):
+            if qid not in rows:
+                base.pop(k, None)       # a synthetic quest binds no NPC
+        base.update(cols, quest_id=qid)
+        rows[qid] = base
+    return rows
+
+
+def drive(rows, steps, retail=True, **flags):
+    """Run accept_quest / _replay_quests against `rows` (patched in as the
+    server's quest table) with QUEST_LOG_RETAIL = `retail` and any other
+    authsrv flag in `flags`; restores all of it. `steps` is [(kind, qid or
+    held, map_id, state overrides)]; one progress carrier is shared across
+    the steps, as bind_progress shares it across connections. Returns
+    [[(op, values)] per step]."""
+    saved_rows = authsrv._QUEST_ROWS
+    saved_flags = {k: getattr(authsrv, k) for k in ["QUEST_LOG_RETAIL"] + list(flags)}
+    saved_bar = list(authsrv.SKILLBAR)
+    authsrv._QUEST_ROWS = rows
+    authsrv.QUEST_LOG_RETAIL = retail
+    for k, v in flags.items():
+        setattr(authsrv, k, v)
+    carrier = {"quests": set(), "objectives_done": set(),
+               "quests_completed": set(), "quest_home": {}}
+    out = []
+    try:
+        for kind, what, map_id, extra in steps:
+            sent, send = collect()
+            st = dict(carrier, map_id=map_id, pos=(9826.0, 8077.0),
+                      interacting=99, agents={}, char_uuid="u1")
+            st.update(extra)
+            if kind == "accept":
+                authsrv.accept_quest(send, st, what, rows[what], 0)
+            else:
+                st["quests"] = set(what)
+                authsrv._replay_quests(send, st)
+            for k in carrier:           # the carrier is the character's
+                if k in st and k != "quests":
+                    carrier[k] = st[k]
+            if kind == "accept":
+                carrier["quests"] = st["quests"]
+            out.append(sent)
+    finally:
+        authsrv._QUEST_ROWS = saved_rows
+        for k, v in saved_flags.items():
+            setattr(authsrv, k, v)
+        authsrv.SKILLBAR[:] = saved_bar
+    return out
+
+
+def first(seq, op):
+    return next((v for o, v in seq if o == op), None)
+
+
+def section_6():
+    print("\n6. RANGERPRE-S18 (QUESTFLOW-A1): OURS -- the accept's log flags "
+          "and home, and the replay's")
+    import questdefs
+    rows = questdefs.load()
+    nm = questdefs.enc_string(rows[ERRAND]["enc_name"])
+    acc, = drive(rows, [("accept", ERRAND, 148, {})])
+    add = first(acc, ACCEPT)
+    led.ok(add is not None and add[4] == 32 and add[8] == 148
+           and add[5:8] == [nm, nm, nm],
+           "the errand's 0x0049 carries log flags 32 (a row that says nothing: "
+           "QUEST_LOG_FLAGS_DEFAULT, what ours always sent) and home 148, the "
+           "accepting map", f"{add}")
+    rows0 = rows_with({ERRAND: {"quest_log_flags": 0}})
+    acc0, rep0 = drive(rows0, [("accept", ERRAND, 148, {}),
+                               ("replay", [ERRAND], 168, {})])
+    add0, re0 = first(acc0, ACCEPT), first(rep0, REPLAY)
+    led.ok(add0 is not None and add0[4] == 0 and add0[8] == 148,
+           "a row with quest_log_flags = 0 accepts with flags 0 (retail's value "
+           "on 5 of the tape's 12 accepts)", f"{add0}")
+    led.ok(re0 == [ERRAND, 0, nm, nm, nm, 148],
+           "and its 0x0050 on the NEXT map (168) carries flags 0 and home 148 "
+           "-- the accepting map, not the one being loaded", f"{re0}")
+    led.ok(log_words_hold(add0, 148, [re0]),
+           "and the tape's rule (log_words_hold) holds on ours", f"{add0} {re0}")
+    # A quest held with no recorded home: the loaded map, as before S18.
+    rep_nohome, = drive(rows0, [("replay", [ERRAND], 168, {})])
+    led.ok(first(rep_nohome, REPLAY) == [ERRAND, 0, nm, nm, nm, 168],
+           "a held quest with NO recorded home replays the loaded map (the "
+           "pre-S18 value) with the row's flags", f"{first(rep_nohome, REPLAY)}")
+    # KNOWN-BAD: --no-retail-quest-log.
+    b_acc, b_rep = drive(rows0, [("accept", ERRAND, 148, {}),
+                                 ("replay", [ERRAND], 168, {})], retail=False)
+    b_add, b_re = first(b_acc, ACCEPT), first(b_rep, REPLAY)
+    led.ok(b_add is not None and b_add[4] == 32 and b_re is not None
+           and b_re[1] == 32 and b_re[5] == 168,
+           "KNOWN-BAD arm (--no-retail-quest-log): the flags-0 row accepts AND "
+           "replays with 32, and the replay's home is the loaded 168 -- every "
+           "run before S18", f"{b_add[4] if b_add else None} {b_re}")
+    led.ok(not log_words_hold(b_add, 148, [b_re]),
+           "and the tape's rule goes RED on it", f"{b_re}")
+    # VACUITY: the rule refuses each near miss.
+    a = [ERRAND, (0.0, 0.0), 0, 148, 0, nm, nm, nm, 148]
+    r = [ERRAND, 0, nm, nm, nm, 148]
+    misses = {"no replay": (a, 148, []),
+              "accept home not the accepting map": (a, 146, [r]),
+              "replay flags 32": (a, 148, [[ERRAND, 32, nm, nm, nm, 148]]),
+              "replay home the loaded map": (a, 148, [[ERRAND, 0, nm, nm, nm, 168]])}
+    red = {k: log_words_hold(*m) for k, m in misses.items()}
+    led.ok(not any(red.values()) and log_words_hold(a, 148, [r])
+           and log_words_hold(a, 148, [[ERRAND, 2, nm, nm, nm, 148]]),
+           "VACUITY: the rule refuses each near miss and accepts the exact "
+           "shape, bit 1 on the replay included (the tape's q79 34)", f"{red}")
+    # log_flags: the row's word, and what it refuses.
+    bad_vals = [1, 2, 3, 34, -1, 2 ** 32, True, "32", 32.0]
+    refused = []
+    for v in bad_vals:
+        try:
+            questdefs.log_flags({"quest_log_flags": v})
+        except ValueError:
+            refused.append(v)
+    led.ok(refused == bad_vals
+           and questdefs.log_flags({}) == questdefs.QUEST_LOG_FLAGS_DEFAULT == 32
+           and questdefs.log_flags({"quest_log_flags": 0}) == 0
+           and questdefs.log_flags({"quest_log_flags": 0x40}) == 0x40,
+           "questdefs.log_flags: absent is 32; 0, 32 and 0x40 pass; bit 0 or 1 "
+           "(1, 2, 3, 34), a negative, past a u32, a bool, a str and a float "
+           "are REFUSED", f"refused {refused}")
+
+    class _World:
+        def __init__(self, rows_):
+            self._r = rows_
+
+        def rows(self, kind):
+            return self._r if kind == "quest" else {}
+    try:
+        questdefs.load(_World({"q": {"quest_id": 7, "quest_log_flags": 2}}))
+        load_refused = ""
+    except ValueError as exc:
+        load_refused = str(exc)
+    led.ok("'q'" in load_refused and "bit 0 or 1" in load_refused
+           and all(questdefs.log_flags(r) == 32 for r in rows.values()),
+           "questdefs.load refuses a row with flags 2 at STARTUP, naming it; "
+           "every shipped row loads at 32", load_refused)
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.no_retail_quest_log:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--no-retail-quest-log"]).no_retail_quest_log
+           and not ap.parse_args([]).no_retail_quest_log
+           and authsrv.QUEST_LOG_RETAIL is True
+           and "global QUEST_LOG_RETAIL\n" in window
+           and "QUEST_LOG_RETAIL = False\n" in window,
+           "--no-retail-quest-log parses, the default is the row's words, and "
+           "main() sets QUEST_LOG_RETAIL = False under it",
+           f"window found={at >= 0}")
+
+
+def section_7():
+    print(f"\n7. RANGERPRE-S18 (QUESTFLOW-A1): the TAPE {TAPE_S18} -- its 12 "
+          "accepts and 37 replays")
+    conns = tape_s18()
+    if conns is None:
+        led.skip(f"the tape {TAPE_S18}", "no capture directory (bare machine)")
+        return
+    accepts, replays = [], []
+    for port, cmap, merged, ok in conns:
+        for t, d, op, v in merged:
+            if d == "s2c" and op == ACCEPT:
+                accepts.append((port, round(t, 4), v[1], v, cmap))
+            elif d == "s2c" and op == REPLAY:
+                replays.append((port, round(t, 4), v[1], v, cmap))
+    led.ok(all(ok for _p, _m, _s, ok in conns) and len(conns) == 11,
+           f"TAPE {TAPE_S18}: all 11 game connections decode", f"{len(conns)}")
+    got = {(p, t, q, v[-5]) for p, t, q, v, _m in accepts}
+    led.ok(got == ACCEPTS_S18 and len(accepts) == 12,
+           "TAPE: exactly the 12 accepts, pinned by port, batch t, qid and log "
+           "flags -- 0 on q80 q90 q52 q68 q75, 32 on the other seven",
+           f"{sorted(got ^ ACCEPTS_S18)}")
+    led.ok(all(v[-1] == m for _p, _t, _q, v, m in accepts),
+           "TAPE: every accept's home is the accepting connection's own map "
+           "(tape.client_version), 12 of 12",
+           f"{[(p, q, v[-1], m) for p, _t, q, v, m in accepts if v[-1] != m]}")
+    acc = {q: (v, m) for _p, _t, q, v, m in accepts}
+    exact = [(p, t, q) for p, t, q, v, _m in replays if v[-5] == acc[q][0][-5]]
+    odd = [(p, t, q, v[-5]) for p, t, q, v, _m in replays
+           if v[-5] != acc[q][0][-5]]
+    led.ok(len(replays) == 37 and all(q in acc for _p, _t, q, _v, _m in replays)
+           and len(exact) == 36 and odd == [("59427", 1216.7834, 79, 34)],
+           "TAPE: 37 replays, every one of a quest accepted on this tape; 36 "
+           "repeat the accept's flags exactly and the 37th is q79 on :59427 at "
+           "34 = 32 | 2 (after its 0x004D, :53756 1192.658)", f"{odd}")
+    by_q = {}
+    for _p, _t, q, v, _m in replays:
+        by_q.setdefault(q, []).append(v)
+    held = {q: log_words_hold(acc[q][0], acc[q][1], by_q[q]) for q in by_q}
+    cross = sum(1 for _p, _t, _q, v, m in replays if v[-1] != m)
+    led.ok(all(held.values()) and len(held) == 8 and cross == 27,
+           "TAPE: log_words_hold on all 8 replayed quests -- 27 of the 37 "
+           "replays carry a home that is NOT the map being loaded", f"{held} "
+           f"cross={cross}")
+    # OURS vs TAPE: each quest accepted on its accepting map with a row
+    # carrying the tape's flags, then each connection's load replayed on its
+    # own map -- (flags, home) compared per replay.
+    rows = rows_with({q: {"quest_log_flags": v[-5]} for q, (v, _m) in acc.items()})
+    steps = [("accept", q, m, {}) for q, (v, m) in sorted(acc.items())]
+    loads = {}
+    for p, t, q, v, m in replays:
+        loads.setdefault((p, t, m), []).append((q, v))
+    order = sorted(loads)
+    steps += [("replay", [q for q, _v in loads[k]], k[2], {}) for k in order]
+
+    def score(retail):
+        outs = drive(rows, steps, retail=retail)
+        n_acc = sum(1 for (q, (v, m)), o in zip(sorted(acc.items()),
+                                                 outs[:len(acc)])
+                    if (first(o, ACCEPT)[4], first(o, ACCEPT)[8])
+                    == (v[-5], v[-1]))
+        eq, ne = 0, []
+        for k, o in zip(order, outs[len(acc):]):
+            ours = {v[0]: (v[1], v[5]) for op, v in o if op == REPLAY}
+            for q, v in loads[k]:
+                if ours.get(q) == (v[-5], v[-1]):
+                    eq += 1
+                else:
+                    ne.append((k[0], k[1], q, ours.get(q), (v[-5], v[-1])))
+        return n_acc, eq, ne
+    n_acc, eq, ne = score(True)
+    led.ok(n_acc == 12 and eq == 36
+           and [(p, t, q) for p, t, q, _o, _t2 in ne] == [("59427", 1216.7834, 79)]
+           and ne[0][3] == (32, 148) and ne[0][4] == (34, 148),
+           "OURS vs TAPE: our 12 accepts carry the tape's (flags, home) and our "
+           "replays equal 36 of the 37 -- the odd one q79's 34, bit 1 of a "
+           "0x004D we do not send", f"accepts {n_acc}, replays {eq}, {ne}")
+    b_acc, b_eq, _b_ne = score(False)
+    led.ok(b_acc == 7 and b_eq == 3,
+           "KNOWN-BAD: --no-retail-quest-log matches only the 7 flag-32 "
+           "accepts and 3 of 37 replays (flag 32 AND home = the loaded map)",
+           f"accepts {b_acc}, replays {b_eq}")
+
+
+def section_8():
+    print("\n8. RANGERPRE-S18 (QUESTFLOW-A1): the live CORPUS -- every accept "
+          "and replay")
+    c = corpus()
+    if c is None:
+        led.skip("section 8, the live corpus", "no live captures")
+        return
+    acc = c["accepts"]
+    flags = [v[-5] for _c, _p, _t, v, _m, _b in acc]
+    per_q = {}
+    for _c, _p, _t, v, _m, _b in acc:
+        per_q.setdefault(v[1], set()).add(v[-5])
+    led.ok(len(acc) >= 30 and set(flags) <= {0, 32} and flags.count(0) >= 11
+           and all(len(s) == 1 for s in per_q.values()),
+           f"CORPUS: {len(acc)} accepts (floor 30), flags only 0 or 32 "
+           f"({flags.count(0)} zeros, floor 11), each quest ONE value across "
+           f"every capture ({len(per_q)} quests)",
+           f"{ {q: sorted(s) for q, s in per_q.items() if len(s) > 1} }")
+    led.ok(all(v[-1] == m for _c, _p, _t, v, m, _b in acc),
+           f"CORPUS: every accept's home is the accepting connection's map "
+           f"({len(acc)} of {len(acc)})",
+           f"{[(cc, p, t, v[-1], m) for cc, p, t, v, m, _b in acc if v[-1] != m]}")
+    home = {v[1]: (v[-5], v[-1]) for _c, _p, _t, v, _m, _b in acc}
+    rep = [(cc, p, t, v) for cc, p, t, v, _m in c["replays"] if v[1] in home]
+    exact = sum(1 for *_x, v in rep if v[-5] == home[v[1]][0])
+    bad = [(cc, p, t, v[1], v[-5], v[-1]) for cc, p, t, v in rep
+           if (v[-5] & ~2) != home[v[1]][0] or v[-1] != home[v[1]][1]]
+    led.ok(len(rep) >= 90 and exact >= 87 and not bad,
+           f"CORPUS: {len(rep)} replays of an accepted quest (floor 90) carry "
+           f"its flags ({exact} exactly, floor 87; the rest add only bit 1) and "
+           f"its home, every one", f"{bad}")
+
+
 def main():
     section_1()
     section_2()
     section_3()
     section_4()
     section_5()
+    section_6()
+    section_7()
+    section_8()
     return led.verdict()
 
 
