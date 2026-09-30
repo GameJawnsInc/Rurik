@@ -3500,9 +3500,10 @@ only):
   line 237), then s2c **`0x014B`** `ITEM_CHANGE_LOCATION(item 11: bag 2 slot 1 -> bag 2
   slot 2)` (238). The frames show the spear in cell 1, then in cell 2. No `0x003E`.
 
-**Still open, on another branch:** `rangerpre`'s quest grants (RANGERPRE-S18/S20) put items
-into the backpack. That branch does not yet contain HEROINV, so under `--party` its grants
-stay invisible and undraggable until it takes `main`. By desk reading its `grant_item`
-registers the item in the item store (`itemstore.place`), which is all the move handler
-needs.
+**`rangerpre`'s quest grants** (RANGERPRE-S18/S20) put items into the backpack. By desk
+reading, its `grant_item` registers the item in the item store (`itemstore.place`), which
+is all the move handler needs. **Corrected the same day:** this paragraph said `rangerpre`
+"does not yet contain HEROINV". It was written at 13:05 from a 12:26 look, and `rangerpre`
+had merged `main` at 12:50 (`30923224`, HEROINV included). `test_heroinvorder.py` passes in
+that tree (27 checks). The quest-grant drag itself has not been run on the client.
 

@@ -28,6 +28,15 @@ move back.
 
 ---
 
+### HEROINV's drag, corrected -- 2026-09-30 -- **the hand-off line was stale when written: `rangerpre` already had HEROINV**
+
+The entry below ("HEROINV's drag") ends by saying `rangerpre` lacks HEROINV. It was written
+at 13:05 from a 12:26 look. `rangerpre` had merged `main` at 12:50 (`30923224`), and
+`test_heroinvorder.py` passes in that tree (27 checks). The hand-off it asked for is done;
+[studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35.5 is corrected in place.
+
+---
+
 ### HEROINV's drag -- 2026-09-30 -- **the backpack drag under `--party` works on `main`; it needed the grid, nothing else**
 
 [studies/pvpui/FINDINGS.md](studies/pvpui/FINDINGS.md) §35.5. The report's `0x003E` from a
