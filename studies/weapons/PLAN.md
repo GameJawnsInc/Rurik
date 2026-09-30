@@ -971,6 +971,20 @@ are now spent** — hold alone (`20260918T185402`), stop alone (`20260918T190124
 (`20260918T201027`) — and not one of them stops the client walking a stored `0x002A`.
 WITHDRAWN with the other two; nothing from this arm is on `main`.
 
+> **2026-09-30, the frame correction to (a) and to section 20** (RANGERPRE-S16, which ships
+> this batch as the default; [CONFIRM-2026-09-30.md](../presearing/CONFIRM-2026-09-30.md) §8).
+> "Walked in exactly as before" rests on the flights, and the flights are the server mirror's
+> (22.3). The client's own report disagrees on this build. Harness `20260930T131951` opened the
+> fight with the `attack:` mailbox at this geometry (the target at (11099, 6804), 1800 u out),
+> and the start batch went out as `[4]`, `[8, 1, 1]`, `0x0028 [1]`. The client's first
+> `0x003D` after a later S press sat 2.8 u from the approach's end, 1500.8 u from the target,
+> while the flights read 0.728 and 0.282 s, the mirror walking in. The known-bad arm, `[4]`
+> alone (`20260930T132130`, `--no-approach-start-halt`), walked in: its first `0x003D` was
+> 224 u from the target. OBSERVED, n = 1 per arm. So this batch does park the drawn body at
+> range, and 22.2's inference that the stored follow re-drives the body after a stop is
+> CONTESTED by it. Which of the batch's words does the parking, and by which client path, is
+> UNVERIFIED.
+
 **(b) REFUTED: the client is not missing a range word on our bow.** The rival worth
 checking before touching movement was that retail's client stops at range because retail's
 bow *item record* carries a reach our items omit. It does not, and the decode was already

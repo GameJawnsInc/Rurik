@@ -454,3 +454,51 @@ on it. Other non-fleshy families (spirits, undead, constructs) and effect-grante
 immunity are NOT MODELLED -- mapping a family to its files needs data we do not
 hold.
 """
+
+
+# ---------------------------------------------------------------------------
+# THE CHARMABLE ANIMAL -- RANGERPRE-S12 (the ANIMAL item, 2026-09-30).
+#
+# Definition 1343 as npcdefs.py compiles it from the Reforged capture: the body
+# retail created carrying 'anim' and turned to 'anin' on the player's first
+# landed hit (agents.TOKEN_ANIMAL). The TOKEN is not a field here -- a spawn row
+# says allegiance = "animal" (content/world.toml [spawn.animal_probe]) and the
+# server sends the pair; the template is only what 0x0056 declares plus the
+# stats joined to its creates.
+
+[npc.animal_1343]
+# NO `name`: npcdefs writes none ("a name comes from a rendered nameplate or it
+# does not exist") and no client of ours has drawn this definition; the KEY is
+# ours. NO model_id: retail declares it with 0x0056 and sends no 0x0057, like
+# lakeside_worm and stone_elemental.
+definition = 1343
+file_id = 16689
+scale = 1677721600          # 0x64000000 -- hue/sat/light 0, scale 100%
+flags = 9
+profession = 2
+level = 1
+move_speed = 360.0
+attack_interval = 2.0
+attack_modifier = 1.0
+max_health = 80
+enc_name = [3851, 49443, 34856, 21815]
+
+[npc.animal_1343.provenance]
+source = "capture"
+capture = "20260929T150923"
+origin = "live"
+build = "2026-09-01_44fbd68767a8"
+mode = "reforged"
+extractor = "toolkit/authsrv/npcdefs.py"
+verified = """OBSERVED on ArenaNet's own wire (client version 38888): \
+definition 1343 declared by GAME_SMSG 0x0056 [1343, 16689, 0, 0x64000000, 0, \
+9, 2, 1, name] on 10.0.0.210:55934 at t=503.515, with no 0x0057; agent 161's \
+create at t=504.4205 carries model word 536872255 (0x20000000 | 1343) and team \
+token 'anim'. max_health is the [42, 161, 80] declared at t=565.0302 right \
+before the player's first landed word on it (Reforged -- every pre-Searing \
+capture is, so no base witness exists), the attack rate 0x0035 [161, 2.0, 1.0] \
+at t=565.667. Every field is npcdefs.read's row for 1343 over this one capture, \
+unchanged -- test_animaltoken section 1 re-runs the extractor and requires \
+equality, field for field. The 0x0056 fields also equal the vault overlay's \
+def_1343 from 20260807T143055 (build 2026-07-29): 81 creates of it across the \
+two builds, every one 'anim'."""

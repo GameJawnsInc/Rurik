@@ -849,8 +849,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "content key, and under --persist writes every accepted "
                          "cell to the character's item_locations so the next dress "
                          "puts armour and set items where they were left (a stored "
-                         "HAND change is not restored -- the weapon sets own slots "
-                         "0/1; said in the log). Refused with nothing sent: an empty "
+                         "HAND change is restored too, as one unit, by default "
+                         "since 2026-09-30 -- RANGERPRE-S21; under "
+                         "--no-hand-restore it is not: the weapon sets own slots "
+                         "0/1, said in the log). Refused "
+                         "with nothing sent: an empty "
                          "source slot, an undeclared bag, a slot past the bag, a "
                          "FILLED destination (the client's add worker asserts it "
                          "empty, ItCliInv:105), a cell RESERVED for a worn set "
@@ -859,6 +862,37 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "select_weapon_set's lead rule (0x014B into an emptied "
                          "hand, never a 0x0152 with a 0) and the store-built "
                          "0x006E -- with no in-game move nothing differs.")
+    ap.add_argument("--no-hand-restore", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S21 (WEAPONREFUSE-B), "
+                         "whose hand restore is the DEFAULT since 2026-09-30: "
+                         "under --persist a stored HAND change -- an in-game equip "
+                         "into equipped 0/1 -- is put back at the next dress, so "
+                         "set 0, the hands, 0x0147, 0x006E and the load's 42 name "
+                         "the equipped items. OBSERVED n=1: after 20260929T150923 "
+                         ":56064's sword and shield equips (set 0 held the bow) "
+                         "the next three loads dressed set 0 = [sword, shield] with "
+                         "the bow at the sword's old backpack cell. The pair is put "
+                         "back as ONE unit or not at all: an empty lead, a lead "
+                         "that is not a weapon, an off hand that is not an off-hand "
+                         "item or one beside a two-hander, two items in one hand "
+                         "cell, or a colliding cell keep every hand item at its "
+                         "default (said in the log); the armour's stored cells "
+                         "apply either way. It shipped OFF until the loopback gate "
+                         "answered whether OUR client accepts a load naming one "
+                         "item in two weapon sets (a set-1..3 item restored into "
+                         "the hands): OBSERVED yes, build 38797, harness "
+                         "20260930T102914 (0x0147 [1,0,11,12] AND [1,1,11,12], no "
+                         "crash, heartbeat to teardown) and 5 more loads, two of "
+                         "them zone loads. RETAIL stays UNVERIFIED (0 of 21 retail "
+                         "loads name one item twice). This flag restores every "
+                         "dress before 2026-09-30: the hands at set 0's record, the "
+                         "stored hand change said in the log (KNOWN-BAD: "
+                         "20260930T102741 loaded the bow).")
+    ap.add_argument("--hand-restore", action="store_true",
+                    help="RANGERPRE-S21: the DEFAULT since 2026-09-30, spelled out "
+                         "-- a no-op kept because the loopback gate's run cards "
+                         "and scripts name it. See --no-hand-restore, the revert "
+                         "arm; naming both is refused.")
     ap.add_argument("--equipped-visual-order", action="store_true",
                     help="THE REVERT ARM for the owner's confirmation pass on "
                          "DESKWORK-D1 step 8 (2026-09-23): dress the armour into "
@@ -1021,6 +1055,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(6 connections, 4 captures; amounts 10/25/50); the "
                          "amount is the content row's own number. Also reverts "
                          "the purse's persistence of that credit.")
+    ap.add_argument("--drop-table", default=None, metavar="KEY",
+                    help="RANGERPRE-S15 (LOOT slice 1): every HOSTILE kill rolls on "
+                         "the content/drops.toml row KEY (INVENTED, every row) and, "
+                         "on a hit, drops gold in retail's frame -- 0x0162, 0x0168 "
+                         "and the ground agent's 0x0020 between the death's status "
+                         "word and its reward (20260929T150923, 4 of 4 drops); a "
+                         "click on it walks the body there on a straight 0x002A and "
+                         "the arrival credits the purse. probe_gold drops 6 on every "
+                         "kill. DEFAULT none: no kill drops (the owner's default for "
+                         "the pre-Searing areas). A key the store lacks, or a row "
+                         "naming items (slice 2), refuses to start.")
+    ap.add_argument("--no-drops", action="store_true",
+                    help="RANGERPRE-S15 REVERT: no kill drops anything, even under "
+                         "--drop-table -- this server's bytes until 2026-09-30, where "
+                         "retail's kill frame carries the drop on 4 of 12 kills "
+                         "(20260929T150923). KNOWN-BAD arm.")
     ap.add_argument("--no-reward-in-frame", action="store_true",
                     help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
                          "reward lines (0x00EE, 0x0140, skills) go AFTER the "
@@ -1055,6 +1105,61 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "hand-ins, e.g. 20260929T150923 :55934 293.809 "
                          "0x004A then 0x009F [20, 31, 7]; what visual 7 draws "
                          "is UNREAD. KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-retail-quest-log", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S18's quest-log words "
+                         "(QUESTFLOW-A1): the accept's 0x0049 and every 0x0050 "
+                         "replay send log flags 32 for every quest, and a "
+                         "replay's home is the map being loaded, as every run "
+                         "before this step. The default sends the row's "
+                         "quest_log_flags (default 32; questdefs.log_flags) and "
+                         "the map the quest was ACCEPTED on -- OBSERVED on "
+                         "20260929T150923: flags 0 on 5 of 12 accepts (q80 "
+                         ":59969 184.441 among them), home = the accepting map "
+                         "12 of 12, and every replay carrying it, 37 of 37. "
+                         "KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-accept-rewards", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S18's accept-time grants "
+                         "(QUESTFLOW-A3): a quest row's accept_items and "
+                         "accept_skills are NOT granted when the quest is "
+                         "accepted, as every run before this step. The default "
+                         "grants them BEFORE the 0x0049 (accept_quest): the "
+                         "items through grant_item (0x0161 then 0x013E into the "
+                         "lowest free backpack cell), then the skills through "
+                         "grant_skill -- OBSERVED on 2 of 2 grant-carrying "
+                         "retail accepts, 20260929T150923 :56064 921.161 (q75: "
+                         "a sword, then skills 382, 384 and 1, then 0x0049) and "
+                         "20260819T132414 :52606 228.313 (q270: two skills). "
+                         "KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-quest-items", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S20's hand-in items "
+                         "(QUESTFLOW-H4): a hand-in takes no handin_items back "
+                         "and grants no reward_items, and the offer and "
+                         "turn-in screens draw no item line, as every run "
+                         "before this step. The default sends, BEFORE the "
+                         "first 0x0052 (turn_in_quest), 0x014D for each quest "
+                         "item taken back (take_quest_item), then 0x0161 and "
+                         "0x013E for each reward (grant_item) into the cell a "
+                         "taken item vacated, and draws a shield's name and "
+                         "armour line after the reward (questdefs."
+                         "reward_item_run) -- OBSERVED on 20260929T150923 "
+                         ":53880 727.4875 (q62: 0x014D [92, 3359], then the "
+                         "shield 1607 into [92, 1607, 452, 0], the cell 3359 "
+                         "had held) and 20260819T132414 :52606 145.487 (q440). "
+                         "KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--quest-marker-at-player", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S18's accept marker "
+                         "(QUESTFLOW-A2): the accept's 0x0049 marks the "
+                         "player's own position on this map, plane 0, as every "
+                         "run before this step. The default marks the "
+                         "objective (quest_accept_marker): the objective or "
+                         "kill spawn row's spot with the live body's plane "
+                         "when it is on this map, else the first portal toward "
+                         "its map labelled with that map -- OBSERVED on "
+                         "20260929T150923, where 5 of 12 accepts sit exactly "
+                         "on an NPC's create spot (q80 :59969 184.441 at "
+                         "(11715, 3517) plane 26) and 5 name another map at "
+                         "the exit the player then took. KNOWN-BAD against "
+                         "the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "
@@ -2313,6 +2418,24 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-approach-start-halt", action="store_true",
+                    help="RANGERPRE-S16 REVERT (ROUTE-A): the first swing after a "
+                         "RANGED approach arrives is 0x00A0 [4] alone, as every run "
+                         "before 2026-09-30 sent it -- no 0x009F [8, me, 1] hold and "
+                         "no 0x0028 [me] halt, so nothing stops the drawn body at "
+                         "range. KNOWN-BAD: retail's start batch carries both on 12 "
+                         "of 12 ranged approaches (20260929T150923 :55934 335.0923 "
+                         "and four more; three older captures).")
+    ap.add_argument("--held-interact-at-range", action="store_true",
+                    help="RANGERPRE-S17 REVERT (ROUTE-B): a HELD interact is "
+                         "served as soon as the model is inside INTERACT_RANGE "
+                         "(144 u) and the routed interact-walk stops 100 u short, "
+                         "as every run before 2026-09-30 did -- instead of walking "
+                         "to the 80 u follow disc and serving inside 81 u (or "
+                         "inside 144 u once the walk is over). KNOWN-BAD: retail "
+                         "serves at 67.8 and 75.2 u on its two exact-start walks "
+                         "(20260929T150923 :56064 979.1046, :59969 202.6552), "
+                         "which a 144 u serve predicts 0.26 and 0.24 s early.")
     ap.add_argument("--no-scythe-extras", action="store_true",
                     help="WEAPONS-W3 REVERT: a scythe swing lands on its target only. "
                          "Retail's scythe hits up to two more bodies inside ~80 u of the "
@@ -2901,6 +3024,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "maximum immediately ahead of a damage word at the "
                          "observer (0 of 3 armour-ignoring, 0 of 401 damage "
                          "words); it rides the Deep Wound batches instead.")
+    ap.add_argument("--npc-max-at-create", action="store_true",
+                    help="RANGERPRE-S10 REVERT: declare every NPC's maximum "
+                         "health (0x009F 42) in its create burst, and an "
+                         "armour-ignoring word's target maximum before EVERY "
+                         "such word from any source, as until 2026-09-29. "
+                         "Retail declares an NPC's maximum on the player's "
+                         "first landed word and never at the create (12 of "
+                         "526 creates on 20260929T150923, each right before "
+                         "that word). A party body keeps its create-time 42 "
+                         "either way.")
+    ap.add_argument("--no-animal-token-flip", action="store_true",
+                    help="RANGERPRE-S12 REVERT: a spawn row of allegiance "
+                         "'animal' keeps its create token 'anim' after the "
+                         "player's first landed hit and fights under it -- no "
+                         "prelude (prop 65, 0x009B, prop 36) ahead of the "
+                         "maximum, and no 0x002F. Retail turned the hit 'anim' "
+                         "body to 'anin' (0x002F on the tick after the hit; "
+                         "20260929T150923 :55934 t=565.0302). The body is "
+                         "still passive until hit and fights back either way.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "

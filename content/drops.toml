@@ -1,0 +1,40 @@
+# Drop tables -- what a kill may leave on the ground (RANGERPRE-S15, LOOT slice 1: gold).
+#
+# EVERY ROW HERE IS INVENTED, and each says so in its own provenance. A drop table is
+# server-side on retail: a capture shows DRAWS -- which kill dropped, what, how much --
+# and never the table that produced them, so no row of this file can be a measurement.
+# What IS measured sits elsewhere: the gold record's bytes (content/items.toml
+# [item.gold_coins]) and the drop's frame, pickup and view range (toolkit/authsrv/loot.py).
+#
+# OFF BY DEFAULT. No kill rolls on any row unless the server is started with
+# `--drop-table KEY` (serverargs.py), and then every HOSTILE kill rolls on that one row
+# -- a party body's death never does. The owner's default for the pre-Searing areas is
+# no drops (the spec's own open question; the tables are invented, so opting in is the
+# owner's call and not this file's).
+#
+# A row: `chance` in [0, 1] (one draw per kill), `gold = [lo, hi]` (a uniform integer
+# amount, 1 <= lo <= hi). `items` is LOOT slice 2 and is REFUSED at startup until that
+# lands (loot.validate_table).
+
+[drop.presearing_gold]
+chance = 0.33
+gold = [2, 7]
+
+[drop.presearing_gold.provenance]
+source = "invented"
+verified = ""
+note = """OURS, shaped on the draws only -- do not promote it. On 20260929T150923 4 of the \
+12 own kills dropped (maps 146 / 160); the corpus's 9 gold amounts are 2, 2, 3, 3, 3, 3, 4, \
+6 and 7. Level scaling, foe dependence and party rules are unmeasured, and a later session \
+must not read 0.33 or [2, 7] as retail's."""
+
+[drop.probe_gold]
+chance = 1.0
+gold = [6, 6]
+
+[drop.probe_gold.provenance]
+source = "invented"
+verified = ""
+note = """A PROBE row: every hostile kill drops exactly 6 gold -- retail's first pickup \
+amount (:55934 395.546, 0x0140 [2, 6]) -- so test_loot and a loopback run see one \
+deterministically. Not a claim about any drop rate."""

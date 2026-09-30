@@ -252,6 +252,114 @@ def quest_agent(row, which):
     return None if v is None else int(v)
 
 
+def spawn_row_map(row, here):
+    """The map a spawn row is FOR: its own `map`, else its area's map_id,
+    else `here` -- spawn_row_on_map's rule, as a value."""
+    if row.get("map") is not None:
+        return int(row["map"])
+    try:
+        arow = agents.WORLD.get("area", str(row.get("area")))
+    except Exception:                                          # noqa: BLE001
+        return int(here)
+    return int(here) if arow.get("map_id") is None else int(arow["map_id"])
+
+
+def portal_route(here, target, rows_of=None):
+    """[(portal key, portal row)] -- the fewest enabled portal hops from map
+    `here` to map `target`, ties broken by portal key; [] when here IS the
+    target, None when no route exists. `rows_of(map_id)` is portal_rows by
+    default (a test passes its own)."""
+    from collections import deque
+    rows_of = rows_of or portal_rows
+    here, target = int(here), int(target)
+    prev = {here: None}
+    queue = deque([here])
+    while queue and target not in prev:
+        m = queue.popleft()
+        for key, prow in rows_of(m):
+            nxt = int(prow["to_map"])
+            if nxt not in prev:
+                prev[nxt] = (m, key, prow)
+                queue.append(nxt)
+    if target not in prev:
+        return None
+    hops, m = [], target
+    while prev[m] is not None:
+        m, key, prow = prev[m]
+        hops.append((key, prow))
+    return hops[::-1]
+
+
+def quest_accept_marker(state, row, rows_of=None):
+    """(pos, plane, map, why) for a quest's 0x0049 marker -- RANGERPRE-S18
+    (QUESTFLOW-A2). Retail puts it ON THE OBJECTIVE, never at the player.
+
+    OBSERVED on 20260929T150923's 12 accepts: 5 sit exactly (0.0 u) on an
+    NPC's 0x0020 create spot with its plane -- q80 (:59969 184.441) and q89
+    (:59427 1244.849) on agent 40 at (11715, 3517) PLANE 26, q79 on 41, q86 on
+    43, q54 on 142. 5 name ANOTHER map: the point is the EXIT on the current
+    map and the map is where the objective is -- CORROBORATED on the three
+    connections that then left: the player's last position before the
+    transfer sits 168 u (:59969), 202 u (:53880) and 387 u (:55934) from the
+    marker, and each transfer's destination is the marker's map. A route of
+    more than one hop keeps the FIRST exit and names the FINAL map: :53880's
+    0x0051 markers use the same (7311, 5438) exit to 146 for objectives on 146,
+    160 and 164 (CORROBORATED, positional). 2 sit on no agent (q52, q75).
+
+    THE TARGET, in this order: the row's `objective_spawn` or
+    `objective_kill` spawn row; else its `giver_spawn` (RECONSTRUCTION: q79's
+    marker sat on its giver, n = 1); else the probe world's live
+    `objective_agent` / `giver_agent` body. A spawn row on THIS map marks its
+    x, y with the live body's plane (plane 0 when the body is not live:
+    RECONSTRUCTION); a kill target marks its spawn point, not its body
+    (RECONSTRUCTION: q75's marker is 34 u off agent 30, n = 1). A spawn row
+    on ANOTHER map marks the first portal of portal_route toward it, plane
+    0, and names the target's map. No target, or no route: the pre-S18
+    placeholder (the player's own position, plane 0, this map), and `why`
+    says which."""
+    here = int(state["map_id"])
+    placeholder = (tuple(state["pos"]), 0, here)
+    target = None
+    for col in ("objective_spawn", "objective_kill", "giver_spawn"):
+        key = row.get(col)
+        if not key:
+            continue
+        try:
+            target = (col, str(key), agents.WORLD.get("spawn", str(key)))
+        except Exception as exc:                              # noqa: BLE001
+            return placeholder + (f"{col} = {key!r} names no spawn row "
+                                  f"({exc}); the marker stays at the player",)
+        break
+    if target is None:
+        for col in ("objective_agent", "giver_agent"):
+            aid = row.get(col)
+            body = (state.get("agents") or {}).get(aid) if aid is not None else None
+            if body is not None and body.get("pos") is not None:
+                x, y = body["pos"]
+                return ((float(x), float(y)), int(body.get("plane", 0) or 0),
+                        here, f"{col} {aid}'s live body (the probe binding)")
+        return placeholder + ("the row names no objective or giver the "
+                              "marker could point at; it stays at the player",)
+    col, key, srow = target
+    tmap = spawn_row_map(srow, here)
+    x, y = float(srow["x"]), float(srow["y"])
+    if tmap == here:
+        body = (state.get("agents") or {}).get(int(srow.get("agent_id", -1)))
+        plane = int(body.get("plane", 0) or 0) if body is not None else 0
+        return ((x, y), plane, here,
+                f"{col} {key!r} on this map"
+                + ("" if body is not None else " (no live body: plane 0)"))
+    route = portal_route(here, tmap, rows_of)
+    if not route:
+        return placeholder + (f"{col} {key!r} is on map {tmap} and no portal "
+                              f"route leads there from {here}; the marker "
+                              f"stays at the player",)
+    pkey, prow = route[0]
+    return ((float(prow["x"]), float(prow["y"])), 0, tmap,
+            f"{col} {key!r} is on map {tmap}: the exit {pkey!r}, hop 1 of "
+            f"{len(route)}, labelled with the objective's map")
+
+
 def _quest_lines(state):
     """[(quest_id, code, row)] this NPC can act on, given what the player holds.
 
@@ -479,7 +587,37 @@ def turn_in_quest(send, state, qid, row, conn_id):
     (QUEST_COMPLETE_VISUAL_ID; what it draws is UNREAD). It follows the 0x004A
     under either --no-reward-in-frame arm, so pass 1's order keeps it there too;
     --no-quest-complete-visual drops it, as every run before S8.
+
+    THE ITEMS COME FIRST (RANGERPRE-S20, QUESTFLOW-H4), ahead of the 0x0052:
+    the row's `handin_items` are taken back (take_quest_item: 0x014D), then
+    its `reward_items` are granted (grant_item: 0x0161 then 0x013E), each
+    reward into the cell a taken item vacated, in order, while one is left.
+    Retail puts both before the first 0x0052 on 2 of 2 item-bearing hand-ins
+    (OBSERVED): 20260929T150923 :53880 727.4875 (q62: 0x014D [92, 3359], then
+    0x0161 [1607, type 24] and 0x013E [92, 1607, 452, 0] -- the cell 3359
+    had held) and 20260819T132414 :52606 145.487 (q440: no quest item; 0x0161
+    [652, type 30], 0x013E [4, 652, 8, 0]). They are not reward LINES, so they
+    stay ahead of the 0x0052 under --no-reward-in-frame too. The objective
+    and chat lines retail sends around the 0x014D on q62 are not sent here:
+    q1462's and q62's 0x0054 + 0x0051, a 0x005D + 0x005E and two 0x009F
+    before it; q1462's objective lines, two 0x005D + 0x005E and q62's 0x004D +
+    0x004C (the objective met at the hand-in NPC) between it and the 0x0161.
+    --no-quest-items takes and grants nothing, as every run before S20.
     """
+    if QUEST_ITEMS_ENABLED:
+        vacated = []
+        for key in row.get("handin_items") or ():
+            cell = take_quest_item(send, state, conn_id, str(key),
+                                   f"quest {qid} handed in")
+            if cell is not None:
+                vacated.append(cell)
+        for key in row.get("reward_items") or ():
+            grant_item(send, state, conn_id, str(key), f"quest {qid} reward",
+                       slot=vacated.pop(0) if vacated else None)
+    elif row.get("handin_items") or row.get("reward_items"):
+        print(f"[c{conn_id}] quest {qid}: handin_items / reward_items NOT "
+              f"taken or granted (--no-quest-items, as every run before "
+              f"RANGERPRE-S20)", flush=True)
     send(GAME_SMSG_QUEST_REMOVE, [qid],
          f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
     state.setdefault("quests", set()).discard(qid)
@@ -496,6 +634,217 @@ def turn_in_quest(send, state, qid, row, conn_id):
              f"player (RANGERPRE-S8, OBSERVED 22 of 22; its look UNREAD)")
     if not REWARD_IN_FRAME:
         grant_quest_reward(send, state, qid, row, conn_id)
+
+
+def grant_item(send, state, conn_id, key, why, slot=None):
+    """Put one content item (content/items.toml `key`) in the player's
+    backpack: mint a per-session id, declare it (0x0161), then place it
+    (0x013E [key, id, backpack, slot]) -- RANGERPRE-S18 (QUESTFLOW-A3), the
+    one helper every server-side grant shares (the quest accept's, and since
+    RANGERPRE-S20 the hand-in's reward; LOOT's pickup is meant to reuse it).
+
+    `slot` NAMES A CELL (RANGERPRE-S20): the hand-in passes the backpack cell
+    its quest item just vacated, retail's q62 cell (20260929T150923 :53880
+    727.4875: 0x014D [92, 3359] took the item the load had put at [92, 3359,
+    452, 0], and the shield went to [92, 1607, 452, 0]; OBSERVED, n = 1). It is
+    used when it is inside the backpack and free by the same test the lowest
+    cell passes; otherwise the rule below decides, and says so. On that one
+    witness the vacated cell was also the lowest free one, so which rule
+    retail follows is RECONSTRUCTION -- this one says what the tape shows.
+
+    THE SHAPE IS RETAIL'S: 0x0161 then 0x013E, declared before placed -- the
+    q75 accept's sword, 20260929T150923 :56064 921.1613, 0x0161 [704, type
+    27, model 2982] then 0x013E [2, 704, 4, 2] (OBSERVED; the purchase's
+    mint-then-place is the same order). The CELL is ours: the lowest backpack slot
+    free of the merchant's map, the item store and the off hands' reserved
+    homes -- the purchase's rule (merchant.handle_item_purchase) -- because
+    retail's choice of slot 2 on that tape cannot be read off one sample
+    (RECONSTRUCTION). THE ID is minted from the purchase counter
+    (next_purchased_item), so a grant and a purchase never collide, and the
+    item is PER-SESSION like a purchase: the dress never re-declares it and
+    _item_moves_commit does not persist its cell (a stated limitation, not a
+    claim about retail). It is registered in the merchant's backpack map (so
+    it can be sold) and in the item store under its content key (so an equip
+    drives the swing model from the row).
+
+    A FULL BACKPACK grants nothing: printed, None returned. Retail's answer
+    there is NOT FOUND. An unknown key raises (agents.item_template); the
+    quest loader refuses one at startup first."""
+    row = agents.item_template(key)
+    items = state.get("items")
+    held = state.setdefault("backpack", {})
+    size = player_bags().get(BACKPACK_BAG_ID, merchant.BACKPACK_SLOT_COUNT)
+    avoid = set(held) | reserved_backpack_slots(state)
+    used = set(itemstore.in_bag(items or {}, BACKPACK_BAG_ID)) | avoid
+    named = slot
+    if named is not None and 0 <= int(named) < size and int(named) not in used:
+        slot = int(named)
+    else:
+        slot = itemstore.first_free(items or {}, BACKPACK_BAG_ID, size,
+                                    avoid=avoid)
+        if named is not None:
+            print(f"[c{conn_id}] ITEM GRANT {key!r}: the named cell {named} is "
+                  f"not a free backpack cell -- the lowest free one instead "
+                  f"[RANGERPRE-S20]", flush=True)
+    if slot is None:
+        print(f"[c{conn_id}] ITEM GRANT {key!r} ({why}) NOT granted: the "
+              f"backpack is full ({size} slots) -- nothing sent; retail's "
+              f"answer to a full backpack is NOT FOUND [RANGERPRE-S18]",
+              flush=True)
+        return None
+    new_id = state.get("next_purchased_item", merchant.PURCHASED_ITEM_ID_BASE)
+    state["next_purchased_item"] = new_id + 1
+    held[slot] = new_id
+    if items is not None:
+        itemstore.place(items, new_id, BACKPACK_BAG_ID, slot, key=key,
+                        kind="reward", item_type=row["item_type"])
+    send(GAME_SMSG_CREATE_NAMED_ITEM, agents.named_item(new_id, row),
+         f"CREATE_NAMED_ITEM({key} as item {new_id}; {why})")
+    send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+         [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
+         f"ITEM_MOVED_TO_LOCATION({new_id} -> backpack slot {slot})")
+    print(f"[c{conn_id}] ITEM GRANT {key!r} as item {new_id} into backpack "
+          f"slot {slot}"
+          + (" -- the named cell" if named is not None and slot == named else "")
+          + f" ({why}) [RANGERPRE-S18]", flush=True)
+    return new_id
+
+
+def take_quest_item(send, state, conn_id, key, why):
+    """Take one quest item back out of the player's backpack at a hand-in:
+    0x014D [key, id] -- RANGERPRE-S20 (QUESTFLOW-H4). Returns the backpack
+    slot it vacated, or None when nothing was taken.
+
+    RETAIL'S SHAPE, OBSERVED n = 1 (the only hand-in batch in the live corpus
+    carrying a 0x014D): 20260929T150923 :53880 727.4875, q62 -- 0x014D [92,
+    3359] removes the quest item (type 21) the load had declared at [92, 3359,
+    452, 0], ahead of the reward item's 0x0161 / 0x013E and of the first
+    0x0052 -- first of the REDUCED batch (test_questflow's reduce_handin);
+    objective and chat lines for q1462 and q62 precede it in the same segment.
+    It is the 9th of the 57 s2c lines sharing that stamp: 0x0054 + 0x0051 for
+    q1462, 0x005D + 0x005E, 0x0054 + 0x0051 for q62 and two 0x009F [11, 41,
+    5] come first, so it is NOT the head of the batch, and a follow-on that
+    sends those lines must not put the 0x014D ahead of them. The same message
+    the merchant's sale sends (merchant.handle_item_sale; 8 of 8 sales), and
+    like a sale nothing moves: the item ceases to exist.
+
+    WHICH ITEM IS OURS (RECONSTRUCTION): the lowest-id item in the BACKPACK
+    whose content key is `key` and whose kind is "reward" -- one grant_item
+    minted, the accept's accept_items being how a quest hands one over today.
+    Never a dressed item (a weapon set's backpack sword carries the same key
+    and kind "set k lead"), never an equipped one. Not held -- never granted,
+    sold, moved out of the backpack, or lost with the per-session connection
+    that granted it -- takes nothing and says so; retail's hand-in without
+    its quest item is NOT FOUND."""
+    items = state.get("items") or {}
+    mine = sorted(iid for iid, r in items.items()
+                  if r.get("key") == key and r.get("kind") == "reward"
+                  and r.get("bag") == BACKPACK_BAG_ID)
+    if not mine:
+        print(f"[c{conn_id}] QUEST ITEM {key!r} ({why}) NOT taken: no granted "
+              f"{key!r} in the backpack -- nothing sent; retail's hand-in "
+              f"without its quest item is NOT FOUND [RANGERPRE-S20]", flush=True)
+        return None
+    iid = mine[0]
+    slot = int(items[iid]["slot"])
+    items.pop(iid)
+    held = state.setdefault("backpack", {})
+    for s in [s for s, h in held.items() if h == iid]:
+        del held[s]
+    send(merchant.GAME_SMSG_ITEM_REMOVED, [PLAYER_INVENTORY_KEY, iid],
+         f"ITEM_REMOVED({key} item {iid} from backpack slot {slot}; {why})")
+    print(f"[c{conn_id}] QUEST ITEM {key!r} item {iid} taken out of backpack "
+          f"slot {slot} ({why}) [RANGERPRE-S20]", flush=True)
+    return slot
+
+
+def accept_quest(send, state, qid, row, conn_id):
+    """The accept batch for one quest: the accept-time grants, 0x0049, the
+    state add, the marker batch, the bare 0x0081 -- the dispatch's
+    SERVICE_ACCEPT arm calls this (RANGERPRE-S18 moved it here from inline in
+    the 0x003B dispatch, so it can be driven without a socket).
+
+    THE GRANTS COME FIRST (RANGERPRE-S18, QUESTFLOW-A3). A quest may hand
+    over items and skills when it is ACCEPTED, and retail sends them BEFORE
+    the 0x0049 on 2 of 2 grant-carrying accepts in the live corpus, none
+    after: 20260929T150923 :56064 921.1613 (q75: a sword 0x0161 + 0x013E,
+    then 0x00DC/0x00D9 for 382, 384 (+ 0x001C) and 1, then 0x0049) and
+    20260819T132414 :52606 228.313 (q270: two skills, each with its
+    0x001C). The row's `accept_items` (content/items.toml keys, through
+    grant_item) go before its `accept_skills` (grant_skill, whose 0x001C
+    rides only a skill new to the account), q75's order. --no-accept-rewards
+    grants nothing, as every run before S18.
+
+    0x0049 is [qid, marker pos, marker plane, marker map, FLAGS, s1, s2, s3,
+    HOME]. THE FLAGS ARE THE ROW'S (RANGERPRE-S18, QUESTFLOW-A1): retail sends
+    0 or 32 as a per-quest constant -- 0 on 5 of 20260929T150923's 12 accepts
+    (questdefs.log_flags has them) -- and ours sent 32 for every quest.
+    THE HOME IS THE ACCEPTING MAP, and it is RECORDED: retail's is the
+    accepting connection's own map on 12 of 12, and every 0x0050 replay
+    carries that map, never the one being loaded (37 of 37; q62 accepted on
+    146 replays home 146 on 146, 148 and 164). state["quest_home"] carries it
+    across connections for _replay_quests. --no-retail-quest-log sends 32
+    and records nothing, as every run before S18.
+
+    THE MARKER IS ON THE OBJECTIVE (RANGERPRE-S18, QUESTFLOW-A2): the
+    objective NPC's spot and plane, or the exit toward the objective's map
+    labelled with that map -- quest_accept_marker has the tape and the
+    rules. It needs no marker column: the point is the objective's own spawn
+    row or the portal row, both already content. Until S18 it was the
+    player's own position on the instance's map, a placeholder;
+    --quest-marker-at-player keeps that as the known-bad arm.
+    """
+    granted = []
+    if ACCEPT_REWARDS:
+        for key in row.get("accept_items") or ():
+            if grant_item(send, state, conn_id, str(key),
+                          f"quest {qid} accepted") is not None:
+                granted.append(str(key))
+        for sid in row.get("accept_skills") or ():
+            grant_skill(send, state, int(sid), conn_id,
+                        unlocked=int(sid) in state.get("skills_known", set()))
+            # grant_skill REFUSES an id past the served skill table (nothing
+            # sent, nothing stored) and says so; the summary below names only
+            # what went out. Its None return cannot tell this apart -- None
+            # is also "the bar was full, learned" -- so the table bound is
+            # the test, the same one grant_skill applies.
+            if int(sid) < SKILL_TABLE_ROWS:
+                granted.append(f"skill {int(sid)}")
+    elif row.get("accept_items") or row.get("accept_skills"):
+        print(f"[c{conn_id}] quest {qid}: accept_items / accept_skills NOT "
+              f"granted (--no-accept-rewards, as every run before "
+              f"RANGERPRE-S18)", flush=True)
+    if granted:
+        print(f"[c{conn_id}] quest {qid} accept grants, BEFORE the 0x0049: "
+              f"{', '.join(granted)} (RANGERPRE-S18, QUESTFLOW-A3)", flush=True)
+    mid = state["map_id"]
+    nm = questdefs.enc_string(row.get("enc_name") or [])
+    flags = questdefs.log_flags(row) if QUEST_LOG_RETAIL else 32
+    if QUEST_MARKER_AT_OBJECTIVE:
+        mpos, mplane, mmap, why = quest_accept_marker(state, row)
+    else:
+        mpos, mplane, mmap, why = (tuple(state["pos"]), 0, mid,
+                                   "--quest-marker-at-player: the pre-S18 "
+                                   "placeholder")
+    print(f"[c{conn_id}] quest {qid} accept marker: ({mpos[0]:.0f}, "
+          f"{mpos[1]:.0f}) plane {mplane} map {mmap} -- {why} "
+          f"(RANGERPRE-S18, QUESTFLOW-A2)", flush=True)
+    send(GAME_SMSG_QUEST_ADD,
+         [qid, tuple(mpos), mplane, mmap, flags, nm, nm, nm, mid],
+         f"QUEST_ADD[{qid}] (accepted; marker map {mmap}, log flags {flags}, "
+         f"home {mid})")
+    state.setdefault("quests", set()).add(qid)
+    if QUEST_LOG_RETAIL:
+        state.setdefault("quest_home", {})[qid] = mid
+    print(f"[c{conn_id}] quest {qid} accepted: log flags {flags}"
+          + (f", home map {mid} recorded (RANGERPRE-S18, QUESTFLOW-A1)"
+             if QUEST_LOG_RETAIL else
+             " (--no-retail-quest-log: always 32, no home recorded)"),
+          flush=True)
+    # The marker moves in the SAME batch as the quest message that caused it
+    # -- never on a later tick -- and then the window closes.
+    _send_markers(send, state, " (accepted)")
+    _close_dialog(send, state["interacting"], "accepted")
 
 
 def kill_completes_objective(send, state, dead_id, conn_id):
@@ -599,12 +948,92 @@ def _objective_quests(state, agent):
 # NPC conversation uses exactly touch range is not on that page -- so this is
 # the ladder's shortest rung as the best-supported number, not a measured
 # dialog range, and 250/144 = 1.7 is what "probably 2x" looks like.
+#
+# RANGERPRE-S17 (2026-09-30): CORROBORATED as the IMMEDIATE range -- the
+# distance a press is answered from at once, with no walk -- and that is all
+# it gates now: where a HELD interact is served is HELD_INTERACT_AT_DISC's
+# (below). 20260929T150923 (build 38888), positions from EXACT c2s 0x0047
+# stops: :55934 628.2476, 95.7 u from agent 142, the dialog +45 ms; :56025
+# 780.6734, 134.6 u from agent 38, +53 ms. A press from ~167 u (:55934
+# 630.7047, dead-reckoned from a keyboard report 0.32 s old -- RECONSTRUCTION)
+# was answered with a 0x002A walk instead. Retail's immediate range is in
+# (134.6, ~167], and 144 is inside it (test_approachroute section 5).
 INTERACT_RANGE = 144.0
 
-# Where the routed interact-walk stops: this far from the NPC, on the
-# player's side, inside INTERACT_RANGE with room for the model and the
-# client's report to disagree by a body's width.
-INTERACT_STOP = 100.0
+# Where the routed interact-walk stops, centre to centre: the FOLLOW DISC,
+# `follow_stop_radius()` -- 12 + 12 + 56 = 80 u for the radii this server
+# sends. A literal because this line runs before BOUNDING_RADIUS exists;
+# test_approachroute section 4 pins the equality. RANGERPRE-S17: it was 100,
+# "inside INTERACT_RANGE with room for the model and the client's report to
+# disagree by a body's width" -- ours. Retail's walk-in is a 0x002A FOLLOW
+# naming the NPC, and a follow ends at the disc; the held interact is served
+# there (HELD_INTERACT_AT_DISC). The revert arm walks to
+# INTERACT_STOP_AT_RANGE, the old 100 (`interact_stop()` picks).
+INTERACT_STOP = 80.0
+INTERACT_STOP_AT_RANGE = 100.0
+
+# RANGERPRE-S17 (ROUTE-B): A HELD INTERACT IS SERVED AT THE FOLLOW DISC, not at
+# INTERACT_RANGE. What retail does, OBSERVED on the wire and RECONSTRUCTED as a
+# 288 u/s walk (test_approachroute section 5 re-derives every figure from the
+# bytes, own agents by adrenjoin.whose_agent):
+#   * 20260929T150923 :56064 (agent 9). The press at 968.0936 on agent 10 is
+#     walked by four 0x0029 corners; the 0x002A [9, (21195, 13076), 0, 0, 10]
+#     goes out at 977.2544, 3.6 ms after the last corner's ETA, so the body
+#     stands at that corner (21120, 12480), 600.7 u from the NPC. The dialog
+#     (0x0080 + 0x0081 [10]) comes at 979.1046, with no client packet between:
+#     1.850 s of walking, 67.8 u by the model -- 45.7 ms after the model
+#     crosses 81 u. A 144 u serve predicts 978.8401, 0.26 s early.
+#   * :59969 (agent 123). The press at 190.9224 on agent 40, from an EXACT stop
+#     (the 0x0047 (10448.0, 320.3) at 189.9401), is walked by three 0x0029 legs
+#     on retail's own cadence. The dialog at 202.6552 finds the model 75.2 u
+#     from the NPC and still 42.3 u short of its last leg's end: served ON THE
+#     WAY, not on arrival -- a DISTANCE rule. 20.0 ms after the 81 u crossing;
+#     a 144 u serve predicts it 0.24 s early.
+# So retail serves inside ~75-82 u: 75.2 is :59969's floor, and ~82 is what a
+# serve tick of <= 50 ms allows :56064. That is the follow disc. RECONSTRUCTION,
+# n = 2 exact starts (the design lane's eight dead-reckoned walks land at 53-82 u).
+#
+# THE SLACK, and why this is not "serve inside the disc" alone (the orchestrator
+# critic's ERROR against the spec): the disc is follow_stop_radius() + 1 = 81 u
+# and our walk stops at 80, so any leg end more than 1 u outside the disc -- the
+# router's clip-fallback stopping short of an off-mesh approach point, a client
+# stop report a few units off the modelled end, an NPC that stepped after the
+# walk was planned -- would strand the hold for good, because this tick has no
+# expiry. So a hold whose walk is OVER (`interact_walk_live` false: the model
+# arrived, the client reported, another order replaced it, or no walk went out
+# at all) is served anywhere inside INTERACT_RANGE -- the range the same press
+# would have been answered from at once. Retail's walk always ends at the disc,
+# so on its shape the two rules are one instant. A walk that ends beyond
+# INTERACT_RANGE keeps the hold, as it always did (retail's expiry is
+# unmeasured -- the spec's open question). Where no walk went out (no mesh, or
+# --no-interact-route) the hold is served at INTERACT_RANGE as before: OURS --
+# retail always walks.
+HELD_INTERACT_AT_DISC = True     # False (--held-interact-at-range): 144 u, the walk stops at 100
+# The disc's float slack (SEAM_TOL-sized): the integrator lands exactly on the
+# walk's end, 80.0 u, and this keeps that landing inside the disc.
+INTERACT_DISC_SLACK = 1.0
+
+
+def interact_stop():
+    """Where the routed interact-walk stops, centre to centre (RANGERPRE-S17):
+    the follow disc, or the old 100 u under --held-interact-at-range."""
+    return INTERACT_STOP if HELD_INTERACT_AT_DISC else INTERACT_STOP_AT_RANGE
+
+
+def interact_walk_live(state):
+    """Is the held interact's own walk still in flight? -> bool (RANGERPRE-S17)
+
+    The walk is `interact_route`'s, and its identity is the click-latch stamp
+    it set (`state["interact_walk"]`). It is live while the latch still carries
+    that stamp -- a c2s 0x003D / 0x0047 clears the latch, another click or
+    approach re-stamps it -- AND the router still has something for the body to
+    walk: a chain with legs left to grant, or a leg the integrator has not
+    finished (`dest`, which the integrator clears on arrival). Read-only; the
+    same cross-thread reads `_player_body_moving` makes."""
+    t0 = state.get("interact_walk")
+    if t0 is None or state.get("click_moving_at") != t0:
+        return False
+    return state.get("router_chain") is not None or bool(state.get("dest"))
 
 
 def _order_walk(send, state, conn_id, agent_id, spot):
@@ -632,13 +1061,15 @@ def _order_walk(send, state, conn_id, agent_id, spot):
 
 
 def interact_approach_point(spot, pos, stop=None):
-    """The point INTERACT_STOP short of the NPC, on the player's side. -> (x, y)
+    """The point `interact_stop()` short of the NPC (INTERACT_STOP, the follow
+    disc; the old 100 u under --held-interact-at-range), on the player's side.
+    -> (x, y)
 
     A player already inside `stop` gets the NPC's own spot back -- there is
     nothing to walk -- and a player at exactly the NPC's position too, so the
     division below never sees zero.
     """
-    stop = INTERACT_STOP if stop is None else float(stop)
+    stop = interact_stop() if stop is None else float(stop)
     dx, dy = float(pos[0]) - float(spot[0]), float(pos[1]) - float(spot[1])
     gap = math.hypot(dx, dy)
     if gap <= stop:
@@ -668,7 +1099,13 @@ def interact_route(send, state, conn_id, agent_id, spot):
     comment); this is OUR walk, on OUR mesh, and it says so. Returns False --
     hold only, no walk -- where the router has nothing to route over (no mesh,
     no position belief) or the arm is off.
+
+    RANGERPRE-S17: the walk's identity -- the click-latch stamp it sets -- is
+    recorded as `state["interact_walk"]`, and cleared on the no-walk returns,
+    so interact_pending_tick can tell a walk still in flight from one that is
+    over (`interact_walk_live`).
     """
+    state.pop("interact_walk", None)
     if not INTERACT_ROUTE or not ROUTER:
         return False
     pm, pos = state.get("pathmap"), state.get("pos")
@@ -687,12 +1124,13 @@ def interact_route(send, state, conn_id, agent_id, spot):
     state["heading_hold"] = None
     prev = state.get("click_moving_at")
     state["click_moving_at"] = now
+    state["interact_walk"] = now
     _click_leg_arm(state, dest, now, silent=prev is not None)
     routed = router_answer_click(send, state, conn_id, None, dest, dest_plane,
                                  cur_plane, dest_plane, cur_plane)
     if routed:
         print(f"[c{conn_id}] INTERACT-WALK: routed the player to "
-              f"({dest[0]:.0f}, {dest[1]:.0f}), {INTERACT_STOP:.0f} u short of "
+              f"({dest[0]:.0f}, {dest[1]:.0f}), {interact_stop():.0f} u short of "
               f"agent {agent_id}, over our mesh (OURS; --no-interact-route "
               f"reverts to the hold alone)", flush=True)
     return bool(routed)
@@ -706,6 +1144,13 @@ def interact_pending_tick(send, state, conn_id):
     duplicating its body -- that function is already the whole consequence of an
     interact and is identical whoever asks, which is the property its own
     docstring is about.
+
+    WHERE (RANGERPRE-S17, the evidence at HELD_INTERACT_AT_DISC): inside the
+    follow disc, follow_stop_radius() + INTERACT_DISC_SLACK (81 u), while our
+    walk is in flight -- retail's ~75-82 u; or anywhere inside INTERACT_RANGE
+    once that walk is over (arrived, reported, replaced, or never sent), so a
+    leg that ends outside the disc cannot strand the hold. Under
+    --held-interact-at-range: inside INTERACT_RANGE, walk or no walk.
     """
     pending = state.get("pending_interact")
     if not pending:
@@ -721,11 +1166,27 @@ def interact_pending_tick(send, state, conn_id):
               f"the agent is gone", flush=True)
         return
     px, py = state["pos"]
-    if math.hypot(spot[0] - px, spot[1] - py) > INTERACT_RANGE:
+    gap = math.hypot(spot[0] - px, spot[1] - py)
+    if HELD_INTERACT_AT_DISC:
+        disc = follow_stop_radius() + INTERACT_DISC_SLACK
+        if gap <= disc:
+            why = f"inside the {disc:.0f} u follow disc"
+        elif gap <= INTERACT_RANGE and not interact_walk_live(state):
+            why = ("our walk is over" if state.get("interact_walk") is not None
+                   else "no walk went out")
+            why += f", inside INTERACT_RANGE ({INTERACT_RANGE:.0f} u)"
+        else:
+            return
+    elif gap > INTERACT_RANGE:
         return
+    else:
+        why = (f"inside INTERACT_RANGE ({INTERACT_RANGE:.0f} u), "
+               f"--held-interact-at-range")
     state.pop("pending_interact", None)
+    state.pop("interact_walk", None)
     print(f"[c{conn_id}] held INTERACT for agent {agent_id} ARRIVES -- "
-          f"answering it now", flush=True)
+          f"answering it now: the model stands {gap:.1f} u from it, {why} "
+          f"[RANGERPRE-S17]", flush=True)
     _handle_interact(send, state, conn_id, agent_id, interact_byte)
 
 
@@ -771,11 +1232,16 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             how = ("routed over our mesh" if routed
                    else ("0x002A walk order (--interact-walk)" if INTERACT_WALK
                          else "NO walk -- the player walks over themselves"))
+            # RANGERPRE-S17: where the hold will be served -- the follow disc
+            # while our walk is in flight, INTERACT_RANGE otherwise.
+            _serve = (follow_stop_radius() + INTERACT_DISC_SLACK
+                      if HELD_INTERACT_AT_DISC and interact_walk_live(state)
+                      else INTERACT_RANGE)
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
                   f"HOLDING the interact; {how} "
-                  f"(~{max(0.0, gap - INTERACT_RANGE) / DEFAULT_RUN_SPEED:.1f} s "
-                  f"at run speed)", flush=True)
+                  f"(~{max(0.0, gap - _serve) / DEFAULT_RUN_SPEED:.1f} s "
+                  f"at run speed to the {_serve:.0f} u serve)", flush=True)
             return
     # Serving any interact cancels a held one: the player changed their mind,
     # and firing the stale one on arrival would open a window they no longer
@@ -872,14 +1338,57 @@ def _quest_prose(row, text):
     framing = row.get("wire_framing", "template")
     xp = row.get("reward_experience")
     if xp is None:
+        if QUEST_ITEMS_ENABLED and row.get("reward_items"):
+            print(f"[quests] quest {row.get('quest_id')}: reward_items are NOT "
+                  f"drawn -- the row has no reward_experience, so there is no "
+                  f"reward block to carry an item line (a header with items "
+                  f"alone is NOT FOUND on tape) [RANGERPRE-S20]", flush=True)
         return questdefs.coded_literal(text, framing,
                                        limit=questdefs.DIALOG_UNITS)
     # SLOT B FOLLOWS THE FLAG (the D9 fix pass, ENG-9): --no-quest-gold is
     # "as before this arc", and before this arc the screen drew no gold line;
     # a promise the server then refuses to pay is the worse half of a revert.
     gold = row.get("reward_gold") if QUEST_GOLD_ENABLED else None
+    # THE ITEM LINES FOLLOW THEIR FLAG the same way (RANGERPRE-S20):
+    # --no-quest-items grants nothing, so it draws nothing.
+    items = quest_item_lines(row) if QUEST_ITEMS_ENABLED else ()
     return questdefs.with_reward(text, int(xp), gold,
-                                 framing, limit=questdefs.DIALOG_UNITS)
+                                 framing, limit=questdefs.DIALOG_UNITS,
+                                 items=items)
+
+
+# The wire's shield type byte: quest 62's delivered reward 1607 is type 24
+# (0x0161 at 20260929T150923 :53880 727.4875), the Warrior henchman's shield
+# too (F33). OBSERVED; holds_shield's literal 24 is the same number.
+SHIELD_ITEM_TYPE = 24
+
+
+def quest_item_lines(row):
+    """[(name units, armour)] -- the reward_items this row's screens DRAW
+    (questdefs.reward_item_run), RANGERPRE-S20 (QUESTFLOW-H4).
+
+    A SHIELD ONLY: an item of wire type 24 carrying an armour-rating (572)
+    word, drawn as its name and `Armor: <572's argument>` -- the one line on
+    tape (quest 62's shield, 21 strings; its numeric equal to the delivered
+    shield's own 572 argument, n = 1). Every other reward item is GRANTED at
+    the hand-in but NOT DRAWN, and this prints why: a weapon's line needs a
+    damage-type string id from 587's argument, a table NOT FOUND in this repo
+    (0x08DE / 0x08E4 are the two seen); anything else has no stat template
+    observed for it."""
+    out = []
+    for key in row.get("reward_items") or ():
+        item = agents.item_template(str(key))
+        rating = item_word(item, ARMOR_RATING_MODIFIER)
+        if int(item.get("item_type", -1)) == SHIELD_ITEM_TYPE and rating is not None:
+            out.append(([ord(c) for c in item["enc_name"]], int(rating[0])))
+            continue
+        why = ("a weapon: its line's damage-type string (from 587's argument) "
+               "is NOT FOUND" if item_word(item, ITEM_WORD_DAMAGE_TYPE)
+               else "no observed line template for its type")
+        print(f"[quests] quest {row.get('quest_id')}: reward item {key!r} "
+              f"(type {item.get('item_type')}) is granted but NOT DRAWN on the "
+              f"screen -- {why} [RANGERPRE-S20]", flush=True)
+    return out
 
 
 def _quest_screen(send, agent_id, qid, code, row):
@@ -1047,8 +1556,12 @@ def _quest_markers(state):
 # here, so the giver stops offering it and its marker stays clear. Before this a
 # completed quest was simply un-held, which made every quest repeatable and put
 # the '!' straight back on the giver the moment the reward window closed.
+# `quest_home` since RANGERPRE-S18: {quest id: the map it was accepted on},
+# written by accept_quest and read by _replay_quests -- retail's 0x0050 carries
+# the ACCEPTING map on every replay (37 of 37 on 20260929T150923), so the map
+# has to outlive the connection that accepted the quest.
 QUEST_PROGRESS = {"quests": set(), "objectives_done": set(),
-                  "quests_completed": set()}
+                  "quests_completed": set(), "quest_home": {}}
 
 
 def bind_progress(state):
@@ -1077,16 +1590,31 @@ def _replay_quests(send, state):
     objectives line it sent went nowhere. Copying the order verbatim would
     reproduce a bug we can see, and the failure is invisible: the client shows
     an empty objective and looks like it ignored us.
+
+    0x0050 is [qid, FLAGS, s1, s2, s3, HOME], and since RANGERPRE-S18 both
+    words are the accept's: the row's log flags (36 of 20260929T150923's 37
+    replays repeat the accept's value; the 37th adds bit 1 after a 0x004D we
+    do not send) and the map the quest was ACCEPTED on (37 of 37 -- q75,
+    accepted on 160, replays home 160 on 146 and 160). A quest held with no
+    recorded home (accepted before S18 in this process, or under the flag)
+    falls back to the map being loaded, which is what every replay sent
+    before. --no-retail-quest-log sends 32 and the loaded map, as before S18.
     """
     held = sorted(state.setdefault("quests", set()))
     if not held:
         return
     mid = state["map_id"]
+    homes = state.get("quest_home") or {}
     for qid in held:
         row = quest_rows()[qid]
         nm = questdefs.enc_string(row.get("enc_name") or [])
-        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, 32, nm, nm, nm, mid],
-             f"QUEST_ADD_NO_MARKER[{qid}] (instance load)")
+        if QUEST_LOG_RETAIL:
+            flags, home = questdefs.log_flags(row), int(homes.get(qid, mid))
+        else:
+            flags, home = 32, mid
+        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, flags, nm, nm, nm, home],
+             f"QUEST_ADD_NO_MARKER[{qid}] (instance load; log flags {flags}, "
+             f"home {home})")
     for qid in held:
         row = quest_rows()[qid]
         _send_description(send, state, qid, row)
@@ -1356,6 +1884,14 @@ GAME_SMSG_ITEM_CHANGE_LOCATION = 0x014B
 GAME_SMSG_ITEM_SWAP_LOCATIONS = 0x0152
 GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT = 0x006F
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
+# RANGERPRE-S15 (LOOT slice 1), a kill's gold drop and its pickup (loot.py):
+# 0x0162 declares the GOLD -- named_item()'s layout, 9 of 9 corpus gold records
+# on it and 0 on 0x0161 (the schema carries no name; ITEM_GOLD_DECLARE is OURS);
+# 0x0168 [ground agent, source agent] (ITEM_AGENT_DROP_SOURCE); 0x0159
+# [item, picker] (ITEM_PICKED_UP).
+GAME_SMSG_ITEM_GOLD_DECLARE = 0x0162
+GAME_SMSG_ITEM_DROP_SOURCE = 0x0168
+GAME_SMSG_ITEM_PICKED_UP = 0x0159
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
 GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
 # [agent_id, dword]. Grows the char client's char-by-id table ([charctx+0x7CC],
@@ -1476,9 +2012,21 @@ GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT = 0x006E
 # -- a server must declare before it references. The noun stays unsettled; see
 # studies/smsg/FINDINGS.md section 2.
 GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
-# agent_id + allegiance byte. The field that decides whether a click is an
-# attack or a conversation; the team token only decides colour.
+# [agent_id, team token] -- the DISPLAYED allegiance, the create's field 12 at
+# agent+0xE8. This comment used to say "allegiance byte. The field that
+# decides whether a click is an attack", which studies/newopcodes/FINDINGS.md's
+# 0x002F section RESOLVED 2026-08-18: 0x002F alone flips the displayed token on
+# our client, and attackability is +0x1B5, written once at construction
+# (studies/enemy/PLAN.md). First SENT by RANGERPRE-S12 (send_due_tokens): a
+# provoked charmable animal turns 'anim' -> 'anin', retail's own use of it.
 GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
+# [agent_id, string16] -- the agent's encoded NAME (schema/overrides.json 155:
+# stored per agent id, compare-else-copy, so an equal repeat is a no-op).
+# First SENT by RANGERPRE-S12, in a provoked animal's turn prelude
+# (animal_turn_prelude). Retail also sent it in that animal's CREATE batch
+# (:55934 t=504.4205, with [36, 161, 1]) and ours does not -- a named
+# follow-up, not that step.
+GAME_SMSG_AGENT_SET_NAME = 0x009B
 # agent_id + a dword CHECKSUM of five fields off the agent's SYNC copy --
 # ArenaNet's own desync detector, decoded 2026-08-23 and never sent by retail in
 # our corpus. The client XORs +0xB4/+0xB0 velocity, +0x80 plane and +0x7C/+0x78
@@ -2885,9 +3433,17 @@ WEAPON_SET_BACKPACK_SLOTS = {}
 # DESKWORK-D1 step 8: what a set's items ARE after an in-game equip changed
 # them -- {set: (lead item id, off item id)}, read by weapon_set_items before
 # the constants. An equip (0x0030) into slot 0 or 1 makes that item the ACTIVE
-# set's lead / off hand (the hands ARE the active set; which record retail
-# rewrites is UNOBSERVED -- its four swap witnesses re-sent no 0x0147), a move
-# out of a hand (0x004F) leaves a 0. Cleared at every dress.
+# set's lead / off hand (the hands ARE the active set), a move out of a hand
+# (0x004F) leaves a 0. Cleared at every dress. WHICH RECORD RETAIL REWRITES is
+# OBSERVED since RANGERPRE-S21, n=1: the ACTIVE set's -- 20260929T150923
+# :56064's two equips (set 0 active, the bow in hand) were followed by three
+# loads naming set 0 = [sword, shield] (:53753, :53756, :59427). The in-session
+# swaps re-send no 0x0147 (its four earlier witnesses, and these two). What
+# retail does to ANOTHER set's record when that set's item is equipped into
+# set 0 is NOT OBSERVED (retail's sword and shield were in no set). Under
+# HAND_RESTORE (the default since 2026-09-30) item_hands_at_dress re-fills this
+# map at the dress from the restored hands; under --no-hand-restore the dress
+# clears it and the hands are the records'.
 SET_ITEMS_OVERRIDE = {}
 
 
@@ -4348,7 +4904,9 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
                      now, label, base=0.0):
     """One EXTRA hit of a scythe swing on body `aid`: its own roll and critical
     through ITS armour, then retail's per-hit batch -- the gain, the first-hit
-    maximum, the word (WEAPONS-W3). `base` is the swing's base penetration
+    maximum, the word (WEAPONS-W3); a critical's energy sits ahead of the
+    maximum, which is always the message right before its word (MAXHP-1).
+    `base` is the swing's base penetration
     (an attack skill's, studies/weapons 35). Returns the points dealt."""
     foe = state["agents"][aid]
     armour = penetrated_armour(cracked_body_armour(state, aid, creature_typed_rating(foe.get("armor_rating"), foe,
@@ -4376,14 +4934,12 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
     if ENERGY:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now, conn_id,
                                 f"the scythe's extra hit on agent {aid}")
-    if foe.get("max_declared_on_hit", foe["max_health"]) != foe["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, aid, int(foe["max_health"])],
-             f"maximum {int(foe['max_health'])} on agent {aid}, declared on the "
-             f"scythe's extra hit")
-        foe["max_declared_on_hit"] = foe["max_health"]
     if critical:
         critical_energy_gain(send, state, conn_id)
+    # MAXHP-1: the body's maximum is the message immediately before its word
+    # (OBSERVED 12 of 12 on 20260929T150923; the scythe's position INFERRED).
+    declare_body_max_on_hit(send, foe, aid, PLAYER_AGENT_ID,
+                            "the scythe's extra hit")
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, aid, PLAYER_AGENT_ID,
@@ -4481,6 +5037,12 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
                  [agents.GV_EFFECT_ON_TARGET, aid, PLAYER_AGENT_ID, visual],
                  f"impact {visual} of preparation {prep_skill} on agent {aid} "
                  f"(the splash)")
+        # MAXHP-1: the neighbour's first word from the player carries its
+        # maximum right before it -- INFERRED, the splash has no retail witness
+        # (0 Ignite Arrows in the corpus); it is the rule every other player
+        # word follows (12 of 12, 20260929T150923).
+        declare_body_max_on_hit(send, foe, aid, PLAYER_AGENT_ID,
+                                f"preparation {prep_skill}'s splash")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.PROP_DAMAGE, aid, PLAYER_AGENT_ID,
               _damage_fraction(points, foe["max_health"], agents.PROP_DAMAGE,
@@ -5839,6 +6401,23 @@ def npc_recharge_anchor(activation):
 # from the last value declared. --player-max-always is the pre-2026-09-22 arm.
 PLAYER_MAX_ALWAYS = False
 
+# AN NPC'S MAXIMUM RIDES THE PLAYER'S FIRST LANDED WORD, NOT ITS CREATE
+# (RANGERPRE-S10, MAXHP-1). OBSERVED, capture 20260929T150923: 526 NPC-class
+# create intervals (0x0020 tag 2) over 11 connections, 12 carry a 0x009F [42,
+# agent, max], and every one is the message IMMEDIATELY before the observer's
+# FIRST 0x00A3 on that body, at the same wire t -- 0 on a body the observer
+# never hit, 0 hit bodies left undeclared; an attack order with no landed hit
+# draws none (:53756 agent 19). The design lane's corpus agrees, 120 of 120 over
+# 5,910 NPC-class intervals, and 0 of 2,458 party / other-source words on an
+# undeclared body carried one. So create_agent_world withholds an NPC's 42 and
+# declare_body_max_on_hit sends it at every player-sourced damage site. PARTY
+# bodies (allegiance 'play') keep their create-time 42 -- retail declares none
+# of its 509 'play' creates either, but a hero's rides its character block
+# ahead of the create, which ours does not always send (PARTYMAX, a follow-up).
+# --npc-max-at-create is the pre-2026-09-29 arm: the create declares, and an
+# armour-ignoring word (Empathy's) declares before every word, any source.
+NPC_MAX_AT_CREATE = False
+
 # MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
 # GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE, the maxSpeed store at agent+0x5C
@@ -6073,6 +6652,9 @@ import henchparty                                              # noqa: E402
 # builder; read by player_purse, the load burst, grant_quest_reward and the
 # merchant wrappers (persist_purse), and by test_purse.py.
 import purse                                                   # noqa: E402
+# RANGERPRE-S15 (LOOT slice 1): the ground drop's values (a stdlib leaf); the
+# sends are loot_on_kill / handle_pickup / serve_pickup / ground_items_tick here.
+import loot                                                    # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -11895,6 +12477,12 @@ GAME_CMSG_UNNAMED_ACK_0079 = 0x0079
 #   is 0 in 363 of 363 with 0 collisions. Nothing was arranged to make that come
 #   out; the messages were being decoded and discarded the entire time.
 GAME_CMSG_TARGET_SELECT = 0x00C1
+# 0x003F PICKUP -- [ground agent, u8 0], arm 3 of the client's world-action switch
+#   (schema/overrides.json GAME_CMSG 63). OBSERVED 3 of 3 on 20260929T150923, each
+#   in one segment with its 0x00C1 [agent, x]; answered since RANGERPRE-S15 by
+#   handle_pickup (a straight 0x002A walk, then the arrival frame). It was
+#   test_dispatch's DROPPED_ON_PURPOSE row "the day a drop exists" -- it exists.
+GAME_CMSG_PICKUP = 0x003F
 # 0x0040 ROTATE_PLAYER -- [angle, turn_amount], and THE TRAP IS THE TYPING. Both
 #   payload fields are marshalled `dword` and hold IEEE-754 float32 VALUES; the
 #   client's own SEND table says u32, so the catalog is correct and must not be
@@ -12481,6 +13069,14 @@ HOSTILE_TARGETS_PARTY = True   # False (--hostile-target-player): the player onl
 # the H3 rule from then on. A row that says nothing behaves as it always did.
 PASSIVE_HOSTILES = True   # False (--no-passive-hostiles): every hostile notices on
                           # proximity, every run before 2026-09-16.
+# RANGERPRE-S12: a PROVOKED ANIMAL TURNS ON THE WIRE. A row whose allegiance is
+# "animal" is created carrying 'anim' (TEAM_TOKEN_BY_NAME); the provoke marks
+# the turn due, the player's landed word carries retail's prelude right before
+# its 42 (animal_turn_prelude, from declare_body_max_on_hit), and the next
+# simulation tick sends 0x002F 'anin' ahead of the body's first chase or swing
+# (send_due_tokens). False (--no-animal-token-flip): the body keeps 'anim' and
+# fights under it -- no prelude, no 0x002F -- the known-bad arm.
+ANIMAL_TOKEN_FLIP = True
 BASE_ARMOUR_BY_PROFESSION = {1: 80, 2: 70, 3: 60, 4: 60, 5: 60, 6: 60,
                              7: 70, 8: 60, 9: 80, 10: 70}
 SCALE_MEANS_RESURRECT = {"Resurrect"}
@@ -12903,6 +13499,45 @@ ITEM_MOVES_ENABLED = True      # False (--no-item-moves): c2s 0x004F ITEM_MOVE
                                # lead rule (0x014B into an EMPTIED hand, never
                                # a 0x0152 with a 0) and the store-built 0x006E
                                # -- with no in-game move nothing differs.
+HAND_RESTORE = True            # False (--no-hand-restore), RANGERPRE-S21
+                               # (WEAPONREFUSE-B): under --persist a stored
+                               # HAND change -- an in-game equip into equipped
+                               # 0/1 -- is put back at the next dress
+                               # (itemstore.restore's hand_ok, then
+                               # item_hands_at_dress), so set 0, the hands,
+                               # 0x0147 and 0x006E name the equipped weapons.
+                               # OBSERVED, n=1 swap on three loads: on
+                               # 20260929T150923 :56064 the load held the bow
+                               # (set 0 = [2, 0, 698, 0]); c2s 0x0030 [697]
+                               # at t=930.405 and [696] at 932.489 put a sword
+                               # and a shield in the hands; the next three
+                               # loads (:53753 t0 993.31, :53756 997.62,
+                               # :59427 1216.74) dressed set 0 = [sword,
+                               # shield], 0x0148 set 0, the bow at the
+                               # sword's old backpack cell. DEFAULT ON since
+                               # 2026-09-30: shipped OFF (3ab6b017) until a
+                               # loopback run answered one question -- the
+                               # restored load names a set-1..3 item in BOTH
+                               # set 0 and its own set -- and the run PASSED.
+                               # OBSERVED on OUR client (build 38797, tree
+                               # rangerpre e968131a, agent-piloted): harness
+                               # 20260930T102914 sent 0x0147 [327,1,0,11,12]
+                               # AND [327,1,1,11,12], spawn checkpoints passed,
+                               # no crash dialog, heartbeat alive to teardown,
+                               # doll and body drew the restored sword+shield;
+                               # the doubled load was accepted on 4 fresh loads
+                               # (T102914, T103106, T103314, T103453) and 2 zone
+                               # loads (T104128 c2 map 146, c3 map 148); F2/F1
+                               # in the doubled state answered by 0x0148 only.
+                               # What RETAIL does stays UNVERIFIED: 0 of 21
+                               # retail loads with two or more non-empty sets
+                               # name one item twice. The revert arm is the
+                               # pre-flip default, every dress before
+                               # 2026-09-30: the hands at the defaults, a
+                               # stored hand change said in the log (KNOWN-BAD:
+                               # T102741 and zone pair T103808 loaded the bow
+                               # after the sword+shield equips). --hand-restore
+                               # is still accepted: the default spelled out.
 EQUIPPED_VISUAL_ORDER = False  # True (--equipped-visual-order): dress the armour
                                # into the EQUIPPED BAG at its 0x006E position
                                # (body 2, boots 3, legs 4, gloves 5, head 6) --
@@ -13051,6 +13686,40 @@ QUEST_COMPLETE_VISUAL = True   # False (--no-quest-complete-visual): a hand-in
                                # turn_in_quest sends it right after the 0x004A
                                # -- retail's next message on 22 of 22 hand-ins
                                # (OBSERVED; QUEST_COMPLETE_VISUAL_ID).
+QUEST_LOG_RETAIL = True        # False (--no-retail-quest-log): the accept's
+                               # 0x0049 and every 0x0050 replay send log flags
+                               # 32 and the replay's home is the map being
+                               # loaded, as every run before RANGERPRE-S18.
+                               # Default ON: the row's flags (questdefs.
+                               # log_flags; 0 on 5 of 20260929T150923's 12
+                               # accepts) and the ACCEPTING map as home on
+                               # every replay (37 of 37) -- OBSERVED.
+ACCEPT_REWARDS = True          # False (--no-accept-rewards): a quest row's
+                               # accept_items / accept_skills are NOT granted
+                               # (the print names them), as every run before
+                               # RANGERPRE-S18. Default ON: accept_quest grants
+                               # them BEFORE the 0x0049 -- retail's order on 2
+                               # of 2 grant-carrying accepts (OBSERVED;
+                               # 20260929T150923 :56064 921.161, q75).
+QUEST_ITEMS_ENABLED = True     # False (--no-quest-items): a hand-in takes no
+                               # handin_items back and grants no reward_items,
+                               # and the screens draw no item line, as every
+                               # run before RANGERPRE-S20. Default ON:
+                               # turn_in_quest sends 0x014D per taken item, then
+                               # 0x0161 + 0x013E per reward (into the vacated
+                               # cell) BEFORE the first 0x0052 -- 2 of 2 retail
+                               # item-bearing hand-ins (OBSERVED; 20260929T150923
+                               # :53880 727.4875, q62) -- and _quest_prose draws
+                               # a shield's line (questdefs.reward_item_run).
+QUEST_MARKER_AT_OBJECTIVE = True  # False (--quest-marker-at-player): the
+                               # accept's 0x0049 marker is the player's own
+                               # position on this map, plane 0, as every run
+                               # before RANGERPRE-S18. Default ON: the
+                               # objective's spot and plane, or the exit toward
+                               # its map labelled with that map
+                               # (quest_accept_marker; retail's 5 of 12 on a
+                               # create spot, 5 of 12 cross-map, OBSERVED /
+                               # CORROBORATED on 20260929T150923).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -13803,6 +14472,17 @@ ALLEGIANCE_BY_NAME = {
     "hostile": agents.ALLEGIANCE_HOSTILE,
     "player": agents.ALLEGIANCE_PLAYER,
     "noncombatant": agents.ALLEGIANCE_NONCOMBATANT,
+    # RANGERPRE-S12: a charmable animal is a FOE CLASS like any hostile (every
+    # foe predicate, AI tick, reward and gate reads this value), and its WIRE
+    # token is TEAM_TOKEN_BY_NAME's -- the two are kept apart on purpose.
+    "animal": agents.ALLEGIANCE_HOSTILE,
+}
+# The names whose create token is NOT the foe class: (created with, turned to
+# on the first landed hit). A row naming one is passive and attacks back unless
+# it says otherwise (spawn_population). RECONSTRUCTION of the split; both
+# tokens OBSERVED on definition 1343 (agents.TOKEN_ANIMAL).
+TEAM_TOKEN_BY_NAME = {
+    "animal": (agents.TOKEN_ANIMAL, agents.TOKEN_ANIMAL_PROVOKED),
 }
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
@@ -18427,7 +19107,14 @@ def action_hold(send, state, value, why):
     under the GIL. PLAYER ONLY: the corpus shows other agents' actions
     bracketed by the same property, and our NPC paths do not send it --
     recorded in castmech 3c rather than wired past the evidence.
+
+    RANGERPRE-S16: ANY release ends a ranged approach's hold as well
+    (`approach_hold`, which only exempts the hold from the launch's release in
+    _land_player_swing) -- before the transition-only return, so a release of a
+    flag already clear still forgets it.
     """
+    if not value:
+        state.pop("approach_hold", None)
     if state.get("action_hold", 0) == value:
         return
     state["action_hold"] = value
@@ -19559,7 +20246,66 @@ def follow_stop_radius(target=None):
 # and 1,284 u for a bow the wiki puts at 1,273, both against a target that
 # walked during the windup, so they bound nothing tighter. No inset: the leg
 # ends AT range and the gate's strict `>` lets the swing open there.
+# (CORRECTED by RANGERPRE-S16, below: the hold is not all that parks the body.
+# A 0x0028 [me] rides the same segment one simulation tick behind it, 12 of 12
+# -- "no stop message precedes the start" is true; one FOLLOWS it.)
 APPROACH_STOPS_AT_RANGE = True      # --legacy-ranged-approach reverts to the disc
+
+# ---- RANGERPRE-S16 (ROUTE-A, 2026-09-30): A RANGED APPROACH'S SWING HALTS THE BODY
+#
+# OBSERVED, re-read from the bytes for this step (livewire.decode_conn, own agent by
+# adrenjoin.whose_agent; test_approachroute section 3 re-derives every count). On
+# the four connections whose player SHOOTS (own 0x00A4 launches: arrows 143 on
+# three, projectile 2 on :62994), the FIRST own attack start after a server 0x002A
+# follow carries, in ONE segment:
+#     0x00A0 [4, me, T, 0], 0x009F [8, me, 1], 0x001E tick, 0x0028 [me]
+# on 12 of 12 such starts: 20260929T150923 :55934 at 335.0923, 338.0686, 379.4129,
+# 453.5679, 515.4825 (5/5); 20260914T005758 :56011 at 169.8902, 223.5783, 361.9119,
+# 363.9707, 583.1255 (5/5; 361.9119's swing was cancelled by a keyboard move before
+# its launch); 20260810T235916 :61624 at 95.4709; 20260807T143055 :62994 at 82.7741.
+# The hold is NOT released at the launch: the swing's own 0x00A4 segment carries no
+# [8, me, 0] on 0 of 10 (336.2391, 380.5511, 454.7078, 516.6069 ...; 338.0686 and
+# 361.9119 never launched -- a skill press, a move). It ends at the next thing
+# that releases a hold. The FIRST own [8, me, 0] after each of the 12 starts is:
+#   - a keyboard report's answer, 7 -- [8, me, 0] then the 0x0029 leg, the c2s
+#     0x003D under 60 ms ahead: :55934 461.5991 (0x003D at 461.5639; the 453.5679
+#     hold stayed up 8.0 s across its launches), :56011 171.2864 (0x003D at
+#     171.2508), 224.8611, 362.1789, 365.3111, 584.6648, :61624 99.8772 (0.33 s
+#     after its target died, but riding the report's leg);
+#   - a re-approach, 1 -- [8, me, 0] immediately ahead of the new 0x002A (337.5687);
+#   - a skill press, 2 -- [8, me, 0] opens the press's own burst (338.1238:
+#     [8, 31, 0], [3, 31, 0], 0x00A0 [50, 31, 45, 394], [8, 31, 1]; 517.4328);
+#   - the target's death, 2 -- :55934 384.3644, 0.79 s after agent 46 dies at
+#     383.5733; :62994 86.2717.
+# Every one is an action_hold(0) site here already (cancel_on_move, _approach_send,
+# the skill press, attack_tick's target-gone), and action_hold's pop forgets the
+# approach's hold at each: the hold has no release site of its own. (This block
+# first cited 339.4568 as the keyboard end. It is not the approach's: it releases
+# the hold 338.1238's skill press set.) The chain's later starts are [4] alone
+# (381.8887, 456.0487): the hold is transition-only.
+#
+# CONTROL: every start with the body at rest (the last own movement event a c2s
+# 0x0047, or a server 0x0028 / 0x002C) carries neither message -- 37 of 37 on
+# 20260929T150923. MELEE IS NOT THIS SHAPE and is left alone: :53756's melee
+# approach starts are mixed (1045.737 hold only, 1088.4492 both, 1114.1519 and
+# 1133.4666 neither), so the rule is scoped to a ranged weapon, where it is 12/12.
+#
+# WHY IT MATTERS HERE (RECONSTRUCTION, from the decode; the run measures it): the
+# 0x002A names the TARGET, and the client's own resolver stops the body at the
+# MELEE disc (r + r + 56, approach_tick's docstring); our leg ends at the weapon's
+# range (W2b). Since ANIMREF-RE 35 no hold rides an auto swing, so nothing on the
+# wire told the drawn body to stop at range while our copy parked there. The
+# 0x0028 halts both client copies where they stand; after a server-ordered follow
+# the sync copy walks the same 0x002A as the body, so this is not CANCELWALK-F34's
+# keyboard warp onto a lagging copy -- the run's no-snap question checks that.
+#
+# NOT REPRODUCED: the 0x001E between [8, 1] and 0x0028 -- retail's halt is one
+# simulation tick behind the start (12 of 12); ours rides the start's own tick,
+# ~50 ms and ~14 u of walk earlier. UNVERIFIED: the melee rule, and starts after
+# any OTHER movement answer (a 0x0029 leg, a keyboard report answered at the press)
+# -- mixed on the tapes, and not produced by this server's approach, which is
+# always the one 0x002A (ROUTE-C's corner chain does not exist here).
+APPROACH_START_HALTS = True         # False (--no-approach-start-halt): [4] alone
 
 
 def approach_stop(target=None):
@@ -19609,7 +20355,13 @@ def _approach_abandon(state):
     The three arms and attack_tick call this; the latch itself is theirs to
     clear. Forgets the follow and stops the server copy's integrator walk
     -- the click arm never sets `dest`, so a stale one here would march
-    the model to a point the body abandoned."""
+    the model to a point the body abandoned.
+
+    RANGERPRE-S16: it also forgets an approach that ARRIVED and whose swing has
+    not opened yet (`approach_closed`), BEFORE the early return -- arrival has
+    already cleared `approach` itself, and a body that moved, clicked or lost
+    its target since is no longer standing where the follow left it."""
+    state.pop("approach_closed", None)
     if state.get("approach") is None:
         return
     state["approach"] = None
@@ -19617,8 +20369,26 @@ def _approach_abandon(state):
 
 
 def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
-                   rec=None):
-    """Send the follow and arm the leg it starts. See approach_tick."""
+                   rec=None, stop_at=None, into="approach"):
+    """Send the follow and arm the leg it starts. See approach_tick.
+
+    `stop_at` (RANGERPRE-S15) overrides where the leg ends, centre to centre:
+    None is approach_stop's (the melee disc or the held weapon's range), and a
+    pickup walks to the item itself (0.0). The wire is the same 0x002A either
+    way -- the target's own point and its id.
+
+    `into` names the record the leg is PUBLISHED under, and it is written last,
+    after the dest it names: "approach" (attack_tick's -- it abandons one, dest
+    and all, on every tick it holds no attack target) or "pickup"
+    (pickup_tick's: {agent, t0, eta, dest}). A pickup's leg never touches
+    state["approach"], not even for the length of one print: handle_pickup runs
+    on the CONNECTION thread and attack_tick on the WORLD tick, so a record
+    parked there is one the tick can abandon, clearing the walk's dest while
+    the 0x002A is already on the wire -- the pickup then cancels "short" and
+    the client walks onto a pile nobody serves (RANGERPRE-S15 review: 1 of 400
+    at the tick's cadence, 71 of 400 with a tight tick; test_loot 3j/3k)."""
+    if into not in ("approach", "pickup"):
+        raise ValueError(f"_approach_send: into={into!r} -- 'approach' or 'pickup'")
     plane = int(state.get("plane", 0))
     # MOVECODE-1z-v: the 0x002A follow is a movement order of its own, so
     # a live router chain must not keep granting legs behind it (the
@@ -19707,7 +20477,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     px, py = _reach_frame(state, now)
     px, py = float(px), float(py)
     dist = math.hypot(tx - px, ty - py)
-    stop = approach_stop(agent)                       # WEAPONS-W2b: the range for a bow
+    stop = (approach_stop(agent) if stop_at is None   # WEAPONS-W2b: the range for a bow
+            else float(stop_at))                      # RANGERPRE-S15: a pickup, 0.0
     run = max(dist - stop, 0.0)
     f = run / dist if dist > 0.0 else 0.0
     stop_point = (px + (tx - px) * f, py + (ty - py) * f)
@@ -19756,18 +20527,29 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                                                     ty - float(lr[1])), 1)),
                       report_age=(None if lr is None else round(now - float(lr[3]), 3)),
                       frame_vs_model=round(math.hypot(px - mx, py - my), 1),
-                      stop=round(stop, 1))
+                      stop=round(stop, 1),
+                      **({"leg": "pickup"} if into == "pickup" else {}))
         except Exception:                              # noqa: BLE001
             pass
+    # RANGERPRE-S16: a NEW follow while a ranged approach's hold is still up
+    # (the target walked out of range mid-chain) releases it first, adjacent to
+    # the 0x002A -- retail's re-approach, :55934 337.5687: [8, 31, 0] then
+    # 0x002A [31, ..., 45]. A re-path is the same follow and releases nothing.
+    if not repath and state.get("approach_hold"):
+        action_hold(send, state, 0, f"the re-approach to agent {target_id} "
+                    f"[RANGERPRE-S16]")
     # The dest is the TARGET'S OWN position, not the stop point: that is the
     # message retail sends (bit-exact on 16/16 never-moved targets) and it
     # is what makes the client's own resolver stop the body at reach. Both
     # plane words carry the mover's plane (61/61 equal on retail).
     send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
          [PLAYER_AGENT_ID, (tx, ty), plane, plane, target_id],
-         f"APPROACH{' re-path' if repath else ''}: player -> agent "
-         f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
-         f"{stop:.0f} u [ANIMREF-RE 38]")
+         (f"PICKUP WALK: player -> ground agent {target_id} at ({tx:.0f},"
+          f"{ty:.0f}), {dist:.0f} u out, to the item itself [RANGERPRE-S15]"
+          if into == "pickup" else
+          f"APPROACH{' re-path' if repath else ''}: player -> agent "
+          f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
+          f"{stop:.0f} u [ANIMREF-RE 38]"))
     # The body is on a leg it walks silently -- the click latch's exact
     # meaning (the client sends nothing between a follow and its swing,
     # 0/7 on retail), bounded by THIS leg's travel time to the stop point.
@@ -19783,6 +20565,12 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # see the body arrive.
     state["dest"] = stop_point if run > 0.0 else None
     state["dest_speed"] = speed
+    if into == "pickup":
+        # RANGERPRE-S15: the pickup's own record, never state["approach"] (the
+        # docstring's race). handle_pickup has already cleared both.
+        state["pickup"] = {"agent": target_id, "t0": now, "eta": leg["eta"],
+                           "dest": (stop_point if run > 0.0 else None)}
+        return
     state["approach"] = {"target": target_id, "t0": now,
                          "told": (tx, ty), "sent_at": now,
                          "eta": leg["eta"]}
@@ -19925,7 +20713,11 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
         if now >= ap["eta"] or dist <= stop:
             # Arrived. The leg record has already released the latch; the
             # integrator has parked the copy. Forget the follow and let the
-            # range gate open the swing this tick.
+            # range gate open the swing this tick. RANGERPRE-S16: remember
+            # WHOSE follow just ended, so the swing it opens can halt the
+            # body at range (attack_tick, APPROACH_START_HALTS); consumed by
+            # that start and dropped by _approach_abandon.
+            state["approach_closed"] = target_id
             state["approach"] = None
             return False
         return True
@@ -19968,7 +20760,13 @@ def _land_player_swing(send, state, conn_id, swing):
         # flight later. The hold ends here -- retail's [8, me, 0] rides the
         # release or follows it by a quarter second, never the hit.
         launch_player_projectile(send, state, conn_id, swing, _how)
-        if LANDING_HOLD_RELEASE:
+        # RANGERPRE-S16: NOT when the hold is the approach's. Retail keeps
+        # that one through the launch -- 0 of 10 launches after a ranged
+        # approach's start carry [8, me, 0] (:55934 336.2391, 380.5511,
+        # 454.7078, 516.6069 ...) -- and ends it at the next release: a
+        # keyboard move, a re-approach, a skill press or the target's death
+        # (the census at APPROACH_START_HALTS).
+        if LANDING_HOLD_RELEASE and not state.get("approach_hold"):
             action_hold(send, state, 0,
                         "the shot is away -- movement is legal now")
         return
@@ -20350,6 +21148,30 @@ def attack_tick(send, state, conn_id, rec=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    # RANGERPRE-S16 (APPROACH_START_HALTS, the evidence at the flag): the first
+    # start after OUR follow arrived, with a ranged weapon in hand, holds the
+    # walk gate and halts the body -- [4], [8, me, 1], 0x0028 [me], retail's
+    # 12 of 12. Consumed by every start, so a chain's later swings (and a start
+    # on another target) are [4] alone.
+    _closed = state.pop("approach_closed", None)
+    if (APPROACH_START_HALTS and _closed == target_id
+            and player_ranged(state) is not None):
+        action_hold(send, state, 1, f"the ranged approach to {target_id} ends "
+                    f"at range [RANGERPRE-S16]")
+        state["approach_hold"] = True
+        send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+             f"AGENT_STOP_MOVING(player): APPROACH HALT -- the ranged swing at "
+             f"{target_id} opens at range [RANGERPRE-S16]")
+        # The client's copies stop where they stand; so does ours (a leg that
+        # ended by distance before its eta would otherwise walk on).
+        state["dest"] = None
+        _fx, _fy = _reach_frame(state, now)
+        print(f"[c{conn_id}] APPROACH HALT [RANGERPRE-S16]: ranged swing at "
+              f"agent {target_id} opens {math.hypot(ax - _fx, ay - _fy):.0f} u "
+              f"out (range {attack_reach():.0f}) -- [4], [8,1], 0x0028 sent; "
+              f"the hold stays up through the launch until a move, a re-approach, "
+              f"a skill press or the target's death",
+              flush=True)
     leader_engaged(state, target_id, now, "swing")        # SLICE-H4
     _press_answered(state, rec, conn_id, "swing")
     # The hold follows the START, in that order -- every player [8, 31, 1]
@@ -20487,6 +21309,12 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
         send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
              f"flags {AGENT_FLAGS_KILLED} on the dying party agent {target_id}")
         return
+    # RANGERPRE-S15 (LOOT slice 1): THE DROP, when a table applies -- in the
+    # death's own frame, AFTER the status word and AHEAD of the reward block's
+    # first send (the 75-XP tick below). OBSERVED 4 of 4 retail drops
+    # (20260929T150923 :55934 383.5733: 0x00F1 [46, 16], 0x0162, 0x0168,
+    # 0x0020, then 0x009C [31, 100]). A party body's death (above) never drops.
+    loot_on_kill(send, state, target_id, agent, conn_id)
     # A SINGLE [0, 26], and the single is the finding. The pair
     # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
     # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
@@ -20541,6 +21369,348 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # is the tick ahead of the award now.)
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
+
+
+def declare_body_max_on_hit(send, agent, agent_id, source_id, why, always=False):
+    """A body's maximum health, 0x009F [42, agent, max], sent when the PLAYER's
+    word is about to land on it and the client has not been told this value.
+    Called immediately before the word at every player-sourced damage site --
+    hit_enemy (swings, attack skills, arrows and the spells routed through it),
+    scythe_extra_hit, preparation_splash and armour_ignoring_damage. Returns
+    whether it sent.
+
+    OBSERVED (RANGERPRE-S10, MAXHP-1), capture 20260929T150923: 12 of 526
+    NPC-class create intervals carry a 42, each the message immediately before
+    the observer's FIRST 0x00A3 on the body at the same wire t; 0 on a body the
+    observer never hit; a miss or an attack order draws none. The corpus: 120
+    of 120 over 5,910 intervals. Empathy's words (MANTID, 20260913T210901
+    :60877) declare on the first word only -- agent 24's [55, 24, 9] at 695.127
+    carries [42, 24, 25], the two after it none (4 first words declared, 4
+    later words not). And a MOVED maximum is declared on the next word: PVPMAX
+    (SLICE-F46.10, the PvP tape 20260817T231139 -- 13 of the observer's 90 hits
+    on one connection, exactly the first hits and the first after a Deep Wound
+    edge or a rise) and :53756's 64 -> 52 at 1117.382. deep_wound_open/close
+    and create_agent_world mark the tracker stale (None); a MISSING key counts
+    as declared, which is what a party body and a bare test fixture are.
+
+    Only the PLAYER's word carries it: 0 of 2,458 party and other-source words
+    on an undeclared body did (hurt_agent_row sends none). `always` is the
+    --npc-max-at-create arm's armour-ignoring word, which declared before every
+    word from any source until 2026-09-29.
+
+    RANGERPRE-S12: a provoked ANIMAL's turn prelude goes out FIRST, from here,
+    so it sits immediately before the 42 at every site that calls this --
+    retail's :55934 t=565.0302 is [65, 161, 0], 0x009B, [36, 161, 1],
+    [42, 161, 80], then the word (animal_turn_prelude; a no-op for any body
+    whose turn is not due)."""
+    animal_turn_prelude(send, agent_id, agent, why)
+    if not always:
+        if source_id != PLAYER_AGENT_ID:
+            return False
+        if agent.get("max_declared_on_hit", agent["max_health"]) == agent["max_health"]:
+            return False
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
+         f"maximum {int(agent['max_health'])} on agent {agent_id}, declared "
+         f"ahead of {why} [MAXHP-1]")
+    agent["max_declared_on_hit"] = agent["max_health"]
+    return True
+
+
+# ---------------------------------------------- RANGERPRE-S15: ground drops --
+#
+# LOOT slice 1: a GOLD drop on a kill, the pickup's walk and arrival, the purse
+# credit, and the view range that removes and re-creates an unpicked drop. Every
+# retail value and its witness is in loot.py's docstring (20260929T150923, build
+# 38888); the gold record is content ([item.gold_coins], a capture row) and the
+# drop TABLES are content (content/drops.toml -- INVENTED, every row).
+#
+# OFF BY DEFAULT: no kill rolls on any table unless the server is started with
+# --drop-table KEY, and then every HOSTILE kill rolls on that one row (a party
+# body's death never drops -- kill_agent returns before the call). The default
+# server's bytes are the pre-S15 bytes; the 0x003F arm answers a pickup of a
+# ground agent that does not exist with nothing, as the unhandled drop did.
+# --no-drops (LOOT_ENABLED False) is the known-bad arm under --drop-table: the
+# kill frame carries no drop, as every kill did until 2026-09-30, where retail's
+# drop 4 of 12 kills on the same tape. Slice 2 (an item drop: 0x0161, the 0x0135
+# reservation, the drop line, into the backpack) is DEFERRED.
+LOOT_ENABLED = True
+DROP_TABLE = None           # --drop-table KEY: the content `drop` row kills roll on
+
+
+def drop_table_row(key):
+    """The content `drop` row `key`, validated -- raises content.ContentError for
+    a key the store does not carry and loot.LootError for a row this slice
+    cannot serve. main() calls it at startup so a bad --drop-table never starts."""
+    return loot.validate_table(key, agents.WORLD.get("drop", key))
+
+
+def loot_on_kill(send, state, target_id, agent, conn_id, rng=None):
+    """Roll DROP_TABLE for a hostile's death and, on a hit, put the gold on the
+    ground: 0x0162 (the declare), 0x0168 [ground agent, the dying agent] and the
+    ground agent's 0x0020 -- retail's order at :55934 383.5733, 4 of 4. Called by
+    kill_agent between the death's status word and its reward block. -> the
+    ground agent id, or None (off, no table, or the roll missed).
+
+    WHERE IT FALLS: DROP_SCATTER from the corpse at a uniform angle, moved onto
+    the navmesh by population.place_on_mesh (the corpse's own point when nothing
+    near is ground). RECONSTRUCTION (loot.DROP_SCATTER). `rng` is the random
+    module unless a test hands a stub."""
+    if not LOOT_ENABLED or not DROP_TABLE:
+        return None
+    rng = random if rng is None else rng
+    row = drop_table_row(DROP_TABLE)
+    got = loot.roll(row, rng)
+    if got is None:
+        print(f"[c{conn_id}] DROP: agent {target_id} ({agent.get('name', '?')}) "
+              f"drops nothing (table {DROP_TABLE!r}, chance {row['chance']}, "
+              f"INVENTED) [RANGERPRE-S15]", flush=True)
+        return None
+    _kind, amount = got
+    ground = state.setdefault("ground_items", {})
+    item = loot.mint_item_id(state, merchant.PURCHASED_ITEM_ID_BASE)
+    # the party side's reserved ids (area_population's list: the player, the
+    # henchman, up to seven heroes) and every live body and ground item
+    taken = (set(state.get("agents") or {}) | set(ground)
+             | {PLAYER_AGENT_ID, HENCHMAN_AGENT_ID}
+             | {HERO_AGENT_ID + i for i in range(7)})
+    drop = loot.next_drop_agent(taken)
+    cx, cy = float(agent["pos"][0]), float(agent["pos"][1])
+    sx, sy = loot.scatter(cx, cy, rng)
+    placed = population.place_on_mesh(state.get("pathmap"), sx, sy,
+                                      f"the drop from agent {target_id}")
+    x, y = (float(placed[0]), float(placed[1])) if placed is not None else (cx, cy)
+    plane = int(agent.get("plane", state.get("plane", 0)))
+    gold = loot.gold_record(agents.item_template("gold_coins"), amount)
+    send(GAME_SMSG_ITEM_GOLD_DECLARE, agents.named_item(item, gold),
+         f"ITEM_GOLD_DECLARE(item {item}: {amount} gold) [RANGERPRE-S15]")
+    send(GAME_SMSG_ITEM_DROP_SOURCE, loot.drop_source(drop, target_id),
+         f"ITEM_AGENT_DROP_SOURCE(ground agent {drop} from agent {target_id}) "
+         f"[RANGERPRE-S15]")
+    send(GAME_SMSG_WORLD_CREATE_AGENT,
+         loot.ground_item_create(drop, item, x, y, plane),
+         f"WORLD_CREATE_AGENT(ground item {drop}: item {item} at "
+         f"({x:.0f},{y:.0f}) plane {plane}) [RANGERPRE-S15]")
+    ground[drop] = {"item": item, "gold": int(amount), "pos": (x, y),
+                    "plane": plane, "source": target_id, "shown": True}
+    print(f"[c{conn_id}] DROP: agent {target_id} ({agent.get('name', '?')}) "
+          f"dropped {amount} gold -- ground agent {drop}, item {item}, at "
+          f"({x:.0f},{y:.0f}) plane {plane}, "
+          f"{math.hypot(x - cx, y - cy):.0f} u from the corpse (table "
+          f"{DROP_TABLE!r}, INVENTED; the frame is retail's) [RANGERPRE-S15]",
+          flush=True)
+    return drop
+
+
+def handle_pickup(values, send, state, conn_id, rec=None):
+    """GAME_CMSG 0x003F PICKUP [ground agent, u8] -- walk to it, serve on arrival.
+
+    RETAIL (3 of 3 on 20260929T150923): the reply is a STRAIGHT 0x002A [player,
+    the item's own point, plane, plane, ground agent] within ~40 ms, no client
+    report during the walk, and the arrival frame about the straight-line walk
+    time later. So the walk is `_approach_send` with the stop AT the item
+    (stop_at=0.0): the same message, the same leg record, the same integrator.
+    Its record is PUBLISHED straight into state["pickup"] (into="pickup") and
+    never into state["approach"], because attack_tick -- on the world-tick
+    thread -- abandons an approach, dest and all, on every tick it holds no
+    attack target; a record that passed through state["approach"] could be
+    abandoned between the send and the move (the RANGERPRE-S15 review's race,
+    test_loot 3j). For the same reason any follow still on record is abandoned
+    HERE, before the leg's dest is written (3k). pickup_tick owns the walk from
+    here. A body already within loot.PICKUP_REACH is served at once
+    (RECONSTRUCTION: n = 0 on tape).
+
+    The press is a move order: it ends a keyboard lead and a click leg in the
+    0x0026 arm's own order, and forgets the attack target. RECONSTRUCTION --
+    what retail does with a pickup pressed mid-attack or mid-cast is n = 0; a
+    cast in flight is left alone, as the interact arm leaves it.
+
+    REFUSED LOUDLY, with nothing sent: an agent that is no ground item in view
+    (this server's pre-S15 answer to every 0x003F), a dead player, and a second
+    press on the item already being walked to."""
+    drop = int(values[1])
+    now = time.time()
+    g = (state.get("ground_items") or {}).get(drop)
+    if g is None or not g.get("shown", True):
+        print(f"[c{conn_id}] PICKUP of agent {drop} REFUSED: no ground item in view "
+              f"under that id -- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    if state.get("player_dead"):
+        print(f"[c{conn_id}] PICKUP of ground agent {drop} REFUSED: the player is "
+              f"dead -- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    pk = state.get("pickup")
+    if pk is not None and pk.get("agent") == drop:
+        print(f"[c{conn_id}] PICKUP of ground agent {drop}: already walking to it "
+              f"-- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    _kbd_lead_kill(send, state, conn_id, rec, "pickup")
+    _press_supersedes(send, state, conn_id, drop, rec=rec)
+    state["attacking"] = None
+    # the follow the attack order was walking, if one is still on record: what
+    # attack_tick does on its next tick anyway, done NOW -- once the pickup's
+    # dest is written below, an approach left here would take it with it.
+    _approach_abandon(state)
+    state["pickup"] = None
+    px, py = _reach_frame(state, now)
+    gap = math.hypot(float(g["pos"][0]) - px, float(g["pos"][1]) - py)
+    if gap <= loot.PICKUP_REACH:
+        state["pickup"] = {"agent": drop, "t0": None, "eta": now, "dest": None}
+        print(f"[c{conn_id}] PICKUP of ground agent {drop}: {gap:.1f} u, in reach "
+              f"-- served now [RANGERPRE-S15]", flush=True)
+        serve_pickup(send, state, conn_id, now)
+        return True
+    _approach_send(send, state, conn_id, drop,
+                   {"pos": g["pos"], "name": f"ground item {drop}"}, now,
+                   rec=rec, stop_at=0.0, into="pickup")
+    pk = state.get("pickup") or {}
+    print(f"[c{conn_id}] PICKUP of ground agent {drop} (item {g['item']}, "
+          f"{g['gold']} gold) at {gap:.0f} u: a STRAIGHT 0x002A to the item's own "
+          f"point (retail's reply, 3 of 3); the arrival frame at the leg's eta, "
+          f"{pk.get('eta', now) - now:.2f} s (our straight-line model) "
+          f"[RANGERPRE-S15]", flush=True)
+    return True
+
+
+def serve_pickup(send, state, conn_id, now=None):
+    """The arrival frame, in retail's order (:55934 395.546 and :53756 1125.5645,
+    2 of 2 gold, byte-identical with the ids substituted): the hold 0x009F
+    [8, me, 1], 0x009F [39, me, 0], 0x0159 [item, me], the purse credit 0x0140
+    [key, n], the gold line 0x005D + 0x005E [1, 10], 0x0028 [me], 0x0021 [ground
+    agent]. The purse moves through purse.py and persists under --persist, as a
+    quest's gold does. The hold's release is pickup_tick's, 1.0 s on.
+
+    The 0x0028 [me] is the fourth player-directed 0x0028 site (test_cancelwalk's
+    census): retail's arrival carries it 5 of 6 across the corpus, and the client
+    sends no report in that window, so it halts a body that has already arrived
+    rather than cutting a walk short. -> True when a pickup was served."""
+    now = time.time() if now is None else now
+    pk = state.pop("pickup", None)
+    if not pk:
+        return False
+    drop = pk["agent"]
+    g = (state.get("ground_items") or {}).pop(drop, None)
+    if g is None:
+        return False
+    n = int(g["gold"])
+    action_hold(send, state, 1, "the pickup [RANGERPRE-S15]")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.GV_PICKUP, PLAYER_AGENT_ID, 0],
+         "PICKUP property 39 [me, 0 for gold] (the name ours) [RANGERPRE-S15]")
+    send(GAME_SMSG_ITEM_PICKED_UP, loot.picked_up(g["item"], PLAYER_AGENT_ID),
+         f"ITEM_PICKED_UP(item {g['item']}) [RANGERPRE-S15]")
+    send(merchant.GAME_SMSG_GOLD_CREDIT, [PLAYER_INVENTORY_KEY, n],
+         f"GOLD_CREDIT(+{n}, a picked-up drop) [RANGERPRE-S15]")
+    before = player_purse(state)
+    state["purse"] = purse.after_credit(before, n)
+    persist_purse(state)
+    send(GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.gold_pickup_body(n)],
+         f"CHAT_MESSAGE_CORE[the gold pickup line: {n}] [RANGERPRE-S15]")
+    send(GAME_SMSG_CHAT_MESSAGE_SERVER, [PLAYER_NUMBER, chatdefs.CHANNEL_NOTIFY],
+         f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, channel "
+         f"{chatdefs.CHANNEL_NOTIFY})")
+    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+         "AGENT_STOP_MOVING(player): the pickup's arrival (retail 5 of 6) "
+         "[RANGERPRE-S15]")
+    send(GAME_SMSG_WORLD_REMOVE_AGENT, [drop],
+         f"WORLD_REMOVE_AGENT({drop}) -- the ground item is picked up "
+         f"[RANGERPRE-S15]")
+    # The body stands at the item: the server's copy lands there with the
+    # client's (retail's report after the arrival, 1.6 u off), and the walk the
+    # integrator was running is over.
+    state["pos"] = (float(g["pos"][0]), float(g["pos"][1]))
+    state["dest"] = None
+    state["pickup_release_at"] = now + loot.PICKUP_HOLD_SECONDS
+    print(f"[c{conn_id}] PICKUP SERVED: ground agent {drop}, item {g['item']}, "
+          f"+{n} gold -- purse {before} -> {state['purse']} (0x0140 [key, {n}]); "
+          f"the hold releases in {loot.PICKUP_HOLD_SECONDS:.1f} s [RANGERPRE-S15]",
+          flush=True)
+    return True
+
+
+def pickup_tick(send, state, conn_id, now=None):
+    """The world tick's half of a pickup: serve it on arrival, cancel it when
+    something replaced the walk, and release the arrival's hold 1.0 s on.
+
+    ARRIVAL is the leg's eta while the server's copy still walks the pickup's
+    own `dest`, or -- once that dest is gone (the integrator arrived, or a report
+    placed the body) -- the copy standing within loot.PICKUP_REACH of the item.
+    CANCELLED, with nothing sent, when: the item is gone or out of view, the
+    player died, an attack order was taken, the click latch was re-stamped (a
+    click, an interact walk, another approach), the copy was given another
+    destination, or the walk ended short of the item. What retail does in each
+    is n = 0 (RECONSTRUCTION); the walk itself is the client's to stop."""
+    now = time.time() if now is None else now
+    rel = state.get("pickup_release_at")
+    if rel is not None and now >= rel:
+        state["pickup_release_at"] = None
+        action_hold(send, state, 0, "the pickup's hold ends, 1.0 s after the "
+                    "arrival (retail 6 of 6) [RANGERPRE-S15]")
+    pk = state.get("pickup")
+    if not pk:
+        return None
+    g = (state.get("ground_items") or {}).get(pk["agent"])
+    latch, dest = state.get("click_moving_at"), state.get("dest")
+    why = None
+    if g is None or not g.get("shown", True):
+        why = "the item is gone or out of view"
+    elif state.get("player_dead"):
+        why = "the player died"
+    elif state.get("attacking"):
+        why = "an attack order replaced the walk"
+    elif pk.get("t0") is not None and latch is not None and latch != pk["t0"]:
+        why = "a newer move order (the click latch was re-stamped)"
+    elif dest is not None and dest != pk.get("dest"):
+        why = "the body was given another destination"
+    if why is None:
+        if dest is None:
+            px, py = state.get("pos", (0.0, 0.0))
+            if math.hypot(float(g["pos"][0]) - float(px),
+                          float(g["pos"][1]) - float(py)) <= loot.PICKUP_REACH:
+                return serve_pickup(send, state, conn_id, now)
+            why = "the walk ended short of the item"
+        elif now >= pk["eta"]:
+            return serve_pickup(send, state, conn_id, now)
+        else:
+            return None
+    state["pickup"] = None
+    print(f"[c{conn_id}] PICKUP of ground agent {pk['agent']} CANCELLED: {why} "
+          f"-- nothing sent [RANGERPRE-S15]", flush=True)
+    return False
+
+
+def ground_items_tick(send, state, conn_id):
+    """The view range: an unpicked ground item leaves by a bare 0x0021 once the
+    server's copy of the player stands past loot.DROP_VIEW_RANGE from it, and
+    comes back by a bare 0x0020 once it is inside again -- retail's shape, 11 of
+    11 removals and 4 of 4 re-creates on 20260929T150923 (loot.py). No timer."""
+    ground = state.get("ground_items")
+    pos = state.get("pos")
+    if not ground or pos is None:
+        return 0
+    moved = 0
+    for aid, g in list(ground.items()):
+        seen = loot.in_view(pos, g["pos"])
+        if g.get("shown", True) and not seen:
+            send(GAME_SMSG_WORLD_REMOVE_AGENT, [aid],
+                 f"WORLD_REMOVE_AGENT({aid}) -- the ground item is out of view "
+                 f"range [RANGERPRE-S15]")
+            g["shown"] = False
+            moved += 1
+            print(f"[c{conn_id}] DROP VIEW: ground agent {aid} (item {g['item']}) "
+                  f"leaves -- the player is past {loot.DROP_VIEW_RANGE:.0f} u "
+                  f"[RANGERPRE-S15]", flush=True)
+        elif not g.get("shown", True) and seen:
+            send(GAME_SMSG_WORLD_CREATE_AGENT,
+                 loot.ground_item_create(aid, g["item"], g["pos"][0], g["pos"][1],
+                                         g["plane"]),
+                 f"WORLD_CREATE_AGENT(ground item {aid} back in view) "
+                 f"[RANGERPRE-S15]")
+            g["shown"] = True
+            moved += 1
+            print(f"[c{conn_id}] DROP VIEW: ground agent {aid} (item {g['item']}) "
+                  f"re-created -- the player is back inside "
+                  f"{loot.DROP_VIEW_RANGE:.0f} u [RANGERPRE-S15]", flush=True)
+    return moved
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
@@ -20870,30 +22040,6 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if ENERGY and swing:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now,
                                 conn_id, f"weapon hit on agent {target_id}")
-    # PVPMAX (2026-09-14, studies/slice/FINDINGS.md SLICE-F46.10): the TARGET's
-    # maximum rides the OBSERVER's own landed hit -- retail's first one (its
-    # first declaration), and the first after the maximum moved -- between
-    # the observer's gain (0x00CF)
-    # and the damage word, and no other hit carries it. OBSERVED on the PvP
-    # arena tape 20260817T231139, four connections: 27 of 27 explicit maxima
-    # for other agents share a tick with [16|17, agent, observer] and the
-    # observer's close; 13 of the observer's 90 hits on one connection carry
-    # one, exactly the first hits and the first hits after a Deep Wound edge
-    # or a rise; party members' hits on the same agents carry none. So a
-    # body's Deep Wound (deep_wound_open/close) no longer sends its 0x009F 42
-    # -- it marks the declaration stale and this site catches up on the next
-    # landed hit, 1.33 s later on the tape when the player was already
-    # swinging and 6-34 s when not. The player's OWN maximum keeps the isle
-    # shape (same batch as the status word).
-    # Ours declares a body's maximum at its CREATE already (a separate,
-    # measured decision), so a missing key counts as declared and only a
-    # MOVE -- deep_wound_open/close set the key to None -- fires this.
-    if agent.get("max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, target_id, int(agent["max_health"])],
-             f"maximum {int(agent['max_health'])} on agent {target_id}, "
-             f"declared on the player's hit")
-        agent["max_declared_on_hit"] = agent["max_health"]
     # DAGGERS-B5: what a LANDED hit puts on the wire just ahead of its damage
     # word -- the chain state, retail's order (E5, 0x005C, the word, E3). A
     # miss or a block returned above, so a chain skill that did not hit
@@ -20906,6 +22052,18 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, target_id, PLAYER_AGENT_ID, prep_visual],
              f"impact {prep_visual} of preparation {prep_skill} on agent {target_id}")
+    # THE TARGET'S MAXIMUM, the message immediately before the word
+    # (RANGERPRE-S10, MAXHP-1; see declare_body_max_on_hit). It rides the
+    # player's FIRST landed word on the body -- 12 of 12 on 20260929T150923,
+    # never at the create -- and the first after the maximum moved (PVPMAX,
+    # SLICE-F46.10: a Deep Wound marks it stale; :53756 declared 64 at
+    # 1113.410 and 52 at 1117.382). Everything else this hit sends goes AHEAD
+    # of it: the chain state, the critical's energy, a preparation's visual
+    # (:62557 122.012 [E5, 9F 46, 5C, 9F 42, A3]; the design lane, 122 of 122
+    # batches). Until 2026-09-29 it sat before before_damage and ours declared
+    # every body at its create, so only a MOVE ever fired it here.
+    declare_body_max_on_hit(send, agent, target_id, PLAYER_AGENT_ID,
+                            "the player's hit")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -25026,7 +26184,7 @@ def aura_off(send, state, agent_id, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max="always", skill_id=None):
+                           declare_max=None, skill_id=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction]. Kills through the same doors a hit does.
 
@@ -25036,10 +26194,18 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     it ahead of a damage word at the observer 0 of 3 (armour-ignoring) / 0 of
     401 (16/17). It used to declare FIRST before every 55 here, "3 of 3 on the
     tape", but those three were a FOE's maximum ahead of Empathy's word, kept on
-    the body branch. A BODY's rule is `declare_max`: "always" declares each time,
-    "stale" (DAGGERS-B8) is hit_enemy's PVPMAX -- the first word after it moved.
-    RUN-DAGGERS-1's adjacent words say so -- [42, neighbour, 480] sits ahead of
-    the FIRST 55 on each of the two bodies and ahead of none of the 13 after."""
+    the body branch. A BODY's rule is `declare_max`: "stale" (DAGGERS-B8, and the
+    default since RANGERPRE-S10) is declare_body_max_on_hit -- the PLAYER's first
+    word on the body and the first after its maximum moved; "always" declares
+    before every word from any source, which was the default until 2026-09-29
+    and is now only the --npc-max-at-create arm's (None resolves to one or the
+    other). "always" is REFUTED by the MANTID tape: Empathy's [42, 24, 25] rode
+    the first of agent 24's three words, and 4 later words across agents 18, 24
+    and 26 carried none. RUN-DAGGERS-1's adjacent words say the same -- [42,
+    neighbour, 480] sits ahead of the FIRST 55 on each of the two bodies and
+    ahead of none of the 13 after."""
+    if declare_max is None:
+        declare_max = "always" if NPC_MAX_AT_CREATE else "stale"
     amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
@@ -25086,15 +26252,17 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     if not agent or agent.get("dead"):
         return 0.0
     pool = float(agent["max_health"])
-    if declare_max == "always" or agent.get(
-            "max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, target_id, int(pool)],
-             f"maximum {int(pool)} declared ahead of {what}")
-        agent["max_declared_on_hit"] = agent["max_health"]
+    # MONSTERAI-J's provoke goes FIRST (state only): RANGERPRE-S12's turn
+    # prelude rides the declare call below, so the provoke that marks the turn
+    # due must precede it. It sat after the declare until 2026-09-30, which
+    # changed nothing then -- the provoke sends nothing.
+    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
+    # MAXHP-1: the player's first word on the body (or the first after its
+    # maximum moved) carries the 42 right before it; a hero's Empathy none.
+    declare_body_max_on_hit(send, agent, target_id, source_id, what,
+                            always=(declare_max == "always"))
     frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
     agent["health"] = max(0.0, float(agent["health"]) - amount)
-    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_ARMOR_IGNORING, target_id, source_id, frac],
          f"{what}: {amount:.0f} armour-ignoring to agent {target_id}")
@@ -27396,6 +28564,9 @@ def revive_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id}")
+        # MAXHP-1: the client now holds this maximum, so the player's next
+        # hit need not repeat it (a no-op on the client if it did).
+        agent["max_declared_on_hit"] = agent["max_health"]
         # Re-asserting the SAME maximum refills nothing, which is why a revived
         # body stood up with an empty bar while our own bookkeeping said full --
         # so it still took a full seven swings to drop, and the bar never moved.
@@ -27965,6 +29136,10 @@ def enemy_attack_tick(send, state, conn_id):
     the cause.
     """
     player_pools(state)
+    # RANGERPRE-S12: a provoked animal's 0x002F goes out before its first
+    # swing -- here as well as in enemy_move_tick, because combat_pass runs
+    # this tick without the move tick.
+    send_due_tokens(send, state, conn_id)
     # "Nothing swings at a corpse" was a top-of-function return on the
     # PLAYER's death; since SLICE-H3 it is per hostile, on ITS target, below
     # -- a dead player no longer stops the hostiles fighting the party.
@@ -27999,6 +29174,8 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if animal_turn_pending(agent):                   # RANGERPRE-S12
+            continue                     # provoked this tick: turns first
         # SLICE-H3: THIS hostile's target (enemy_move_tick picks it), and a
         # corpse is not swung at -- the armed swing at a body that died in
         # the windup drops, as it always did for the player.
@@ -29143,7 +30320,13 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
     aims at the hitter (`target_was`). Returns the ids provoked; empty when
     nothing changed (not passive, already provoked, the hitter is a hostile).
     Retail (MONSTERAI 12.7): the hit creature swung 1.2-1.3 s after the
-    player's swing, its group-mate 0.4 s behind it, unhit."""
+    player's swing, its group-mate 0.4 s behind it, unhit.
+
+    RANGERPRE-S12: a provoked row that carries `token_on_provoke` (an
+    "animal" row) is marked to TURN -- `token_due`, stamped with the current
+    simulation tick. State only, as before: the prelude rides the hitter's
+    word (animal_turn_prelude) and the 0x002F goes out after the next 0x001E
+    (send_due_tokens). A group-mate turned unhit gets its whole burst there."""
     if not PASSIVE_HOSTILES:
         return []
     rows = state.get("agents", {})
@@ -29166,12 +30349,108 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
         r["provoked"] = True
         r["target_was"] = attacker_id
         out.append(aid)
+        if (ANIMAL_TOKEN_FLIP and r.get("token_on_provoke") is not None
+                and r.get("team_token") != r["token_on_provoke"]):
+            r["token_due"] = r["token_on_provoke"]              # RANGERPRE-S12
+            r["token_due_tick"] = state.get("sim_ticks", 0)
     if out:
         print(f"[c{conn_id}] agent {attacker_id}'s hit PROVOKES "
               + ", ".join(str(a) for a in out)
               + (f" (group {group!r})" if group is not None and len(out) > 1
                  else "")
               + " -- passive until now (MONSTERAI-J)", flush=True)
+    return out
+
+
+# ---- RANGERPRE-S12: a provoked charmable animal turns 'anim' -> 'anin' -------
+#
+# RETAIL (OBSERVED n=1, capture 20260929T150923, connection :55934, agent 161,
+# definition 1343, the player agent 31). Every message naming 161 at wire
+# t=565.0302, in order, with the simulation ticks between them:
+#   0x009F [65, 161, 0]          prop 65 (agents.PROP_PVP_TEAM)
+#   0x009B [161, <its name>]     AGENT_SET_NAME, the create's own four words
+#   0x009F [36, 161, 1]          its displayed level
+#   0x009F [42, 161, 80]         its maximum (MAXHP-1, declare_body_max_on_hit)
+#   0x00A3 [16, 161, 31, -0.3125]  the player's arrow, 25 of 80
+#   0x001E [110]                 -- the next simulation tick --
+#   0x002F [161, 'anin']         the turn
+#   0x002B [161, 1.0, 1], 0x002A [161, <the player's point>, 0, 0, 31]
+# It was passive before (no 0x00A0 [4, 161, *] with the player within ~258 u),
+# swung 0.64 s later (0x0035 [161, 2.0, 1.0], then [4, 161, 31, 0] every
+# 2.0 s) and the client's c2s 0x00C1 [0, 0] at 565.1515 -- with a re-select
+# 0x00C1 [161, 0] at the same instant, 121 ms after the 0x002F -- drew no
+# reply. A 'mon1' body's first hit carries none of 65 / 0x009B / 36 / 0x002F
+# (agent 48 at 414.3195, agent 215 at 516.9892).
+#
+# OURS: the prelude from the declare site, the turn from the next tick's
+# first move or swing pass. What is RECONSTRUCTION: the split itself (retail's
+# server is not visible, only the tick between); a group-mate or a party-hit
+# turning with its whole burst on the next tick (no witness); a body IN REACH
+# at the hit (a melee player) swinging only after its 0x002F -- [.., 0x001E,
+# 0x002F, 0x002E, 0x00A0] (retail's witness is a ranged hit, which chases;
+# test_animaltoken 2j); a body that dies before the turn keeps it pending
+# (0x002F is never sent to a corpse).
+
+def animal_turn_prelude(send, agent_id, agent, why="the turn"):
+    """The three messages retail sends ahead of a provoked animal's 42: prop
+    65 = 0, its name (0x009B, when the row carries one) and its level (prop
+    36). Only when the row's turn is DUE and its prelude has not gone out;
+    returns whether it sent."""
+    if agent.get("token_due") is None or agent.get("token_prelude_sent"):
+        return False
+    npc = agent.get("npc") or {}
+    level = int(npc.get("level") or 0)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_PVP_TEAM, agent_id, 0],
+         f"prop 65 = 0 on agent {agent_id}: the turn's prelude, ahead of "
+         f"{why} [RANGERPRE-S12]")
+    if npc.get("enc_name"):
+        send(GAME_SMSG_AGENT_SET_NAME, [agent_id, npc["enc_name"]],
+             f"AGENT_SET_NAME({agent_id}): the turn's prelude [RANGERPRE-S12]")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_LEVEL, agent_id, level],
+         f"level {level} on agent {agent_id}: the turn's prelude [RANGERPRE-S12]")
+    agent["token_prelude_sent"] = True
+    return True
+
+
+def animal_turn_pending(agent):
+    """A provoked animal whose 0x002F has not gone out: it neither moves nor
+    swings until send_due_tokens turns it (no body fights under 'anim')."""
+    return agent.get("token_due") is not None
+
+
+def send_due_tokens(send, state, conn_id):
+    """Turn every live row whose turn is due and was marked on an EARLIER
+    simulation tick: the prelude if its hitter's word did not carry it, then
+    0x002F [agent, token]. Called first in enemy_move_tick and
+    enemy_attack_tick, so the turn precedes the body's first chase order and
+    first swing -- retail's [0x001E, 0x002F, 0x002B, 0x002A]. `sim_ticks` is
+    the world tick's count of 0x001E sent. Returns the ids turned."""
+    now_tick = state.get("sim_ticks", 0)
+    out = []
+    for aid, r in list(state.get("agents", {}).items()):
+        tok = r.get("token_due")
+        if tok is None or r.get("dead"):
+            continue
+        if r.get("token_due_tick", -1) >= now_tick:
+            continue                    # marked on THIS tick: after the next 0x001E
+        whole = animal_turn_prelude(send, aid, r, "its 0x002F")
+        was = r.get("team_token")
+        send(GAME_SMSG_AGENT_UPDATE_ALLEGIANCE, [aid, tok],
+             f"AGENT_UPDATE_ALLEGIANCE({aid}, "
+             f"{int(tok).to_bytes(4, 'big').decode('latin1')!r}) [RANGERPRE-S12]")
+        r["team_token"] = tok
+        for k in ("token_due", "token_due_tick", "token_prelude_sent"):
+            r.pop(k, None)
+        _fc = (lambda x: int(x).to_bytes(4, "big").decode("latin1")
+               if x is not None else "?")
+        print(f"[c{conn_id}] [ANIMAL-TURN] agent {aid} ({r.get('name', '?')}) "
+              f"turns {_fc(was)!r} -> {_fc(tok)!r} on the tick after its "
+              f"provoke" + (" (its whole burst: no player word carried the "
+                            "prelude)" if whole else "") + " [RANGERPRE-S12]",
+              flush=True)
+        out.append(aid)
     return out
 
 
@@ -30984,13 +32263,30 @@ def item_layout_defaults():
     return out
 
 
+def _hands_legal_for(defaults):
+    """RANGERPRE-S21: itemstore.restore's `hand_ok` for THIS dress -- the
+    wire type of every item it creates (item_layout_defaults' fifth field)
+    bound to itemstore.hands_legal with the weapon-type rows' `hands`."""
+    types = {int(iid): t for iid, (_b, _s, _k, _kind, t) in defaults.items()}
+    hands = item_hands_of_type()
+    return lambda lead, off: itemstore.hands_legal(lead, off, types, hands)
+
+
 def item_layout_begin(state, conn_id=0):
     """Decide every item's cell for this dress and seed state["items"]
     (DESKWORK-D1 step 8). The constants' layout, then -- under --persist with
     the arm on -- the character's stored cells through itemstore.restore,
-    which keeps the HANDS at their defaults (the weapon sets own slots 0/1;
-    a stored hand change is logged, not applied) and drops the whole store on
-    an illegal or colliding cell. The set items' backpack slots follow, so
+    which drops the whole store on an illegal or colliding cell. UNDER
+    HAND_RESTORE (RANGERPRE-S21, WEAPONREFUSE-B; the default since
+    2026-09-30, the loopback gate harness 20260930T102914 PASSED) a stored
+    hand change is applied, as one unit, when itemstore.hands_legal accepts
+    the pair (_hands_legal_for) -- retail's three loads after :56064's
+    equips (OBSERVED, n=1); under --no-hand-restore (the pre-flip default)
+    restore keeps the HANDS at their defaults (the weapon sets own slots
+    0/1; a stored hand change is logged, not applied). The swing model
+    follows restored hands at the dress's END (item_hands_at_dress), never here: the creates
+    below still read set 0's RECORD through agents.PLAYER_WEAPON /
+    PLAYER_OFFHAND (ENG-B4). The set items' backpack slots follow, so
     select_weapon_set moves a shield to where it really sits (and
     declare_weapon_sets leaves that map alone once this has run -- the fix
     pass, ENG-M2). Returns the items dict; with the arm off the store is not
@@ -31041,7 +32337,9 @@ def item_layout_begin(state, conn_id=0):
     stale = []
     if stored:
         decided, notes = itemstore.restore(cells, stored, player_bags(), EQUIPPED_BAG_ID,
-                                           stale=stale)
+                                           stale=stale,
+                                           hand_ok=(_hands_legal_for(defaults)
+                                                    if HAND_RESTORE else None))
     for iid, cell in stale:
         # A stored EQUIPPED cell that is not the piece's type's (the owner's
         # confirmation pass): written under the pre-2026-09-23 visual
@@ -31190,6 +32488,47 @@ def _item_hands_mirror(state, conn_id, before):
             agents.PLAYER_OFFHAND = None
 
 
+def item_hands_at_dress(state, conn_id):
+    """RANGERPRE-S21 (WEAPONREFUSE-B), under HAND_RESTORE (the default since
+    2026-09-30; --no-hand-restore reverts): the RESTORED hands
+    become set 0's items for this session and the swing model -- the in-session
+    mirror (_item_hands_mirror) against set 0's record, so a load after an
+    in-game equip is the state the equip left: 0x0147 set 0 and the load's 42
+    (held_health_bonus reads the swing model) name the equipped items. Called
+    by the dress AFTER every create (item 1 and the off hand are created from
+    set 0's RECORD, ENG-B4 -- moving this into item_layout_begin would create
+    item 1 as the sword and lose the bow) and BEFORE the 0x0148/0x0147 rows.
+    A no-op when the hands ARE the record's, so a dress with no stored hand
+    change is byte-identical; a no-op with the arm off (--no-hand-restore,
+    the pre-flip default).
+
+    OBSERVED shape, n=1: 20260929T150923 :53753 / :53756 / :59427 each named
+    set 0 = [sword, shield] after :56064's two equips, and their own 42 was
+    135 (994.024, 998.208, 1217.429) -- the shield's 564 held at load.
+    The load then names a set-1..3 item in set 0 AND its own set. RETAIL:
+    UNVERIFIED, no retail load does (0 of 21). OUR CLIENT: OBSERVED to accept
+    it -- the loopback gate, build 38797, 2026-09-30: harness 20260930T102914
+    sent 0x0147 [327,1,0,11,12] and [327,1,1,11,12], spawn checkpoints
+    passed, no crash dialog, heartbeat to teardown, doll and body drew the
+    sword+shield; accepted again on T103106, T103314, T103453 and the zone
+    pair T104128 (maps 146 and 148)."""
+    if not (HAND_RESTORE and EQUIP_WEAPON and state.get("items")):
+        return None
+    before = weapon_set_items(0)
+    after = itemstore.hand_items(state["items"], EQUIPPED_BAG_ID)
+    if after == tuple(before):
+        return None
+    _item_hands_mirror(state, conn_id, before)
+    twice = sorted({i for i in after if i} & {i for k in (1, 2, 3)
+                                              for i in weapon_set_items(k) if i})
+    print(f"[c{conn_id}] ITEMS: HAND RESTORE at the dress -- set 0's record ({before[0]}, "
+          f"{before[1]}) -> the stored hands ({after[0]}, {after[1]}); 0x0147 set 0 names "
+          f"them" + (f", and items {twice} are ALSO named by their own set's 0x0147 row "
+                     f"(0 of 21 retail loads do that: UNVERIFIED)" if twice else "")
+          + " [RANGERPRE-S21]", flush=True)
+    return after
+
+
 def _item_moves_commit(send, state, conn_id, batch, changes, what):
     """Send a planned batch, apply its cells, keep the set machinery's slot map
     and the store current, and mirror the hands."""
@@ -31233,8 +32572,10 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
-            if (items[iid].get("kind") or "") == "bought":
+            if (items[iid].get("kind") or "") == "bought" \
+                    or (items[iid].get("kind") or "") == "reward":
                 continue        # per-session: the dress never re-declares a purchase
+                                # or a grant (grant_item, RANGERPRE-S18)
             store.set_item_location(state.get("char_uuid", ""), iid,
                                     items[iid]["bag"], items[iid]["slot"])
     where = ", ".join(f"item {i} -> bag {items[i]['bag']} slot {items[i]['slot']}"
@@ -32193,6 +33534,9 @@ def enemy_move_tick(send, state, conn_id, rec=None):
     tick, stopping at ENEMY_MELEE_RANGE.
     """
     player_pools(state)
+    # RANGERPRE-S12: a provoked animal turns ('anim' -> 'anin', 0x002F) before
+    # the chase below opens -- retail's [0x002F, 0x002B, 0x002A] after the tick.
+    send_due_tokens(send, state, conn_id)
     px, py = state.get("pos", (0.0, 0.0))
     now = time.time()
     pm = state.get("pathmap")
@@ -32252,6 +33596,10 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             # no chase, under either targeting arm.
             agent["moving"] = False
             agent["follow"] = None
+            continue
+        if not _ally and animal_turn_pending(agent):
+            # RANGERPRE-S12: provoked on THIS simulation tick -- it turns
+            # (send_due_tokens, above) after the next 0x001E, then chases.
             continue
         if not _ally and leash_returning(agent):
             # DESKWORK-D8 step 3: walking home -- no pick, no chase; the
@@ -35603,6 +36951,7 @@ def agent_refill_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id} (deferred)")
+        agent["max_declared_on_hit"] = agent["max_health"]    # MAXHP-1: told
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill agent {agent_id}'s bar (deferred)")
@@ -35802,15 +37151,29 @@ def create_agent_world(send, state, agent_id, entry, why,
          f"AGENT_INITIAL_EFFECTS({agent_id}, "
          f"0x{int(entry.get('effects') or 0):04X})")
 
+    # RANGERPRE-S12: field 12 is the row's TEAM token when it has one (an
+    # "animal": 'anim', then 'anin' once turned -- so a burrow's re-create
+    # carries the current one); `allegiance` stays the foe class.
     send(GAME_SMSG_WORLD_CREATE_AGENT,
          agents.create_agent(agent_id,
                              agents.CHAR_CLASS_MONSTER_BASE | definition,
                              agents.AGENT_KIND_NPC, x, y, plane,
-                             allegiance=entry["allegiance"]),
+                             allegiance=entry.get("team_token") or entry["allegiance"]),
          f"WORLD_CREATE_AGENT({agent_id}) — {why}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
-         f"health {int(entry['max_health'])} on agent {agent_id}")
+    # RANGERPRE-S10 (MAXHP-1): an NPC's maximum is NOT part of its create --
+    # 0 of 526 NPC-class create intervals on 20260929T150923 carry one (0 of
+    # 5,910 over the corpus); it rides the player's first landed word, so the
+    # tracker is marked stale here and declare_body_max_on_hit sends it. A
+    # re-create (the burrow's) resets it the same way -- retail re-declared on
+    # the first hit after a re-create, n = 2. A PARTY body keeps the 42 here
+    # (PARTYMAX, a follow-up), and --npc-max-at-create restores it for all.
+    _max_at_create = NPC_MAX_AT_CREATE or entry.get("allegiance") == agents.ALLEGIANCE_PLAYER
+    if _max_at_create:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
+             f"health {int(entry['max_health'])} on agent {agent_id}")
+    else:
+        entry["max_declared_on_hit"] = None
 
     # --- three of the four named on 2026-08-10, sent here for the first time ---
     #
@@ -35852,7 +37215,10 @@ def create_agent_world(send, state, agent_id, entry, why,
     live[agent_id] = entry
     if conn_id is not None:
         print(f"[c{conn_id}] created agent {agent_id} ({entry.get('name', '?')}) "
-              f"— {why}", flush=True)
+              f"— {why}"
+              + ("" if _max_at_create else
+                 f" -- maximum {int(entry['max_health'])} withheld until the "
+                 f"player's first landed word [MAXHP-1]"), flush=True)
     return entry
 
 
@@ -36352,6 +37718,18 @@ def area_population(area):
         if problem:
             raise PopulationError(problem)
 
+    # THE ALLEGIANCE IS A KNOWN NAME (RANGERPRE-S12). spawn_population indexes
+    # ALLEGIANCE_BY_NAME with it, so an unknown name ("anmial") used to raise a
+    # bare KeyError inside instance bring-up -- where the harness still reports
+    # PASS with the body absent (the level guard's shape above). Refused here.
+    for key, row in rows:
+        name = row.get("allegiance", "hostile")
+        if name not in ALLEGIANCE_BY_NAME:
+            raise PopulationError(
+                f"spawn row {key!r} in area {area!r} says allegiance {name!r}, "
+                f"which is not one of {sorted(ALLEGIANCE_BY_NAME)}. The server "
+                f"would raise inside instance bring-up with the body absent")
+
     # THE PARTY CO-LOADS WITH EVERY AREA, so its ids are reserved against area
     # rows even though the rows above are internally consistent. The set checks
     # above cannot see this collision, and it stayed unguarded for a week
@@ -36460,7 +37838,12 @@ def spawn_population(send, state, origin, conn_id, area=None):
             continue
         x, y, moved = spot
 
-        allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
+        _aname = row.get("allegiance", "hostile")
+        allegiance = ALLEGIANCE_BY_NAME[_aname]
+        # RANGERPRE-S12: (create token, turned token) for an "animal", else
+        # None -- the body is then passive and attacks back unless its row
+        # says otherwise, which is what retail's 'anim' body did.
+        _team = TEAM_TOKEN_BY_NAME.get(_aname)
         hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
         # A vault-emitted def_NNNN row deliberately has NO name -- npcdefs.py:
         # "a name comes from a rendered nameplate or it does not exist" -- and
@@ -36529,10 +37912,11 @@ def spawn_population(send, state, origin, conn_id, area=None):
                 row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
-            "attacks_back": bool(row.get("attacks_back", False)),
+            "attacks_back": bool(row.get("attacks_back", _team is not None)),
             # MONSTERAI-J: a passive row notices nothing until it is hit, and
-            # its group joins on the hit. Both default to today's behaviour.
-            "passive": bool(row.get("passive", False)),
+            # its group joins on the hit. Both default to today's behaviour --
+            # except an "animal" row's, which default True (RANGERPRE-S12).
+            "passive": bool(row.get("passive", _team is not None)),
             "group": row.get("group"),
             # MONSTERAI-S8: a `stationary = true` row never scatters (copied here,
             # or the field could never reach a spawned row -- R3-F3).
@@ -36592,6 +37976,8 @@ def spawn_population(send, state, origin, conn_id, area=None):
                     "level": _hlevel,
                     "name": label,
                 }
+        if _team is not None:                           # RANGERPRE-S12
+            entry["team_token"], entry["token_on_provoke"] = _team
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
         if row.get("weapon_item"):
@@ -36732,6 +38118,10 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
     # displacement scan finds, so either GWCA's offsets are for a different
     # build or the write is computed. Do not send 0x002F for this purpose again
     # without settling that first.
+    #
+    # (0x002F IS sent since RANGERPRE-S12 -- for the DISPLAYED token it
+    # writes, a provoked animal's 'anim' -> 'anin' in send_due_tokens, which is
+    # retail's own use of it; not for attackability, which this note is about.)
     #
     # The health and attack-speed sends that used to sit here moved into
     # create_agent_world, unchanged and in the same order, so that a burrow
@@ -39045,6 +40435,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     delta_ms = int((now - prev_tick) * 1000)
                     if delta_ms > 0:
                         prev_tick = now
+                        # RANGERPRE-S12: the count of 0x001E, which
+                        # send_due_tokens reads -- a provoked animal turns on
+                        # the tick AFTER its hit, as retail's did. Counted
+                        # BEFORE the send: a hit landing from the client
+                        # thread in between stamps the new count and waits
+                        # one tick more, never one tick less.
+                        state["sim_ticks"] = state.get("sim_ticks", 0) + 1
                         try:
                             # quiet: 20 of these a second would bury the log.
                             send(GAME_SMSG_WORLD_SIMULATION_TICK, [delta_ms],
@@ -39149,6 +40546,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reported arrival, so it should be served on the first
                         # tick after that report rather than one interval later.
                         interact_pending_tick(send, state, conn_id)
+                        # RANGERPRE-S15: a pickup's arrival (or its cancel) and
+                        # its hold's release, then the ground items' view range
+                        # -- polled for the interact's reason: the client sends
+                        # nothing on the way (3 of 3 retail pickups).
+                        pickup_tick(send, state, conn_id)
+                        ground_items_tick(send, state, conn_id)
                         # A click held back by the grant floor. Polled here for
                         # the same reason the interact above is -- the client
                         # sends NOTHING while click-walking (measured silences
@@ -39705,6 +41108,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [1, COSTUME_HEAD_ITEM_ID] + _cell,
                                  f"ITEM_MOVED_TO_LOCATION({COSTUME_HEAD_KEY} -> "
                                  f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, COSTUME_HEAD_SLOT)})")
+                        # RANGERPRE-S21 (HAND_RESTORE, the default since
+                        # 2026-09-30): the RESTORED hands become set 0's items
+                        # and the swing model HERE -- after every create above
+                        # (they read set 0's record, ENG-B4) and before the
+                        # 0x0148/0x0147 rows below that name them. A no-op
+                        # under --no-hand-restore and whenever the hands are
+                        # the record's.
+                        item_hands_at_dress(state, conn_id)
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
                         for slot in range(4):
@@ -39887,25 +41298,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"{qid} code 0x{code:02X}"
                                   + ("" if row else " -- NOT IN content/quests.toml"))
                             if row and code == questdefs.SERVICE_ACCEPT:
-                                # The marker goes at the player's own position
-                                # and the map ids are the instance's, which is
-                                # a PLACEHOLDER: a real giver would put it at
-                                # the objective. The quest row has no marker
-                                # column yet, and inventing coordinates it does
-                                # not carry would be a number nobody measured.
-                                mid = state["map_id"]
-                                nm = questdefs.enc_string(row.get("enc_name") or [])
-                                send(GAME_SMSG_QUEST_ADD,
-                                     [qid, tuple(state["pos"]), 0, mid, 32,
-                                      nm, nm, nm, mid],
-                                     f"QUEST_ADD[{qid}] (accepted)")
-                                state.setdefault("quests", set()).add(qid)
-                                # The marker moves in the SAME batch as the
-                                # quest message that caused it -- never on a
-                                # later tick -- and then the window closes.
-                                _send_markers(send, state, " (accepted)")
-                                _close_dialog(send, state["interacting"],
-                                              "accepted")
+                                # THE ACCEPT BATCH is accept_quest's: 0x0049
+                                # with the row's log flags and the accepting
+                                # map as home (RANGERPRE-S18), the state add,
+                                # the markers, the bare 0x0081.
+                                accept_quest(send, state, qid, row, conn_id)
                             elif row and code == questdefs.SERVICE_TURN_IN:
                                 # THE HAND-IN BATCH is turn_in_quest's: one
                                 # 0x0052 (the party-broadcast experiment), the
@@ -40010,6 +41407,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Nothing here reads it: the press carries its target.
                         state["target"] = values[1]
                         state["target_auto"] = values[2]
+                    elif opcode == GAME_CMSG_PICKUP:
+                        # RANGERPRE-S15 (LOOT slice 1): walk to a ground item
+                        # and pick it up -- the straight 0x002A now, the arrival
+                        # frame at the leg's end (pickup_tick). An id that is no
+                        # ground item in view is refused with nothing sent, the
+                        # dead-player guard included (handle_pickup).
+                        handle_pickup(values, send, state, conn_id, rec=rec)
                     elif opcode == GAME_CMSG_ROTATE_PLAYER:
                         # THE DWORD/FLOAT TRAP -- read the constant before
                         # touching this. values[1] and values[2] are integers
@@ -44327,6 +45731,32 @@ def main():
               "are ignored and no stored item cell is read -- every run before "
               "DESKWORK-D1 step 8 (2026-09-23): the dress is the constants' and a "
               "drag or double-click in the inventory gets no reply.", flush=True)
+    if a.hand_restore and a.no_hand_restore:
+        ap.error("--hand-restore and --no-hand-restore name both arms")
+    global HAND_RESTORE
+    if a.hand_restore:
+        # The default since 2026-09-30, spelled out: kept because today's run
+        # cards and scripts name it (RANGERPRE-S21's loopback gate).
+        HAND_RESTORE = True
+        print("[items] --hand-restore: the default since 2026-09-30, spelled out "
+              "-- under --persist a stored HAND change is put back at the next "
+              "dress [RANGERPRE-S21]" + ("" if a.persist else "  -- NOTE: "
+                                        "--persist is OFF, so no item cell "
+                                        "survives a load and this does nothing"),
+              flush=True)
+    if a.no_hand_restore:
+        HAND_RESTORE = False
+        print("[items] --no-hand-restore: THE REVERT ARM for RANGERPRE-S21's flip "
+              "(2026-09-30) -- a stored HAND change (an in-game equip into equipped "
+              "0/1) is NOT put back at the next dress: the hands, set 0, 0x0147 and "
+              "the load's 42 are set 0's record again, the change said in the log, "
+              "as every dress before 2026-09-30. KNOWN-BAD against retail's three "
+              "loads after 20260929T150923 :56064's equips (OBSERVED n=1), and the "
+              "loopback gate's known-bad arms (harness 20260930T102741, zone pair "
+              "T103808) loaded the bow." + ("" if a.persist else "  -- NOTE: "
+                                           "--persist is OFF, so no item cell "
+                                           "survives a load and this changes "
+                                           "nothing"), flush=True)
     if a.equipped_visual_order:
         global EQUIPPED_VISUAL_ORDER
         EQUIPPED_VISUAL_ORDER = True
@@ -44404,6 +45834,30 @@ def main():
               "paid (the print names it) and the offer screen draws no gold "
               "line -- the pre-DESKWORK-D9 behaviour. Default pays 0x0140 "
               "[key, gold] after the experience 0x00EE.", flush=True)
+    if a.drop_table is not None:
+        # RANGERPRE-S15: resolve and validate the table NOW, so a bad name or a
+        # row this slice cannot serve never starts a server (a kill mid-run
+        # would otherwise raise inside the world tick).
+        try:
+            _dt_row = drop_table_row(a.drop_table)
+            # and the gold row each hit declares, else kill_agent raises mid-frame
+            loot.gold_record(agents.item_template("gold_coins"), _dt_row["gold"][1])
+        except (agents.content.ContentError, loot.LootError) as exc:
+            raise SystemExit(f"--drop-table {a.drop_table}: {exc}") from None
+        global DROP_TABLE
+        DROP_TABLE = a.drop_table
+        print(f"[loot] --drop-table {a.drop_table}: every HOSTILE kill rolls on "
+              f"it -- chance {_dt_row['chance']}, gold {list(_dt_row['gold'])} "
+              f"(content/drops.toml, INVENTED); the drop's frame, pickup and "
+              f"view range are retail's (loot.py) [RANGERPRE-S15]", flush=True)
+    if a.no_drops:
+        global LOOT_ENABLED
+        LOOT_ENABLED = False
+        print("[loot] --no-drops: no kill drops anything, even under "
+              "--drop-table -- this server's bytes until 2026-09-30. KNOWN-BAD "
+              "against retail's kill frame, which carries the drop (0x0162, "
+              "0x0168, 0x0020) ahead of the reward on 4 of 12 kills of "
+              "20260929T150923 [RANGERPRE-S15 revert]", flush=True)
     if a.no_reward_in_frame:
         global REWARD_IN_FRAME
         REWARD_IN_FRAME = False
@@ -44436,6 +45890,41 @@ def main():
               "RANGERPRE-S8. KNOWN-BAD against the tape: retail sends it right "
               "after the 0x004A on 22 of 22 hand-ins (turn_in_quest).",
               flush=True)
+    if a.no_retail_quest_log:
+        global QUEST_LOG_RETAIL
+        QUEST_LOG_RETAIL = False
+        print("[quests] --no-retail-quest-log: the accept's 0x0049 and every "
+              "0x0050 replay send log flags 32, and a replay's home is the map "
+              "being loaded, as every run before RANGERPRE-S18. KNOWN-BAD "
+              "against the tape: retail sends the quest's own flags (0 on 5 of "
+              "12 accepts) and the accepting map on 37 of 37 replays "
+              "(accept_quest, _replay_quests).", flush=True)
+    if a.no_accept_rewards:
+        global ACCEPT_REWARDS
+        ACCEPT_REWARDS = False
+        print("[quests] --no-accept-rewards: a quest row's accept_items and "
+              "accept_skills are NOT granted at the accept, as every run "
+              "before RANGERPRE-S18. KNOWN-BAD against the tape: retail grants "
+              "them before the 0x0049 on 2 of 2 grant-carrying accepts "
+              "(accept_quest).", flush=True)
+    if a.no_quest_items:
+        global QUEST_ITEMS_ENABLED
+        QUEST_ITEMS_ENABLED = False
+        print("[quests] --no-quest-items: a hand-in takes no handin_items back "
+              "(no 0x014D), grants no reward_items (no 0x0161 / 0x013E), and "
+              "the screens draw no item line, as every run before "
+              "RANGERPRE-S20. KNOWN-BAD against the tape: retail removes the "
+              "quest item and adds the reward item into its cell before the "
+              "first 0x0052 (q62, 20260929T150923 :53880 727.4875) "
+              "(turn_in_quest).", flush=True)
+    if a.quest_marker_at_player:
+        global QUEST_MARKER_AT_OBJECTIVE
+        QUEST_MARKER_AT_OBJECTIVE = False
+        print("[quests] --quest-marker-at-player: the accept's 0x0049 marker "
+              "is the player's own position on this map, plane 0, as every run "
+              "before RANGERPRE-S18. KNOWN-BAD against the tape: retail marks "
+              "the objective's spot and plane, or the exit toward its map "
+              "(quest_accept_marker).", flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
@@ -45585,6 +47074,19 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_approach_start_halt:
+        global APPROACH_START_HALTS
+        APPROACH_START_HALTS = False
+        print("APPROACH: --no-approach-start-halt -- a ranged approach's first swing "
+              "is [4] alone, no [8, me, 1] and no 0x0028 [me]: KNOWN-BAD against "
+              "retail's 12 of 12 [RANGERPRE-S16 revert]", flush=True)
+    if a.held_interact_at_range:
+        global HELD_INTERACT_AT_DISC
+        HELD_INTERACT_AT_DISC = False
+        print("INTERACT: --held-interact-at-range -- a held interact is served "
+              "inside INTERACT_RANGE (144 u) and the routed walk stops 100 u "
+              "short: KNOWN-BAD against retail's 67.8 / 75.2 u "
+              "[RANGERPRE-S17 revert]", flush=True)
     if a.no_preparation_splash:
         global PREPARATION_SPLASH
         PREPARATION_SPLASH = False
@@ -46076,6 +47578,23 @@ def main():
         print("PLAYER MAX ALWAYS: the player's property 42 goes out before every "
               "armour-ignoring word, as until 2026-09-22 (retail: never immediately "
               "ahead of a damage word at the observer, 0 of 3 / 0 of 401).",
+              flush=True)
+
+    if a.npc_max_at_create:
+        global NPC_MAX_AT_CREATE
+        NPC_MAX_AT_CREATE = True
+        print("NPC MAX AT CREATE: every NPC's property 42 goes out in its create "
+              "burst and ahead of every armour-ignoring word, as until 2026-09-29 "
+              "(retail: on the player's first landed word only, 12 of 12) "
+              "[RANGERPRE-S10 revert]", flush=True)
+
+    if a.no_animal_token_flip:
+        global ANIMAL_TOKEN_FLIP
+        ANIMAL_TOKEN_FLIP = False
+        print("NO ANIMAL TOKEN FLIP: an 'animal' row keeps 'anim' after its first "
+              "landed hit -- no prop 65 / 0x009B / prop 36 prelude and no 0x002F "
+              "(retail turned it to 'anin' on the tick after the hit, "
+              "20260929T150923 :55934 t=565.0302) [RANGERPRE-S12 revert]",
               flush=True)
 
     if a.no_adren_bar_gate:
