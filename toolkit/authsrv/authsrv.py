@@ -34350,6 +34350,25 @@ MODEL_PARKS_ON_AVOID_HALT = True   # --no-model-avoid-halt reverts
 #     again and parked the model 45 u from the body. agenttap --agents 1
 #     reads both world copies.
 # --no-pickup-through-avoid-halt reverts: the pickup cancels, as on Run A.
+#
+# CORRECTED THE SAME DAY by its own confirming run, 20260930T151413 (agenttap
+# on both world copies). Both pickups served, and world-0 did not halt either:
+# it took each pickup's target and arrived 0.5 u and 0.4 u from the pile. But
+# the Hatcher in every one of these arrivals had been KILLED AND REVIVED. The
+# kill's 0x0026 [10, 8] cleared bit 0 of the client's copy of it
+# (m_flags 0x00020009 -> 0x00020008, t = 24.3 s). Our revive (revive_due: the
+# 0x00F1 status ALONE) never set it back, and it read 0x00020008 to the end of
+# the tape. Retail's in-place revive also sends FLAGS 9 (respawn.py:
+# STATUS 0x0 + FLAGS 9). The control: a plain router 0x0029 into the revived
+# Hatcher's disc, ending 75.3 u from its centre, did not halt either. The
+# pre-kill approach did stop at its disc (world-0 parked 65 u out). So the
+# client was not treating the revived Hatcher as an obstacle at all.
+# "The body walks into a standing NPC's disc" is NOT shown. What IS shown is
+# that our mirror counts an agent the client does not (RANGERLOOP-F10).
+# What this switch rests on now is retail's SERVER alone: the arrival on its
+# straight-line clock (2 of 2), and a server that clips no lead on an agent
+# (1z-dj.1: 243 of 291). For a pile inside a COLLIDING NPC's disc, n = 0, so
+# that part is RECONSTRUCTION.
 PICKUP_WALKS_THROUGH_AVOID_HALT = True   # --no-pickup-through-avoid-halt reverts
 
 
@@ -34380,7 +34399,8 @@ def _model_park_on_avoid_halt(state, rec, now):
 
     RANGERLOOP-F8: a halt taken while a pickup's leg still owns the model's
     dest is consumed and NOT parked (PICKUP_WALKS_THROUGH_AVOID_HALT), because
-    the body walks into the disc to reach the item. Keyed on the dest itself,
+    the pickup is served on its own leg's clock, as retail's server serves it
+    (the switch's comment says what its run corrected). Keyed on the dest itself,
     so a pickup whose walk was replaced is parked as before. THE THREADS: the
     grant's own setter can halt the copy inside send(), on the recv thread,
     before _approach_send writes the dest. A tick that parks there clears a
@@ -34418,8 +34438,8 @@ def _model_park_on_avoid_halt(state, rec, now):
         print(f"[model] AVOID HALT on a pickup walk: the mirror's pass halted the "
               f"player's copy at ({hx:.0f},{hy:.0f}), "
               f"{math.hypot(tx - hx, ty - hy):.0f} u short of ground agent "
-              f"{pk.get('agent')}; NOT parked -- the body walks into the disc to "
-              f"the item and the pickup is served at its eta [RANGERLOOP-F8]",
+              f"{pk.get('agent')}; NOT parked -- the pickup is served on its "
+              f"own leg's clock, at its eta [RANGERLOOP-F8]",
               flush=True)
         return False
     px, py = state.get("pos", (hx, hy))

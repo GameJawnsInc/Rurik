@@ -19776,6 +19776,27 @@ leg A's four halts landed on the four reports. On an S15 pickup walk it does not
 
 The record is in PLAN-LOG, "RANGERLOOP-F8", and `test_loot` §7 covers it.
 
+### 1z-dj.6 CORRECTED 2026-09-30 by its own client run: the revived Hatcher was never an obstacle to the client
+
+The run, `20260930T151413`, tapped both world copies (`agenttap --agents 1,10`).
+- **World-0 did NOT halt on either pickup walk.** It arrived 0.5 u and 0.4 u from the pile.
+- **A plain `0x0029` did not halt either.** It ended 75.3 u from the Hatcher's centre,
+  inside its disc.
+- **Why:** the Hatcher's own `m_flags` lost bit 0 at the first kill (`0x00020009` →
+  `0x00020008`, the kill's `0x0026 [10, 8]`). Our revive, the `0x00F1` status alone, never
+  set it back. Retail's in-place revive also sends FLAGS 9 (`toolkit/authsrv/respawn.py`).
+- **Before the kill it was an obstacle:** the approach's target-agent stop parked world-0
+  65 u out. OBSERVED.
+
+**What this does to the record:**
+- **1z-dj.5's premise is withdrawn.** The arrivals it cites do not show a body passing a
+  colliding disc. What they show is our mirror counting an agent the client had dropped from
+  its pass. That is RANGERLOOP-F10: `revive_due` omits the FLAGS 9.
+- **Bit 0 is what the pass tests:** RECONSTRUCTION. The decode names bits 0/1 as the
+  resolver's, and the pass's own filter is not read.
+- **The pickup switch stays**, on retail's server clock alone (PLAN-LOG, "RANGERLOOP-F8's
+  client run").
+
 ---
 
 ## 1z-dk. THE PARKED COPY'S GRANT REFUSAL, DECODED — **there is no gate. The handler is gateless, the setter writes `m_targetPoint` unconditionally, and the "refusal" is the avoidance pass halting at the setter and invalidating the target blocks — F14's mechanism, confirmed on the specimen and by a census: 72 of 72 parked-with-a-hostile leads never installed, and our mesh agrees with the client's waypoint verdict at 71 of those 72.** Nothing ships; 1z-dj already covers the class; the one disagreement is a mesh boundary and it is named

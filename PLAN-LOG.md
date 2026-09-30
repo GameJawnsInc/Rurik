@@ -28,6 +28,48 @@ move back.
 
 ---
 
+### RANGERLOOP-F8's client run -- 2026-09-30 -- **the pickups are served on the client (2 of 2), and the run CORRECTS the entry below: the Hatcher was not an obstacle to the client at all. Our revive omits retail's FLAGS 9, so a revived NPC stays non-colliding in the client and our mirror counts it anyway (RANGERLOOP-F10)**
+
+**The run.** `20260930T151413`, launched from `main` at `f60b3511`, on S15's Run A rig. It was
+agent-piloted with the owner's hands off. `agenttap --agents 1,10` read both of the
+client's world copies throughout (`vault/research/animref/agenttap-F8-20260930T1513.jsonl`).
+The questions were registered before launch; F8-Q6 was written to a file before its input.
+- **F8-Q1, the exposure, held.** Both pickup walks printed `AVOID HALT on a pickup walk ...
+  NOT parked`, 92 u and 50 u short of the pile.
+- **F8-Q2, held.** Both were served in retail's eight-message frame, purse 0 → 6 → 12, with
+  0 CANCELLED. The inventory counter reads 12.
+- **F8-Q3, held.** Each S tap's report came from the pile's exact point, 0.0 u.
+- **F8-Q5, the residual, reproduced.** Pile 401's stop-echo was covered by the disc from the
+  mirror's stale copy, and 1z-dj parked the model 54 u from the body.
+- **F8-Q4, world-0, AGAINST the decode's prediction.** World-0 took each pickup's target
+  (`+0x98` = the ground agent) and ARRIVED, 0.5 u and 0.4 u from the pile. It did not halt.
+  Pile 400's walk started inside the disc, 33 u from the Hatcher, in the cone.
+- **F8-Q6, the control, AGAINST prediction too.** A ground click was routed to (10183, 8028),
+  75.3 u from the Hatcher, as a plain `0x0029`. World-0 walked there and arrived.
+- **Why, OBSERVED on the same tape.** The Hatcher's own `m_flags` went `0x00020009` →
+  `0x00020008` at the first kill (t = 24.3 s): the kill's `0x0026 [10, 8]` cleared bit 0.
+  It stayed `0x00020008` to the end, through both revives. Our `revive_due` sends the
+  `0x00F1` status alone. Retail's in-place NPC revive is `STATUS 0x0 + FLAGS 9` (`respawn.py`).
+- **Before the first kill the Hatcher was an obstacle.** The approach's target-agent disc
+  stop parked world-0 65 u out.
+
+**What this corrects.** The entry below says the body walks into a standing NPC's disc to
+reach the item. It does not show that. Every arrival was beside a Hatcher that the client
+no longer counted. `PICKUP_WALKS_THROUGH_AVOID_HALT` stays ON, and its comment says what it
+rests on now: retail's server serves on its straight-line clock and clips no lead on an
+agent (1z-dj.1). For a COLLIDING NPC that is RECONSTRUCTION, n = 0.
+
+**RANGERLOOP-F10, registered (`PLAN.md` §8.1).** `revive_due` omits the `0x0026 [agent, 9]`
+that retail's in-place revive sends. So the client keeps a revived NPC at life-state 8,
+which does not collide, while `_npc_obstacles` counts it again as soon as `dead` clears.
+- Every mirror halt against a revived practice target is ours alone. That includes Run A's
+  cancels and both residual parks (45 u and 54 u).
+- Two fixes, not taken here:
+  - **The wire fix, FLAGS 9 on the revive.** It is retail's, but it touches `test_agentlife`,
+    `test_guards`, `test_burrow`, `test_morale` and `test_pools`, and it needs a client run
+    for the resurrect asserts.
+  - **Or the mirror follows the life-state byte.**
+
 ### RANGERLOOP-F8 -- 2026-09-30 -- **fixed at the desk: an avoid halt on a pickup walk no longer cancels the pickup. The fix goes in 1z-dj's park, not in the mirror's pass. Client confirmation is still open**
 
 **The defect** ([CONFIRM-2026-09-30.md](studies/presearing/CONFIRM-2026-09-30.md) §7):
