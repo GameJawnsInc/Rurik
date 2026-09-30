@@ -2901,6 +2901,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "maximum immediately ahead of a damage word at the "
                          "observer (0 of 3 armour-ignoring, 0 of 401 damage "
                          "words); it rides the Deep Wound batches instead.")
+    ap.add_argument("--npc-max-at-create", action="store_true",
+                    help="RANGERPRE-S10 REVERT: declare every NPC's maximum "
+                         "health (0x009F 42) in its create burst, and an "
+                         "armour-ignoring word's target maximum before EVERY "
+                         "such word from any source, as until 2026-09-29. "
+                         "Retail declares an NPC's maximum on the player's "
+                         "first landed word and never at the create (12 of "
+                         "526 creates on 20260929T150923, each right before "
+                         "that word). A party body keeps its create-time 42 "
+                         "either way.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "

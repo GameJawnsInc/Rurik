@@ -3213,7 +3213,12 @@ agent 25 there) — so the two rules are: **self, in the batch; others, on your 
 damage word when the target's maximum has moved since it was last declared
 (`max_declared_on_hit`; a missing key counts as declared, because ours declares a body's
 maximum at its create — a separate, measured decision — so retail's first-hit 42, its FIRST
-declaration, is not duplicated). `deep_wound_open` / `deep_wound_close` no longer send a
+declaration, is not duplicated; **SUPERSEDED 2026-09-29, RANGERPRE-S10 (MAXHP-1):** that
+decision was never measured against retail and retail refutes it — 0 of 526 NPC-class creates
+on `20260929T150923` carry a 42, and 12 of 12 declarations sit immediately before the
+observer's first word on the body — so the create no longer declares an NPC's maximum (party
+bodies still do, PARTYMAX) and `declare_body_max_on_hit` sends the first-hit 42 right before
+the word, after the gain, the chain state and a critical's energy). `deep_wound_open` / `deep_wound_close` no longer send a
 body's 42 in the batch; they mark it stale, and the player's own keeps the isle batch.
 `test_mechanics` §16: a foe's Deep Wound batch is the status word alone, the player's next
 landed hit declares `[42, foe, 80]` before its damage word, the hit after it carries none

@@ -4336,7 +4336,9 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
                      now, label, base=0.0):
     """One EXTRA hit of a scythe swing on body `aid`: its own roll and critical
     through ITS armour, then retail's per-hit batch -- the gain, the first-hit
-    maximum, the word (WEAPONS-W3). `base` is the swing's base penetration
+    maximum, the word (WEAPONS-W3); a critical's energy sits ahead of the
+    maximum, which is always the message right before its word (MAXHP-1).
+    `base` is the swing's base penetration
     (an attack skill's, studies/weapons 35). Returns the points dealt."""
     foe = state["agents"][aid]
     armour = penetrated_armour(cracked_body_armour(state, aid, creature_typed_rating(foe.get("armor_rating"), foe,
@@ -4364,14 +4366,12 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
     if ENERGY:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now, conn_id,
                                 f"the scythe's extra hit on agent {aid}")
-    if foe.get("max_declared_on_hit", foe["max_health"]) != foe["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, aid, int(foe["max_health"])],
-             f"maximum {int(foe['max_health'])} on agent {aid}, declared on the "
-             f"scythe's extra hit")
-        foe["max_declared_on_hit"] = foe["max_health"]
     if critical:
         critical_energy_gain(send, state, conn_id)
+    # MAXHP-1: the body's maximum is the message immediately before its word
+    # (OBSERVED 12 of 12 on 20260929T150923; the scythe's position INFERRED).
+    declare_body_max_on_hit(send, foe, aid, PLAYER_AGENT_ID,
+                            "the scythe's extra hit")
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, aid, PLAYER_AGENT_ID,
@@ -4469,6 +4469,12 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
                  [agents.GV_EFFECT_ON_TARGET, aid, PLAYER_AGENT_ID, visual],
                  f"impact {visual} of preparation {prep_skill} on agent {aid} "
                  f"(the splash)")
+        # MAXHP-1: the neighbour's first word from the player carries its
+        # maximum right before it -- INFERRED, the splash has no retail witness
+        # (0 Ignite Arrows in the corpus); it is the rule every other player
+        # word follows (12 of 12, 20260929T150923).
+        declare_body_max_on_hit(send, foe, aid, PLAYER_AGENT_ID,
+                                f"preparation {prep_skill}'s splash")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.PROP_DAMAGE, aid, PLAYER_AGENT_ID,
               _damage_fraction(points, foe["max_health"], agents.PROP_DAMAGE,
@@ -5826,6 +5832,23 @@ def npc_recharge_anchor(activation):
 # branch declared it before EVERY 55 word; now only when the maximum differs
 # from the last value declared. --player-max-always is the pre-2026-09-22 arm.
 PLAYER_MAX_ALWAYS = False
+
+# AN NPC'S MAXIMUM RIDES THE PLAYER'S FIRST LANDED WORD, NOT ITS CREATE
+# (RANGERPRE-S10, MAXHP-1). OBSERVED, capture 20260929T150923: 526 NPC-class
+# create intervals (0x0020 tag 2) over 11 connections, 12 carry a 0x009F [42,
+# agent, max], and every one is the message IMMEDIATELY before the observer's
+# FIRST 0x00A3 on that body, at the same wire t -- 0 on a body the observer
+# never hit, 0 hit bodies left undeclared; an attack order with no landed hit
+# draws none (:53756 agent 19). The design lane's corpus agrees, 120 of 120 over
+# 5,910 NPC-class intervals, and 0 of 2,458 party / other-source words on an
+# undeclared body carried one. So create_agent_world withholds an NPC's 42 and
+# declare_body_max_on_hit sends it at every player-sourced damage site. PARTY
+# bodies (allegiance 'play') keep their create-time 42 -- retail declares none
+# of its 509 'play' creates either, but a hero's rides its character block
+# ahead of the create, which ours does not always send (PARTYMAX, a follow-up).
+# --npc-max-at-create is the pre-2026-09-29 arm: the create declares, and an
+# armour-ignoring word (Empathy's) declares before every word, any source.
+NPC_MAX_AT_CREATE = False
 
 # MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
@@ -20488,6 +20511,45 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
 
+def declare_body_max_on_hit(send, agent, agent_id, source_id, why, always=False):
+    """A body's maximum health, 0x009F [42, agent, max], sent when the PLAYER's
+    word is about to land on it and the client has not been told this value.
+    Called immediately before the word at every player-sourced damage site --
+    hit_enemy (swings, attack skills, arrows and the spells routed through it),
+    scythe_extra_hit, preparation_splash and armour_ignoring_damage. Returns
+    whether it sent.
+
+    OBSERVED (RANGERPRE-S10, MAXHP-1), capture 20260929T150923: 12 of 526
+    NPC-class create intervals carry a 42, each the message immediately before
+    the observer's FIRST 0x00A3 on the body at the same wire t; 0 on a body the
+    observer never hit; a miss or an attack order draws none. The corpus: 120
+    of 120 over 5,910 intervals. Empathy's words (MANTID, 20260913T210901
+    :60877) declare on the first word only -- agent 24's [55, 24, 9] at 695.127
+    carries [42, 24, 25], the two after it none (4 first words declared, 4
+    later words not). And a MOVED maximum is declared on the next word: PVPMAX
+    (SLICE-F46.10, the PvP tape 20260817T231139 -- 13 of the observer's 90 hits
+    on one connection, exactly the first hits and the first after a Deep Wound
+    edge or a rise) and :53756's 64 -> 52 at 1117.382. deep_wound_open/close
+    and create_agent_world mark the tracker stale (None); a MISSING key counts
+    as declared, which is what a party body and a bare test fixture are.
+
+    Only the PLAYER's word carries it: 0 of 2,458 party and other-source words
+    on an undeclared body did (hurt_agent_row sends none). `always` is the
+    --npc-max-at-create arm's armour-ignoring word, which declared before every
+    word from any source until 2026-09-29."""
+    if not always:
+        if source_id != PLAYER_AGENT_ID:
+            return False
+        if agent.get("max_declared_on_hit", agent["max_health"]) == agent["max_health"]:
+            return False
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
+         f"maximum {int(agent['max_health'])} on agent {agent_id}, declared "
+         f"ahead of {why} [MAXHP-1]")
+    agent["max_declared_on_hit"] = agent["max_health"]
+    return True
+
+
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
               skill_strike=False, skill_id=None, before_damage=None,
@@ -20815,30 +20877,6 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if ENERGY and swing:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now,
                                 conn_id, f"weapon hit on agent {target_id}")
-    # PVPMAX (2026-09-14, studies/slice/FINDINGS.md SLICE-F46.10): the TARGET's
-    # maximum rides the OBSERVER's own landed hit -- retail's first one (its
-    # first declaration), and the first after the maximum moved -- between
-    # the observer's gain (0x00CF)
-    # and the damage word, and no other hit carries it. OBSERVED on the PvP
-    # arena tape 20260817T231139, four connections: 27 of 27 explicit maxima
-    # for other agents share a tick with [16|17, agent, observer] and the
-    # observer's close; 13 of the observer's 90 hits on one connection carry
-    # one, exactly the first hits and the first hits after a Deep Wound edge
-    # or a rise; party members' hits on the same agents carry none. So a
-    # body's Deep Wound (deep_wound_open/close) no longer sends its 0x009F 42
-    # -- it marks the declaration stale and this site catches up on the next
-    # landed hit, 1.33 s later on the tape when the player was already
-    # swinging and 6-34 s when not. The player's OWN maximum keeps the isle
-    # shape (same batch as the status word).
-    # Ours declares a body's maximum at its CREATE already (a separate,
-    # measured decision), so a missing key counts as declared and only a
-    # MOVE -- deep_wound_open/close set the key to None -- fires this.
-    if agent.get("max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, target_id, int(agent["max_health"])],
-             f"maximum {int(agent['max_health'])} on agent {target_id}, "
-             f"declared on the player's hit")
-        agent["max_declared_on_hit"] = agent["max_health"]
     # DAGGERS-B5: what a LANDED hit puts on the wire just ahead of its damage
     # word -- the chain state, retail's order (E5, 0x005C, the word, E3). A
     # miss or a block returned above, so a chain skill that did not hit
@@ -20851,6 +20889,18 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, target_id, PLAYER_AGENT_ID, prep_visual],
              f"impact {prep_visual} of preparation {prep_skill} on agent {target_id}")
+    # THE TARGET'S MAXIMUM, the message immediately before the word
+    # (RANGERPRE-S10, MAXHP-1; see declare_body_max_on_hit). It rides the
+    # player's FIRST landed word on the body -- 12 of 12 on 20260929T150923,
+    # never at the create -- and the first after the maximum moved (PVPMAX,
+    # SLICE-F46.10: a Deep Wound marks it stale; :53756 declared 64 at
+    # 1113.410 and 52 at 1117.382). Everything else this hit sends goes AHEAD
+    # of it: the chain state, the critical's energy, a preparation's visual
+    # (:62557 122.012 [E5, 9F 46, 5C, 9F 42, A3]; the design lane, 122 of 122
+    # batches). Until 2026-09-29 it sat before before_damage and ours declared
+    # every body at its create, so only a MOVE ever fired it here.
+    declare_body_max_on_hit(send, agent, target_id, PLAYER_AGENT_ID,
+                            "the player's hit")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -24971,7 +25021,7 @@ def aura_off(send, state, agent_id, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max="always", skill_id=None):
+                           declare_max=None, skill_id=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction]. Kills through the same doors a hit does.
 
@@ -24981,10 +25031,18 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     it ahead of a damage word at the observer 0 of 3 (armour-ignoring) / 0 of
     401 (16/17). It used to declare FIRST before every 55 here, "3 of 3 on the
     tape", but those three were a FOE's maximum ahead of Empathy's word, kept on
-    the body branch. A BODY's rule is `declare_max`: "always" declares each time,
-    "stale" (DAGGERS-B8) is hit_enemy's PVPMAX -- the first word after it moved.
-    RUN-DAGGERS-1's adjacent words say so -- [42, neighbour, 480] sits ahead of
-    the FIRST 55 on each of the two bodies and ahead of none of the 13 after."""
+    the body branch. A BODY's rule is `declare_max`: "stale" (DAGGERS-B8, and the
+    default since RANGERPRE-S10) is declare_body_max_on_hit -- the PLAYER's first
+    word on the body and the first after its maximum moved; "always" declares
+    before every word from any source, which was the default until 2026-09-29
+    and is now only the --npc-max-at-create arm's (None resolves to one or the
+    other). "always" is REFUTED by the MANTID tape: Empathy's [42, 24, 25] rode
+    the first of agent 24's three words, and 4 later words across agents 18, 24
+    and 26 carried none. RUN-DAGGERS-1's adjacent words say the same -- [42,
+    neighbour, 480] sits ahead of the FIRST 55 on each of the two bodies and
+    ahead of none of the 13 after."""
+    if declare_max is None:
+        declare_max = "always" if NPC_MAX_AT_CREATE else "stale"
     amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
@@ -25031,12 +25089,10 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     if not agent or agent.get("dead"):
         return 0.0
     pool = float(agent["max_health"])
-    if declare_max == "always" or agent.get(
-            "max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, target_id, int(pool)],
-             f"maximum {int(pool)} declared ahead of {what}")
-        agent["max_declared_on_hit"] = agent["max_health"]
+    # MAXHP-1: the player's first word on the body (or the first after its
+    # maximum moved) carries the 42 right before it; a hero's Empathy none.
+    declare_body_max_on_hit(send, agent, target_id, source_id, what,
+                            always=(declare_max == "always"))
     frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
     agent["health"] = max(0.0, float(agent["health"]) - amount)
     provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
@@ -27341,6 +27397,9 @@ def revive_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id}")
+        # MAXHP-1: the client now holds this maximum, so the player's next
+        # hit need not repeat it (a no-op on the client if it did).
+        agent["max_declared_on_hit"] = agent["max_health"]
         # Re-asserting the SAME maximum refills nothing, which is why a revived
         # body stood up with an empty bar while our own bookkeeping said full --
         # so it still took a full seven swings to drop, and the bar never moved.
@@ -35534,6 +35593,7 @@ def agent_refill_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id} (deferred)")
+        agent["max_declared_on_hit"] = agent["max_health"]    # MAXHP-1: told
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill agent {agent_id}'s bar (deferred)")
@@ -35739,9 +35799,20 @@ def create_agent_world(send, state, agent_id, entry, why,
                              agents.AGENT_KIND_NPC, x, y, plane,
                              allegiance=entry["allegiance"]),
          f"WORLD_CREATE_AGENT({agent_id}) — {why}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
-         f"health {int(entry['max_health'])} on agent {agent_id}")
+    # RANGERPRE-S10 (MAXHP-1): an NPC's maximum is NOT part of its create --
+    # 0 of 526 NPC-class create intervals on 20260929T150923 carry one (0 of
+    # 5,910 over the corpus); it rides the player's first landed word, so the
+    # tracker is marked stale here and declare_body_max_on_hit sends it. A
+    # re-create (the burrow's) resets it the same way -- retail re-declared on
+    # the first hit after a re-create, n = 2. A PARTY body keeps the 42 here
+    # (PARTYMAX, a follow-up), and --npc-max-at-create restores it for all.
+    _max_at_create = NPC_MAX_AT_CREATE or entry.get("allegiance") == agents.ALLEGIANCE_PLAYER
+    if _max_at_create:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
+             f"health {int(entry['max_health'])} on agent {agent_id}")
+    else:
+        entry["max_declared_on_hit"] = None
 
     # --- three of the four named on 2026-08-10, sent here for the first time ---
     #
@@ -35783,7 +35854,10 @@ def create_agent_world(send, state, agent_id, entry, why,
     live[agent_id] = entry
     if conn_id is not None:
         print(f"[c{conn_id}] created agent {agent_id} ({entry.get('name', '?')}) "
-              f"— {why}", flush=True)
+              f"— {why}"
+              + ("" if _max_at_create else
+                 f" -- maximum {int(entry['max_health'])} withheld until the "
+                 f"player's first landed word [MAXHP-1]"), flush=True)
     return entry
 
 
@@ -45969,6 +46043,14 @@ def main():
               "armour-ignoring word, as until 2026-09-22 (retail: never immediately "
               "ahead of a damage word at the observer, 0 of 3 / 0 of 401).",
               flush=True)
+
+    if a.npc_max_at_create:
+        global NPC_MAX_AT_CREATE
+        NPC_MAX_AT_CREATE = True
+        print("NPC MAX AT CREATE: every NPC's property 42 goes out in its create "
+              "burst and ahead of every armour-ignoring word, as until 2026-09-29 "
+              "(retail: on the player's first landed word only, 12 of 12) "
+              "[RANGERPRE-S10 revert]", flush=True)
 
     if a.no_adren_bar_gate:
         global ADREN_BAR_GATE

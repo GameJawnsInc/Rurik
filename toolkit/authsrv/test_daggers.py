@@ -827,9 +827,9 @@ def section_adjacent(have_fields):
         maxima = [v for o, v in sent if o == 0x009F
                   and v[0] == agents.PROP_HEALTH_MAX and v[1] in (11, 12)]
         check(maxima == [],
-              "no maximum is re-declared for a body whose maximum never moved "
-              "(ours declares it at the create; retail's [42] rode the FIRST "
-              "adjacent word on each body and none of the 13 after)", str(maxima))
+              "no maximum is re-declared for a body already declared (this bare "
+              "fixture's missing key counts as declared; retail's [42] rode the "
+              "FIRST adjacent word on each body and none of the 13 after)", str(maxima))
         st["agents"][11]["max_declared_on_hit"] = None      # it moved
         _land(authsrv, st, LEAD)
         _land(authsrv, st, OFF)
