@@ -166,7 +166,7 @@ run (`bc8f409b`). **S19 is not built.**
 | RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | **landed** `31112797`; **CONFIRMED** on the wire and the target bar ([CONFIRM](CONFIRM-2026-09-30.md) §6); the body visual is for the owner's eyes |
 | RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | **landed** `ce895d98`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
 | RANGERPRE-S15 | LOOT-1 | gold drop on kill, pickup, purse credit (straight walk) | L | **landed** `3e0851cf`; the drop **CONFIRMED** on the client; the pickup CONFIRMED only under `--no-model-avoid-halt`: **by default MOVECODE-1z-dj's avoid halt cancels it beside a standing NPC** (RANGERLOOP-F8, open) ([CONFIRM](CONFIRM-2026-09-30.md) §7) |
-| RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | **landed** `c26ecec5`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §8); a re-approach's halt comes late once the server's mirror has diverged (RANGERLOOP-F9, open) |
+| RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | **landed** `c26ecec5`; **CONFIRMED** on the client **on the first approach** ([CONFIRM](CONFIRM-2026-09-30.md) §8); the re-approach missed Q1's and Q6's windows, halting late and 134 u inside range once the server's mirror had diverged (RANGERLOOP-F9, open) |
 | RANGERPRE-S17 | ROUTE-B | interact served ~75 u, with the stop/serve slack fixed | L | **landed** `1c1bc840`; **CONFIRMED** on the client, n = 2 ([CONFIRM](CONFIRM-2026-09-30.md) §9) |
 | RANGERPRE-S18 | QUESTFLOW-A | accept flags, marker on the objective, rewards on accept | D+L | **landed** `55f7d0fc`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §2) |
 | RANGERPRE-S19 | SECONDARY-B | a content-authored dialog button grants a secondary | L | open: **not built**, it waits on the owner's `0x00B6` ruling (§5) |
@@ -203,8 +203,11 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   and `rangerpre` took them at `30923224`. **The other three are still red** on `rangerpre` at
   `41e5032a`, re-run for this record: test_wearmap (1 check: 34 worn items not declared first on
   their own connection), test_routerbench (2: one click of 149 unanswered) and
-  test_weaponcensus (1: WEAPONS-Q8, bow intervals of 2.63-2.72 s beside the pinned 2.476). They
-  are unclassified, whether this tape is their cause is UNVERIFIED, and they stay open.
+  test_weaponcensus (1: WEAPONS-Q8, bow intervals of 2.63-2.72 s beside the pinned 2.476).
+  **test_wearmap's 34 all come from this tape**, `20260929T150923` :53880 (OBSERVED, a
+  per-connection scan of the live corpus); the test and its code are identical on `main`, so it
+  is red there too (inferred, not re-run on `main`). test_routerbench and test_weaponcensus are
+  unclassified, whether this tape is their cause is UNVERIFIED, and all three stay open.
 - **RANGERPRE-S19** (SECONDARY-B) is not built. It waits on the owner's `0x00B6` ruling: the
   secondary-unlock mask, which we never send ([studies/profession/RUNS.md](../profession/RUNS.md)
   §13).

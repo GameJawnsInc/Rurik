@@ -28,7 +28,7 @@ move back.
 
 ---
 
-### RANGERPRE's loopback confirmation -- 2026-09-30 -- **S10, S12, S15-S18, S20 and S21 landed and run on our client: seven CONFIRMED, and S15's pickup FAILS by default beside a standing NPC; six shipped steps confirmed beside them; the hand restore ships ON; nine findings (RANGERLOOP-F1..F9)**
+### RANGERPRE's loopback confirmation -- 2026-09-30 -- **S10, S12, S15-S18, S20 and S21 landed and run on our client: six CONFIRMED, S16 CONFIRMED on its first approach, and S15's pickup FAILS by default beside a standing NPC; six shipped steps confirmed beside them; the hand restore ships ON; nine findings (RANGERLOOP-F1..F9)**
 
 **Landed** on lanes `rp2-a`..`rp2-d`, merged into `rangerpre` at `e968131a` and `d2fc95e1`.
 Each step was reviewed by an independent reviewer who re-ran its tests and its
@@ -69,11 +69,14 @@ separated from its treatment.
   without a new declaration, and a hero's hits carry none.
 - **S12 CONFIRMED.** The turn is exactly retail's `[9F/65, 9B, 9F/36, 9F/42, A3, 1E, 2F, 2B,
   2A]`, n = 2, one of them from the client's own attack.
-- **S16 CONFIRMED.** The client's own first report after the halt sits 2.8 u from the
+- **S16 CONFIRMED on the first approach; the re-approach missed Q1's and Q6's windows
+  (RANGERLOOP-F9).** The client's own first report after the halt sits 2.8 u from the
   approach's end, 1500.8 u from the target, against `--no-approach-start-halt`'s walk-in to
   224 u. The hold survives the launch, a keyboard move releases it with no freeze, and it does
-  not eat a mouse click. The re-approach halted late (RANGERLOOP-F9). The frame correction is
-  written into [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §21.
+  not eat a mouse click. The re-approach's halt carried the full batch but came 1.207 s after
+  its `0x002A` against eta 0.742, 1364 u out, 134 u inside range. The card had Q6 as SCORED;
+  the results log scores it PARTIAL/RECORDED. The frame correction is written into
+  [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §21.
 - **S17 CONFIRMED, n = 2.** A held interact is served at 80.0 u, on arrival, after 9/69/69
   ticks, against `--held-interact-at-range`'s 142.4/137.6/133.1 u after 4/63/63.
 - **S15: the drop CONFIRMED** (3 of 3 kill blocks in retail's order, against `--no-drops`),
@@ -104,10 +107,12 @@ separated from its treatment.
 
 **Also re-run for this record:** test_wearmap, test_routerbench and test_weaponcensus, the
 three reds of the tape's five that `main`'s corpus-reds landing did not name, are still red on
-`rangerpre` at `41e5032a` (4 checks). They are unclassified (RANGERPRE.md §5).
+`rangerpre` at `41e5032a` (4 checks). test_wearmap's 34 undeclared worn items all come from
+this tape's connection :53880 (OBSERVED, a per-connection scan); the other two are
+unclassified (RANGERPRE.md §5).
 
 **Open** (PLAN.md 8.1): S19 on the owner; F8 and F9; F2, F5 and F6; those three reds. The
-owner's eyes on S13's and S8's visuals are listed in CONFIRM §11.
+owner's eyes on S13's and S8's visuals are in PLAN.md 8.2 and CONFIRM §11.
 
 ---
 

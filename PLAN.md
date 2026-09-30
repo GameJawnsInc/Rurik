@@ -2349,6 +2349,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **296 map rows are limited by information, not effort**: one live capture on a
   known-named zone yields one exact `(map id, file id)` pair
   ([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md)).
+* **The owner's eyes, RANGERPRE**: S13's body visual and S8's quest-complete visual, both
+  UNREAD ([CONFIRM](studies/presearing/CONFIRM-2026-09-30.md) §11).
 
 ### 8.3 Standing residue the studies still call open
 
