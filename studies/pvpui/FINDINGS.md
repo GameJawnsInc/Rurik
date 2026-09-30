@@ -3464,3 +3464,15 @@ arm's bytes are unchanged. **Prediction for the re-run**, stated before it: the 
 grid AND the doll's equipment slots are both drawn, the latter as in
 `20260930T110231`.
 
+**CONFIRMED on the client, 2026-09-30** (harness `20260930T122945`, commit `0f6e1f91`, the
+command above, owner's go-ahead). With the inventory open, the doll wears the warrior set
+(helm, chest, gloves, legs, boots) and holds the spear and shield. The bag row is coloured
+with the backpack's badge, and the 20-cell Backpack grid is open under it. `gamesrv.log`:
+`HERO_INFO` at line 164, then `ITEM_STREAM_CREATE(hero inv 2, field 2 = 1)` at 165, then
+`INVENTORY_CREATE_BAG(hero equipped, bag 10)` at 166, then the hero's
+`AGENT_ATTRIBUTE_POINTS` at 167, and `HERO_ACTIVATE … inventory 2` at 179. The purse reads 0
+in this run and in the first cut alike, because this configuration credits no gold at load.
+`…110231`'s 10 was a quest reward and `…102526`'s a persisted purse, so it is not a
+regression. Not run: the `--hero-inv-legacy` arm on the client (the test pins its bytes), and
+the field-2-alone separating arm (35.3).
+

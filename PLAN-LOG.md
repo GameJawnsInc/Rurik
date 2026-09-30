@@ -60,8 +60,9 @@ see. The one load difference was `--hero-bags`'s pair (§26.3, 2026-08-18): `0x0
 - `test_heroinvorder.py` is new: 27 checks. With the default flipped, 11 go red; with the
   bag back on id 1, 2 go red. `test_heroadd` §5's re-declared pair is now `[2, 1]` plus
   the hero's own bag id.
-- **Open:** the re-run on the client. The grid and the doll's gear should both be drawn;
-  the prediction is in §35.4.
+- **CONFIRMED on the client** (harness `20260930T122945`, `0f6e1f91`): under `--party slice`
+  the Backpack grid is open and the doll wears its gear. Nothing about this is left open.
+  The field-2-alone separating arm in §35.3 is optional and unbuilt.
 
 ### RANGERPRE's corpus reds -- 2026-09-30 -- **three tests red on `main` from the Reforged pre-Searing tape; each classified per connection; all three were the tests, and two carried findings**
 
