@@ -19756,6 +19756,26 @@ length; the follow's orders then name the halt point, and the hostile parks 80 u
 instead of 520 — the owner's "chasing a ghost" should not recur in leg A's regime. Leg B's regime
 (the parked copy refusing a grant) will still snap until its rule is decoded.
 
+### 1z-dj.5 Scoped 2026-09-30: the park does not apply to a pickup walk (RANGERLOOP-F8)
+
+**The park assumed that the body halts where world-0 halts.** On keyboard leads that holds:
+leg A's four halts landed on the four reports. On an S15 pickup walk it does not hold.
+- **The failure:** with the revived practice Hatcher 30 u from its drops, the pass halted
+  the copy at the disc on 3 of 3 pickups. The park cleared the walk's dest, and each pickup
+  cancelled.
+- **What the body did:** it reached the pile. The first report after each walk stood 0.0,
+  3.0 and 0.0 u from it (`20260930T133106`, `134310`), OBSERVED.
+
+**What is known about which copy halted:**
+- The body's arrival is OBSERVED.
+- World-0 on a pickup walk is UNVERIFIED. The "target covered" exit says it halts, and no
+  tap has read it. So the pass stays as transcribed, and only the park is scoped:
+  `PICKUP_WALKS_THROUGH_AVOID_HALT`, reverted by `--no-pickup-through-avoid-halt`.
+- Retail's corpus holds no pickup beside a standing agent: 3 of 3 piles had only corpses
+  near them.
+
+The record is in PLAN-LOG, "RANGERLOOP-F8", and `test_loot` §7 covers it.
+
 ---
 
 ## 1z-dk. THE PARKED COPY'S GRANT REFUSAL, DECODED — **there is no gate. The handler is gateless, the setter writes `m_targetPoint` unconditionally, and the "refusal" is the avoidance pass halting at the setter and invalidating the target blocks — F14's mechanism, confirmed on the specimen and by a census: 72 of 72 parked-with-a-hostile leads never installed, and our mesh agrees with the client's waypoint verdict at 71 of those 72.** Nothing ships; 1z-dj already covers the class; the one disagreement is a mesh boundary and it is named

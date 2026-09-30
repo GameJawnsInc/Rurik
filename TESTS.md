@@ -3467,7 +3467,20 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `handle_pickup`'s abandon of a follow still on record reddens 3k alone; `main()` without
   the gold-row validation reddens 5d. The same round re-aimed `test_playerswing.py` §9k's
   `_approach_abandon` census 11 → 12 (the pickup press abandons a follow still on record).
-  Floor 37 from the bare green run (the tape adds 9: 46 vaulted). No socket, no client.
+  **§7, RANGERLOOP-F8 (2026-09-30): the pickup beside a standing NPC.** The rig is rebuilt with the REAL
+  AgTrack guard (`_agtrack_guard_seed`), the REAL avoidance pass and the REAL
+  `_npc_obstacles`, fed through the send() choke point's own `_agtrack_shadow_emit`, at the
+  loopback runs' own coordinates: the Hatcher standing at (10126, 8077), Run A's pile 401
+  from the approach's disc stop, Run A''s pile 400 from 136 u out. 7a/7b: the pass halts
+  the copy on the disc (the exposure) and the pickup is still served at the leg's eta, in
+  retail's frame. 7c the KNOWN-BAD arm (`--no-pickup-through-avoid-halt`): 1z-dj parks and
+  both cancel, which is Run A's 3 of 3 reproduced. 7d: a plain `0x0029` lead into the same
+  disc is still parked. 7e: the setter's halt parked INSIDE send(), before the dest is
+  written, still serves. 7f: a pickup whose dest was replaced is parked (the exemption
+  keys on the walk's dest). 7g: a corpse halts nothing, on both arms. 7h: the flag, its
+  capture row and its wiring. Proved red: the exemption's condition disabled in the
+  source reddens 7a and 7b; 7c, the flag arm, stays green, being that server.
+  Floor 45 from the bare green run (the tape adds 9: 54 vaulted). No socket, no client.
   ~20 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with

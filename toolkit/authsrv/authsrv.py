@@ -34316,6 +34316,41 @@ NPC_DISC_COS_CONE = 0.5    # the resolver's +-60 degree cone, fcomp [0x009458BC]
 # replay diverges 491.9 u with or without the mesh, at a point the pass did
 # not halt -- a mirror/mesh divergence, named in 1z-dj rather than hidden.
 MODEL_PARKS_ON_AVOID_HALT = True   # --no-model-avoid-halt reverts
+# ...EXCEPT ON A PICKUP WALK (RANGERLOOP-F8, 2026-09-30). The park above
+# assumes the client's BODY halts where its world-0 copy does. That holds on
+# a keyboard lead: RUN-1zDB's four halts landed on its four reports. It does
+# not hold on a pickup's 0x002A walk. With the revived practice Hatcher
+# standing 30 u from its own drops, the mirror's pass halted the copy at
+# the Hatcher's 80 u disc on 3 of 3 pickups. The park cleared the walk's
+# dest, and pickup_tick cancelled each one as "short of the item". The
+# client's body reached the pile anyway: its next report put the body
+# 0.0 u from pile 401 on Run A (20260930T133106). On Run A' (134310,
+# --no-model-avoid-halt) the reports put it 3.0 u and 0.0 u from piles 400
+# and 401, and the walk to 400 started 118 u out, its line passing 21.6 u
+# from the Hatcher's centre. OBSERVED, n = 3 arrivals, 2 from outside the
+# disc. So while a pickup's own leg still owns the model's dest, a halt is
+# counted as seen and NOT parked. The model walks on, and pickup_tick
+# serves at the leg's eta. That eta is retail's clock: the arrival frame
+# comes the straight-line walk time after the 0x002A, 2 of 2, with no
+# report in between, 3 of 3 (loot.py). There is no arrival report to wait
+# for. On Run A the client sent 111 0x0009s and nothing else between the
+# cancel and the operator's next key press.
+#   * NOT a change to the pass. Its "target covered" halt (0x006005D8) is
+#     the decode's, and 14 of 14 keyboard-lead halts plus 1 of 1 out of
+#     sample confirm it (NPCTRACK-F14). Whether the client's world-0 halts
+#     on a pickup walk is UNVERIFIED: the decode says it does, the mirror
+#     still does, and no tap has read it. Only the BODY is observed.
+#   * RECONSTRUCTION past this rig. Retail's corpus holds no pickup beside
+#     a standing agent: the 3 piles on 20260929T150923 had only corpses
+#     within 300 u, and _npc_obstacles skips a corpse. The loopback n = 3
+#     is one Hatcher.
+#   * RESIDUAL, registered for the confirming run: after a served pickup
+#     the mirror's copy is still at the halt point. On Run A the next
+#     keyboard STOP-ECHO, covered by the same disc from there, halted it
+#     again and parked the model 45 u from the body. agenttap --agents 1
+#     reads both world copies.
+# --no-pickup-through-avoid-halt reverts: the pickup cancels, as on Run A.
+PICKUP_WALKS_THROUGH_AVOID_HALT = True   # --no-pickup-through-avoid-halt reverts
 
 
 def _mirror_avoid_halt(state, now):
@@ -34341,7 +34376,19 @@ def _model_park_on_avoid_halt(state, rec, now):
     """1z-dj: one shadow tick's read of the mirror's halt counter. A NEW halt
     parks the position model at the mirror's point, clears the integrator's
     dest and consumes the keyboard leg (so neither the arrival re-grant nor
-    the kill can re-arm a copy the client has halted). Idempotent per halt."""
+    the kill can re-arm a copy the client has halted). Idempotent per halt.
+
+    RANGERLOOP-F8: a halt taken while a pickup's leg still owns the model's
+    dest is consumed and NOT parked (PICKUP_WALKS_THROUGH_AVOID_HALT), because
+    the body walks into the disc to reach the item. Keyed on the dest itself,
+    so a pickup whose walk was replaced is parked as before. THE THREADS: the
+    grant's own setter can halt the copy inside send(), on the recv thread,
+    before _approach_send writes the dest. A tick that parks there clears a
+    dest _approach_send then overwrites, so the walk goes on (test_loot 7e).
+    NOT covered is a park landing between `state["dest"] =` and
+    `state["pickup"] =`, two statements with no I/O between them. That park
+    still cancels, which is the known-bad outcome and nothing worse. Closing it
+    needs the halt's own target, which the mirror's set_position discards."""
     if not MODEL_PARKS_ON_AVOID_HALT:
         return False
     got = _mirror_avoid_halt(state, now)
@@ -34355,6 +34402,26 @@ def _model_park_on_avoid_halt(state, rec, now):
     if pt is None:
         return False
     hx, hy = float(pt[0]), float(pt[1])
+    pk = state.get("pickup")
+    if (PICKUP_WALKS_THROUGH_AVOID_HALT and pk and pk.get("dest") is not None
+            and state.get("dest") == pk["dest"]):
+        tx, ty = float(pk["dest"][0]), float(pk["dest"][1])
+        if rec is not None:
+            try:
+                rec.event("kbd_leg", act="avoid-halt-pickup", n=n,
+                          point=[round(hx, 1), round(hy, 1)],
+                          pickup=pk.get("agent"),
+                          dest=[round(tx, 1), round(ty, 1)],
+                          short=round(math.hypot(tx - hx, ty - hy), 1))
+            except Exception:                          # noqa: BLE001
+                pass
+        print(f"[model] AVOID HALT on a pickup walk: the mirror's pass halted the "
+              f"player's copy at ({hx:.0f},{hy:.0f}), "
+              f"{math.hypot(tx - hx, ty - hy):.0f} u short of ground agent "
+              f"{pk.get('agent')}; NOT parked -- the body walks into the disc to "
+              f"the item and the pickup is served at its eta [RANGERLOOP-F8]",
+              flush=True)
+        return False
     px, py = state.get("pos", (hx, hy))
     moved = math.hypot(hx - float(px), hy - float(py))
     state["pos"] = (hx, hy)
@@ -45578,6 +45645,13 @@ def main():
         print("[map] --no-model-avoid-halt: the position model walks a lead "
               "the mirror's pass has halted the client's copy on (1z-dj's "
               "revert; RUN-1zDB leg A's 520 u ghost).", flush=True)
+    if a.no_pickup_through_avoid_halt:
+        global PICKUP_WALKS_THROUGH_AVOID_HALT
+        PICKUP_WALKS_THROUGH_AVOID_HALT = False
+        print("[loot] --no-pickup-through-avoid-halt: a halt of the mirror's "
+              "copy on a pickup walk parks the model and the pickup CANCELS as "
+              "short of the item -- 20260930T133106's 3 of 3, while the client "
+              "reached the pile. KNOWN-BAD arm [RANGERLOOP-F8 revert]", flush=True)
     if a.no_mirror_avoid:
         global MIRROR_AVOID
         MIRROR_AVOID = False

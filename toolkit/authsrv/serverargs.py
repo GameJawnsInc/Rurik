@@ -1374,6 +1374,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "lead -- RUN-1zDB leg A's ghost (drift 520 u, the "
                          "Hatcher marched to the phantom and hit from there). "
                          "Known-bad arm.")
+    ap.add_argument("--no-pickup-through-avoid-halt", action="store_true",
+                    help="RANGERLOOP-F8 REVERT: a halt of the mirror's copy on a "
+                         "PICKUP walk parks the position model like any other "
+                         "(1z-dj), and the pickup cancels as short of the item. "
+                         "On 20260930T133106 that cancelled 3 of 3 pickups beside "
+                         "the revived Hatcher while the client's body reached "
+                         "the pile. Known-bad arm.")
     ap.add_argument("--no-mirror-avoid", action="store_true",
                     help="NPCTRACK-F14 REVERT: the server's mirror of the "
                          "player's world-0 copy walks every leg straight, "
