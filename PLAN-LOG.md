@@ -28,6 +28,49 @@ move back.
 
 ---
 
+### REVIVE-HEAL -- 2026-09-30 -- **an NPC's revive heals in the status's own segment with retail's `0x00A2 [55, agent, 1.0]`. Landed and run: 0 resurrect complaints in 5, against my registered prediction of 5**
+
+**Retail** (every in-place revive on the live corpus, 88):
+- **The heal:** each carries `0x00A2 [55, agent, f]` in the status's own segment. NPC:
+  status, the 55, flags 9 (63 of 63). Player: status, the 55, energy 43 and 52, flags 5
+  (25 of 25). f = 1.0 on 86, and 0.5892 on 2.
+- **What it never sends:** within 1.5 s of any revive, no `0x00A3 [34]` bar-setter.
+- **The maximum:** one `[42]`, 1.1 s later on the first hit (PVPMAX).
+- **Ours:** the status, then one tick later `0x009F [42]` + `0x00A3 [34, 1.0]`. That defer
+  exists because the burst of those two drew `Health non-zero on resurrect` (agentprops §1f:
+  3 of 3 NPC, 13 of 13 player).
+
+**The change** (`4ea4b21a`): `REVIVE_HEAL_GAIN` sends status, `0x00A2 [55, agent, 1.0]`,
+flags 9 in one burst, with no refill.
+- **The maximum:** its tracker goes stale, so the next landed word declares `[42]`.
+- **The flag:** `--no-revive-heal-gain` restores the defer.
+- **Tests:** `test_loot` §9 (9a-9d; floor 49 → 53 bare, 58 → 62 vaulted), and `test_guards`
+  §5 now wants 3 messages on the heal arm. Proved red: the arm disabled reddens 9a, 9b and
+  `test_guards` §5.
+- **All green:** `test_loot` 62/53, `test_agentlife` 704 (+1 skip), `test_mechanics` 384,
+  `test_maxdeclare` 45, `test_guards` 45, `test_burrow` 31, and srclint. Not the full suite.
+
+**The run**, `20260930T162947`: the practice Hatcher, 5 kills and 5 revives, agent-piloted,
+owner hands off. Questions registered before launch.
+- **Q1 held: the wire and no crash.** 5 of 5 revives went out as status → heal → flags 9, with
+  no refill line. `PASS`, and the store hash is unchanged.
+- **Q2 REFUTED my prediction: 0 complaints in 5.** I had predicted one per revive, because a
+  -1.0 on property 55 empties the bar at once (§1b).
+  - **The control:** the report carries the whole `Gw.log`, and its `Error:` channel was live
+    (this run's credentials line).
+  - **The same exe logged 3 of 3** for the old burst (`20260813T210520`).
+- **Q3 held: the bar.** It is solid full after a revive, and the next hit (11 of 20) takes it
+  to about half.
+- **Q4 held: the maximum.** `[42]` was re-declared on the first hit after each of the 4
+  revives that were hit.
+- **Q5, a heal number: inconclusive.** One frame at +0.25 s, with the body behind the player.
+
+**So the gain lands without the complaint the setter drew.** Why is UNVERIFIED; agentprops §1g
+names three readings.
+
+**Open (`PLAN.md` §8.1):** the player's rise. Retail's shape is the 55 plus energy 43 and 52,
+and §1f's 13-of-13 player burst is the control.
+
 ### RANGERLOOP-F10 -- 2026-09-30 -- **landed and run: the NPC revive sends retail's `0x0026 [agent, 9]`, the client counts the revived body again, and a pile inside a colliding NPC's disc is UNREACHABLE on the client (2 of 2). F8's exemption is WITHDRAWN (default OFF)**
 
 **The fix** (`da606fc3`): `revive_due` sends `0x0026 [agent, 9]` after the `0x00F1`

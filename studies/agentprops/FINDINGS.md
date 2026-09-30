@@ -659,3 +659,44 @@ selects the NEXT target. Three attack commands gave 21 hits and 3 kills in 30 s.
 2 and nothing visible is wrong — the bar refills correctly, OBSERVED twice in §1e — so
 this is a correctness complaint from the client about our message order, not a symptom
 anybody has seen. It earns an experiment, not a guess.
+
+## 1g. Retail's revive heal is a GAIN in the status's own segment, and it does NOT trip the resurrect check (REVIVE-HEAL, 2026-09-30)
+
+**Retail [OBSERVED]:** every in-place revive on the live corpus carries `0x00A2 [55, agent, f]`
+in the status's own segment. That is 88 of 88: 63 NPC revives (status, the 55, flags 9) and 25
+player rises (status, the 55, energy 43 and 52, flags 5).
+- **The value:** f = 1.0 on 86, and 0.5892 on 2 NPCs.
+- **What retail never sends:** within 1.5 s of any revive, no `0x00A3 [34]` bar-setter.
+- **The maximum:** one `0x009F [42]`, 1.1 s after its revive, on the first hit. That is
+  PVPMAX's "the first word after a rise declares the maximum".
+- **The census:** a scratch script over `livewire.live_connections()`, joining each
+  `0x0026` alive-flag to the same agent's dead-flag and printing every health-bearing
+  property within 1.5 s. Its counts are recorded in `authsrv.py`'s REVIVE_HEAL_GAIN comment.
+
+**§1f read literally predicts a complaint**, and I registered that prediction before the run.
+- **The chain:** property 55 is damage's record path (§1a), and a -1.0 on it emptied the
+  bar at once (§1b). So +1.0 riding the status's segment should fill the pool before the
+  client's deferred check reads it.
+- **What that was bound to predict:** one complaint per revive, like the §1f burst.
+
+**The result, `20260930T162947` (loopback, build 38797, practice Hatcher, 5 revives) [OBSERVED]:
+0 complaints in 5, so the prediction is REFUTED.**
+- **The control on this exe:** the report carries the whole `Gw.log`. The same exe logged
+  `Error: Corpse of Hatcher [Collector]: Health non-zero on resurrect` 3 times for the §1f
+  burst (`20260813T210520`).
+- **The channel is live in this run:** the log holds this run's own `Error: Failed to store
+  credentials` line.
+- **The bar reads full after each revive:** the overhead bar is solid red, and the next hit,
+  11 damage from 20, takes it to about half.
+- **`[42]` is re-declared** on the first hit after each of the 4 revives that were hit.
+
+**So the gain lands without the complaint, where the `[34]` setter drew it.** Why is
+UNVERIFIED. The check reads `min(+0x130, +0x134)`, and three readings survive:
+- a gain's pool write is queued past the check;
+- a gain writes a different float than the setter;
+- `[42]`, sent with the setter in the burst, was the operand.
+
+This does not need settling for the server. Shipped: `REVIVE_HEAL_GAIN`, reverted by
+`--no-revive-heal-gain` (the §1f defer). **The player's rise is not changed yet.** Retail's
+shape for it (the 55 plus energy 43 and 52) is the obvious next step, and §1f's 13-of-13
+player burst is the control that step would have to beat.

@@ -14563,6 +14563,15 @@ REVIVE_SENDS_ALIVE_FLAGS = True   # --no-revive-flags reverts
 #     a session with revives: NOT FOUND in the vault.
 #   * The maximum: none is sent, and the tracker goes stale, so the next landed
 #     word declares it (declare_body_max_on_hit), as retail's does.
+#   * RESULT, 20260930T162947: the PREDICTION WAS WRONG. 5 of 5 revives went
+#     out as the one segment, and the client logged 0 `Health non-zero on
+#     resurrect`. The report carries the whole Gw.log, whose `Error:` channel
+#     was live in the same run: it holds the credentials line. The old [42] +
+#     [34] burst logged 3 of 3 on the same exe (20260813T210520). The bar read
+#     full after each revive, and the next hit took it to half. `[42]` was
+#     re-declared on the first hit after each of the 4 revives that were hit.
+#     So the gain lands without tripping the check, where the setter tripped
+#     it. Why is UNVERIFIED: agentprops 1g.
 # --no-revive-heal-gain restores the deferred [42] + [34] refill.
 REVIVE_HEAL_GAIN = True   # --no-revive-heal-gain reverts
 
