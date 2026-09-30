@@ -948,12 +948,92 @@ def _objective_quests(state, agent):
 # NPC conversation uses exactly touch range is not on that page -- so this is
 # the ladder's shortest rung as the best-supported number, not a measured
 # dialog range, and 250/144 = 1.7 is what "probably 2x" looks like.
+#
+# RANGERPRE-S17 (2026-09-30): CORROBORATED as the IMMEDIATE range -- the
+# distance a press is answered from at once, with no walk -- and that is all
+# it gates now: where a HELD interact is served is HELD_INTERACT_AT_DISC's
+# (below). 20260929T150923 (build 38888), positions from EXACT c2s 0x0047
+# stops: :55934 628.2476, 95.7 u from agent 142, the dialog +45 ms; :56025
+# 780.6734, 134.6 u from agent 38, +53 ms. A press from ~167 u (:55934
+# 630.7047, dead-reckoned from a keyboard report 0.32 s old -- RECONSTRUCTION)
+# was answered with a 0x002A walk instead. Retail's immediate range is in
+# (134.6, ~167], and 144 is inside it (test_approachroute section 5).
 INTERACT_RANGE = 144.0
 
-# Where the routed interact-walk stops: this far from the NPC, on the
-# player's side, inside INTERACT_RANGE with room for the model and the
-# client's report to disagree by a body's width.
-INTERACT_STOP = 100.0
+# Where the routed interact-walk stops, centre to centre: the FOLLOW DISC,
+# `follow_stop_radius()` -- 12 + 12 + 56 = 80 u for the radii this server
+# sends. A literal because this line runs before BOUNDING_RADIUS exists;
+# test_approachroute section 4 pins the equality. RANGERPRE-S17: it was 100,
+# "inside INTERACT_RANGE with room for the model and the client's report to
+# disagree by a body's width" -- ours. Retail's walk-in is a 0x002A FOLLOW
+# naming the NPC, and a follow ends at the disc; the held interact is served
+# there (HELD_INTERACT_AT_DISC). The revert arm walks to
+# INTERACT_STOP_AT_RANGE, the old 100 (`interact_stop()` picks).
+INTERACT_STOP = 80.0
+INTERACT_STOP_AT_RANGE = 100.0
+
+# RANGERPRE-S17 (ROUTE-B): A HELD INTERACT IS SERVED AT THE FOLLOW DISC, not at
+# INTERACT_RANGE. What retail does, OBSERVED on the wire and RECONSTRUCTED as a
+# 288 u/s walk (test_approachroute section 5 re-derives every figure from the
+# bytes, own agents by adrenjoin.whose_agent):
+#   * 20260929T150923 :56064 (agent 9). The press at 968.0936 on agent 10 is
+#     walked by four 0x0029 corners; the 0x002A [9, (21195, 13076), 0, 0, 10]
+#     goes out at 977.2544, 3.6 ms after the last corner's ETA, so the body
+#     stands at that corner (21120, 12480), 600.7 u from the NPC. The dialog
+#     (0x0080 + 0x0081 [10]) comes at 979.1046, with no client packet between:
+#     1.850 s of walking, 67.8 u by the model -- 45.7 ms after the model
+#     crosses 81 u. A 144 u serve predicts 978.8401, 0.26 s early.
+#   * :59969 (agent 123). The press at 190.9224 on agent 40, from an EXACT stop
+#     (the 0x0047 (10448.0, 320.3) at 189.9401), is walked by three 0x0029 legs
+#     on retail's own cadence. The dialog at 202.6552 finds the model 75.2 u
+#     from the NPC and still 42.3 u short of its last leg's end: served ON THE
+#     WAY, not on arrival -- a DISTANCE rule. 20.0 ms after the 81 u crossing;
+#     a 144 u serve predicts it 0.24 s early.
+# So retail serves inside ~75-82 u: 75.2 is :59969's floor, and ~82 is what a
+# serve tick of <= 50 ms allows :56064. That is the follow disc. RECONSTRUCTION,
+# n = 2 exact starts (the design lane's eight dead-reckoned walks land at 53-82 u).
+#
+# THE SLACK, and why this is not "serve inside the disc" alone (the orchestrator
+# critic's ERROR against the spec): the disc is follow_stop_radius() + 1 = 81 u
+# and our walk stops at 80, so any leg end more than 1 u outside the disc -- the
+# router's clip-fallback stopping short of an off-mesh approach point, a client
+# stop report a few units off the modelled end, an NPC that stepped after the
+# walk was planned -- would strand the hold for good, because this tick has no
+# expiry. So a hold whose walk is OVER (`interact_walk_live` false: the model
+# arrived, the client reported, another order replaced it, or no walk went out
+# at all) is served anywhere inside INTERACT_RANGE -- the range the same press
+# would have been answered from at once. Retail's walk always ends at the disc,
+# so on its shape the two rules are one instant. A walk that ends beyond
+# INTERACT_RANGE keeps the hold, as it always did (retail's expiry is
+# unmeasured -- the spec's open question). Where no walk went out (no mesh, or
+# --no-interact-route) the hold is served at INTERACT_RANGE as before: OURS --
+# retail always walks.
+HELD_INTERACT_AT_DISC = True     # False (--held-interact-at-range): 144 u, the walk stops at 100
+# The disc's float slack (SEAM_TOL-sized): the integrator lands exactly on the
+# walk's end, 80.0 u, and this keeps that landing inside the disc.
+INTERACT_DISC_SLACK = 1.0
+
+
+def interact_stop():
+    """Where the routed interact-walk stops, centre to centre (RANGERPRE-S17):
+    the follow disc, or the old 100 u under --held-interact-at-range."""
+    return INTERACT_STOP if HELD_INTERACT_AT_DISC else INTERACT_STOP_AT_RANGE
+
+
+def interact_walk_live(state):
+    """Is the held interact's own walk still in flight? -> bool (RANGERPRE-S17)
+
+    The walk is `interact_route`'s, and its identity is the click-latch stamp
+    it set (`state["interact_walk"]`). It is live while the latch still carries
+    that stamp -- a c2s 0x003D / 0x0047 clears the latch, another click or
+    approach re-stamps it -- AND the router still has something for the body to
+    walk: a chain with legs left to grant, or a leg the integrator has not
+    finished (`dest`, which the integrator clears on arrival). Read-only; the
+    same cross-thread reads `_player_body_moving` makes."""
+    t0 = state.get("interact_walk")
+    if t0 is None or state.get("click_moving_at") != t0:
+        return False
+    return state.get("router_chain") is not None or bool(state.get("dest"))
 
 
 def _order_walk(send, state, conn_id, agent_id, spot):
@@ -981,13 +1061,15 @@ def _order_walk(send, state, conn_id, agent_id, spot):
 
 
 def interact_approach_point(spot, pos, stop=None):
-    """The point INTERACT_STOP short of the NPC, on the player's side. -> (x, y)
+    """The point `interact_stop()` short of the NPC (INTERACT_STOP, the follow
+    disc; the old 100 u under --held-interact-at-range), on the player's side.
+    -> (x, y)
 
     A player already inside `stop` gets the NPC's own spot back -- there is
     nothing to walk -- and a player at exactly the NPC's position too, so the
     division below never sees zero.
     """
-    stop = INTERACT_STOP if stop is None else float(stop)
+    stop = interact_stop() if stop is None else float(stop)
     dx, dy = float(pos[0]) - float(spot[0]), float(pos[1]) - float(spot[1])
     gap = math.hypot(dx, dy)
     if gap <= stop:
@@ -1017,7 +1099,13 @@ def interact_route(send, state, conn_id, agent_id, spot):
     comment); this is OUR walk, on OUR mesh, and it says so. Returns False --
     hold only, no walk -- where the router has nothing to route over (no mesh,
     no position belief) or the arm is off.
+
+    RANGERPRE-S17: the walk's identity -- the click-latch stamp it sets -- is
+    recorded as `state["interact_walk"]`, and cleared on the no-walk returns,
+    so interact_pending_tick can tell a walk still in flight from one that is
+    over (`interact_walk_live`).
     """
+    state.pop("interact_walk", None)
     if not INTERACT_ROUTE or not ROUTER:
         return False
     pm, pos = state.get("pathmap"), state.get("pos")
@@ -1036,12 +1124,13 @@ def interact_route(send, state, conn_id, agent_id, spot):
     state["heading_hold"] = None
     prev = state.get("click_moving_at")
     state["click_moving_at"] = now
+    state["interact_walk"] = now
     _click_leg_arm(state, dest, now, silent=prev is not None)
     routed = router_answer_click(send, state, conn_id, None, dest, dest_plane,
                                  cur_plane, dest_plane, cur_plane)
     if routed:
         print(f"[c{conn_id}] INTERACT-WALK: routed the player to "
-              f"({dest[0]:.0f}, {dest[1]:.0f}), {INTERACT_STOP:.0f} u short of "
+              f"({dest[0]:.0f}, {dest[1]:.0f}), {interact_stop():.0f} u short of "
               f"agent {agent_id}, over our mesh (OURS; --no-interact-route "
               f"reverts to the hold alone)", flush=True)
     return bool(routed)
@@ -1055,6 +1144,13 @@ def interact_pending_tick(send, state, conn_id):
     duplicating its body -- that function is already the whole consequence of an
     interact and is identical whoever asks, which is the property its own
     docstring is about.
+
+    WHERE (RANGERPRE-S17, the evidence at HELD_INTERACT_AT_DISC): inside the
+    follow disc, follow_stop_radius() + INTERACT_DISC_SLACK (81 u), while our
+    walk is in flight -- retail's ~75-82 u; or anywhere inside INTERACT_RANGE
+    once that walk is over (arrived, reported, replaced, or never sent), so a
+    leg that ends outside the disc cannot strand the hold. Under
+    --held-interact-at-range: inside INTERACT_RANGE, walk or no walk.
     """
     pending = state.get("pending_interact")
     if not pending:
@@ -1070,11 +1166,27 @@ def interact_pending_tick(send, state, conn_id):
               f"the agent is gone", flush=True)
         return
     px, py = state["pos"]
-    if math.hypot(spot[0] - px, spot[1] - py) > INTERACT_RANGE:
+    gap = math.hypot(spot[0] - px, spot[1] - py)
+    if HELD_INTERACT_AT_DISC:
+        disc = follow_stop_radius() + INTERACT_DISC_SLACK
+        if gap <= disc:
+            why = f"inside the {disc:.0f} u follow disc"
+        elif gap <= INTERACT_RANGE and not interact_walk_live(state):
+            why = ("our walk is over" if state.get("interact_walk") is not None
+                   else "no walk went out")
+            why += f", inside INTERACT_RANGE ({INTERACT_RANGE:.0f} u)"
+        else:
+            return
+    elif gap > INTERACT_RANGE:
         return
+    else:
+        why = (f"inside INTERACT_RANGE ({INTERACT_RANGE:.0f} u), "
+               f"--held-interact-at-range")
     state.pop("pending_interact", None)
+    state.pop("interact_walk", None)
     print(f"[c{conn_id}] held INTERACT for agent {agent_id} ARRIVES -- "
-          f"answering it now", flush=True)
+          f"answering it now: the model stands {gap:.1f} u from it, {why} "
+          f"[RANGERPRE-S17]", flush=True)
     _handle_interact(send, state, conn_id, agent_id, interact_byte)
 
 
@@ -1120,11 +1232,16 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             how = ("routed over our mesh" if routed
                    else ("0x002A walk order (--interact-walk)" if INTERACT_WALK
                          else "NO walk -- the player walks over themselves"))
+            # RANGERPRE-S17: where the hold will be served -- the follow disc
+            # while our walk is in flight, INTERACT_RANGE otherwise.
+            _serve = (follow_stop_radius() + INTERACT_DISC_SLACK
+                      if HELD_INTERACT_AT_DISC and interact_walk_live(state)
+                      else INTERACT_RANGE)
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
                   f"HOLDING the interact; {how} "
-                  f"(~{max(0.0, gap - INTERACT_RANGE) / DEFAULT_RUN_SPEED:.1f} s "
-                  f"at run speed)", flush=True)
+                  f"(~{max(0.0, gap - _serve) / DEFAULT_RUN_SPEED:.1f} s "
+                  f"at run speed to the {_serve:.0f} u serve)", flush=True)
             return
     # Serving any interact cancels a held one: the player changed their mind,
     # and firing the stale one on arrival would open a window they no longer
@@ -1767,6 +1884,14 @@ GAME_SMSG_ITEM_CHANGE_LOCATION = 0x014B
 GAME_SMSG_ITEM_SWAP_LOCATIONS = 0x0152
 GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT = 0x006F
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
+# RANGERPRE-S15 (LOOT slice 1), a kill's gold drop and its pickup (loot.py):
+# 0x0162 declares the GOLD -- named_item()'s layout, 9 of 9 corpus gold records
+# on it and 0 on 0x0161 (the schema carries no name; ITEM_GOLD_DECLARE is OURS);
+# 0x0168 [ground agent, source agent] (ITEM_AGENT_DROP_SOURCE); 0x0159
+# [item, picker] (ITEM_PICKED_UP).
+GAME_SMSG_ITEM_GOLD_DECLARE = 0x0162
+GAME_SMSG_ITEM_DROP_SOURCE = 0x0168
+GAME_SMSG_ITEM_PICKED_UP = 0x0159
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
 GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
 # [agent_id, dword]. Grows the char client's char-by-id table ([charctx+0x7CC],
@@ -6514,6 +6639,9 @@ import henchparty                                              # noqa: E402
 # builder; read by player_purse, the load burst, grant_quest_reward and the
 # merchant wrappers (persist_purse), and by test_purse.py.
 import purse                                                   # noqa: E402
+# RANGERPRE-S15 (LOOT slice 1): the ground drop's values (a stdlib leaf); the
+# sends are loot_on_kill / handle_pickup / serve_pickup / ground_items_tick here.
+import loot                                                    # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -12336,6 +12464,12 @@ GAME_CMSG_UNNAMED_ACK_0079 = 0x0079
 #   is 0 in 363 of 363 with 0 collisions. Nothing was arranged to make that come
 #   out; the messages were being decoded and discarded the entire time.
 GAME_CMSG_TARGET_SELECT = 0x00C1
+# 0x003F PICKUP -- [ground agent, u8 0], arm 3 of the client's world-action switch
+#   (schema/overrides.json GAME_CMSG 63). OBSERVED 3 of 3 on 20260929T150923, each
+#   in one segment with its 0x00C1 [agent, x]; answered since RANGERPRE-S15 by
+#   handle_pickup (a straight 0x002A walk, then the arrival frame). It was
+#   test_dispatch's DROPPED_ON_PURPOSE row "the day a drop exists" -- it exists.
+GAME_CMSG_PICKUP = 0x003F
 # 0x0040 ROTATE_PLAYER -- [angle, turn_amount], and THE TRAP IS THE TYPING. Both
 #   payload fields are marshalled `dword` and hold IEEE-754 float32 VALUES; the
 #   client's own SEND table says u32, so the catalog is correct and must not be
@@ -18901,7 +19035,14 @@ def action_hold(send, state, value, why):
     under the GIL. PLAYER ONLY: the corpus shows other agents' actions
     bracketed by the same property, and our NPC paths do not send it --
     recorded in castmech 3c rather than wired past the evidence.
+
+    RANGERPRE-S16: ANY release ends a ranged approach's hold as well
+    (`approach_hold`, which only exempts the hold from the launch's release in
+    _land_player_swing) -- before the transition-only return, so a release of a
+    flag already clear still forgets it.
     """
+    if not value:
+        state.pop("approach_hold", None)
     if state.get("action_hold", 0) == value:
         return
     state["action_hold"] = value
@@ -20033,7 +20174,66 @@ def follow_stop_radius(target=None):
 # and 1,284 u for a bow the wiki puts at 1,273, both against a target that
 # walked during the windup, so they bound nothing tighter. No inset: the leg
 # ends AT range and the gate's strict `>` lets the swing open there.
+# (CORRECTED by RANGERPRE-S16, below: the hold is not all that parks the body.
+# A 0x0028 [me] rides the same segment one simulation tick behind it, 12 of 12
+# -- "no stop message precedes the start" is true; one FOLLOWS it.)
 APPROACH_STOPS_AT_RANGE = True      # --legacy-ranged-approach reverts to the disc
+
+# ---- RANGERPRE-S16 (ROUTE-A, 2026-09-30): A RANGED APPROACH'S SWING HALTS THE BODY
+#
+# OBSERVED, re-read from the bytes for this step (livewire.decode_conn, own agent by
+# adrenjoin.whose_agent; test_approachroute section 3 re-derives every count). On
+# the four connections whose player SHOOTS (own 0x00A4 launches: arrows 143 on
+# three, projectile 2 on :62994), the FIRST own attack start after a server 0x002A
+# follow carries, in ONE segment:
+#     0x00A0 [4, me, T, 0], 0x009F [8, me, 1], 0x001E tick, 0x0028 [me]
+# on 12 of 12 such starts: 20260929T150923 :55934 at 335.0923, 338.0686, 379.4129,
+# 453.5679, 515.4825 (5/5); 20260914T005758 :56011 at 169.8902, 223.5783, 361.9119,
+# 363.9707, 583.1255 (5/5; 361.9119's swing was cancelled by a keyboard move before
+# its launch); 20260810T235916 :61624 at 95.4709; 20260807T143055 :62994 at 82.7741.
+# The hold is NOT released at the launch: the swing's own 0x00A4 segment carries no
+# [8, me, 0] on 0 of 10 (336.2391, 380.5511, 454.7078, 516.6069 ...; 338.0686 and
+# 361.9119 never launched -- a skill press, a move). It ends at the next thing
+# that releases a hold. The FIRST own [8, me, 0] after each of the 12 starts is:
+#   - a keyboard report's answer, 7 -- [8, me, 0] then the 0x0029 leg, the c2s
+#     0x003D under 60 ms ahead: :55934 461.5991 (0x003D at 461.5639; the 453.5679
+#     hold stayed up 8.0 s across its launches), :56011 171.2864 (0x003D at
+#     171.2508), 224.8611, 362.1789, 365.3111, 584.6648, :61624 99.8772 (0.33 s
+#     after its target died, but riding the report's leg);
+#   - a re-approach, 1 -- [8, me, 0] immediately ahead of the new 0x002A (337.5687);
+#   - a skill press, 2 -- [8, me, 0] opens the press's own burst (338.1238:
+#     [8, 31, 0], [3, 31, 0], 0x00A0 [50, 31, 45, 394], [8, 31, 1]; 517.4328);
+#   - the target's death, 2 -- :55934 384.3644, 0.79 s after agent 46 dies at
+#     383.5733; :62994 86.2717.
+# Every one is an action_hold(0) site here already (cancel_on_move, _approach_send,
+# the skill press, attack_tick's target-gone), and action_hold's pop forgets the
+# approach's hold at each: the hold has no release site of its own. (This block
+# first cited 339.4568 as the keyboard end. It is not the approach's: it releases
+# the hold 338.1238's skill press set.) The chain's later starts are [4] alone
+# (381.8887, 456.0487): the hold is transition-only.
+#
+# CONTROL: every start with the body at rest (the last own movement event a c2s
+# 0x0047, or a server 0x0028 / 0x002C) carries neither message -- 37 of 37 on
+# 20260929T150923. MELEE IS NOT THIS SHAPE and is left alone: :53756's melee
+# approach starts are mixed (1045.737 hold only, 1088.4492 both, 1114.1519 and
+# 1133.4666 neither), so the rule is scoped to a ranged weapon, where it is 12/12.
+#
+# WHY IT MATTERS HERE (RECONSTRUCTION, from the decode; the run measures it): the
+# 0x002A names the TARGET, and the client's own resolver stops the body at the
+# MELEE disc (r + r + 56, approach_tick's docstring); our leg ends at the weapon's
+# range (W2b). Since ANIMREF-RE 35 no hold rides an auto swing, so nothing on the
+# wire told the drawn body to stop at range while our copy parked there. The
+# 0x0028 halts both client copies where they stand; after a server-ordered follow
+# the sync copy walks the same 0x002A as the body, so this is not CANCELWALK-F34's
+# keyboard warp onto a lagging copy -- the run's no-snap question checks that.
+#
+# NOT REPRODUCED: the 0x001E between [8, 1] and 0x0028 -- retail's halt is one
+# simulation tick behind the start (12 of 12); ours rides the start's own tick,
+# ~50 ms and ~14 u of walk earlier. UNVERIFIED: the melee rule, and starts after
+# any OTHER movement answer (a 0x0029 leg, a keyboard report answered at the press)
+# -- mixed on the tapes, and not produced by this server's approach, which is
+# always the one 0x002A (ROUTE-C's corner chain does not exist here).
+APPROACH_START_HALTS = True         # False (--no-approach-start-halt): [4] alone
 
 
 def approach_stop(target=None):
@@ -20083,7 +20283,13 @@ def _approach_abandon(state):
     The three arms and attack_tick call this; the latch itself is theirs to
     clear. Forgets the follow and stops the server copy's integrator walk
     -- the click arm never sets `dest`, so a stale one here would march
-    the model to a point the body abandoned."""
+    the model to a point the body abandoned.
+
+    RANGERPRE-S16: it also forgets an approach that ARRIVED and whose swing has
+    not opened yet (`approach_closed`), BEFORE the early return -- arrival has
+    already cleared `approach` itself, and a body that moved, clicked or lost
+    its target since is no longer standing where the follow left it."""
+    state.pop("approach_closed", None)
     if state.get("approach") is None:
         return
     state["approach"] = None
@@ -20091,8 +20297,26 @@ def _approach_abandon(state):
 
 
 def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
-                   rec=None):
-    """Send the follow and arm the leg it starts. See approach_tick."""
+                   rec=None, stop_at=None, into="approach"):
+    """Send the follow and arm the leg it starts. See approach_tick.
+
+    `stop_at` (RANGERPRE-S15) overrides where the leg ends, centre to centre:
+    None is approach_stop's (the melee disc or the held weapon's range), and a
+    pickup walks to the item itself (0.0). The wire is the same 0x002A either
+    way -- the target's own point and its id.
+
+    `into` names the record the leg is PUBLISHED under, and it is written last,
+    after the dest it names: "approach" (attack_tick's -- it abandons one, dest
+    and all, on every tick it holds no attack target) or "pickup"
+    (pickup_tick's: {agent, t0, eta, dest}). A pickup's leg never touches
+    state["approach"], not even for the length of one print: handle_pickup runs
+    on the CONNECTION thread and attack_tick on the WORLD tick, so a record
+    parked there is one the tick can abandon, clearing the walk's dest while
+    the 0x002A is already on the wire -- the pickup then cancels "short" and
+    the client walks onto a pile nobody serves (RANGERPRE-S15 review: 1 of 400
+    at the tick's cadence, 71 of 400 with a tight tick; test_loot 3j/3k)."""
+    if into not in ("approach", "pickup"):
+        raise ValueError(f"_approach_send: into={into!r} -- 'approach' or 'pickup'")
     plane = int(state.get("plane", 0))
     # MOVECODE-1z-v: the 0x002A follow is a movement order of its own, so
     # a live router chain must not keep granting legs behind it (the
@@ -20181,7 +20405,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     px, py = _reach_frame(state, now)
     px, py = float(px), float(py)
     dist = math.hypot(tx - px, ty - py)
-    stop = approach_stop(agent)                       # WEAPONS-W2b: the range for a bow
+    stop = (approach_stop(agent) if stop_at is None   # WEAPONS-W2b: the range for a bow
+            else float(stop_at))                      # RANGERPRE-S15: a pickup, 0.0
     run = max(dist - stop, 0.0)
     f = run / dist if dist > 0.0 else 0.0
     stop_point = (px + (tx - px) * f, py + (ty - py) * f)
@@ -20230,18 +20455,29 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                                                     ty - float(lr[1])), 1)),
                       report_age=(None if lr is None else round(now - float(lr[3]), 3)),
                       frame_vs_model=round(math.hypot(px - mx, py - my), 1),
-                      stop=round(stop, 1))
+                      stop=round(stop, 1),
+                      **({"leg": "pickup"} if into == "pickup" else {}))
         except Exception:                              # noqa: BLE001
             pass
+    # RANGERPRE-S16: a NEW follow while a ranged approach's hold is still up
+    # (the target walked out of range mid-chain) releases it first, adjacent to
+    # the 0x002A -- retail's re-approach, :55934 337.5687: [8, 31, 0] then
+    # 0x002A [31, ..., 45]. A re-path is the same follow and releases nothing.
+    if not repath and state.get("approach_hold"):
+        action_hold(send, state, 0, f"the re-approach to agent {target_id} "
+                    f"[RANGERPRE-S16]")
     # The dest is the TARGET'S OWN position, not the stop point: that is the
     # message retail sends (bit-exact on 16/16 never-moved targets) and it
     # is what makes the client's own resolver stop the body at reach. Both
     # plane words carry the mover's plane (61/61 equal on retail).
     send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
          [PLAYER_AGENT_ID, (tx, ty), plane, plane, target_id],
-         f"APPROACH{' re-path' if repath else ''}: player -> agent "
-         f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
-         f"{stop:.0f} u [ANIMREF-RE 38]")
+         (f"PICKUP WALK: player -> ground agent {target_id} at ({tx:.0f},"
+          f"{ty:.0f}), {dist:.0f} u out, to the item itself [RANGERPRE-S15]"
+          if into == "pickup" else
+          f"APPROACH{' re-path' if repath else ''}: player -> agent "
+          f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
+          f"{stop:.0f} u [ANIMREF-RE 38]"))
     # The body is on a leg it walks silently -- the click latch's exact
     # meaning (the client sends nothing between a follow and its swing,
     # 0/7 on retail), bounded by THIS leg's travel time to the stop point.
@@ -20257,6 +20493,12 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # see the body arrive.
     state["dest"] = stop_point if run > 0.0 else None
     state["dest_speed"] = speed
+    if into == "pickup":
+        # RANGERPRE-S15: the pickup's own record, never state["approach"] (the
+        # docstring's race). handle_pickup has already cleared both.
+        state["pickup"] = {"agent": target_id, "t0": now, "eta": leg["eta"],
+                           "dest": (stop_point if run > 0.0 else None)}
+        return
     state["approach"] = {"target": target_id, "t0": now,
                          "told": (tx, ty), "sent_at": now,
                          "eta": leg["eta"]}
@@ -20399,7 +20641,11 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
         if now >= ap["eta"] or dist <= stop:
             # Arrived. The leg record has already released the latch; the
             # integrator has parked the copy. Forget the follow and let the
-            # range gate open the swing this tick.
+            # range gate open the swing this tick. RANGERPRE-S16: remember
+            # WHOSE follow just ended, so the swing it opens can halt the
+            # body at range (attack_tick, APPROACH_START_HALTS); consumed by
+            # that start and dropped by _approach_abandon.
+            state["approach_closed"] = target_id
             state["approach"] = None
             return False
         return True
@@ -20442,7 +20688,13 @@ def _land_player_swing(send, state, conn_id, swing):
         # flight later. The hold ends here -- retail's [8, me, 0] rides the
         # release or follows it by a quarter second, never the hit.
         launch_player_projectile(send, state, conn_id, swing, _how)
-        if LANDING_HOLD_RELEASE:
+        # RANGERPRE-S16: NOT when the hold is the approach's. Retail keeps
+        # that one through the launch -- 0 of 10 launches after a ranged
+        # approach's start carry [8, me, 0] (:55934 336.2391, 380.5511,
+        # 454.7078, 516.6069 ...) -- and ends it at the next release: a
+        # keyboard move, a re-approach, a skill press or the target's death
+        # (the census at APPROACH_START_HALTS).
+        if LANDING_HOLD_RELEASE and not state.get("approach_hold"):
             action_hold(send, state, 0,
                         "the shot is away -- movement is legal now")
         return
@@ -20824,6 +21076,30 @@ def attack_tick(send, state, conn_id, rec=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    # RANGERPRE-S16 (APPROACH_START_HALTS, the evidence at the flag): the first
+    # start after OUR follow arrived, with a ranged weapon in hand, holds the
+    # walk gate and halts the body -- [4], [8, me, 1], 0x0028 [me], retail's
+    # 12 of 12. Consumed by every start, so a chain's later swings (and a start
+    # on another target) are [4] alone.
+    _closed = state.pop("approach_closed", None)
+    if (APPROACH_START_HALTS and _closed == target_id
+            and player_ranged(state) is not None):
+        action_hold(send, state, 1, f"the ranged approach to {target_id} ends "
+                    f"at range [RANGERPRE-S16]")
+        state["approach_hold"] = True
+        send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+             f"AGENT_STOP_MOVING(player): APPROACH HALT -- the ranged swing at "
+             f"{target_id} opens at range [RANGERPRE-S16]")
+        # The client's copies stop where they stand; so does ours (a leg that
+        # ended by distance before its eta would otherwise walk on).
+        state["dest"] = None
+        _fx, _fy = _reach_frame(state, now)
+        print(f"[c{conn_id}] APPROACH HALT [RANGERPRE-S16]: ranged swing at "
+              f"agent {target_id} opens {math.hypot(ax - _fx, ay - _fy):.0f} u "
+              f"out (range {attack_reach():.0f}) -- [4], [8,1], 0x0028 sent; "
+              f"the hold stays up through the launch until a move, a re-approach, "
+              f"a skill press or the target's death",
+              flush=True)
     leader_engaged(state, target_id, now, "swing")        # SLICE-H4
     _press_answered(state, rec, conn_id, "swing")
     # The hold follows the START, in that order -- every player [8, 31, 1]
@@ -20961,6 +21237,12 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
         send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
              f"flags {AGENT_FLAGS_KILLED} on the dying party agent {target_id}")
         return
+    # RANGERPRE-S15 (LOOT slice 1): THE DROP, when a table applies -- in the
+    # death's own frame, AFTER the status word and AHEAD of the reward block's
+    # first send (the 75-XP tick below). OBSERVED 4 of 4 retail drops
+    # (20260929T150923 :55934 383.5733: 0x00F1 [46, 16], 0x0162, 0x0168,
+    # 0x0020, then 0x009C [31, 100]). A party body's death (above) never drops.
+    loot_on_kill(send, state, target_id, agent, conn_id)
     # A SINGLE [0, 26], and the single is the finding. The pair
     # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
     # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
@@ -21061,6 +21343,302 @@ def declare_body_max_on_hit(send, agent, agent_id, source_id, why, always=False)
          f"ahead of {why} [MAXHP-1]")
     agent["max_declared_on_hit"] = agent["max_health"]
     return True
+
+
+# ---------------------------------------------- RANGERPRE-S15: ground drops --
+#
+# LOOT slice 1: a GOLD drop on a kill, the pickup's walk and arrival, the purse
+# credit, and the view range that removes and re-creates an unpicked drop. Every
+# retail value and its witness is in loot.py's docstring (20260929T150923, build
+# 38888); the gold record is content ([item.gold_coins], a capture row) and the
+# drop TABLES are content (content/drops.toml -- INVENTED, every row).
+#
+# OFF BY DEFAULT: no kill rolls on any table unless the server is started with
+# --drop-table KEY, and then every HOSTILE kill rolls on that one row (a party
+# body's death never drops -- kill_agent returns before the call). The default
+# server's bytes are the pre-S15 bytes; the 0x003F arm answers a pickup of a
+# ground agent that does not exist with nothing, as the unhandled drop did.
+# --no-drops (LOOT_ENABLED False) is the known-bad arm under --drop-table: the
+# kill frame carries no drop, as every kill did until 2026-09-30, where retail's
+# drop 4 of 12 kills on the same tape. Slice 2 (an item drop: 0x0161, the 0x0135
+# reservation, the drop line, into the backpack) is DEFERRED.
+LOOT_ENABLED = True
+DROP_TABLE = None           # --drop-table KEY: the content `drop` row kills roll on
+
+
+def drop_table_row(key):
+    """The content `drop` row `key`, validated -- raises content.ContentError for
+    a key the store does not carry and loot.LootError for a row this slice
+    cannot serve. main() calls it at startup so a bad --drop-table never starts."""
+    return loot.validate_table(key, agents.WORLD.get("drop", key))
+
+
+def loot_on_kill(send, state, target_id, agent, conn_id, rng=None):
+    """Roll DROP_TABLE for a hostile's death and, on a hit, put the gold on the
+    ground: 0x0162 (the declare), 0x0168 [ground agent, the dying agent] and the
+    ground agent's 0x0020 -- retail's order at :55934 383.5733, 4 of 4. Called by
+    kill_agent between the death's status word and its reward block. -> the
+    ground agent id, or None (off, no table, or the roll missed).
+
+    WHERE IT FALLS: DROP_SCATTER from the corpse at a uniform angle, moved onto
+    the navmesh by population.place_on_mesh (the corpse's own point when nothing
+    near is ground). RECONSTRUCTION (loot.DROP_SCATTER). `rng` is the random
+    module unless a test hands a stub."""
+    if not LOOT_ENABLED or not DROP_TABLE:
+        return None
+    rng = random if rng is None else rng
+    row = drop_table_row(DROP_TABLE)
+    got = loot.roll(row, rng)
+    if got is None:
+        print(f"[c{conn_id}] DROP: agent {target_id} ({agent.get('name', '?')}) "
+              f"drops nothing (table {DROP_TABLE!r}, chance {row['chance']}, "
+              f"INVENTED) [RANGERPRE-S15]", flush=True)
+        return None
+    _kind, amount = got
+    ground = state.setdefault("ground_items", {})
+    item = loot.mint_item_id(state, merchant.PURCHASED_ITEM_ID_BASE)
+    # the party side's reserved ids (area_population's list: the player, the
+    # henchman, up to seven heroes) and every live body and ground item
+    taken = (set(state.get("agents") or {}) | set(ground)
+             | {PLAYER_AGENT_ID, HENCHMAN_AGENT_ID}
+             | {HERO_AGENT_ID + i for i in range(7)})
+    drop = loot.next_drop_agent(taken)
+    cx, cy = float(agent["pos"][0]), float(agent["pos"][1])
+    sx, sy = loot.scatter(cx, cy, rng)
+    placed = population.place_on_mesh(state.get("pathmap"), sx, sy,
+                                      f"the drop from agent {target_id}")
+    x, y = (float(placed[0]), float(placed[1])) if placed is not None else (cx, cy)
+    plane = int(agent.get("plane", state.get("plane", 0)))
+    gold = loot.gold_record(agents.item_template("gold_coins"), amount)
+    send(GAME_SMSG_ITEM_GOLD_DECLARE, agents.named_item(item, gold),
+         f"ITEM_GOLD_DECLARE(item {item}: {amount} gold) [RANGERPRE-S15]")
+    send(GAME_SMSG_ITEM_DROP_SOURCE, loot.drop_source(drop, target_id),
+         f"ITEM_AGENT_DROP_SOURCE(ground agent {drop} from agent {target_id}) "
+         f"[RANGERPRE-S15]")
+    send(GAME_SMSG_WORLD_CREATE_AGENT,
+         loot.ground_item_create(drop, item, x, y, plane),
+         f"WORLD_CREATE_AGENT(ground item {drop}: item {item} at "
+         f"({x:.0f},{y:.0f}) plane {plane}) [RANGERPRE-S15]")
+    ground[drop] = {"item": item, "gold": int(amount), "pos": (x, y),
+                    "plane": plane, "source": target_id, "shown": True}
+    print(f"[c{conn_id}] DROP: agent {target_id} ({agent.get('name', '?')}) "
+          f"dropped {amount} gold -- ground agent {drop}, item {item}, at "
+          f"({x:.0f},{y:.0f}) plane {plane}, "
+          f"{math.hypot(x - cx, y - cy):.0f} u from the corpse (table "
+          f"{DROP_TABLE!r}, INVENTED; the frame is retail's) [RANGERPRE-S15]",
+          flush=True)
+    return drop
+
+
+def handle_pickup(values, send, state, conn_id, rec=None):
+    """GAME_CMSG 0x003F PICKUP [ground agent, u8] -- walk to it, serve on arrival.
+
+    RETAIL (3 of 3 on 20260929T150923): the reply is a STRAIGHT 0x002A [player,
+    the item's own point, plane, plane, ground agent] within ~40 ms, no client
+    report during the walk, and the arrival frame about the straight-line walk
+    time later. So the walk is `_approach_send` with the stop AT the item
+    (stop_at=0.0): the same message, the same leg record, the same integrator.
+    Its record is PUBLISHED straight into state["pickup"] (into="pickup") and
+    never into state["approach"], because attack_tick -- on the world-tick
+    thread -- abandons an approach, dest and all, on every tick it holds no
+    attack target; a record that passed through state["approach"] could be
+    abandoned between the send and the move (the RANGERPRE-S15 review's race,
+    test_loot 3j). For the same reason any follow still on record is abandoned
+    HERE, before the leg's dest is written (3k). pickup_tick owns the walk from
+    here. A body already within loot.PICKUP_REACH is served at once
+    (RECONSTRUCTION: n = 0 on tape).
+
+    The press is a move order: it ends a keyboard lead and a click leg in the
+    0x0026 arm's own order, and forgets the attack target. RECONSTRUCTION --
+    what retail does with a pickup pressed mid-attack or mid-cast is n = 0; a
+    cast in flight is left alone, as the interact arm leaves it.
+
+    REFUSED LOUDLY, with nothing sent: an agent that is no ground item in view
+    (this server's pre-S15 answer to every 0x003F), a dead player, and a second
+    press on the item already being walked to."""
+    drop = int(values[1])
+    now = time.time()
+    g = (state.get("ground_items") or {}).get(drop)
+    if g is None or not g.get("shown", True):
+        print(f"[c{conn_id}] PICKUP of agent {drop} REFUSED: no ground item in view "
+              f"under that id -- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    if state.get("player_dead"):
+        print(f"[c{conn_id}] PICKUP of ground agent {drop} REFUSED: the player is "
+              f"dead -- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    pk = state.get("pickup")
+    if pk is not None and pk.get("agent") == drop:
+        print(f"[c{conn_id}] PICKUP of ground agent {drop}: already walking to it "
+              f"-- nothing sent [RANGERPRE-S15]", flush=True)
+        return False
+    _kbd_lead_kill(send, state, conn_id, rec, "pickup")
+    _press_supersedes(send, state, conn_id, drop, rec=rec)
+    state["attacking"] = None
+    # the follow the attack order was walking, if one is still on record: what
+    # attack_tick does on its next tick anyway, done NOW -- once the pickup's
+    # dest is written below, an approach left here would take it with it.
+    _approach_abandon(state)
+    state["pickup"] = None
+    px, py = _reach_frame(state, now)
+    gap = math.hypot(float(g["pos"][0]) - px, float(g["pos"][1]) - py)
+    if gap <= loot.PICKUP_REACH:
+        state["pickup"] = {"agent": drop, "t0": None, "eta": now, "dest": None}
+        print(f"[c{conn_id}] PICKUP of ground agent {drop}: {gap:.1f} u, in reach "
+              f"-- served now [RANGERPRE-S15]", flush=True)
+        serve_pickup(send, state, conn_id, now)
+        return True
+    _approach_send(send, state, conn_id, drop,
+                   {"pos": g["pos"], "name": f"ground item {drop}"}, now,
+                   rec=rec, stop_at=0.0, into="pickup")
+    pk = state.get("pickup") or {}
+    print(f"[c{conn_id}] PICKUP of ground agent {drop} (item {g['item']}, "
+          f"{g['gold']} gold) at {gap:.0f} u: a STRAIGHT 0x002A to the item's own "
+          f"point (retail's reply, 3 of 3); the arrival frame at the leg's eta, "
+          f"{pk.get('eta', now) - now:.2f} s (our straight-line model) "
+          f"[RANGERPRE-S15]", flush=True)
+    return True
+
+
+def serve_pickup(send, state, conn_id, now=None):
+    """The arrival frame, in retail's order (:55934 395.546 and :53756 1125.5645,
+    2 of 2 gold, byte-identical with the ids substituted): the hold 0x009F
+    [8, me, 1], 0x009F [39, me, 0], 0x0159 [item, me], the purse credit 0x0140
+    [key, n], the gold line 0x005D + 0x005E [1, 10], 0x0028 [me], 0x0021 [ground
+    agent]. The purse moves through purse.py and persists under --persist, as a
+    quest's gold does. The hold's release is pickup_tick's, 1.0 s on.
+
+    The 0x0028 [me] is the fourth player-directed 0x0028 site (test_cancelwalk's
+    census): retail's arrival carries it 5 of 6 across the corpus, and the client
+    sends no report in that window, so it halts a body that has already arrived
+    rather than cutting a walk short. -> True when a pickup was served."""
+    now = time.time() if now is None else now
+    pk = state.pop("pickup", None)
+    if not pk:
+        return False
+    drop = pk["agent"]
+    g = (state.get("ground_items") or {}).pop(drop, None)
+    if g is None:
+        return False
+    n = int(g["gold"])
+    action_hold(send, state, 1, "the pickup [RANGERPRE-S15]")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.GV_PICKUP, PLAYER_AGENT_ID, 0],
+         "PICKUP property 39 [me, 0 for gold] (the name ours) [RANGERPRE-S15]")
+    send(GAME_SMSG_ITEM_PICKED_UP, loot.picked_up(g["item"], PLAYER_AGENT_ID),
+         f"ITEM_PICKED_UP(item {g['item']}) [RANGERPRE-S15]")
+    send(merchant.GAME_SMSG_GOLD_CREDIT, [PLAYER_INVENTORY_KEY, n],
+         f"GOLD_CREDIT(+{n}, a picked-up drop) [RANGERPRE-S15]")
+    before = player_purse(state)
+    state["purse"] = purse.after_credit(before, n)
+    persist_purse(state)
+    send(GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.gold_pickup_body(n)],
+         f"CHAT_MESSAGE_CORE[the gold pickup line: {n}] [RANGERPRE-S15]")
+    send(GAME_SMSG_CHAT_MESSAGE_SERVER, [PLAYER_NUMBER, chatdefs.CHANNEL_NOTIFY],
+         f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, channel "
+         f"{chatdefs.CHANNEL_NOTIFY})")
+    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+         "AGENT_STOP_MOVING(player): the pickup's arrival (retail 5 of 6) "
+         "[RANGERPRE-S15]")
+    send(GAME_SMSG_WORLD_REMOVE_AGENT, [drop],
+         f"WORLD_REMOVE_AGENT({drop}) -- the ground item is picked up "
+         f"[RANGERPRE-S15]")
+    # The body stands at the item: the server's copy lands there with the
+    # client's (retail's report after the arrival, 1.6 u off), and the walk the
+    # integrator was running is over.
+    state["pos"] = (float(g["pos"][0]), float(g["pos"][1]))
+    state["dest"] = None
+    state["pickup_release_at"] = now + loot.PICKUP_HOLD_SECONDS
+    print(f"[c{conn_id}] PICKUP SERVED: ground agent {drop}, item {g['item']}, "
+          f"+{n} gold -- purse {before} -> {state['purse']} (0x0140 [key, {n}]); "
+          f"the hold releases in {loot.PICKUP_HOLD_SECONDS:.1f} s [RANGERPRE-S15]",
+          flush=True)
+    return True
+
+
+def pickup_tick(send, state, conn_id, now=None):
+    """The world tick's half of a pickup: serve it on arrival, cancel it when
+    something replaced the walk, and release the arrival's hold 1.0 s on.
+
+    ARRIVAL is the leg's eta while the server's copy still walks the pickup's
+    own `dest`, or -- once that dest is gone (the integrator arrived, or a report
+    placed the body) -- the copy standing within loot.PICKUP_REACH of the item.
+    CANCELLED, with nothing sent, when: the item is gone or out of view, the
+    player died, an attack order was taken, the click latch was re-stamped (a
+    click, an interact walk, another approach), the copy was given another
+    destination, or the walk ended short of the item. What retail does in each
+    is n = 0 (RECONSTRUCTION); the walk itself is the client's to stop."""
+    now = time.time() if now is None else now
+    rel = state.get("pickup_release_at")
+    if rel is not None and now >= rel:
+        state["pickup_release_at"] = None
+        action_hold(send, state, 0, "the pickup's hold ends, 1.0 s after the "
+                    "arrival (retail 6 of 6) [RANGERPRE-S15]")
+    pk = state.get("pickup")
+    if not pk:
+        return None
+    g = (state.get("ground_items") or {}).get(pk["agent"])
+    latch, dest = state.get("click_moving_at"), state.get("dest")
+    why = None
+    if g is None or not g.get("shown", True):
+        why = "the item is gone or out of view"
+    elif state.get("player_dead"):
+        why = "the player died"
+    elif state.get("attacking"):
+        why = "an attack order replaced the walk"
+    elif pk.get("t0") is not None and latch is not None and latch != pk["t0"]:
+        why = "a newer move order (the click latch was re-stamped)"
+    elif dest is not None and dest != pk.get("dest"):
+        why = "the body was given another destination"
+    if why is None:
+        if dest is None:
+            px, py = state.get("pos", (0.0, 0.0))
+            if math.hypot(float(g["pos"][0]) - float(px),
+                          float(g["pos"][1]) - float(py)) <= loot.PICKUP_REACH:
+                return serve_pickup(send, state, conn_id, now)
+            why = "the walk ended short of the item"
+        elif now >= pk["eta"]:
+            return serve_pickup(send, state, conn_id, now)
+        else:
+            return None
+    state["pickup"] = None
+    print(f"[c{conn_id}] PICKUP of ground agent {pk['agent']} CANCELLED: {why} "
+          f"-- nothing sent [RANGERPRE-S15]", flush=True)
+    return False
+
+
+def ground_items_tick(send, state, conn_id):
+    """The view range: an unpicked ground item leaves by a bare 0x0021 once the
+    server's copy of the player stands past loot.DROP_VIEW_RANGE from it, and
+    comes back by a bare 0x0020 once it is inside again -- retail's shape, 11 of
+    11 removals and 4 of 4 re-creates on 20260929T150923 (loot.py). No timer."""
+    ground = state.get("ground_items")
+    pos = state.get("pos")
+    if not ground or pos is None:
+        return 0
+    moved = 0
+    for aid, g in list(ground.items()):
+        seen = loot.in_view(pos, g["pos"])
+        if g.get("shown", True) and not seen:
+            send(GAME_SMSG_WORLD_REMOVE_AGENT, [aid],
+                 f"WORLD_REMOVE_AGENT({aid}) -- the ground item is out of view "
+                 f"range [RANGERPRE-S15]")
+            g["shown"] = False
+            moved += 1
+            print(f"[c{conn_id}] DROP VIEW: ground agent {aid} (item {g['item']}) "
+                  f"leaves -- the player is past {loot.DROP_VIEW_RANGE:.0f} u "
+                  f"[RANGERPRE-S15]", flush=True)
+        elif not g.get("shown", True) and seen:
+            send(GAME_SMSG_WORLD_CREATE_AGENT,
+                 loot.ground_item_create(aid, g["item"], g["pos"][0], g["pos"][1],
+                                         g["plane"]),
+                 f"WORLD_CREATE_AGENT(ground item {aid} back in view) "
+                 f"[RANGERPRE-S15]")
+            g["shown"] = True
+            moved += 1
+            print(f"[c{conn_id}] DROP VIEW: ground agent {aid} (item {g['item']}) "
+                  f"re-created -- the player is back inside "
+                  f"{loot.DROP_VIEW_RANGE:.0f} u [RANGERPRE-S15]", flush=True)
+    return moved
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
@@ -39845,6 +40423,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reported arrival, so it should be served on the first
                         # tick after that report rather than one interval later.
                         interact_pending_tick(send, state, conn_id)
+                        # RANGERPRE-S15: a pickup's arrival (or its cancel) and
+                        # its hold's release, then the ground items' view range
+                        # -- polled for the interact's reason: the client sends
+                        # nothing on the way (3 of 3 retail pickups).
+                        pickup_tick(send, state, conn_id)
+                        ground_items_tick(send, state, conn_id)
                         # A click held back by the grant floor. Polled here for
                         # the same reason the interact above is -- the client
                         # sends NOTHING while click-walking (measured silences
@@ -40695,6 +41279,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Nothing here reads it: the press carries its target.
                         state["target"] = values[1]
                         state["target_auto"] = values[2]
+                    elif opcode == GAME_CMSG_PICKUP:
+                        # RANGERPRE-S15 (LOOT slice 1): walk to a ground item
+                        # and pick it up -- the straight 0x002A now, the arrival
+                        # frame at the leg's end (pickup_tick). An id that is no
+                        # ground item in view is refused with nothing sent, the
+                        # dead-player guard included (handle_pickup).
+                        handle_pickup(values, send, state, conn_id, rec=rec)
                     elif opcode == GAME_CMSG_ROTATE_PLAYER:
                         # THE DWORD/FLOAT TRAP -- read the constant before
                         # touching this. values[1] and values[2] are integers
@@ -45094,6 +45685,30 @@ def main():
               "paid (the print names it) and the offer screen draws no gold "
               "line -- the pre-DESKWORK-D9 behaviour. Default pays 0x0140 "
               "[key, gold] after the experience 0x00EE.", flush=True)
+    if a.drop_table is not None:
+        # RANGERPRE-S15: resolve and validate the table NOW, so a bad name or a
+        # row this slice cannot serve never starts a server (a kill mid-run
+        # would otherwise raise inside the world tick).
+        try:
+            _dt_row = drop_table_row(a.drop_table)
+            # and the gold row each hit declares, else kill_agent raises mid-frame
+            loot.gold_record(agents.item_template("gold_coins"), _dt_row["gold"][1])
+        except (agents.content.ContentError, loot.LootError) as exc:
+            raise SystemExit(f"--drop-table {a.drop_table}: {exc}") from None
+        global DROP_TABLE
+        DROP_TABLE = a.drop_table
+        print(f"[loot] --drop-table {a.drop_table}: every HOSTILE kill rolls on "
+              f"it -- chance {_dt_row['chance']}, gold {list(_dt_row['gold'])} "
+              f"(content/drops.toml, INVENTED); the drop's frame, pickup and "
+              f"view range are retail's (loot.py) [RANGERPRE-S15]", flush=True)
+    if a.no_drops:
+        global LOOT_ENABLED
+        LOOT_ENABLED = False
+        print("[loot] --no-drops: no kill drops anything, even under "
+              "--drop-table -- this server's bytes until 2026-09-30. KNOWN-BAD "
+              "against retail's kill frame, which carries the drop (0x0162, "
+              "0x0168, 0x0020) ahead of the reward on 4 of 12 kills of "
+              "20260929T150923 [RANGERPRE-S15 revert]", flush=True)
     if a.no_reward_in_frame:
         global REWARD_IN_FRAME
         REWARD_IN_FRAME = False
@@ -46310,6 +46925,19 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_approach_start_halt:
+        global APPROACH_START_HALTS
+        APPROACH_START_HALTS = False
+        print("APPROACH: --no-approach-start-halt -- a ranged approach's first swing "
+              "is [4] alone, no [8, me, 1] and no 0x0028 [me]: KNOWN-BAD against "
+              "retail's 12 of 12 [RANGERPRE-S16 revert]", flush=True)
+    if a.held_interact_at_range:
+        global HELD_INTERACT_AT_DISC
+        HELD_INTERACT_AT_DISC = False
+        print("INTERACT: --held-interact-at-range -- a held interact is served "
+              "inside INTERACT_RANGE (144 u) and the routed walk stops 100 u "
+              "short: KNOWN-BAD against retail's 67.8 / 75.2 u "
+              "[RANGERPRE-S17 revert]", flush=True)
     if a.no_preparation_splash:
         global PREPARATION_SPLASH
         PREPARATION_SPLASH = False

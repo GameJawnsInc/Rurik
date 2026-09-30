@@ -62,6 +62,13 @@ CHANNEL_EMOTE = 6
 # captures never do. That contrast is the discriminating negative -- a channel
 # byte that appeared in both populations would prove nothing.
 CHANNEL_WARNING = 7
+# CHANNEL 10 carries the server's own notices -- the 96 channel-10 tags counted
+# beside channel 7 above, none in a refusal batch. RANGERPRE-S15 (LOOT slice 1)
+# sends its first: the gold pickup line rides 0x005E [1, 10] on both retail gold
+# arrivals (20260929T150923 :55934 395.546, :53756 1125.5645; OBSERVED, test_loot
+# section 6), and by the LOOT design lane's corpus census every item pickup line
+# (4 of 4) and drop line (11 of 11) rides it too.
+CHANNEL_NOTIFY = 10
 ALL_BODY_WRAPPER = 0x0108      # string id 8, the All-chat body wrapper word
 FRAGMENT_UNITS = 121           # declared(122) - 1, measured on both live splits
 BOW_TEMPLATE = 1687            # "%player% bows." -- id measured, text ArenaNet's
@@ -318,6 +325,25 @@ def bow_body(player_number):
     words = (codedstr.encode_id(BOW_TEMPLATE)
              + codedstr.encode_id(PLAYER_ARG_SLOT)
              + codedstr.encode_id(player_number))
+    return "".join(chr(w) for w in words)
+
+
+# THE GOLD PICKUP LINE (RANGERPRE-S15), retail's words up to the amount: a
+# template id (0x07DF), its three-word key (the same class of value as an item
+# enc_name's trailing words -- ids, never text), the argument words, and the
+# amount as a coded id before the terminator. OBSERVED 2 of 2, differing only in
+# the amount word: [..., 0x0106, 0x0001] for 6 at :55934 395.546 and
+# [..., 0x0107, 0x0001] for 7 at :53756 1125.5645 (20260929T150923).
+GOLD_PICKUP_WORDS = (0x07DF, 0xC868, 0xCA88, 0x54A4, 0x010A, 0x0AC2, 0x0101)
+
+
+def gold_pickup_body(amount):
+    """The 0x005D body announcing `amount` gold picked up, as codec-ready `str`:
+    GOLD_PICKUP_WORDS + the amount as a coded id + the terminator (0x0001)."""
+    n = int(amount)
+    if n < 1:
+        raise ValueError(f"a gold pickup of {amount!r} is not a line retail sends")
+    words = list(GOLD_PICKUP_WORDS) + codedstr.encode_id(n) + [0x0001]
     return "".join(chr(w) for w in words)
 
 

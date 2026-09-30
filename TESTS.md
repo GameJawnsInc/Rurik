@@ -3414,6 +3414,61 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
+  `toolkit/authsrv/test_loot.py` (**2026-09-30, RANGERPRE-S15 (LOOT slice 1): a kill's GOLD
+  drop, the pickup walk and its arrival, the purse credit, the view range.** Retail
+  (20260929T150923, build 38888): a drop rides the death's own frame between the `0x00F1`
+  status word and the reward block -- `0x0162` (the gold declare), `0x0168 [ground agent,
+  dying agent]`, the ground agent's `0x0020` (field 3 = 4, kind 0, speed 0, `0x34000000`,
+  token 0) -- 4 of 4; the pickup `0x00C1` + `0x003F` is answered by a straight `0x002A` to
+  the item's own point and, at the walk's end, `0x009F [8, me, 1]`, `[39, me, 0]`, `0x0159`,
+  `0x0140 [key, n]`, the gold line + `0x005E [1, 10]`, `0x0028 [me]`, `0x0021`; the hold
+  released 1.0 s on; an unpicked drop leaves by a bare `0x0021` past ~5,000 u and returns by
+  a bare `0x0020`. Ours dropped nothing and dropped `0x003F`. §1 the leaf (`loot.py`) and
+  the builders against retail's literals: the ground create, the gold declare, the gold
+  line for 6 and 7, the encoded widths 44 / 6 / 99, the KNOWN-BAD living builder
+  (`create_agent` differs in fields 2 / 8 / 10 / 11), `validate_table`'s seven refusals
+  (slice 2's `items` among them), `roll`, `scatter`, the merchant's item-id counter, the
+  5,000 u radius, and the tracked rows' provenance (`[item.gold_coins]` a capture row;
+  every `content/drops.toml` row `invented`). §2 OUR `kill_agent` under `--drop-table
+  probe_gold`: the drop right behind the status word and AHEAD of the 75-XP tick
+  (headline), its payloads, fresh ids per kill; the DEFAULT (no table) is the pre-S15
+  frame and the KNOWN-BAD arm `--no-drops` sends that same frame; a party body never drops;
+  the invented 0.33 table's miss and hit; the scatter point moved onto the mesh, the corpse's
+  point where nothing near is ground. §3 `handle_pickup` / `pickup_tick` / `serve_pickup`:
+  one `0x002A`; `attack_tick` leaves the walk alone (it abandons an approach record, which
+  is why the pickup's leg is published straight into `state['pickup']`, never into
+  `state['approach']`); nothing before the eta, exactly retail's eight at it (purse 0 -> 6)
+  and a MUTANT order that fails (3e reads both the literal's swap AND our sent order); the
+  hold released once at +1.0 s; refusals (a second press, an unknown agent, a dead player)
+  and cancels (a click, another dest, an attack order, a stop short) send nothing; the
+  integrator's arrival and an in-reach press serve too; and THE REVIEW'S RACE, made
+  deterministic (3j, 3k): `_approach_send` wrapped so `attack_tick` -- the world tick --
+  runs the instant it returns, with no follow on record and with one still on record, and
+  the pickup keeps its dest and is served at its eta both times. §4 the view range: out past 5,000 u by one bare `0x0021`, back by a bare
+  `0x0020`, a hidden item refused, a pickup whose item leaves view cancelled. §5 the source:
+  `loot_on_kill` called once in `kill_agent` after the status word and AHEAD of the
+  `morale_experience(` tick (the critic's C1, stronger than ahead-of-the-reward); the world
+  tick's two polls; the `0x003F` arm through `test_dispatch.dispatch_arms` with its
+  DROPPED_ON_PURPOSE row gone; the two flags and `main()`'s validation. §6 THE TAPE (skips
+  ONLY when `captures/live/20260929T150923` is absent): 12 death frames, 4 drops, 3 c2s
+  `0x003F`; all 4 drop frames and ours pass one order predicate; OURS == RETAIL byte for
+  byte -- the kill trio at :55934 offsets 29833 / 29877 / 29889 (item 472, agent 57, foe 46),
+  both gold arrivals with the ids substituted (395.546, 1125.5645), and both straight
+  `0x002A`s -- a SABOTAGED arrival (0x0159 / 0x0140 swapped) fails the same comparator;
+  every `0x0162` (4) is the gold row with value == quantity; property 39 only in the three
+  arrivals; the hold's release +0.9985 / +0.9940; 11 bare removals and 4 bare re-creates.
+  Proved red: the kill-frame call removed, 7 (2a, 2b, 2c, 2g, 5a, 6b, 6c -- 2d, the
+  known-bad arm, stays green, being that server); the call moved between the tick and the
+  award (the C1 case), 3 (2a, 5a, 6b); `serve_pickup`'s credit ahead of `0x0159`, 4 (3d,
+  3e, 3i, 6d); the walk left in `state['approach']`, 5 (3a-3d, 3f); HEAD's `authsrv.py`
+  raises. Review round: the first cut's `authsrv.py` (3e0851cf, the leg parked in
+  `state['approach']` until `_approach_send` returned) reddens 3j and 3k, plus 5d for the
+  gold-row validation this round also added to `main()`; dropping
+  `handle_pickup`'s abandon of a follow still on record reddens 3k alone; `main()` without
+  the gold-row validation reddens 5d. The same round re-aimed `test_playerswing.py` §9k's
+  `_approach_abandon` census 11 → 12 (the pickup press abandons a follow still on record).
+  Floor 37 from the bare green run (the tape adds 9: 46 vaulted). No socket, no client.
+  ~20 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
   0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`
@@ -13169,7 +13224,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   other-agent machine (60/50 opens, 58 finish, 59 cancel, reopen, censor,
   timeout sweep), 0x00F1 recorded as a mark and never a close, and the
   property census keeping unknown ids; the batch clustering (eps=0 exact for live tapes, 5 ms for gamesrv logs whose sends stamp their own clocks); and scan_ours itself over a synthetic RURIK_VAULT -- hand-packed 0x009F rows the codec must frame, the tape-replay exclusion by label, and the era filter that makes the pre-castmech known-bad control possible. Floor 41),
-  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-26, MONSTERAI-S: the 0x0028 census re-aimed, not bumped -- SIX send sites, every one from the builder; still exactly THREE name the player (the safety count, unchanged); the third non-player site is `_scatter_halt` (a scatter ceaser, or a hold engaging while the copy still walks, stops where it stands; the body's own agent_id, only under SCATTER). 124 checks.** **2026-09-27: the cast-stop burst's ATTACK arm
+  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-30, RANGERPRE-S16 (ROUTE-A): the 0x0028 census is EIGHT send sites and FIVE name the player -- the fifth is `attack_tick`'s ranged approach halt, retail's own (the first start after a server `0x002A` follow carries `[4]`, `[8, me, 1]`, `0x0028 [me]` in one segment on 12 of 12 ranged approaches, 20260929T150923 :55934 335.0923 among them; `test_approachroute.py` §3), after a server-ordered walk the client reports nothing on and never at a keyboard stop, so it is not a stop-window send; a SIXTH player site is the red now. 124 checks, unchanged.** **2026-09-30, RANGERPRE-S15 (LOOT slice 1): the 0x0028 census is SEVEN send sites and FOUR name the player -- the fourth is `serve_pickup`'s arrival halt, retail's own (the pickup's arrival frame carries `0x0028 [picker]` in 5 of 6 corpus pickups, 20260929T150923 :55934 395.546 and :53756 1125.5645 among them; the client sends no report between the `0x002A` and the arrival, 3 of 3), so it halts a body that has arrived and is not a stop-window send; a FIFTH player site is still the red the lock exists for. Every figure below that says SIX / THREE (or, in the 2026-09-03 history, THREE / TWO) is that day's count. 124 checks, unchanged.** **2026-09-26, MONSTERAI-S: the 0x0028 census re-aimed, not bumped -- SIX send sites, every one from the builder; still exactly THREE name the player (the safety count, unchanged); the third non-player site is `_scatter_halt` (a scatter ceaser, or a hold engaging while the copy still walks, stops where it stands; the body's own agent_id, only under SCATTER). 124 checks.** **2026-09-27: the cast-stop burst's ATTACK arm
   presses at agent 40 (no row, so no approach walk) instead of target 0 — the attack-target
   gate refuses an attack skill at 0, and the SLICE-F20 retail presses that arm models named
   their foe; the spell arms stay at 0; the count is unchanged at 124.**
@@ -13583,6 +13638,77 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   through the primary hit. §17 (WEAPONS-W8): modifier 585 scales the range -- 15-22 with
   (585, 120) reads 18-26, order-free, a 100 changes nothing, no repo item carries it.
   Floor 129 (114 + 15)),
+  `toolkit/authsrv/test_approachroute.py` (**2026-09-30, RANGERPRE-S17 (ROUTE-B): a HELD
+  interact is served at the FOLLOW DISC, not at INTERACT_RANGE.** Retail (OBSERVED on the
+  wire, RECONSTRUCTED as a 288 u/s walk): the two exact-start held interacts on
+  20260929T150923 are served at 67.8 u (:56064, the dialog at 979.1046, 1.850 s after the
+  `0x002A` left the last corner 600.7 u out) and 75.2 u (:59969, the dialog at 202.6552 with
+  the model still 42.3 u short of its last leg's end -- served on the way, a distance rule),
+  45.7 and 20.0 ms after the model crosses 81 u; a 144 u serve predicts both 0.26 / 0.24 s
+  early. Ours walked to 100 u and served at the first tick inside 144. Now the walk stops at
+  `follow_stop_radius()` (80 u) and the hold is served inside 81 u while the walk is in
+  flight, or inside 144 once it is over (the slack fix -- a leg ending outside the disc
+  cannot strand it). §4 (offline, an open-field stub mesh, world_tick's order driven tick by
+  tick): the stop pinned to the disc (4a); the press held and walked by the router's
+  verbatim leg to (920, 0) (4b); **served at 80.0 u, nothing on the way in (headline 4c)**;
+  the KNOWN-BAD arm `--held-interact-at-range` walks to 100 and serves at 136 (4d); 100 u in
+  flight not served, served by the known-bad arm (4e); the slack -- a clip-fallback leg
+  ending 110 u out served at its end (4f), a client stop report 83 u out served (4g), a walk
+  ending 200 u out keeps the hold (4h); no mesh serves at 144 as before (4i); the immediate
+  range untouched at 100 / 134.6 / 145 u (4j); the flag (4k). §5 THE TAPES (a declared
+  skip without `captures/live`): the :56064 corner walk and its 67.8 u (5a, 5b), the :59969
+  exact-stop walk served 42.3 u short of its end at 75.2 u (5c), **our serve radius -- asked
+  of `interact_pending_tick` itself by bisection -- crossing 0-50 ms before retail's dialog
+  on both while the INTERACT_RANGE rule is >= 0.2 s early (5d)**, and the immediate range
+  (5e: exact stops 95.7 and 134.6 u answered at once, ~167 u dead-reckoned walked). Proved
+  red on a git-archive export of the parent overlaid with the change, each hunk mutated and
+  restored (sha256 checked): the module arm `HELD_INTERACT_AT_DISC = False`, 4a 4b 4c 4f 4k
+  5d; the disc rule off, 4c 4e 4f 5d; the slack branch removed (the spec as written,
+  disc-only -- the critic's ERROR), 4f 4g 4i; the stop left at 100, 4a 4b 4c; the walk's
+  identity not recorded, 4b 4c 4e 4f; the parent's own `authsrv.py` dies on the missing flag.
+  Floor 21 -> 32 from the bare green run (vaulted: 46).
+  **2026-09-30, RANGERPRE-S16 (ROUTE-A, the
+  out-of-reach approach's first piece): a RANGED approach's first swing holds the walk gate
+  and halts the body.** Retail (OBSERVED): on the four live connections whose player shoots,
+  the first own attack start after a server `0x002A` follow carries `0x00A0 [4, me, T, 0]`,
+  `0x009F [8, me, 1]`, a `0x001E` and `0x0028 [me]` in one segment, 12 of 12
+  (20260929T150923 :55934 x5, 20260914T005758 :56011 x5, 20260810T235916 :61624,
+  20260807T143055 :62994); the swing's launch releases nothing (0 of 10); the hold's first
+  release answers a keyboard report 7 times, a re-approach once, a skill press twice and the
+  target's death twice; the chain's later starts are `[4]` alone; at-rest starts carry
+  neither (37 of 37); melee is mixed. Ours sent `[4]` alone, so nothing stopped the drawn
+  body at range. §1 (offline) drives the bow press
+  from 2000 u through `begin_attack` / `attack_tick` / `approach_tick`: one `0x002A`, then at
+  arrival exactly retail's three (headline 1b); the hold is the approach's and the arrival
+  marker is consumed; the launch is `0x00A4` alone; the next start `[4]` alone; a
+  re-approach sends `[8, me, 0]` adjacent to its `0x002A`; the mid-chain re-approach's
+  start (held by the interval) carries the batch; a re-path releases nothing; a move
+  (`cancel_on_move`) releases it, and so does the target's death after the launch
+  (`attack_tick`'s target-gone site); a hold that is NOT the approach's still ends at the
+  launch (control); the KNOWN-BAD arm `--no-approach-start-halt` is `[4]` alone; a sword's
+  arrival, a bow already in range and a marker naming another target are `[4]` alone;
+  `_approach_abandon` and `action_hold(0)` forget their markers. §2 the flag parses, `main()`
+  flips it, the default is on and `capture_flags` carries it, and the halt sits right behind
+  the `[4]` send. §3 THE TAPES (a declared skip without `captures/live`; a missing capture
+  dies in `require_dir`): the four connections decode whole with own agents 31 / 29 / 31 /
+  31 and exactly the twelve named starts; 12 of 12 carry start < hold < halt; the `0x001E`
+  between hold and halt on 12 of 12 (RECORDED, not reproduced -- ours rides the start's
+  tick); OURS == RETAIL with the ids substituted 12 of 12 and the known-bad batch 0 of 12;
+  10 launches, none releasing; the at-rest control 37 of 37 over every connection of
+  20260929T150923; :53756's melee starts mixed (neither x2, hold x1, both x1); what ends each
+  hold, its first own `[8, me, 0]` classified by what it rides -- keyboard x7 (:55934
+  461.5991), re-approach x1 (337.5687), skill press x2 (338.1238, 517.4328), the target's
+  death x2 (:55934 384.3644, :62994 86.2717), never the launch (the review follow-up: the
+  first commit cited :55934 339.4568 as the keyboard end, and that release ends 338.1238's
+  SKILL hold, not the approach's). ROUTE-C / C2 / D are not built and add their
+  sections when they land (ROUTE-B is §4-§5, above). Proved red, each hunk of `authsrv.py` reverted in place and
+  restored (sha256 checked): the `attack_tick` halt disabled, 5 (1b, 1c, 1g, 1r, 3d);
+  `approach_tick`'s arrival marker removed, the same 5; the launch gate removed, 1d and 1r;
+  the re-approach release removed, 1f and 1g (the start then carries `[4]`, `0x0028` with
+  no hold -- transition-only); `_approach_abandon`'s pop removed, 1o; `action_hold`'s pop
+  removed, 1f, 1i, 1p, 1r; the pre-existing target-gone `action_hold(0)` removed, 1r; and
+  3i with the first commit's claim (339.4568 a keyboard end) as its table, red. Floor 21
+  from the bare green run (the tapes add 9: 30 vaulted). No socket, no client, ~2 s),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-29, CASTAI-Z2 (the z2-wpn lane): the
   second Zaishen tape (20260929T100038) turned the bare-bow arrow signature red on the
   Zaishen Archer's Power Shot (680 with Kindle Arrows' 344) -- the SCANNER's defect, not

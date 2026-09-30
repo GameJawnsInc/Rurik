@@ -1041,6 +1041,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(6 connections, 4 captures; amounts 10/25/50); the "
                          "amount is the content row's own number. Also reverts "
                          "the purse's persistence of that credit.")
+    ap.add_argument("--drop-table", default=None, metavar="KEY",
+                    help="RANGERPRE-S15 (LOOT slice 1): every HOSTILE kill rolls on "
+                         "the content/drops.toml row KEY (INVENTED, every row) and, "
+                         "on a hit, drops gold in retail's frame -- 0x0162, 0x0168 "
+                         "and the ground agent's 0x0020 between the death's status "
+                         "word and its reward (20260929T150923, 4 of 4 drops); a "
+                         "click on it walks the body there on a straight 0x002A and "
+                         "the arrival credits the purse. probe_gold drops 6 on every "
+                         "kill. DEFAULT none: no kill drops (the owner's default for "
+                         "the pre-Searing areas). A key the store lacks, or a row "
+                         "naming items (slice 2), refuses to start.")
+    ap.add_argument("--no-drops", action="store_true",
+                    help="RANGERPRE-S15 REVERT: no kill drops anything, even under "
+                         "--drop-table -- this server's bytes until 2026-09-30, where "
+                         "retail's kill frame carries the drop on 4 of 12 kills "
+                         "(20260929T150923). KNOWN-BAD arm.")
     ap.add_argument("--no-reward-in-frame", action="store_true",
                     help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
                          "reward lines (0x00EE, 0x0140, skills) go AFTER the "
@@ -2388,6 +2404,24 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-approach-start-halt", action="store_true",
+                    help="RANGERPRE-S16 REVERT (ROUTE-A): the first swing after a "
+                         "RANGED approach arrives is 0x00A0 [4] alone, as every run "
+                         "before 2026-09-30 sent it -- no 0x009F [8, me, 1] hold and "
+                         "no 0x0028 [me] halt, so nothing stops the drawn body at "
+                         "range. KNOWN-BAD: retail's start batch carries both on 12 "
+                         "of 12 ranged approaches (20260929T150923 :55934 335.0923 "
+                         "and four more; three older captures).")
+    ap.add_argument("--held-interact-at-range", action="store_true",
+                    help="RANGERPRE-S17 REVERT (ROUTE-B): a HELD interact is "
+                         "served as soon as the model is inside INTERACT_RANGE "
+                         "(144 u) and the routed interact-walk stops 100 u short, "
+                         "as every run before 2026-09-30 did -- instead of walking "
+                         "to the 80 u follow disc and serving inside 81 u (or "
+                         "inside 144 u once the walk is over). KNOWN-BAD: retail "
+                         "serves at 67.8 and 75.2 u on its two exact-start walks "
+                         "(20260929T150923 :56064 979.1046, :59969 202.6552), "
+                         "which a 144 u serve predicts 0.26 and 0.24 s early.")
     ap.add_argument("--no-scythe-extras", action="store_true",
                     help="WEAPONS-W3 REVERT: a scythe swing lands on its target only. "
                          "Retail's scythe hits up to two more bodies inside ~80 u of the "

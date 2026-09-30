@@ -1529,6 +1529,12 @@ ATTACK_FAIL_DODGE = 1
 # not the cause).
 ATTACK_FAIL_FAIL = 2
 ATTACK_FAIL_BLOCK = 0            # SLICE-H12: the client posts "block" for 0
+# RANGERPRE-S15 (LOOT slice 1): int property 39 rides ONLY a pickup's arrival
+# frame, right behind the hold's [8, me, 1] -- 3 of 3 arrivals on
+# 20260929T150923 and in no other frame there (test_loot section 6); value 0
+# for gold (2 of 2) and the ground agent for an item (the design lane's corpus
+# census, 4 of 4). The NAME IS OURS; what the client does with it is UNVERIFIED.
+GV_PICKUP = 39
 GV_EFFECT_ON_TARGET = 20
 GV_EFFECT_ON_AGENT = 21
 GV_ANIMATION = 22
