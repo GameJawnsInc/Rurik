@@ -403,19 +403,20 @@ def section_stop_answer():
           "ONE R6 gate and ONE R6-labelled send -- a gate whose send was "
           "deleted, or a second site borrowing R6's label, reddens this")
     sites = stop_moving_sites()
-    check(len(sites) == 7
+    check(len(sites) == 8
           and all(b == "agents.agent_stop_moving" for _, _, b, _ in sites),
-          "SEVEN 0x0028 send sites, every payload from the builder the "
+          "EIGHT 0x0028 send sites, every payload from the builder the "
           "wire-shape check above drives -- never a hand-built [agent] "
           "literal, which would skip that builder's agent-id-0 refusal and "
           "put a silent no-op on the wire", f"{sites}")
     player = [s for s in sites if s[3] == "PLAYER_AGENT_ID"]
-    check(len(player) == 4
-          and sorted(s[1][-1] for s in player) == ["handle",
+    check(len(player) == 5
+          and sorted(s[1][-1] for s in player) == ["attack_tick",
+                                                   "handle",
                                                    "handle_skill_press",
                                                    "send_transfer",
                                                    "serve_pickup"],
-          "and exactly FOUR of them name the PLAYER: R6's stop-ack in the "
+          "and exactly FIVE of them name the PLAYER: R6's stop-ack in the "
           "0x0047 handler and R8/R10's cast-stop in handle_skill_press, "
           "each behind its own gate -- since SLICE-B8 the transfer's "
           "own halt in send_transfer, which is retail's measured pair "
@@ -427,12 +428,22 @@ def section_stop_answer():
           "(20260929T150923 :55934 395.546 and :53756 1125.5645 among them), "
           "the client sends no report between the 0x002A and the arrival "
           "(3 of 3), and it halts a body that has arrived rather than one "
-          "mid-stop -- so it is not a stop-window send either. THIS is the "
-          "count carrying the safety argument -- studies/movement/FINDINGS.md's "
-          "stop census is scoped to the player's own stop window (0x0028 in 7 "
-          "of 114 stops, 'a server author must not send 0x0028 on a stop'), "
-          "and a fifth player-directed site is a new warp channel into both "
-          "copies until its own retail witness says otherwise",
+          "mid-stop -- so it is not a stop-window send either -- and since "
+          "RANGERPRE-S16 the ranged approach's halt in attack_tick, retail's "
+          "own: the first start after a server 0x002A follow carries "
+          "[4], [8, me, 1], 0x0028 [me] in one segment on 12 of 12 ranged "
+          "approaches (20260929T150923 :55934 335.0923 and four more, "
+          "20260914T005758 :56011 x5, 20260810T235916 :61624, 20260807T143055 "
+          ":62994; test_approachroute section 3), after a SERVER-ordered walk "
+          "the client reports nothing on (the sync copy walks the follow too), "
+          "never at a keyboard stop, and only at the first start after OUR "
+          "follow arrived -- so it is not a stop-window send either. THIS is "
+          "the count carrying the safety argument -- "
+          "studies/movement/FINDINGS.md's stop census is scoped to the "
+          "player's own stop window (0x0028 in 7 of 114 stops, 'a server "
+          "author must not send 0x0028 on a stop'), and a sixth "
+          "player-directed site is a new warp channel into both copies until "
+          "its own retail witness says otherwise",
           f"{player}")
     npc = [s for s in sites if s[3] != "PLAYER_AGENT_ID"]
     chase = [s for s in npc if s[1] == ("_npc_follow_tick", "_halt")]

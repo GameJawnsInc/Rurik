@@ -18389,7 +18389,14 @@ def action_hold(send, state, value, why):
     under the GIL. PLAYER ONLY: the corpus shows other agents' actions
     bracketed by the same property, and our NPC paths do not send it --
     recorded in castmech 3c rather than wired past the evidence.
+
+    RANGERPRE-S16: ANY release ends a ranged approach's hold as well
+    (`approach_hold`, which only exempts the hold from the launch's release in
+    _land_player_swing) -- before the transition-only return, so a release of a
+    flag already clear still forgets it.
     """
+    if not value:
+        state.pop("approach_hold", None)
     if state.get("action_hold", 0) == value:
         return
     state["action_hold"] = value
@@ -19521,7 +19528,52 @@ def follow_stop_radius(target=None):
 # and 1,284 u for a bow the wiki puts at 1,273, both against a target that
 # walked during the windup, so they bound nothing tighter. No inset: the leg
 # ends AT range and the gate's strict `>` lets the swing open there.
+# (CORRECTED by RANGERPRE-S16, below: the hold is not all that parks the body.
+# A 0x0028 [me] rides the same segment one simulation tick behind it, 12 of 12
+# -- "no stop message precedes the start" is true; one FOLLOWS it.)
 APPROACH_STOPS_AT_RANGE = True      # --legacy-ranged-approach reverts to the disc
+
+# ---- RANGERPRE-S16 (ROUTE-A, 2026-09-30): A RANGED APPROACH'S SWING HALTS THE BODY
+#
+# OBSERVED, re-read from the bytes for this step (livewire.decode_conn, own agent by
+# adrenjoin.whose_agent; test_approachroute section 3 re-derives every count). On
+# the four connections whose player SHOOTS (own 0x00A4 launches: arrows 143 on
+# three, projectile 2 on :62994), the FIRST own attack start after a server 0x002A
+# follow carries, in ONE segment:
+#     0x00A0 [4, me, T, 0], 0x009F [8, me, 1], 0x001E tick, 0x0028 [me]
+# on 12 of 12 such starts: 20260929T150923 :55934 at 335.0923, 338.0686, 379.4129,
+# 453.5679, 515.4825 (5/5); 20260914T005758 :56011 at 169.8902, 223.5783, 361.9119,
+# 363.9707, 583.1255 (5/5; 361.9119's swing was cancelled by a keyboard move before
+# its launch); 20260810T235916 :61624 at 95.4709; 20260807T143055 :62994 at 82.7741.
+# The hold is NOT released at the launch: the swing's own 0x00A4 segment carries no
+# [8, me, 0] on 0 of 10 (336.2391, 380.5511, 454.7078, 516.6069 ...; 338.0686 and
+# 361.9119 never launched -- a skill press, a move). It ends with the next
+# movement answer -- the keyboard report's (339.4568) or a re-approach's, where
+# [8, me, 0] sits immediately ahead of the new 0x002A (337.5687). The chain's later
+# starts are [4] alone (381.8887, 456.0487): the hold is transition-only.
+#
+# CONTROL: every start with the body at rest (the last own movement event a c2s
+# 0x0047, or a server 0x0028 / 0x002C) carries neither message -- 37 of 37 on
+# 20260929T150923. MELEE IS NOT THIS SHAPE and is left alone: :53756's melee
+# approach starts are mixed (1045.737 hold only, 1088.4492 both, 1114.1519 and
+# 1133.4666 neither), so the rule is scoped to a ranged weapon, where it is 12/12.
+#
+# WHY IT MATTERS HERE (RECONSTRUCTION, from the decode; the run measures it): the
+# 0x002A names the TARGET, and the client's own resolver stops the body at the
+# MELEE disc (r + r + 56, approach_tick's docstring); our leg ends at the weapon's
+# range (W2b). Since ANIMREF-RE 35 no hold rides an auto swing, so nothing on the
+# wire told the drawn body to stop at range while our copy parked there. The
+# 0x0028 halts both client copies where they stand; after a server-ordered follow
+# the sync copy walks the same 0x002A as the body, so this is not CANCELWALK-F34's
+# keyboard warp onto a lagging copy -- the run's no-snap question checks that.
+#
+# NOT REPRODUCED: the 0x001E between [8, 1] and 0x0028 -- retail's halt is one
+# simulation tick behind the start (12 of 12); ours rides the start's own tick,
+# ~50 ms and ~14 u of walk earlier. UNVERIFIED: the melee rule, and starts after
+# any OTHER movement answer (a 0x0029 leg, a keyboard report answered at the press)
+# -- mixed on the tapes, and not produced by this server's approach, which is
+# always the one 0x002A (ROUTE-C's corner chain does not exist here).
+APPROACH_START_HALTS = True         # False (--no-approach-start-halt): [4] alone
 
 
 def approach_stop(target=None):
@@ -19571,7 +19623,13 @@ def _approach_abandon(state):
     The three arms and attack_tick call this; the latch itself is theirs to
     clear. Forgets the follow and stops the server copy's integrator walk
     -- the click arm never sets `dest`, so a stale one here would march
-    the model to a point the body abandoned."""
+    the model to a point the body abandoned.
+
+    RANGERPRE-S16: it also forgets an approach that ARRIVED and whose swing has
+    not opened yet (`approach_closed`), BEFORE the early return -- arrival has
+    already cleared `approach` itself, and a body that moved, clicked or lost
+    its target since is no longer standing where the follow left it."""
+    state.pop("approach_closed", None)
     if state.get("approach") is None:
         return
     state["approach"] = None
@@ -19741,6 +19799,13 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                       **({"leg": "pickup"} if into == "pickup" else {}))
         except Exception:                              # noqa: BLE001
             pass
+    # RANGERPRE-S16: a NEW follow while a ranged approach's hold is still up
+    # (the target walked out of range mid-chain) releases it first, adjacent to
+    # the 0x002A -- retail's re-approach, :55934 337.5687: [8, 31, 0] then
+    # 0x002A [31, ..., 45]. A re-path is the same follow and releases nothing.
+    if not repath and state.get("approach_hold"):
+        action_hold(send, state, 0, f"the re-approach to agent {target_id} "
+                    f"[RANGERPRE-S16]")
     # The dest is the TARGET'S OWN position, not the stop point: that is the
     # message retail sends (bit-exact on 16/16 never-moved targets) and it
     # is what makes the client's own resolver stop the body at reach. Both
@@ -19916,7 +19981,11 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
         if now >= ap["eta"] or dist <= stop:
             # Arrived. The leg record has already released the latch; the
             # integrator has parked the copy. Forget the follow and let the
-            # range gate open the swing this tick.
+            # range gate open the swing this tick. RANGERPRE-S16: remember
+            # WHOSE follow just ended, so the swing it opens can halt the
+            # body at range (attack_tick, APPROACH_START_HALTS); consumed by
+            # that start and dropped by _approach_abandon.
+            state["approach_closed"] = target_id
             state["approach"] = None
             return False
         return True
@@ -19959,7 +20028,11 @@ def _land_player_swing(send, state, conn_id, swing):
         # flight later. The hold ends here -- retail's [8, me, 0] rides the
         # release or follows it by a quarter second, never the hit.
         launch_player_projectile(send, state, conn_id, swing, _how)
-        if LANDING_HOLD_RELEASE:
+        # RANGERPRE-S16: NOT when the hold is the approach's. Retail keeps
+        # that one through the launch -- 0 of 10 launches after a ranged
+        # approach's start carry [8, me, 0] (:55934 336.2391, 380.5511,
+        # 454.7078, 516.6069 ...) -- and ends it at the next movement answer.
+        if LANDING_HOLD_RELEASE and not state.get("approach_hold"):
             action_hold(send, state, 0,
                         "the shot is away -- movement is legal now")
         return
@@ -20341,6 +20414,29 @@ def attack_tick(send, state, conn_id, rec=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    # RANGERPRE-S16 (APPROACH_START_HALTS, the evidence at the flag): the first
+    # start after OUR follow arrived, with a ranged weapon in hand, holds the
+    # walk gate and halts the body -- [4], [8, me, 1], 0x0028 [me], retail's
+    # 12 of 12. Consumed by every start, so a chain's later swings (and a start
+    # on another target) are [4] alone.
+    _closed = state.pop("approach_closed", None)
+    if (APPROACH_START_HALTS and _closed == target_id
+            and player_ranged(state) is not None):
+        action_hold(send, state, 1, f"the ranged approach to {target_id} ends "
+                    f"at range [RANGERPRE-S16]")
+        state["approach_hold"] = True
+        send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+             f"AGENT_STOP_MOVING(player): APPROACH HALT -- the ranged swing at "
+             f"{target_id} opens at range [RANGERPRE-S16]")
+        # The client's copies stop where they stand; so does ours (a leg that
+        # ended by distance before its eta would otherwise walk on).
+        state["dest"] = None
+        _fx, _fy = _reach_frame(state, now)
+        print(f"[c{conn_id}] APPROACH HALT [RANGERPRE-S16]: ranged swing at "
+              f"agent {target_id} opens {math.hypot(ax - _fx, ay - _fy):.0f} u "
+              f"out (range {attack_reach():.0f}) -- [4], [8,1], 0x0028 sent; "
+              f"the hold stays up through the launch until a move",
+              flush=True)
     leader_engaged(state, target_id, now, "swing")        # SLICE-H4
     _press_answered(state, rec, conn_id, "swing")
     # The hold follows the START, in that order -- every player [8, 31, 1]
@@ -45862,6 +45958,12 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_approach_start_halt:
+        global APPROACH_START_HALTS
+        APPROACH_START_HALTS = False
+        print("APPROACH: --no-approach-start-halt -- a ranged approach's first swing "
+              "is [4] alone, no [8, me, 1] and no 0x0028 [me]: KNOWN-BAD against "
+              "retail's 12 of 12 [RANGERPRE-S16 revert]", flush=True)
     if a.no_preparation_splash:
         global PREPARATION_SPLASH
         PREPARATION_SPLASH = False

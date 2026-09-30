@@ -2329,6 +2329,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-approach-start-halt", action="store_true",
+                    help="RANGERPRE-S16 REVERT (ROUTE-A): the first swing after a "
+                         "RANGED approach arrives is 0x00A0 [4] alone, as every run "
+                         "before 2026-09-30 sent it -- no 0x009F [8, me, 1] hold and "
+                         "no 0x0028 [me] halt, so nothing stops the drawn body at "
+                         "range. KNOWN-BAD: retail's start batch carries both on 12 "
+                         "of 12 ranged approaches (20260929T150923 :55934 335.0923 "
+                         "and four more; three older captures).")
     ap.add_argument("--no-scythe-extras", action="store_true",
                     help="WEAPONS-W3 REVERT: a scythe swing lands on its target only. "
                          "Retail's scythe hits up to two more bodies inside ~80 u of the "
