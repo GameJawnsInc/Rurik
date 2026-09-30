@@ -748,6 +748,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
                          "adrenaline and skill family like the player's (107 / "
                          "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--no-hero-cast-e4", action="store_true",
+                    help="THE REVERT ARM for PENDSKILL: no 0x00E4 [hero, skill, 0] "
+                         "at a hero's cast start, and no 0x00E2 closing a hero's "
+                         "cast dropped by a death or a knock-down. Retail opens "
+                         "every hero cast with the E4 (50 of 50); without it the "
+                         "client holds no pending record and logs 'Pending skill "
+                         "N copy 0 not found' on every hero E3.")
     ap.add_argument("--no-wipe-shrine", action="store_true",
                     help="THE REVERT ARM for JARIN: a party wipe stands the "
                          "player up on the timer where it fell. Retail "

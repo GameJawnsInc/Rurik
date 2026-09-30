@@ -3508,6 +3508,25 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   check.
   Floor 56 from the bare green run (the tape adds 9: 65 vaulted). No socket, no client.
   ~20 s vaulted),
+  `toolkit/authsrv/test_pendskill.py` (**2026-09-30, PENDSKILL: a hero's cast opens the
+  client's pending record with `0x00E4 [hero, skill, 0]`, and every way it ends closes it
+  once.** The client's rule is read off the slice client's bytes: E2 and E3 share
+  `0x0091F650 -> 0x00823090`, which drops a reference and logs `Pending skill %u copy %d
+  not found` on a miss; E4 goes to `0x0091F670 -> 0x008148F0`, which adds one for any
+  agent but the observer. `client_ledger` replays what the server sends through that
+  rule. §1 a hero's Resurrection Signet through `ally_cast_tick`: the E4 is the first
+  message naming the hero and sits ahead of its `[60]`; the landing sends E5 then E3; 0
+  misses, 0 open. §2 the drops: a knock-down mid-cast (`[59]` then E2), a death mid-cast
+  through `kill_agent` (status, `[59]`, E2, the flags byte last -- retail's 609.252), an
+  interrupt (its E2 now counted), a transition (the tick's net), and a clean cast after
+  it. §3 a henchman sends no family. §4 the KNOWN-BAD arm `--no-hero-cast-e4`: no E4, so
+  the landing's E3 MISSES on the model, and a death sends no `[59]` / E2. §5 the switch.
+  §6 (vault) the rule against RETAIL: 126 connections, 473 presses, 0 misses, another
+  agent's 50 E4s = its 50 closes -- the model is checked before it judges ours. §7 (vault)
+  the slice client's table rows for E1..E5 ([descriptor, field count, handler]), E2 and E3
+  on one handler and E4 on another, the log string and its push, the add's call. Proved
+  red: `HERO_CAST_OPENS_E4 = False` in the source reddens 11. Floor 19 from the bare green
+  run (the vault adds 7: 26). No socket, no client. ~17 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
   0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`

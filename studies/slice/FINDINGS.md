@@ -3664,3 +3664,114 @@ each tested as the arm before today. The 15 s chain icon joined `combat_deadline
 plain swings): debit → E5 **0.150** for 782 and 780 and **0.067** under Frenzy (were
 0.500); Death Blossom 0.565 / 0.345; the next swing **0.766 s** behind a skill's hit
 (n = 1; was 0.565); the chain's 0 **15.000 s** behind the last hit (was 15.005).
+
+## SLICE-F52 — **PENDSKILL: a hero's cast opens with `0x00E4 [hero, skill, 0]`, and SLICE-F40's census missed it. Retail sends 50, one per hero cast, first in the segment; the client ADDS a pending record on it and drops one on E2 / E3. Without it every hero E3 logged `Pending skill N copy 0 not found` (2026-09-30)**
+
+### 52.1 The client's ledger — OBSERVED from the binary (the slice client, build 38797)
+
+The `0x00E1..0x00E8` receive rows sit at `0x00BC9790`, 12 bytes each, as
+**[descriptor, field count, handler]**, with the descriptor's dword 0 as the opcode.
+
+| op | fields | handler | reaches | what it does |
+|---|---|---|---|---|
+| E1 | 2 | `0x0091F630` | `0x00814860` (1 arg) | — |
+| E2 | 4 | `0x0091F650` | `0x008148C0 -> 0x00822B70 -> 0x00823090` | **drop** one reference; a miss logs the line |
+| E3 | 4 | `0x0091F650` | the same | **drop** |
+| E4 | 4 | `0x0091F670` | `0x008148F0 -> 0x00822B80 -> 0x00822F00` | **add** one, unless the agent equals `0x0080D3E0`'s return (read as the observer's own agent: authsrv's earlier "E4 returns early for your own", and 52.2's zero misses, CORROBORATED) |
+| E5 | 5 | `0x0091F690` | `0x00814920` (4 args) | — |
+
+**The functions.**
+- **The key** is `(skill << 16) | copy`, in the container at `+0xA8` of the agent's skillbar
+  entry (`0x00820F10`; the entry that also holds `+0xA4`, the hotKeyState mask of
+  studies/cmsg).
+- **The add** (`0x00822F00`) finds or inserts. A new record starts at refcount 1 and fires
+  event `0x1000005B`.
+- **The drop** (`0x00823090`) decrements, and removes the record at 0 with the same event.
+  On a miss it pushes `0x00A95C94`, `'Pending skill %u copy %d not found'`, at severity 2
+  (`0x008230E2`).
+- **The observer's own record** is added client-side at the press: `0x008167BA`, on the path
+  that sends `0x0046` / `0x0027`, which is why the E4 handler skips the observer.
+
+**How to read the rows.** The layout is fixed by the argument counts, not by the order of
+words in a row. E1's one-field handler pushes one argument, E5's four-field handler pushes
+four, and E6's and E7's push three. Read the other way round, [handler, descriptor, count],
+every handler is paired with the NEXT opcode. That reading was made once while tracing this,
+and never committed; it maps E2 → the E1 handler, E4 → the drop and E5 → the add. Its
+ledger misses 263 times on retail's own stream (52.2), which is how it was caught. Two older
+statements are the right ones:
+- `authsrv.py`'s note that E4's handler returns early for the observer;
+- `interrupt_body`'s "E2 shares E3's dispatch".
+
+### 52.2 The corpus — the rule as a positive control
+
+The rule, replayed over every live connection: the observer's press and another agent's E4
+add a record, and E2 / E3 drop one. **0 misses.**
+- 126 connections, 473 presses.
+- The observer's 349 E3 + 124 E2 = its 473 presses.
+- The hero's (agent 30, `20260914T005758 :56011`) 48 E3 + 2 E2 = its **50 E4s**.
+
+**Where the E4 sits** (the s2c messages naming the hero within ±0.06 s):
+- It is first in the hero's segment every time. Ahead of the debit (`0x00A2 [62]` or
+  `0x00D2`), of the `0x00A0 [50]` / `[60]` announce and of a `0x002A` move.
+- The two E2s are a `[45]` drop in the E4's own stamp, and **a death mid-cast**: 609.252 is
+  `0x00F1 [30, 16]`, `0x009C [30, 72]`, `0x009F [59, 30, 0]`, `0x00E2 [30, 1, 0]`,
+  `0x00D0 [30]`, `[41]`, `[43]`, `[42]`, `0x0026 [30, 8]`. The cast of skill 1 had opened
+  0.967 s before.
+
+**Henchmen:** 26 connections carry henchmen, and **0 of their 532 casts** carry any of the
+family. The E4 has the E3's gate.
+
+**SLICE-F40's table** counted `0x00E3` / `0x00E5` / `0x00E6` at 48 / 35 / 1 and did not
+count the E4. JARIN shipped what the table listed.
+
+### 52.3 Ours, before
+
+`hero_skill_messages` sent E5 + E3 at the landing and nothing at the start. So every hero
+E3 was a drop with no record: **495 of 495 hero E3s** in the harness captures since
+2026-09-14, and 69 of 69 on the party run `20260930T185003`. The player's own line has two
+sources:
+- **117 lines on an injected press.** `HARNESS SKILL PRESS` is `handle_skill_press` driven by
+  the action script: the client never pressed, and it skips an E4 naming its own agent.
+  **No server message can open that record, so this is the harness's limitation.**
+- **16 August lines:** a `PROBE[cast_anim]` raw E3, and pre-E4 history.
+
+The negative control: 114 client-driven presses in 47 runs since 2026-09-14, 0 lines.
+
+### 52.4 Shipped — `HERO_CAST_OPENS_E4`, `--no-hero-cast-e4` reverts
+
+- **The open.** `hero_skill_e4` sends the E4 from `ally_cast_tick` at the cast start, ahead
+  of the face and the announce, and counts it on the row (`hero_e4_open`).
+  - An instant skill's E4 goes out a tick ahead of its landing batch. That is the player's own
+    instant shape (E4 at the press, the batch on the next tick); retail stamps the hero's E4
+    with its batch. RECONSTRUCTION, within the named ≤ 50 ms residual.
+- **The closes.** Every close decrements the count, and **a drop sends E2 only against an
+  open count**, because an E2 is a drop too.
+  - **A death mid-cast:** `[59]` (`[49]` for an attack skill, none for an instant) then E2,
+    behind the morale word and ahead of the `0x00D0`. **OBSERVED 1 of 1**, the order of
+    609.252.
+  - **A knock-down mid-cast:** E2 behind the stop word `knock_down` already sends.
+    RECONSTRUCTION, the player's release.
+  - **A transition, or any cast the tick drops:** `ally_cast_tick`'s net.
+  - **An interrupt:** its E2 was already sent, and now counts. Before this, that E2 was a
+    miss too.
+
+`test_pendskill.py` replays each path through 52.1's rule (0 misses, 0 left open), checks
+the rule against 52.2's corpus and the rows against the binary, and goes red (11) with the
+switch off in the source.
+
+### 52.5 Also seen, not shipped — a hero's E5 rides only a real recharge
+
+The hero's 35 E5s are all on skills with a recharge (322 ×11, 346 ×17, 348 ×7: 3–4 s).
+Its **13 casts of zero-recharge skills** close with E3 and no E5: 382 ×7, 385 ×5, 2 ×1,
+each with recharge 0.0 in the table. `hero_skill_messages` sends `E5 [hero, skill, 0, 0]`
+for them. The client logs nothing for it. The player's side is not censused. This is open
+in `PLAN.md` §8.1.
+
+### 52.6 Labels
+
+- OBSERVED: the table rows, the functions and the log site (52.1), and the corpus counts
+  (52.2).
+- OBSERVED, 1 of 1: the death's close.
+- RECONSTRUCTION: the knock-down's close and the instant's E4 timing.
+- **Not confirmed on the client yet:** the run is the `revheal2` rig, predicting 0 lines
+  against 69.

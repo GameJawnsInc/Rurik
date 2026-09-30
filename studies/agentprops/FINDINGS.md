@@ -725,4 +725,4 @@ flags 5. That is 24 of 25 live rises, and the 25th is the flags alone.
 - **The complaint:** 0 `Health non-zero on resurrect`.
 - **The pools:** the first hit after each raise came off the full 140 (68 of 68).
 - **So the gain lands clean on all three paths:** NPC 0 of 5, player 0 of 15, party body 0 of 69.
-- **A different severity-2 line appeared once per cast:** `Pending skill 2 copy 0 not found`. That is our `0x00E3` SKILL_ACTIVATED, not the rise (PLAN-LOG, "REVIVE-HEAL, the party body's client run").
+- **A different severity-2 line appeared once per cast:** `Pending skill 2 copy 0 not found`. That is our `0x00E3` SKILL_ACTIVATED, not the rise (PLAN-LOG, "REVIVE-HEAL, the party body's client run"). The cause is a hero's missing `0x00E4`, which opens the client's pending record; fixed as PENDSKILL (PLAN-LOG "PENDSKILL", studies/slice SLICE-F52).

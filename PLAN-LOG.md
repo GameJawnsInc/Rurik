@@ -28,6 +28,79 @@ move back.
 
 ---
 
+### PENDSKILL -- 2026-09-30 -- **the "Pending skill N copy 0 not found" line is a hero's missing 0x00E4: retail opens every hero cast with it (50 of 50), JARIN never sent it, and every hero E3 since 2026-09-14 dropped a record the client never held (495 of 495). Shipped behind `--no-hero-cast-e4`, with the death and knock-down closes, and tested against the client's own ledger rule. It is NOT yet confirmed on the client.**
+
+**Where the line comes from.** OBSERVED from the slice client's bytes (build 38797; study
+[studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F52).
+- **The receive table's rows are [descriptor, field count, handler].** While tracing this
+  they were once read as [handler, descriptor, field count] (never committed), which pairs
+  every handler with the NEXT opcode. Two things refute that reading. The argument counts:
+  E1's one-byte payload goes to the handler that pushes one argument, and E5's four to the
+  one that pushes four. And the census below.
+- **E2 and E3** share `0x0091F650 -> 0x008148C0 -> 0x00822B70 -> 0x00823090`. That drops one
+  reference from the record keyed `(skill << 16) | copy` in the agent's skillbar entry
+  (`+0xA8`), and logs `Pending skill %u copy %d not found` (`0x00A95C94`, pushed at
+  `0x008230E2`) when there is none.
+- **E4** goes to `0x0091F670 -> 0x008148F0`, which returns for the observer's own agent and
+  otherwise ADDS one (`0x00822B80 -> 0x00822F00`: refcount 1, event `0x1000005B`).
+- **The observer's record** is added by its own press (`0x008167BA`, beside the `0x0046` /
+  `0x0027` send).
+
+**The census, with the rule as a positive control.** The rule, replayed over the live
+corpus: the observer's press and another agent's E4 add a record, and E2 / E3 drop one.
+- **Retail misses 0 times:** 126 connections, 473 presses; the observer's 349 E3 + 124 E2 =
+  473, and the hero's 48 E3 + 2 E2 = its 50 E4s.
+- **The same rule under the refuted row reading misses 263 times on retail's own stream.**
+  That reading cannot be right, which is how it was caught.
+- **The harness since 2026-09-14:** 66 runs carry the line, and every one is explained.
+  - 495 of 495 hero E3s.
+  - 117 lines on an **injected** press (`HARNESS SKILL PRESS ... NOT by a key`). The client
+    never pressed, and it drops an E4 naming its own agent, so no server message can open
+    that record. That is the harness's limitation, not a server defect.
+  - 16 August runs: a `PROBE[cast_anim]` raw E3, and pre-E4 history.
+- **The negative control:** 114 client-driven player presses in 47 runs, 0 lines.
+- **Henchmen:** 0 of 532 retail henchman casts carry any of the family.
+
+**Shipped** (`HERO_CAST_OPENS_E4`, `--no-hero-cast-e4` reverts).
+- **`hero_skill_e4`:** the E4 at the cast start in `ally_cast_tick`, first in the hero's
+  segment, ahead of its `[60]` / `[50]`. It has the E3's gate (a hero, never a henchman). An
+  instant skill's E4 goes a tick ahead of its landing batch: the player's own instant shape,
+  where retail stamps the E4 with the batch.
+- **Every drop closes against an exact count** on the row (`hero_e4_open`), because an E2
+  drops a reference too, so an unmatched one logs the same line:
+  - **A death mid-cast:** `[59, hero, 0]` then E2 behind the morale word, ahead of the
+    `0x00D0` (OBSERVED 1 of 1: `20260914T005758 :56011` 609.252, the hero's skill 1 begun
+    0.967 s before its death). An instant sends no stop word, and an attack skill's is `[49]`
+    (RECONSTRUCTION, knock_down's own form).
+  - **A knock-down mid-cast:** the E2 behind the stop word it already sent. This is
+    RECONSTRUCTION: the player's knock-down releases with E2.
+  - **A transition or any other drop:** caught by `ally_cast_tick`'s net.
+  - **The interrupt's E2** (already sent) now counts against the record. Before this fix
+    that E2 was a miss too.
+
+**Tests.** `test_pendskill.py` is new: 19 checks bare, 26 with the vault.
+- It replays our hero casts through the client's rule: 0 misses and 0 records left open,
+  across the landing, knock-down, death, interrupt and transition.
+- The known-bad arm MISSES, and so does the retail control.
+- The binary checks the table rows, the log string's push and the add's call.
+- `HERO_CAST_OPENS_E4 = False` in the source reddens 11.
+- Affected tests green: agentlife, instantannounce, interrupt, heroskilltoggle, bodywindup,
+  castgate, guards, mechanics, daggers, killxp, labelconsumers, recharge, skilldamage,
+  weapons, loot, shouts, pools, partyrow, secondary, heroinvorder, plus the four lints.
+- **`test_checks` was red on main, from this session's `eefcfeed`.** Its §8.1 item took
+  `PLAN.md` §8 to 40,224 bytes against the 40,000 ceiling, and that commit ran the lints
+  but not `test_checks`. This commit's two §8.1 items are one line each, as §8's own rule
+  asks, with the detail in SLICE-F52. §8 is now 39,889 bytes and `test_checks` is green
+  (20).
+
+**Left open, separately.**
+- **The client run:** the two-hero `revheal2` rig again. The prediction is 0 `Pending skill`
+  lines against 69 before.
+- **A hero's E5 on a zero-recharge skill:** retail sends none. Its 35 hero E5s are all on
+  skills with recharge (322, 346, 348). Its 13 casts of 382 ×7, 385 ×5 and 2 ×1 (recharge
+  0.0 in the table) close with E3 alone. We send `E5 [hero, skill, 0, 0]`. The client logs
+  nothing for it; this is fidelity only, and the player's side is not yet censused.
+
 ### REVIVE-HEAL, the party body's client run -- 2026-09-30 -- **69 hero raises by Resurrection Signet, every one retail's segment, 0 resurrect complaints, the risen hero at full health on both sides. SANDBOX U2 answered in part. And a separate, pre-existing client error is traced to our `0x00E3`**
 
 **The rig.** Spec `revheal2`, compiled by `sandbox.py` into `vault/sandbox/revheal2`.

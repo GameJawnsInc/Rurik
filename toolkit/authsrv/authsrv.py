@@ -6536,6 +6536,31 @@ GAME_SMSG_INVENTORY_DESTROY = 0x0145
 # skill family (0x00E3 48, 0x00E5 35, 0x00E6) are on the wire like the
 # player's; a HENCHMAN's never are (0 on eleven henchman bodies).
 HERO_WIRE_POOLS = True         # False (--hero-silent-pools): the pre-JARIN silence.
+# PENDSKILL (2026-09-30): A HERO'S CAST OPENS WITH 0x00E4 [hero, skill, 0], because the
+# client keeps a ledger of casts in flight and 0x00E2 / 0x00E3 CLOSE its records.
+# OBSERVED from the binary (the slice client, build 38797): the receive table's
+# 12-byte entries are [descriptor, field count, handler] -- E1's one-byte payload
+# goes to the handler that pushes one argument, E5's four to the one that pushes
+# four -- and they route E2 and E3 to 0x0091F650 -> 0x00823090, which drops one
+# reference from the record keyed (skill << 16) | copy in the agent's skillbar entry
+# (+0xA8) and logs 'Pending skill %u copy %d not found' when there is none; E4 goes
+# to 0x0091F670 -> 0x008148F0, which ADDS one (0x00822F00, refcount 1, event
+# 0x1000005B) for any agent but the observer, whose own press adds its record
+# client-side (0x008167BA). JARIN sent a hero's E5 and E3 and never the E4 retail
+# opens every hero cast with -- 50 of 50 on 20260914T005758, first in the body's
+# segment, and 50 = its 48 E3 + 2 E2 exactly -- so every hero E3 missed: 495 of
+# 495 on the harness since 2026-09-14, 69 of 69 on the party run 20260930T185003.
+# That ledger replayed over the live corpus misses 0 of 523 closes; 0 of 532
+# henchman casts carry any of the family (hero_skill_e4's gate). The drops close
+# too, and only against an open record (an E2 drops a reference like the E3, so an
+# unmatched one logs the same line): a death mid-cast is [59] + E2 behind the
+# morale word (OBSERVED 1 of 1, 609.252), a knock-down mid-cast adds the E2 behind
+# the stop word it already sent (RECONSTRUCTION, the player's release). The
+# harness's injected press (HARNESS SKILL PRESS, 117 lines on the player since
+# 2026-09-14) is NOT this: the client never pressed, and it drops an E4 naming its
+# own agent, so nothing a server sends can open that record. --no-hero-cast-e4 is
+# the pre-fix arm: no E4 and none of the closes below.
+HERO_CAST_OPENS_E4 = True      # False (--no-hero-cast-e4): no E4, every hero E3 misses.
 # WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
 # on plane 19), the hero's body deleted and re-created, both raised at full
 # health with the maxima kept, no 0x01D8 (340.21 s; three earlier tapes the
@@ -12329,7 +12354,9 @@ GAME_SMSG_SKILL_ACTIVATED = 0x00E3
 # 0x00E4: the broadcast half of activation. OBSERVED: all 7 in the corpus name
 # the PLAYER's own agent, so the real server broadcasts uniformly and relies on
 # the receiver's self-discard (the early return measured above). It contributes
-# nothing to the caster's own feedback; it is sent for wire fidelity.
+# nothing to the caster's own feedback; it is sent for wire fidelity. For ANY
+# OTHER agent it is load-bearing: its handler ADDS the pending record the E3 / E2
+# drops (PENDSKILL, HERO_CAST_OPENS_E4 below) -- a hero's cast opens with it.
 #
 # 0x00E5: activation completes and recharge STARTS. Its trailing dword is the
 # recharge in whole seconds, and it is the first client-side constant ever
@@ -22781,6 +22808,7 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
         if hero:
             send(GAME_SMSG_SKILL_REFUSED, [agent_id, int(skill_id), 0],
                  f"interrupted: E2 releases hero agent {agent_id}'s skill {skill_id}")
+            hero_e4_closed(agent, skill_id)                        # PENDSKILL
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_INTERRUPTED, agent_id, 0],
              f"interrupted: agent {agent_id}'s stagger (skill {by_skill})")
@@ -28215,6 +28243,11 @@ def knock_down(send, state, agent_id, conn_id, why, seconds=None):
                       agent_id, 0],
                      f"{'attack_skill' if _atk else 'skill'}_stopped: agent {agent_id} is "
                      f"knocked down mid-cast of skill {sid} -- no [35] [CASTAI-ZF17]")
+        if slot is not None and slot < len(skills):
+            # PENDSKILL: a hero's open record closes behind the stop word -- the
+            # player's knock-down releases its cast with E2 the same way
+            # (_mark_cancelled -> release_cancelled_cast). RECONSTRUCTION.
+            hero_cast_drop(send, agent_id, row, skills[slot][0], "knocked down mid-cast")
         row["cast_lands_at"] = None
         row["casting"] = None
         if row.get("follow") or row.get("moving"):
@@ -30001,6 +30034,12 @@ def ally_cast_tick(send, state, conn_id):
         # against a stale clock on the first tick after.
         if agent.get("dead") or (agent.get("effects", 0)
                                  & agents.EFFECT_TRANSITION):
+            # PENDSKILL: a record still open here is closed (the death closed its
+            # own in hero_death_tick; this is the transition's, and the net).
+            _slot, _sk = agent.get("casting"), agent.get("skills") or ()
+            if _slot is not None and _slot < len(_sk):
+                hero_cast_drop(send, agent_id, agent, _sk[_slot][0],
+                               "the body dropped its cast")
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
@@ -30144,6 +30183,8 @@ def ally_cast_tick(send, state, conn_id):
                 state, agent_id, activation, _interval)             # CASTAI-ZF16
         else:
             agent["cast_lands_at"] = now + activation
+        # PENDSKILL: the hero's E4 opens the cast, first in its segment (50 of 50).
+        hero_skill_e4(send, agent_id, agent, skill_id)
         face_player(send, state, agent_id, agent, conn_id,
                     at=target_pos(state, target))
         if _atk:
@@ -30982,6 +31023,59 @@ def hero_skill_e3(send, agent_id, row, skill_id):
         return
     send(GAME_SMSG_SKILL_ACTIVATED, [agent_id, int(skill_id), 0],
          f"SKILL_ACTIVATED(hero agent {agent_id}, skill {skill_id}) [JARIN]")
+    hero_e4_closed(row, skill_id)                                  # PENDSKILL
+
+
+def hero_skill_e4(send, agent_id, row, skill_id):
+    """PENDSKILL: the hero's 0x00E4 [hero, skill, 0] at its cast START -- the
+    client ADDS its pending record for the cast (0x008148F0 for any agent but the
+    observer), which the E3 or an E2 closes. First in the body's segment on retail
+    (50 of 50): ahead of the debit, the [50] / [60] and the move. An INSTANT skill's
+    goes here too, a tick ahead of its landing batch -- the player's own instant
+    shape (its E4 at the press, the batch on the next tick), where retail stamps
+    the E4 with the batch. The E3's gate: a henchman sends none. Counts the record
+    on the row so the drops close only what is open."""
+    if (not HERO_CAST_OPENS_E4 or not HERO_WIRE_POOLS or hero_body_id(row) is None
+            or not skill_id):
+        return
+    send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST, [agent_id, int(skill_id), 0],
+         f"SKILL_ACTIVATED_BROADCAST(hero agent {agent_id}, skill {skill_id}): the "
+         f"client's pending record opens [PENDSKILL]")
+    _open = row.setdefault("hero_e4_open", {})
+    _open[int(skill_id)] = _open.get(int(skill_id), 0) + 1
+
+
+def hero_e4_closed(row, skill_id):
+    """PENDSKILL: one E3 / E2 closed a record on the client; the row's count
+    follows. True when a record was open."""
+    _open = (row or {}).get("hero_e4_open") or {}
+    n = _open.get(int(skill_id), 0)
+    if n <= 0:
+        return False
+    if n == 1:
+        del _open[int(skill_id)]
+    else:
+        _open[int(skill_id)] = n - 1
+    return True
+
+
+def hero_cast_drop(send, agent_id, row, skill_id, why, stop=False, attack=False):
+    """PENDSKILL: a hero's cast that ENDS without its E3 closes the client's
+    record with 0x00E2 [hero, skill, 0] -- only when hero_skill_e4 opened one.
+    `stop` puts the stop word ([59], [49] for an attack skill) ahead of it, the
+    death's shape (609.252: 0x009F [59, 30, 0], E2 [30, 1, 0])."""
+    if not skill_id or not (row or {}).get("hero_e4_open", {}).get(int(skill_id)):
+        return False
+    if stop:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_SKILL_STOPPED if attack else agents.GV_SKILL_STOPPED,
+              agent_id, 0],
+             f"{'attack_skill' if attack else 'skill'}_stopped: hero agent {agent_id}'s "
+             f"skill {skill_id} ({why}) [PENDSKILL]")
+    send(GAME_SMSG_SKILL_REFUSED, [agent_id, int(skill_id), 0],
+         f"E2 closes hero agent {agent_id}'s pending skill {skill_id} ({why}) [PENDSKILL]")
+    hero_e4_closed(row, skill_id)
+    return True
 
 
 def hero_skill_messages(send, state, agent_id, row, skill_id, recharge, now,
@@ -31036,6 +31130,21 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
     if after != before:
         send(GAME_SMSG_AGENT_MORALE, [agent_id, after],
              f"morale {morale.display(after)} on hero agent {agent_id} (died) [JARIN]")
+    # PENDSKILL: A DEATH MID-CAST closes the cast -- [59, hero, 0] then E2 [hero,
+    # skill, 0], behind the morale word and ahead of the 0x00D0 (OBSERVED 1 of 1:
+    # 20260914T005758 :56011 609.252, the hero's skill 1 begun 0.967 s before). An
+    # instant skill's carries no stop word (knock_down's rule: it has no window);
+    # an attack skill's is [49] by the same site's form (RECONSTRUCTION).
+    _slot, _sk = row.get("casting"), row.get("skills") or ()
+    if _slot is not None and row.get("cast_lands_at") is not None and _slot < len(_sk):
+        _sid = _sk[_slot][0]
+        _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(_sid)
+        if hero_cast_drop(send, agent_id, row, _sid, "died mid-cast",
+                          stop=not (INSTANT_ANNOUNCE and not _atk
+                                    and _is_instant_skill(_sid)),
+                          attack=_atk):
+            row["cast_lands_at"] = None
+            row["casting"] = None
     hero_pool_clear(send, state, agent_id, row, "died")
     if after != before:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -45794,6 +45903,13 @@ def main():
         HERO_WIRE_POOLS = False
         print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
               "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
+              flush=True)
+    if a.no_hero_cast_e4:
+        global HERO_CAST_OPENS_E4
+        HERO_CAST_OPENS_E4 = False
+        print("[map] --no-hero-cast-e4: no 0x00E4 at a hero's cast start and no E2 "
+              "closing its drops -- every hero E3 logs 'Pending skill N copy 0 not "
+              "found' on the client (retail opens 50 of 50) [PENDSKILL revert]",
               flush=True)
     if a.no_wipe_shrine:
         global WIPE_SHRINE

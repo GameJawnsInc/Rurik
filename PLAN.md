@@ -2311,14 +2311,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **A skill's completion names a pending record the client does not hold** (PLAN-LOG
-  "REVIVE-HEAL, the party body's client run"). `Error: Pending skill N copy 0 not found`
-  appears in 61 harness runs since 2026-09-14, on many skills including the player's, and
-  was 69 of 69 for the heroes' signets on `20260930T185003`.
-  - **The static trace:** the handler `0x0091F650`, which is shared by `0x00E2` and our
-    `0x00E3` SKILL_ACTIVATED, calls `0x00823090`. That looks up `(skill << 16) | copy` in
-    the character's `+0xA8` and logs when the key is missing.
-  - **The question:** what should create that record, since we send no such message.
+* **PENDSKILL's client run** ([SLICE-F52](studies/slice/FINDINGS.md)): the `revheal2` rig
+  again, predicting 0 `Pending skill` lines against 69 (an injected player press still logs one).
+* **A hero's E5 on a zero-recharge skill** (SLICE-F52 52.5): retail sends none (13 of 13); we
+  send `E5 [hero, skill, 0, 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a
