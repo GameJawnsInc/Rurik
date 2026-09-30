@@ -82,10 +82,14 @@ a check:
       any of its four terms (the death flag, a damage word at the agent, the
       order, the value) and it is `unexplained` again.
 
-Sections 1-3 need no captures and no client; 4-7 and 12 need
-`vault/captures/live/`; 8-11 and 13 need the pinned build-38797 image. The last two groups declare skips, the
-first does not, which is `test_pools`' split: the content overlay regenerates
-from the owner's install and a machine without it should go RED.
+Sections 1, 2 and 3b need nothing outside the repo; 3 needs the vault's
+content overlay (`vault/content/`); 4-7 and 12 need `vault/captures/live/`;
+8-11 and 13 need the pinned build-38797 image. Each of the last three declares
+a skip when its fixture's directory is absent, and only then. §3 went RED
+instead until 2026-09-30, citing `test_pools`' split; that split had moved on
+2026-08-31 (`3d1baba2`: `test_pools._needs_skill_rows` skips a section whose
+subject is a cost read from the overlay, because a stub would re-measure the
+stub), and §3's subject is exactly that.
 
 READ-ONLY throughout. The client image is opened, never launched and never
 written. Python 3 standard library only.
@@ -107,44 +111,50 @@ sys.path.insert(0, os.path.join(TOOLKIT, "schema"))
 sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
 import checks  # noqa: E402
 
-# FLOOR 15, and it is the MANDATORY CORE rather than the full count, which is
+# FLOOR 12, and it is the MANDATORY CORE rather than the full count, which is
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
-# BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
-# guess and neither is above what a run produces: a full green run on this
-# machine executes 72 (55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28;
+# BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED, neither is a guess and neither
+# is above what a run produces: a full green run on this machine executes 97
+# (72 on 2026-08-21; 55 until 12-13 landed; 91 since CASTAI-Z1, 2026-09-28;
 # 95 since CASTAI-Z2, 2026-09-29: +3 for 3b's synthetic arms, +1 for the
 # Smiting Monks' tape pinned whole -- measured 95 on the green run; 96 since
 # the CASTAI-Z2 round-1 review, 2026-09-29: +1 for 3b's wordless-death arm,
 # measured 96; 97 since the round-2 review, 2026-09-29: +1 for 3b's
-# value-term arms, measured 97), and a run with neither the captures nor the
-# pinned image executes 15 (10 until CASTAI-Z2; 2026-09-29, CASTAI-Z2 + its
-# review: +4 -- 3b's synthetic arms run without fixtures, measured 14 with
-# `RURIK_VAULT` at an empty directory; 2026-09-29, CASTAI-Z2 round-2 review:
-# +1 -- 3b's value-term arms, measured 15 the same way -- and the floor
-# follows that measurement as the new mandatory core) -- forced by pointing
-# `RURIK_VAULT` at an empty directory,
-# which also turns §3 RED (a failure, not a skip: 3 failures when this was
-# written, 1 on the 2026-09-29 measurement -- the off-grid census over 0 rows;
-# the control and the width check pass on the content overlay alone) because
-# the content overlay is NOT
-# in the skippable half. That is `test_pools`' split and the reason for it: the
-# overlay regenerates from the owner's own install via
-# `skilltable.py --emit-content`, so a machine without it should go red rather
-# than quietly check the schema and stop.
+# value-term arms, measured 97), and a run with no vault executes 12 and
+# declares three skips -- §3, the live corpus, the pinned image -- measured
+# GREEN on 2026-09-30 with `RURIK_VAULT` at a nonexistent path and again at
+# an empty directory: §1's five, §2's two, §3b's five.
+#
+# IT WAS 15 UNTIL 2026-09-30, AND 15 WAS MEASURED ON A RED RUN (10 until
+# CASTAI-Z2, +4 and +1 for 3b's arms). It counted §3's three checks, and §3
+# went RED bare by design -- "the content overlay is NOT in the skippable
+# half ... a machine without it should go red rather than quietly check the
+# schema and stop", `test_pools`' split as it stood on 2026-08-21. That split
+# moved ten days later (see the module docstring) and this file never
+# followed. What a bare §3 read was not the overlay either: it was the
+# fourteen tracked rows in content/overrides/skills_38888.toml, which this
+# comment called "the content overlay" -- so the census failed "0 over 0
+# rows" on a selection, and the control and width check passed on it. §3 now
+# skips on the overlay's DIRECTORY (`section_cost_column` says why not a
+# fixture),
+# and a vault whose `content/` is present but empty still reddens §3:
+# measured the same day, 14 pass, 1 fail, the census.
 #
 # THE CAPTURES ARE SKIPPABLE because they are not regenerable at all -- six live
 # sessions against ArenaNet plus eight loopback-era ones, and no procedure in
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
+# THE OVERLAY is skippable for a third reason: it regenerates, but not from
+# anything in the repo, and §3's subject is the column itself.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 15 of 97 is a weak
-# backstop and a reader should not over-read it: on a machine that HAS both
-# fixtures, one section quietly ceasing to run would still clear 15. The guards
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 12 of 97 is a weak
+# backstop and a reader should not over-read it: on a machine that HAS the
+# fixtures, one section quietly ceasing to run would still clear 12. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
 # capture, connection and message counts, so a corpus walk that visited less
 # goes red instead of silent, and §8 prints the image it read and then makes
 # four assertions about it. The floor's job here is the fixture-less run.
-LEDGER = checks.Ledger("the adrenaline wire model", floor=15)
+LEDGER = checks.Ledger("the adrenaline wire model", floor=12)
 
 # ---------------------------------------------------------------------------
 # THE FAMILY. Ours: NOT FOUND in GWCA, OpenTyria, Headquarter, GWLP-R,
@@ -675,7 +685,8 @@ ASSERTS = {
 
 
 # ---------------------------------------------------------------------------
-# 1-3: no captures, no client. The mandatory core.
+# 1-3: no captures, no client. 1, 2 and 3b are the mandatory core; 3 reads the
+# vault's content overlay and declares a skip without it.
 
 
 def section_schema():
@@ -752,7 +763,27 @@ def section_cost_column():
     """
     print("\n3. the client's own adrenaline cost column, in raw units")
     import content
-    rows = content.load().rows("skills")
+    import vaultpath
+    # THE COLUMN IS THE SUBJECT, SO THIS SKIPS RATHER THAN STUBS (2026-09-30) --
+    # `test_pools._needs_skill_rows`' rule. The column is vault-only
+    # (`skilltable.py --emit-content`); the one tracked skills file,
+    # content/overrides/skills_38888.toml, holds the fourteen rows 38888 MOVED,
+    # every one onto the strike grid, so a bare census reads "0 over 0 rows" by
+    # selection, and a fixture carrying an 80 would only re-measure the fixture.
+    # Keyed on the overlay's DIRECTORY, never on a short column: an overlay that
+    # is present but thin still goes RED below, which is the half of the old
+    # "a machine without it should go red" that was worth keeping.
+    try:
+        overlay = vaultpath.require_dir("content", why="section 3, ArenaNet's "
+                                        "adrenaline cost column")
+    except SystemExit as ex:
+        LEDGER.skip("the client's adrenaline cost column (section 3)",
+                    f"no content overlay here ({ex}). The column is read out of "
+                    f"the owner's install by skilltable.py --emit-content; the "
+                    f"tracked rows are the 38888 moves, all on the grid, so the "
+                    f"census over them would be a statement about the selection")
+        return
+    rows = content.load(vault_dir=overlay).rows("skills")
 
     costs = collections.Counter()
     for _id, row in rows.items():
