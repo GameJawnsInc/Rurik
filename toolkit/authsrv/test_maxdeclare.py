@@ -1,9 +1,10 @@
-"""A held item's maximum health moves the player's 0x009F 42 -- RANGERPRE-S11
-(MAXHP-2), studies/presearing/RANGERPRE.md.
+"""When a maximum health goes on the wire (0x009F 42) -- a held item's moves the
+player's (RANGERPRE-S11, MAXHP-2), and an NPC's rides the player's first landed
+word, not its create (RANGERPRE-S10, MAXHP-1). studies/presearing/RANGERPRE.md.
 
     python toolkit/authsrv/test_maxdeclare.py
 
-WHAT THIS PINS, and what each part rests on:
+WHAT THIS PINS, and what each part rests on (§1-§3 MAXHP-2, §4-§6 MAXHP-1):
 
   * §1 RETAIL (OBSERVED, vault-gated; capture 20260929T150923, the Reforged
     pre-Searing Ranger, 11 game connections -- the live root absent is a
@@ -41,17 +42,45 @@ WHAT THIS PINS, and what each part rests on:
     batch, and in select_weapon_set after the energy pair with the bonus read
     before the hands change; HELD_HEALTH True at module level, and
     --no-held-health parsing and flipping it in main().
+  * §4 RETAIL, MAXHP-1 (OBSERVED, the same capture, plus the MANTID tape
+    20260913T210901 for Empathy): 526 NPC-class create intervals, 12 carry a
+    42, and each is the message immediately before the observer's first 0x00A3
+    on the body at the same wire t -- 0 declared-unhit, 0 hit-undeclared (the
+    exact 12 are pinned); :53756's moved maximum (64 -> 52) re-declared at
+    1117.382 right before [16, 30, 9, f]; Empathy's first word on each of four
+    agents carries [42, a, 25], its 4 later words none.
+  * §5 OURS, MAXHP-1, bare machine through the real functions: the create burst
+    withholds an NPC's 42 and marks the tracker stale; the player's first landed
+    hit declares it immediately before the word, after the chain state (0x005C),
+    and the hit after none; a blocked hit sends none and the next landed one
+    declares; a Deep Wound (64 -> 52) re-declares 52 on the next hit (RANGERPRE-S1's
+    value); a re-create (the burrow's) re-declares; a party hit (hurt_agent_row)
+    declares nothing; the scythe's extra hit declares right before its word;
+    Empathy (armour_ignoring_damage's default) declares on the player's first word
+    only and never on a hero's; a party body keeps its create-time 42 (PARTYMAX, a
+    follow-up); the deferred refill's 42 marks the tracker; the KNOWN-BAD arm
+    (--npc-max-at-create) puts the 42 back in the burst, the first hit then
+    sends none, and every Empathy word declares whatever its source. The
+    preparation splash's neighbour (INFERRED, no retail witness) needs the
+    overlay's skill 431 rows and declares a skip without them.
+  * §6 SOURCE: declare_body_max_on_hit called exactly once in each of the four
+    player damage sites and nowhere else, the hit's and the scythe's AFTER
+    everything else they send and right before the word, no inline
+    PROP_HEALTH_MAX left in either; create_agent_world's gate;
+    NPC_MAX_AT_CREATE False at module level, --npc-max-at-create parsing and
+    flipping it in main().
 
-MAXHP-1 (an NPC's maximum declared on the player's first landed hit) is a
-separate step and is not pinned here. Floor from the green run (the ledger line).
+Floor from the green run (the ledger line).
 """
 import ast
 import contextlib
 import inspect
 import io
 import os
+import random
 import sys
 import threading
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -65,7 +94,7 @@ import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 import combatmath                                            # noqa: E402
 
-led = checks.Ledger("a held item's maximum health (RANGERPRE-S11)", floor=22)   # 2026-09-29: 20 from the first green run with the vault (§1 5, §2 11, §3 4); 22 at RANGERPRE-S21 (critic C10: §1's LATER_LOADS pin, §2's LATER LOAD drive, both vault-gated); a bare machine (RURIK_VAULT at an empty directory) runs 14 and declares §1 and the two load checks skipped, under the floor on purpose -- the retail fixture counts inside it, so a missing capture is RED
+led = checks.Ledger("maximum-health declarations (RANGERPRE-S10, S11)", floor=44)   # 2026-09-29: 20 from the first green run with the vault (§1 5, §2 11, §3 4); RANGERPRE-S21 +2 (critic C10: §1's LATER_LOADS pin, §2's LATER LOAD drive, both vault-gated); 2026-09-30 RANGERPRE-S10 (MAXHP-1) +22 (§4 4, §5 14, §6 4); merged on rangerpre 2026-09-30 (S10 + S21): 44 with the vault, 31 bare (both measured) -- a bare machine (RURIK_VAULT at an empty directory) runs fewer and declares §1, §4, the load checks and the splash skipped, under the floor on purpose -- the retail fixtures count inside it, so a missing capture is RED
 
 INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT             # 0x009F
 CHG = authsrv.GAME_SMSG_ITEM_CHANGE_LOCATION                  # 0x014B
@@ -95,7 +124,9 @@ _saved = {k: getattr(authsrv, k) for k in
           ("PERSIST", "ITEM_MOVES_ENABLED", "EXPLORABLE", "OUTPOST", "EQUIP_WEAPON",
            "EQUIP_ARMOUR", "EQUIP_COSTUME", "EQUIP_COSTUME_HEAD", "WEAPON_SETS",
            "PLAYER_SWING_DAMAGE", "WEAPON_ATTACK_SPEED", "ATTACK_INTERVAL",
-           "HELD_HEALTH", "SPAWN_PROFESSION", "SPAWN_SECONDARY", "HAND_RESTORE")}
+           "HELD_HEALTH", "SPAWN_PROFESSION", "SPAWN_SECONDARY", "HAND_RESTORE",
+           "NPC_MAX_AT_CREATE", "DEEP_WOUND", "blocks")}
+_saved_random = random.random
 _saved_off, _saved_wpn = authsrv.agents.PLAYER_OFFHAND, authsrv.agents.PLAYER_WEAPON
 _saved_slots, _saved_over = dict(authsrv.WEAPON_SET_BACKPACK_SLOTS), dict(authsrv.SET_ITEMS_OVERRIDE)
 _saved_bar = list(authsrv.SKILLBAR)
@@ -142,9 +173,9 @@ def fresh(*, with_564, held=True, set0_off=None):
     return st, items, sid
 
 
-def quiet(fn, *args):
+def quiet(fn, *args, **kw):
     with contextlib.redirect_stdout(io.StringIO()):
-        return fn(*args)
+        return fn(*args, **kw)
 
 
 # ---- §1 retail ----------------------------------------------------------------------
@@ -167,7 +198,7 @@ def section_retail():
     except (Exception, SystemExit) as exc:                     # noqa: BLE001
         # require_dir raises SystemExit on a bare machine (test_srclint's rule)
         led.skip("1. retail's shield equip", f"no live captures: {exc} -- 6 checks")
-        return
+        return None
     import livewire
     import adrenjoin
     cap = vaultpath.vault_path("captures", "live", TAPE)
@@ -180,7 +211,7 @@ def section_retail():
            f"connections, origin live, every one decoding closed (a FAIL, never a skip)",
            f"{len(files)} files, ok {[ok for _c, _m, ok in decoded.values()]}")
     if not files or not ok_all:
-        return
+        return {}
     wit = [g for g in files if EQUIP_CONN in g]
     merged = decoded[wit[0]][1] if len(wit) == 1 else []
     s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
@@ -252,6 +283,7 @@ def section_retail():
            ":59427 t=1217.429 -- the loads after the in-game equip, which §2's LATER LOAD drive "
            "reproduces under --hand-restore",
            f"{sorted(pinned)}")
+    return decoded
 
 
 # ---- §2 ours --------------------------------------------------------------------------
@@ -495,11 +527,418 @@ def section_source():
            "off) and main() sets the global False under it", f"{top}, {len(flips)} of 2")
 
 
+# ---- §4 retail: an NPC's maximum (MAXHP-1) ---------------------------------------------
+
+FLT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET    # 0x00A3
+assert FLT == 0x00A3
+NPC_INTERVALS = 526
+# OBSERVED (connection port, agent, wire t, max): every NPC-class 42 on the tape, each
+# the message immediately before the observer's first 0x00A3 on the body, same t.
+RETAIL_NPC_DECLARED = sorted([
+    ("53756", 22, 1046.303, 64), ("53756", 28, 1089.022, 64), ("53756", 30, 1113.41, 64),
+    ("53756", 27, 1132.708, 64), ("55934", 43, 261.606, 8), ("55934", 45, 336.622, 80),
+    ("55934", 46, 380.837, 4), ("55934", 48, 414.32, 64), ("55934", 61, 455.167, 64),
+    ("55934", 215, 516.989, 96), ("55934", 161, 565.03, 80), ("56025", 56, 838.445, 112)])
+MANTID_TAPE, MANTID_CONN = "20260913T210901", "_60877-"
+EMPATHY_AGENTS = (18, 24, 26, 32)
+
+
+def npc_intervals(s2c, me):
+    """{(agent, create index): (first 42 (j, t, max) | None, observer's first 0x00A3
+    (j, t) | None)} over the NPC-class creates (0x0020 v[2] >> 28 == 2)."""
+    cur, tag, first42, firsthit = {}, {}, {}, {}
+    for j, (t, op, v) in enumerate(s2c):
+        if op == 0x0020:
+            cur[v[1]] = (v[1], j)
+            tag[(v[1], j)] = v[2] >> 28
+        elif op == INT and len(v) > 3 and v[1] == P42 and v[2] in cur:
+            first42.setdefault(cur[v[2]], (j, t, v[3]))
+        elif op == FLT and len(v) > 4 and v[3] == me and v[2] in cur:
+            firsthit.setdefault(cur[v[2]], (j, t))
+    return {k: (first42.get(k), firsthit.get(k)) for k, g in tag.items() if g == 2}
+
+
+def section_npc_retail(decoded):
+    print(f"\n4. retail: an NPC's maximum rides the player's first landed word, {TAPE}")
+    if decoded is None:
+        led.skip("4. retail's NPC maximum", "no live captures (section 1's skip) -- 4 checks")
+        return
+    import adrenjoin
+    import livewire
+    import vaultpath
+    total, declared, unhit, undeclared = 0, [], [], []
+    per = {}
+    for g, (_c, merged, _ok) in decoded.items():
+        s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
+        me = adrenjoin.whose_agent(s2c)
+        port = g.split("_")[1].split("-")[0] if "_" in g else g
+        per[port] = (s2c, me)
+        for (aid, _j), (a42, hit) in npc_intervals(s2c, me).items():
+            total += 1
+            if a42 and hit and hit[0] == a42[0] + 1 and hit[1] == a42[1]:
+                declared.append((port, aid, round(a42[1], 3), a42[2]))
+            elif a42 and not hit:
+                unhit.append((port, aid))
+            elif hit and not a42:
+                undeclared.append((port, aid))
+            elif a42:
+                unhit.append((port, aid, "not adjacent"))
+    led.ok(len(decoded) == TAPE_CONNS and all(m is not None for _s, m in per.values())
+           and total == NPC_INTERVALS,
+           f"POSITIVE CONTROL: all {TAPE_CONNS} connections name their observer, and they "
+           f"hold {NPC_INTERVALS} NPC-class create intervals (0x0020 tag 2)",
+           f"{len(decoded)} connections, observers {[m for _s, m in per.values()]}, {total}")
+    led.ok(sorted(declared) == RETAIL_NPC_DECLARED and not unhit and not undeclared,
+           "OBSERVED: exactly 12 of the 526 carry a 0x009F [42, agent, max], each the message "
+           "IMMEDIATELY before the observer's FIRST 0x00A3 on the body at the same wire t; 0 "
+           "declared on a body the observer never hit, 0 hit bodies left undeclared -- no "
+           "create carries one", f"{sorted(declared)} / unhit {unhit} / undeclared {undeclared}")
+    s2c, me = per.get("53756", ([], None))
+    at = [j for j, (t, op, v) in enumerate(s2c) if op == INT and list(v[1:4]) == [P42, 30, 52]]
+    ok_dw = (len(at) == 1 and round(s2c[at[0]][0], 3) == 1117.382
+             and s2c[at[0] + 1][1] == FLT and list(s2c[at[0] + 1][2][1:4]) == [16, 30, me]
+             and s2c[at[0] + 1][0] == s2c[at[0]][0])
+    led.ok(ok_dw and me == 9,
+           "OBSERVED: a MOVED maximum is declared on the next hit -- :53756 agent 30's 64 -> 52 "
+           "(Deep Wound, RANGERPRE-S1) is [42, 30, 52] at 1117.382, immediately before "
+           "[16, 30, 9, f] at the same t",
+           f"{[(round(s2c[j][0], 3), s2c[j + 1][1], s2c[j + 1][2][1:4]) for j in at]}")
+    try:
+        vaultpath.require_dir("captures", "live", MANTID_TAPE, why="MAXHP-1 Empathy")
+        cap = vaultpath.vault_path("captures", "live", MANTID_TAPE)
+        g = [x for x in livewire.connections(cap) if MANTID_CONN in x]
+        _c, merged, ok = livewire.decode_conn(cap, g[0])
+    except (Exception, SystemExit) as exc:                     # noqa: BLE001
+        led.ok(False, f"the MANTID tape {MANTID_TAPE} :60877 decodes (the live root is "
+               "present, so its absence is a FAIL)", str(exc))
+        return
+    s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
+    me = adrenjoin.whose_agent(s2c)
+    firsts, laters = [], []
+    for aid in EMPATHY_AGENTS:
+        idx = [j for j, (t, op, v) in enumerate(s2c)
+               if op == FLT and list(v[1:4]) == [55, aid, me]]
+        for n, j in enumerate(idx):
+            prev = s2c[j - 1]
+            has42 = (prev[1] == INT and list(prev[2][1:3]) == [P42, aid]
+                     and prev[0] == s2c[j][0])
+            (firsts if n == 0 else laters).append((aid, round(s2c[j][0], 3), has42,
+                                                  prev[2][3] if has42 else None))
+    led.ok(ok and me == 9 and len(firsts) == 4 and all(h and x == 25 for _a, _t, h, x in firsts)
+           and len(laters) == 4 and not any(h for _a, _t, h, _x in laters)
+           and [(a, t) for a, t, _h, _x in laters if a == 24] == [(24, 697.028), (24, 698.779)],
+           "OBSERVED (MANTID :60877): Empathy's FIRST [55, agent, 9] on each of agents 18, 24, "
+           "26, 32 carries [42, agent, 25] right before it; its 4 later words (agent 24 at "
+           "697.028 and 698.779, 26, 18) carry none -- 'declare before every word' is refuted",
+           f"firsts {firsts}, laters {laters}")
+
+
+# ---- §5 ours: an NPC's maximum (MAXHP-1) -----------------------------------------------
+
+HERO = 30
+
+
+def npc_entry(max_health=100.0, allegiance=None, pos=(0.0, 0.0)):
+    """A hostile the way spawn_enemy hands one to create_agent_world (test_burrow's shape)."""
+    return {"pos": pos, "plane": 0, "health": max_health, "max_health": max_health,
+            "dead": False, "name": "maxhp", "npc": authsrv.agents.HATCHER, "definition": 3,
+            "allegiance": allegiance or authsrv.agents.ALLEGIANCE_HOSTILE,
+            "attack_speed": authsrv.agents.ATTACK_SPEED["axe"], "effects": 0,
+            "armor_rating": 60, "last_hit": 0.0}
+
+
+def world():
+    st = {"agents": {}, "pos": (0.0, 0.0), "player_health": 100.0}
+    authsrv.effect_table(st)
+    quiet(authsrv.player_pools, st)
+    return st
+
+
+def spawn(st, aid=11, **kw):
+    burst, send = recorder()
+    entry = npc_entry(**kw)
+    quiet(authsrv.create_agent_world, send, st, aid, entry, "hostile", 0)
+    return burst, entry
+
+
+def maxes(sent, aid=None):
+    return [v for op, v in sent if op == INT and v[0] == P42 and (aid is None or v[1] == aid)]
+
+
+def hit(st, aid=11, **kw):
+    st["agents"][aid]["last_hit"] = 0.0
+    sent, send = recorder()
+    quiet(authsrv.hit_enemy, send, st, aid, 0, **kw)
+    return sent
+
+
+def right_before_word(sent, aid, value):
+    """The 42 [42, aid, value] is the message immediately before the player's first word
+    on `aid`, and there is exactly one 42 on `aid` in the batch."""
+    words = [i for i, (op, v) in enumerate(sent) if op == FLT and v[1] == aid and v[2] == P]
+    m = [i for i, (op, v) in enumerate(sent) if op == INT and v[:2] == [P42, aid]]
+    return (len(m) == 1 and bool(words) and m[0] == words[0] - 1
+            and sent[m[0]][1] == [P42, aid, int(value)])
+
+
+def section_npc_ours():
+    print("\n5. ours: the create withholds an NPC's maximum; the player's first word declares it")
+    authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+    authsrv.NPC_MAX_AT_CREATE = False
+    random.random = lambda: 1.0                    # no critical, no block, no Blind miss
+    # the create
+    st = world()
+    burst, entry = spawn(st)
+    ops = [op for op, _v in burst]
+    led.ok(authsrv.GAME_SMSG_WORLD_CREATE_AGENT in ops and not maxes(burst)
+           and entry.get("max_declared_on_hit", "absent") is None,
+           "create_agent_world (a hostile): the burst carries its 0x0020 and NO [42, agent, "
+           "max] -- 0 of 526 retail creates did -- and the tracker is marked stale (None)",
+           f"{[hex(o) for o in ops]}, tracker {entry.get('max_declared_on_hit', 'absent')}")
+    # the first landed hit, and the one after
+    s1 = hit(st)
+    s2 = hit(st)
+    led.ok(right_before_word(s1, 11, 100) and not maxes(s2)
+           and st["agents"][11]["max_declared_on_hit"] == 100.0,
+           "the player's FIRST landed hit declares [42, 11, 100] as the message immediately "
+           "before its [16, 11, player, f] (12 of 12); the second hit carries none",
+           f"{s1} / {maxes(s2)}")
+    # the chain state goes ahead of the 42
+    st = world()
+    spawn(st)
+    sent, send = recorder()
+    st["agents"][11]["last_hit"] = 0.0
+    quiet(authsrv.hit_enemy, send, st, 11, 0, before_damage=lambda: send(0x005C, [P, 11, 1]))
+    i5c = [i for i, (op, _v) in enumerate(sent) if op == 0x005C]
+    led.ok(i5c and right_before_word(sent, 11, 100)
+           and sent[i5c[0] + 1] == (INT, [P42, 11, 100]),
+           "ORDER: a chain hit's 0x005C goes AHEAD of the 42 and the 42 stays the message "
+           "right before the word (:62557 122.012: E5, 9F 46, 5C, 9F 42, A3 -- 122 of 122 "
+           "batches)", f"{sent}")
+    # a block declares nothing; the next landed hit does
+    st = world()
+    spawn(st)
+    authsrv.blocks = lambda state, agent_id: True
+    sb = hit(st)
+    stale = st["agents"][11].get("max_declared_on_hit", "absent")
+    authsrv.blocks = _saved["blocks"]
+    sl = hit(st)
+    fails = [v for op, v in sb if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+             and v[0] == authsrv.agents.GV_ATTACK_FAIL]
+    led.ok(not maxes(sb) and fails == [[authsrv.agents.GV_ATTACK_FAIL, 11, P,
+                                        authsrv.agents.ATTACK_FAIL_BLOCK]]
+           and not any(op == FLT for op, _v in sb) and stale is None,
+           "a BLOCKED hit sends its fail word [38, 11, player, 0], no damage word and no 42 "
+           "(a miss draws none: 0 of 7 retail), and the tracker stays stale",
+           f"{sb}, tracker {stale}")
+    led.ok(right_before_word(sl, 11, 100),
+           "...and the next LANDED hit declares [42, 11, 100] right before its word",
+           f"{maxes(sl)}")
+    # a moved maximum: Deep Wound 64 -> 52 (RANGERPRE-S1's floor)
+    authsrv.DEEP_WOUND = True
+    st = world()
+    spawn(st, max_health=64.0)
+    h1 = hit(st)
+    dw, dsend = recorder()
+    quiet(authsrv.deep_wound_open, dsend, st, 11, 0)
+    h2 = hit(st)
+    h3 = hit(st)
+    led.ok(right_before_word(h1, 11, 64) and not maxes(dw) and right_before_word(h2, 11, 52)
+           and not maxes(h3),
+           "a MOVED maximum: declared 64 on the first hit; the Deep Wound's batch carries no "
+           "42; the next hit declares 52 right before its word (retail :53756 1117.382) and "
+           "the one after none", f"{maxes(h1)} {maxes(dw)} {maxes(h2)} {maxes(h3)}")
+    # a re-create (the burrow's) re-declares
+    st = world()
+    spawn(st)
+    hit(st)
+    rm, rsend = recorder()
+    back = quiet(authsrv.remove_agent, rsend, st, 11, "burrowing")
+    quiet(authsrv.create_agent_world, rsend, st, 11, back, "emerging from burrow", 0, False)
+    rh = hit(st)
+    led.ok(not maxes(rm) and right_before_word(rh, 11, 100),
+           "a RE-CREATE resets it: remove, re-create the same entry (no 42 in either), and the "
+           "next hit declares again (retail n = 2, the burrower 0x5A2 and agent 80)",
+           f"{maxes(rm)} / {maxes(rh)}")
+    # a party member's hit declares nothing; the player's then does
+    st = world()
+    spawn(st)
+    st["agents"][HERO] = dict(npc_entry(allegiance=authsrv.agents.ALLEGIANCE_PLAYER),
+                              pos=(10.0, 0.0))
+    ph, psend = recorder()
+    quiet(authsrv.hurt_agent_row, psend, st, HERO, 11, 5.0, authsrv._f32(-0.05), 0, "a hero's hit")
+    pl = hit(st)
+    led.ok([op for op, _v in ph].count(FLT) == 1 and not maxes(ph)
+           and right_before_word(pl, 11, 100),
+           "a PARTY member's hit on an undeclared body carries no 42 (0 of 2,458 retail); the "
+           "player's first hit after it declares", f"{ph} / {maxes(pl)}")
+    # the scythe's extra hit -- a CRITICAL one, its energy (a sentinel here) ahead of the 42
+    st = world()
+    spawn(st, aid=12, pos=(20.0, 0.0))
+    sc, ssend = recorder()
+    _gain = authsrv.critical_energy_gain
+    authsrv.critical_energy_gain = lambda send, state, conn_id: send("CRIT", [])
+    random.random = lambda: 0.0                    # the roll crits
+    try:
+        quiet(authsrv.scythe_extra_hit, ssend, st, 12, 0, 0, 0.0, 1.0, time.time(), "extra")
+    finally:
+        authsrv.critical_energy_gain = _gain
+        random.random = lambda: 1.0
+    i_crit = [i for i, (op, _v) in enumerate(sc) if op == "CRIT"]
+    led.ok(right_before_word(sc, 12, 100) and i_crit
+           and sc[i_crit[0] + 1] == (INT, [P42, 12, 100])
+           and any(op == FLT and v[0] == authsrv.agents.GV_CRITICAL for op, v in sc),
+           "the scythe's EXTRA hit on an undeclared body, a critical: its energy, THEN [42, 12, "
+           "100], then its [17] word -- the 42 right before the word (until today it went "
+           "ahead of the critical's energy)", f"{sc}")
+    # Empathy: armour_ignoring_damage's default, the player's first word only; a hero's none
+    st = world()
+    spawn(st)
+    spawn(st, aid=12, pos=(20.0, 0.0))
+    e1, e1s = recorder()
+    quiet(authsrv.armour_ignoring_damage, e1s, st, 11, P, 10.0, 0, "hex 26 punishes the attack")
+    e2, e2s = recorder()
+    quiet(authsrv.armour_ignoring_damage, e2s, st, 11, P, 10.0, 0, "hex 26 punishes the attack")
+    eh, ehs = recorder()
+    quiet(authsrv.armour_ignoring_damage, ehs, st, 12, HERO, 10.0, 0, "a hero's hex punishes")
+    led.ok(right_before_word(e1, 11, 100) and not maxes(e2) and not maxes(eh)
+           and [op for op, _v in eh].count(FLT) == 1,
+           "EMPATHY (armour_ignoring_damage's default): the player's first [55] word on a body "
+           "carries [42, agent, max] right before it, the second none (MANTID agent 24); a "
+           "HERO-cast word none", f"{e1} / {e2} / {eh}")
+    # a party body keeps its create-time 42 (PARTYMAX, a follow-up)
+    st = world()
+    pb, pentry = spawn(st, aid=HERO, allegiance=authsrv.agents.ALLEGIANCE_PLAYER)
+    led.ok(maxes(pb) == [[P42, HERO, 100]] and "max_declared_on_hit" not in pentry,
+           "a PARTY body ('play') keeps its create-time [42, agent, max] -- retail declares none "
+           "of 509, but a hero's rides its character block (PARTYMAX, a follow-up)", f"{maxes(pb)}")
+    # the deferred refill's 42 marks the tracker
+    st = world()
+    spawn(st)
+    st["agents"][11]["refill_due_at"] = 1.0
+    rf, rfs = recorder()
+    quiet(authsrv.agent_refill_due, rfs, st, 0)
+    ra = hit(st)
+    led.ok(maxes(rf) == [[P42, 11, 100]] and not maxes(ra),
+           "a revive's refill declares the maximum and marks it told -- the next hit repeats "
+           "nothing", f"{maxes(rf)} / {maxes(ra)}")
+    # KNOWN-BAD ARM: --npc-max-at-create
+    authsrv.NPC_MAX_AT_CREATE = True
+    try:
+        st = world()
+        kb, kentry = spawn(st)
+        spawn(st, aid=12, pos=(20.0, 0.0))
+        k1 = hit(st)
+        i20 = [i for i, (op, _v) in enumerate(kb) if op == authsrv.GAME_SMSG_WORLD_CREATE_AGENT]
+        ka, kas = recorder()
+        quiet(authsrv.armour_ignoring_damage, kas, st, 12, HERO, 10.0, 0, "a hero's hex")
+        quiet(authsrv.armour_ignoring_damage, kas, st, 12, HERO, 10.0, 0, "a hero's hex")
+        led.ok(i20 and kb[i20[0] + 1] == (INT, [P42, 11, 100]) and not maxes(k1)
+               and "max_declared_on_hit" not in kentry and maxes(ka) == [[P42, 12, 100]] * 2,
+               "KNOWN-BAD ARM (--npc-max-at-create, every run before today): the 42 right after "
+               "the 0x0020, the first hit then carries none, and every armour-ignoring word "
+               "declares whatever its source",
+               f"{[hex(op) for op, _v in kb]} / {maxes(kb)} / {maxes(k1)} / {maxes(ka)}")
+    finally:
+        authsrv.NPC_MAX_AT_CREATE = False
+    # the splash (INFERRED): needs the overlay's skill 431 rows
+    try:
+        radius = float(authsrv.agents.WORLD.get("skills", "431").get("aoe_range", 0.0))
+    except Exception:                                          # noqa: BLE001
+        radius = 0.0
+    if radius <= 0.0 or not authsrv.skill_effect_row(431).get("adjacent_damage"):
+        led.skip("5. the preparation splash's neighbour", "no skills row for 431 in the "
+                 "content (the vault overlay) -- 1 check")
+        return
+    st = world()
+    st["agents"][10] = dict(npc_entry(), pos=(0.0, 0.0))      # the target, already declared
+    spawn(st, aid=11, pos=(50.0, 0.0))
+    sp, sps = recorder()
+    reached = quiet(authsrv.preparation_splash, sps, st, 431, 10.0, 10, 0, 12, None)
+    led.ok(reached == [11] and right_before_word(sp, 11, 100),
+           "the preparation SPLASH onto an undeclared neighbour declares its maximum right "
+           "before its word (INFERRED: 0 Ignite Arrows in the corpus)", f"{reached} {sp}")
+
+
+# ---- §6 source (MAXHP-1) ---------------------------------------------------------------
+
+def section_npc_source():
+    print("\n6. source: one declaration helper, four call sites, the gate, the flag")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    sites = {fn: inspect.getsource(getattr(authsrv, fn)) for fn in
+             ("hit_enemy", "scythe_extra_hit", "preparation_splash", "armour_ignoring_damage")}
+    counts = {fn: s.count("declare_body_max_on_hit(") for fn, s in sites.items()}
+    led.ok(src.count("declare_body_max_on_hit(") == 5 and set(counts.values()) == {1},
+           "SOURCE LOCK: declare_body_max_on_hit is defined once and called exactly once in each "
+           "of hit_enemy, scythe_extra_hit, preparation_splash and armour_ignoring_damage -- "
+           "and nowhere else", f"{src.count('declare_body_max_on_hit(')} in the file, {counts}")
+    he, sc, sp = sites["hit_enemy"], sites["scythe_extra_hit"], sites["preparation_splash"]
+    h_call = he.find("declare_body_max_on_hit(")
+    h_order = [he.find("before_damage()"), he.find("critical_energy_gain(send, state, conn_id)"),
+               he.find("if prep_visual is not None:                          # WEAPONS-W2e"),
+               h_call, he.find("[prop, target_id, PLAYER_AGENT_ID, frac]")]
+    s_call = sc.find("declare_body_max_on_hit(")
+    s_order = [sc.find("critical_energy_gain(send, state, conn_id)"), s_call,
+               sc.find("send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET")]
+    p_call = sp.find("declare_body_max_on_hit(")
+    p_order = [sp.find('f"(the splash)")'), p_call,
+               sp.find("send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET")]
+    led.ok(-1 not in h_order and h_order == sorted(h_order)
+           and -1 not in s_order and s_order == sorted(s_order)
+           and -1 not in p_order and p_order == sorted(p_order)
+           and "agents.PROP_HEALTH_MAX" not in he and "agents.PROP_HEALTH_MAX" not in sc,
+           "SOURCE LOCK: the call is the last thing before the word -- hit_enemy after "
+           "before_damage, the critical's energy and the preparation's visual; the scythe after "
+           "its critical's energy; the splash after its visual -- and no inline PROP_HEALTH_MAX "
+           "is left in hit_enemy or scythe_extra_hit",
+           f"hit {h_order}, scythe {s_order}, splash {p_order}")
+    caw = inspect.getsource(authsrv.create_agent_world)
+    aid = inspect.getsource(authsrv.armour_ignoring_damage)
+    led.ok("_max_at_create = NPC_MAX_AT_CREATE or entry.get(\"allegiance\") == "
+           "agents.ALLEGIANCE_PLAYER" in caw
+           and 'entry["max_declared_on_hit"] = None' in caw
+           and "declare_max=None" in aid
+           and 'declare_max = "always" if NPC_MAX_AT_CREATE else "stale"' in aid,
+           "SOURCE LOCK: create_agent_world sends the 42 only under the arm or for a party body "
+           "and marks every other create stale; armour_ignoring_damage's default resolves to "
+           "'stale' ('always' only under the arm)")
+    mod = ast.parse(src)
+    top = [n.value.value for n in mod.body if isinstance(n, ast.Assign)
+           and any(isinstance(t, ast.Name) and t.id == "NPC_MAX_AT_CREATE" for t in n.targets)
+           and isinstance(n.value, ast.Constant)]
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    a0, a1 = ap.parse_args([]), ap.parse_args(["--npc-max-at-create"])
+    main_fn = next(n for n in mod.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    flips = []
+    for node in ast.walk(main_fn):
+        if (isinstance(node, ast.If) and isinstance(node.test, ast.Attribute)
+                and node.test.attr == "npc_max_at_create"):
+            flips += [s for s in node.body if isinstance(s, ast.Assign)
+                      and any(isinstance(t, ast.Name) and t.id == "NPC_MAX_AT_CREATE"
+                              for t in s.targets)
+                      and isinstance(s.value, ast.Constant) and s.value.value is True]
+            flips += [s for s in node.body if isinstance(s, ast.Global)
+                      and "NPC_MAX_AT_CREATE" in s.names]
+    led.ok(top == [False] and a0.npc_max_at_create is False and a1.npc_max_at_create is True
+           and len(flips) == 2,
+           "NPC_MAX_AT_CREATE defaults False at module level; --npc-max-at-create parses "
+           "(default off) and main() sets the global True under it", f"{top}, {len(flips)} of 2")
+
+
 try:
-    section_retail()
+    _decoded = section_retail()
     section_ours()
     section_source()
+    section_npc_retail(_decoded)
+    section_npc_ours()
+    section_npc_source()
 finally:
+    random.random = _saved_random
     authsrv.agents.item_template = _real_template
     for k, v in _saved.items():
         setattr(authsrv, k, v)

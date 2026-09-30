@@ -2976,6 +2976,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "maximum immediately ahead of a damage word at the "
                          "observer (0 of 3 armour-ignoring, 0 of 401 damage "
                          "words); it rides the Deep Wound batches instead.")
+    ap.add_argument("--npc-max-at-create", action="store_true",
+                    help="RANGERPRE-S10 REVERT: declare every NPC's maximum "
+                         "health (0x009F 42) in its create burst, and an "
+                         "armour-ignoring word's target maximum before EVERY "
+                         "such word from any source, as until 2026-09-29. "
+                         "Retail declares an NPC's maximum on the player's "
+                         "first landed word and never at the create (12 of "
+                         "526 creates on 20260929T150923, each right before "
+                         "that word). A party body keeps its create-time 42 "
+                         "either way.")
+    ap.add_argument("--no-animal-token-flip", action="store_true",
+                    help="RANGERPRE-S12 REVERT: a spawn row of allegiance "
+                         "'animal' keeps its create token 'anim' after the "
+                         "player's first landed hit and fights under it -- no "
+                         "prelude (prop 65, 0x009B, prop 36) ahead of the "
+                         "maximum, and no 0x002F. Retail turned the hit 'anim' "
+                         "body to 'anin' (0x002F on the tick after the hit; "
+                         "20260929T150923 :55934 t=565.0302). The body is "
+                         "still passive until hit and fights back either way.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "

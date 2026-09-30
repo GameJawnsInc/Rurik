@@ -3013,6 +3013,13 @@ was written. That is one of the three unknowns in that section's payload closed.
 > released ALT before the shutter), whether an outpost behaves the same (both runs were
 > `--explorable`, and `0x00AA`'s roster step is `MISSION_MAP_GAME`-gated), whether the flip
 > also restores attackability, and the reverse direction (`'play'` → a hostile token).
+>
+> **2026-09-30, RANGERPRE-S12: our server SENDS it**, for retail's own use — a charmable
+> animal created `'anim'` turns to `'anin'` on the tick after the player's first landed
+> hit (20260929T150923 :55934 t=565.0302, the connection's only `0x002F`, behind a
+> `[65]` / `0x009B` / `[36]` prelude before the maximum; `studies/monsterai/FINDINGS.md`
+> §19, `authsrv.send_due_tokens`). What our client draws for either token is the loopback
+> run that step registers.
 
 **2 sightings**, `(15, 'play')` and `(17, 'play')`, immediately after the two `0x00AA`
 sightings for the same agents in the same order. No refutation pass; treat accordingly.

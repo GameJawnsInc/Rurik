@@ -1875,9 +1875,21 @@ GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT = 0x006E
 # -- a server must declare before it references. The noun stays unsettled; see
 # studies/smsg/FINDINGS.md section 2.
 GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
-# agent_id + allegiance byte. The field that decides whether a click is an
-# attack or a conversation; the team token only decides colour.
+# [agent_id, team token] -- the DISPLAYED allegiance, the create's field 12 at
+# agent+0xE8. This comment used to say "allegiance byte. The field that
+# decides whether a click is an attack", which studies/newopcodes/FINDINGS.md's
+# 0x002F section RESOLVED 2026-08-18: 0x002F alone flips the displayed token on
+# our client, and attackability is +0x1B5, written once at construction
+# (studies/enemy/PLAN.md). First SENT by RANGERPRE-S12 (send_due_tokens): a
+# provoked charmable animal turns 'anim' -> 'anin', retail's own use of it.
 GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
+# [agent_id, string16] -- the agent's encoded NAME (schema/overrides.json 155:
+# stored per agent id, compare-else-copy, so an equal repeat is a no-op).
+# First SENT by RANGERPRE-S12, in a provoked animal's turn prelude
+# (animal_turn_prelude). Retail also sent it in that animal's CREATE batch
+# (:55934 t=504.4205, with [36, 161, 1]) and ours does not -- a named
+# follow-up, not that step.
+GAME_SMSG_AGENT_SET_NAME = 0x009B
 # agent_id + a dword CHECKSUM of five fields off the agent's SYNC copy --
 # ArenaNet's own desync detector, decoded 2026-08-23 and never sent by retail in
 # our corpus. The client XORs +0xB4/+0xB0 velocity, +0x80 plane and +0x7C/+0x78
@@ -4754,7 +4766,9 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
                      now, label, base=0.0):
     """One EXTRA hit of a scythe swing on body `aid`: its own roll and critical
     through ITS armour, then retail's per-hit batch -- the gain, the first-hit
-    maximum, the word (WEAPONS-W3). `base` is the swing's base penetration
+    maximum, the word (WEAPONS-W3); a critical's energy sits ahead of the
+    maximum, which is always the message right before its word (MAXHP-1).
+    `base` is the swing's base penetration
     (an attack skill's, studies/weapons 35). Returns the points dealt."""
     foe = state["agents"][aid]
     armour = penetrated_armour(cracked_body_armour(state, aid, creature_typed_rating(foe.get("armor_rating"), foe,
@@ -4782,14 +4796,12 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
     if ENERGY:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now, conn_id,
                                 f"the scythe's extra hit on agent {aid}")
-    if foe.get("max_declared_on_hit", foe["max_health"]) != foe["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, aid, int(foe["max_health"])],
-             f"maximum {int(foe['max_health'])} on agent {aid}, declared on the "
-             f"scythe's extra hit")
-        foe["max_declared_on_hit"] = foe["max_health"]
     if critical:
         critical_energy_gain(send, state, conn_id)
+    # MAXHP-1: the body's maximum is the message immediately before its word
+    # (OBSERVED 12 of 12 on 20260929T150923; the scythe's position INFERRED).
+    declare_body_max_on_hit(send, foe, aid, PLAYER_AGENT_ID,
+                            "the scythe's extra hit")
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, aid, PLAYER_AGENT_ID,
@@ -4887,6 +4899,12 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
                  [agents.GV_EFFECT_ON_TARGET, aid, PLAYER_AGENT_ID, visual],
                  f"impact {visual} of preparation {prep_skill} on agent {aid} "
                  f"(the splash)")
+        # MAXHP-1: the neighbour's first word from the player carries its
+        # maximum right before it -- INFERRED, the splash has no retail witness
+        # (0 Ignite Arrows in the corpus); it is the rule every other player
+        # word follows (12 of 12, 20260929T150923).
+        declare_body_max_on_hit(send, foe, aid, PLAYER_AGENT_ID,
+                                f"preparation {prep_skill}'s splash")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.PROP_DAMAGE, aid, PLAYER_AGENT_ID,
               _damage_fraction(points, foe["max_health"], agents.PROP_DAMAGE,
@@ -6244,6 +6262,23 @@ def npc_recharge_anchor(activation):
 # branch declared it before EVERY 55 word; now only when the maximum differs
 # from the last value declared. --player-max-always is the pre-2026-09-22 arm.
 PLAYER_MAX_ALWAYS = False
+
+# AN NPC'S MAXIMUM RIDES THE PLAYER'S FIRST LANDED WORD, NOT ITS CREATE
+# (RANGERPRE-S10, MAXHP-1). OBSERVED, capture 20260929T150923: 526 NPC-class
+# create intervals (0x0020 tag 2) over 11 connections, 12 carry a 0x009F [42,
+# agent, max], and every one is the message IMMEDIATELY before the observer's
+# FIRST 0x00A3 on that body, at the same wire t -- 0 on a body the observer
+# never hit, 0 hit bodies left undeclared; an attack order with no landed hit
+# draws none (:53756 agent 19). The design lane's corpus agrees, 120 of 120 over
+# 5,910 NPC-class intervals, and 0 of 2,458 party / other-source words on an
+# undeclared body carried one. So create_agent_world withholds an NPC's 42 and
+# declare_body_max_on_hit sends it at every player-sourced damage site. PARTY
+# bodies (allegiance 'play') keep their create-time 42 -- retail declares none
+# of its 509 'play' creates either, but a hero's rides its character block
+# ahead of the create, which ours does not always send (PARTYMAX, a follow-up).
+# --npc-max-at-create is the pre-2026-09-29 arm: the create declares, and an
+# armour-ignoring word (Empathy's) declares before every word, any source.
+NPC_MAX_AT_CREATE = False
 
 # MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
@@ -12887,6 +12922,14 @@ HOSTILE_TARGETS_PARTY = True   # False (--hostile-target-player): the player onl
 # the H3 rule from then on. A row that says nothing behaves as it always did.
 PASSIVE_HOSTILES = True   # False (--no-passive-hostiles): every hostile notices on
                           # proximity, every run before 2026-09-16.
+# RANGERPRE-S12: a PROVOKED ANIMAL TURNS ON THE WIRE. A row whose allegiance is
+# "animal" is created carrying 'anim' (TEAM_TOKEN_BY_NAME); the provoke marks
+# the turn due, the player's landed word carries retail's prelude right before
+# its 42 (animal_turn_prelude, from declare_body_max_on_hit), and the next
+# simulation tick sends 0x002F 'anin' ahead of the body's first chase or swing
+# (send_due_tokens). False (--no-animal-token-flip): the body keeps 'anim' and
+# fights under it -- no prelude, no 0x002F -- the known-bad arm.
+ANIMAL_TOKEN_FLIP = True
 BASE_ARMOUR_BY_PROFESSION = {1: 80, 2: 70, 3: 60, 4: 60, 5: 60, 6: 60,
                              7: 70, 8: 60, 9: 80, 10: 70}
 SCALE_MEANS_RESURRECT = {"Resurrect"}
@@ -14223,6 +14266,17 @@ ALLEGIANCE_BY_NAME = {
     "hostile": agents.ALLEGIANCE_HOSTILE,
     "player": agents.ALLEGIANCE_PLAYER,
     "noncombatant": agents.ALLEGIANCE_NONCOMBATANT,
+    # RANGERPRE-S12: a charmable animal is a FOE CLASS like any hostile (every
+    # foe predicate, AI tick, reward and gate reads this value), and its WIRE
+    # token is TEAM_TOKEN_BY_NAME's -- the two are kept apart on purpose.
+    "animal": agents.ALLEGIANCE_HOSTILE,
+}
+# The names whose create token is NOT the foe class: (created with, turned to
+# on the first landed hit). A row naming one is passive and attacks back unless
+# it says otherwise (spawn_population). RECONSTRUCTION of the split; both
+# tokens OBSERVED on definition 1343 (agents.TOKEN_ANIMAL).
+TEAM_TOKEN_BY_NAME = {
+    "animal": (agents.TOKEN_ANIMAL, agents.TOKEN_ANIMAL_PROVOKED),
 }
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
@@ -20963,6 +21017,52 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
 
+def declare_body_max_on_hit(send, agent, agent_id, source_id, why, always=False):
+    """A body's maximum health, 0x009F [42, agent, max], sent when the PLAYER's
+    word is about to land on it and the client has not been told this value.
+    Called immediately before the word at every player-sourced damage site --
+    hit_enemy (swings, attack skills, arrows and the spells routed through it),
+    scythe_extra_hit, preparation_splash and armour_ignoring_damage. Returns
+    whether it sent.
+
+    OBSERVED (RANGERPRE-S10, MAXHP-1), capture 20260929T150923: 12 of 526
+    NPC-class create intervals carry a 42, each the message immediately before
+    the observer's FIRST 0x00A3 on the body at the same wire t; 0 on a body the
+    observer never hit; a miss or an attack order draws none. The corpus: 120
+    of 120 over 5,910 intervals. Empathy's words (MANTID, 20260913T210901
+    :60877) declare on the first word only -- agent 24's [55, 24, 9] at 695.127
+    carries [42, 24, 25], the two after it none (4 first words declared, 4
+    later words not). And a MOVED maximum is declared on the next word: PVPMAX
+    (SLICE-F46.10, the PvP tape 20260817T231139 -- 13 of the observer's 90 hits
+    on one connection, exactly the first hits and the first after a Deep Wound
+    edge or a rise) and :53756's 64 -> 52 at 1117.382. deep_wound_open/close
+    and create_agent_world mark the tracker stale (None); a MISSING key counts
+    as declared, which is what a party body and a bare test fixture are.
+
+    Only the PLAYER's word carries it: 0 of 2,458 party and other-source words
+    on an undeclared body did (hurt_agent_row sends none). `always` is the
+    --npc-max-at-create arm's armour-ignoring word, which declared before every
+    word from any source until 2026-09-29.
+
+    RANGERPRE-S12: a provoked ANIMAL's turn prelude goes out FIRST, from here,
+    so it sits immediately before the 42 at every site that calls this --
+    retail's :55934 t=565.0302 is [65, 161, 0], 0x009B, [36, 161, 1],
+    [42, 161, 80], then the word (animal_turn_prelude; a no-op for any body
+    whose turn is not due)."""
+    animal_turn_prelude(send, agent_id, agent, why)
+    if not always:
+        if source_id != PLAYER_AGENT_ID:
+            return False
+        if agent.get("max_declared_on_hit", agent["max_health"]) == agent["max_health"]:
+            return False
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
+         f"maximum {int(agent['max_health'])} on agent {agent_id}, declared "
+         f"ahead of {why} [MAXHP-1]")
+    agent["max_declared_on_hit"] = agent["max_health"]
+    return True
+
+
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
               skill_strike=False, skill_id=None, before_damage=None,
@@ -21290,30 +21390,6 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if ENERGY and swing:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now,
                                 conn_id, f"weapon hit on agent {target_id}")
-    # PVPMAX (2026-09-14, studies/slice/FINDINGS.md SLICE-F46.10): the TARGET's
-    # maximum rides the OBSERVER's own landed hit -- retail's first one (its
-    # first declaration), and the first after the maximum moved -- between
-    # the observer's gain (0x00CF)
-    # and the damage word, and no other hit carries it. OBSERVED on the PvP
-    # arena tape 20260817T231139, four connections: 27 of 27 explicit maxima
-    # for other agents share a tick with [16|17, agent, observer] and the
-    # observer's close; 13 of the observer's 90 hits on one connection carry
-    # one, exactly the first hits and the first hits after a Deep Wound edge
-    # or a rise; party members' hits on the same agents carry none. So a
-    # body's Deep Wound (deep_wound_open/close) no longer sends its 0x009F 42
-    # -- it marks the declaration stale and this site catches up on the next
-    # landed hit, 1.33 s later on the tape when the player was already
-    # swinging and 6-34 s when not. The player's OWN maximum keeps the isle
-    # shape (same batch as the status word).
-    # Ours declares a body's maximum at its CREATE already (a separate,
-    # measured decision), so a missing key counts as declared and only a
-    # MOVE -- deep_wound_open/close set the key to None -- fires this.
-    if agent.get("max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, target_id, int(agent["max_health"])],
-             f"maximum {int(agent['max_health'])} on agent {target_id}, "
-             f"declared on the player's hit")
-        agent["max_declared_on_hit"] = agent["max_health"]
     # DAGGERS-B5: what a LANDED hit puts on the wire just ahead of its damage
     # word -- the chain state, retail's order (E5, 0x005C, the word, E3). A
     # miss or a block returned above, so a chain skill that did not hit
@@ -21326,6 +21402,18 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, target_id, PLAYER_AGENT_ID, prep_visual],
              f"impact {prep_visual} of preparation {prep_skill} on agent {target_id}")
+    # THE TARGET'S MAXIMUM, the message immediately before the word
+    # (RANGERPRE-S10, MAXHP-1; see declare_body_max_on_hit). It rides the
+    # player's FIRST landed word on the body -- 12 of 12 on 20260929T150923,
+    # never at the create -- and the first after the maximum moved (PVPMAX,
+    # SLICE-F46.10: a Deep Wound marks it stale; :53756 declared 64 at
+    # 1113.410 and 52 at 1117.382). Everything else this hit sends goes AHEAD
+    # of it: the chain state, the critical's energy, a preparation's visual
+    # (:62557 122.012 [E5, 9F 46, 5C, 9F 42, A3]; the design lane, 122 of 122
+    # batches). Until 2026-09-29 it sat before before_damage and ours declared
+    # every body at its create, so only a MOVE ever fired it here.
+    declare_body_max_on_hit(send, agent, target_id, PLAYER_AGENT_ID,
+                            "the player's hit")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -25446,7 +25534,7 @@ def aura_off(send, state, agent_id, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max="always", skill_id=None):
+                           declare_max=None, skill_id=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction]. Kills through the same doors a hit does.
 
@@ -25456,10 +25544,18 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     it ahead of a damage word at the observer 0 of 3 (armour-ignoring) / 0 of
     401 (16/17). It used to declare FIRST before every 55 here, "3 of 3 on the
     tape", but those three were a FOE's maximum ahead of Empathy's word, kept on
-    the body branch. A BODY's rule is `declare_max`: "always" declares each time,
-    "stale" (DAGGERS-B8) is hit_enemy's PVPMAX -- the first word after it moved.
-    RUN-DAGGERS-1's adjacent words say so -- [42, neighbour, 480] sits ahead of
-    the FIRST 55 on each of the two bodies and ahead of none of the 13 after."""
+    the body branch. A BODY's rule is `declare_max`: "stale" (DAGGERS-B8, and the
+    default since RANGERPRE-S10) is declare_body_max_on_hit -- the PLAYER's first
+    word on the body and the first after its maximum moved; "always" declares
+    before every word from any source, which was the default until 2026-09-29
+    and is now only the --npc-max-at-create arm's (None resolves to one or the
+    other). "always" is REFUTED by the MANTID tape: Empathy's [42, 24, 25] rode
+    the first of agent 24's three words, and 4 later words across agents 18, 24
+    and 26 carried none. RUN-DAGGERS-1's adjacent words say the same -- [42,
+    neighbour, 480] sits ahead of the FIRST 55 on each of the two bodies and
+    ahead of none of the 13 after."""
+    if declare_max is None:
+        declare_max = "always" if NPC_MAX_AT_CREATE else "stale"
     amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
@@ -25506,15 +25602,17 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     if not agent or agent.get("dead"):
         return 0.0
     pool = float(agent["max_health"])
-    if declare_max == "always" or agent.get(
-            "max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, target_id, int(pool)],
-             f"maximum {int(pool)} declared ahead of {what}")
-        agent["max_declared_on_hit"] = agent["max_health"]
+    # MONSTERAI-J's provoke goes FIRST (state only): RANGERPRE-S12's turn
+    # prelude rides the declare call below, so the provoke that marks the turn
+    # due must precede it. It sat after the declare until 2026-09-30, which
+    # changed nothing then -- the provoke sends nothing.
+    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
+    # MAXHP-1: the player's first word on the body (or the first after its
+    # maximum moved) carries the 42 right before it; a hero's Empathy none.
+    declare_body_max_on_hit(send, agent, target_id, source_id, what,
+                            always=(declare_max == "always"))
     frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
     agent["health"] = max(0.0, float(agent["health"]) - amount)
-    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_ARMOR_IGNORING, target_id, source_id, frac],
          f"{what}: {amount:.0f} armour-ignoring to agent {target_id}")
@@ -27816,6 +27914,9 @@ def revive_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id}")
+        # MAXHP-1: the client now holds this maximum, so the player's next
+        # hit need not repeat it (a no-op on the client if it did).
+        agent["max_declared_on_hit"] = agent["max_health"]
         # Re-asserting the SAME maximum refills nothing, which is why a revived
         # body stood up with an empty bar while our own bookkeeping said full --
         # so it still took a full seven swings to drop, and the bar never moved.
@@ -28385,6 +28486,10 @@ def enemy_attack_tick(send, state, conn_id):
     the cause.
     """
     player_pools(state)
+    # RANGERPRE-S12: a provoked animal's 0x002F goes out before its first
+    # swing -- here as well as in enemy_move_tick, because combat_pass runs
+    # this tick without the move tick.
+    send_due_tokens(send, state, conn_id)
     # "Nothing swings at a corpse" was a top-of-function return on the
     # PLAYER's death; since SLICE-H3 it is per hostile, on ITS target, below
     # -- a dead player no longer stops the hostiles fighting the party.
@@ -28419,6 +28524,8 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if animal_turn_pending(agent):                   # RANGERPRE-S12
+            continue                     # provoked this tick: turns first
         # SLICE-H3: THIS hostile's target (enemy_move_tick picks it), and a
         # corpse is not swung at -- the armed swing at a body that died in
         # the windup drops, as it always did for the player.
@@ -29563,7 +29670,13 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
     aims at the hitter (`target_was`). Returns the ids provoked; empty when
     nothing changed (not passive, already provoked, the hitter is a hostile).
     Retail (MONSTERAI 12.7): the hit creature swung 1.2-1.3 s after the
-    player's swing, its group-mate 0.4 s behind it, unhit."""
+    player's swing, its group-mate 0.4 s behind it, unhit.
+
+    RANGERPRE-S12: a provoked row that carries `token_on_provoke` (an
+    "animal" row) is marked to TURN -- `token_due`, stamped with the current
+    simulation tick. State only, as before: the prelude rides the hitter's
+    word (animal_turn_prelude) and the 0x002F goes out after the next 0x001E
+    (send_due_tokens). A group-mate turned unhit gets its whole burst there."""
     if not PASSIVE_HOSTILES:
         return []
     rows = state.get("agents", {})
@@ -29586,12 +29699,108 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
         r["provoked"] = True
         r["target_was"] = attacker_id
         out.append(aid)
+        if (ANIMAL_TOKEN_FLIP and r.get("token_on_provoke") is not None
+                and r.get("team_token") != r["token_on_provoke"]):
+            r["token_due"] = r["token_on_provoke"]              # RANGERPRE-S12
+            r["token_due_tick"] = state.get("sim_ticks", 0)
     if out:
         print(f"[c{conn_id}] agent {attacker_id}'s hit PROVOKES "
               + ", ".join(str(a) for a in out)
               + (f" (group {group!r})" if group is not None and len(out) > 1
                  else "")
               + " -- passive until now (MONSTERAI-J)", flush=True)
+    return out
+
+
+# ---- RANGERPRE-S12: a provoked charmable animal turns 'anim' -> 'anin' -------
+#
+# RETAIL (OBSERVED n=1, capture 20260929T150923, connection :55934, agent 161,
+# definition 1343, the player agent 31). Every message naming 161 at wire
+# t=565.0302, in order, with the simulation ticks between them:
+#   0x009F [65, 161, 0]          prop 65 (agents.PROP_PVP_TEAM)
+#   0x009B [161, <its name>]     AGENT_SET_NAME, the create's own four words
+#   0x009F [36, 161, 1]          its displayed level
+#   0x009F [42, 161, 80]         its maximum (MAXHP-1, declare_body_max_on_hit)
+#   0x00A3 [16, 161, 31, -0.3125]  the player's arrow, 25 of 80
+#   0x001E [110]                 -- the next simulation tick --
+#   0x002F [161, 'anin']         the turn
+#   0x002B [161, 1.0, 1], 0x002A [161, <the player's point>, 0, 0, 31]
+# It was passive before (no 0x00A0 [4, 161, *] with the player within ~258 u),
+# swung 0.64 s later (0x0035 [161, 2.0, 1.0], then [4, 161, 31, 0] every
+# 2.0 s) and the client's c2s 0x00C1 [0, 0] at 565.1515 -- with a re-select
+# 0x00C1 [161, 0] at the same instant, 121 ms after the 0x002F -- drew no
+# reply. A 'mon1' body's first hit carries none of 65 / 0x009B / 36 / 0x002F
+# (agent 48 at 414.3195, agent 215 at 516.9892).
+#
+# OURS: the prelude from the declare site, the turn from the next tick's
+# first move or swing pass. What is RECONSTRUCTION: the split itself (retail's
+# server is not visible, only the tick between); a group-mate or a party-hit
+# turning with its whole burst on the next tick (no witness); a body IN REACH
+# at the hit (a melee player) swinging only after its 0x002F -- [.., 0x001E,
+# 0x002F, 0x002E, 0x00A0] (retail's witness is a ranged hit, which chases;
+# test_animaltoken 2j); a body that dies before the turn keeps it pending
+# (0x002F is never sent to a corpse).
+
+def animal_turn_prelude(send, agent_id, agent, why="the turn"):
+    """The three messages retail sends ahead of a provoked animal's 42: prop
+    65 = 0, its name (0x009B, when the row carries one) and its level (prop
+    36). Only when the row's turn is DUE and its prelude has not gone out;
+    returns whether it sent."""
+    if agent.get("token_due") is None or agent.get("token_prelude_sent"):
+        return False
+    npc = agent.get("npc") or {}
+    level = int(npc.get("level") or 0)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_PVP_TEAM, agent_id, 0],
+         f"prop 65 = 0 on agent {agent_id}: the turn's prelude, ahead of "
+         f"{why} [RANGERPRE-S12]")
+    if npc.get("enc_name"):
+        send(GAME_SMSG_AGENT_SET_NAME, [agent_id, npc["enc_name"]],
+             f"AGENT_SET_NAME({agent_id}): the turn's prelude [RANGERPRE-S12]")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_LEVEL, agent_id, level],
+         f"level {level} on agent {agent_id}: the turn's prelude [RANGERPRE-S12]")
+    agent["token_prelude_sent"] = True
+    return True
+
+
+def animal_turn_pending(agent):
+    """A provoked animal whose 0x002F has not gone out: it neither moves nor
+    swings until send_due_tokens turns it (no body fights under 'anim')."""
+    return agent.get("token_due") is not None
+
+
+def send_due_tokens(send, state, conn_id):
+    """Turn every live row whose turn is due and was marked on an EARLIER
+    simulation tick: the prelude if its hitter's word did not carry it, then
+    0x002F [agent, token]. Called first in enemy_move_tick and
+    enemy_attack_tick, so the turn precedes the body's first chase order and
+    first swing -- retail's [0x001E, 0x002F, 0x002B, 0x002A]. `sim_ticks` is
+    the world tick's count of 0x001E sent. Returns the ids turned."""
+    now_tick = state.get("sim_ticks", 0)
+    out = []
+    for aid, r in list(state.get("agents", {}).items()):
+        tok = r.get("token_due")
+        if tok is None or r.get("dead"):
+            continue
+        if r.get("token_due_tick", -1) >= now_tick:
+            continue                    # marked on THIS tick: after the next 0x001E
+        whole = animal_turn_prelude(send, aid, r, "its 0x002F")
+        was = r.get("team_token")
+        send(GAME_SMSG_AGENT_UPDATE_ALLEGIANCE, [aid, tok],
+             f"AGENT_UPDATE_ALLEGIANCE({aid}, "
+             f"{int(tok).to_bytes(4, 'big').decode('latin1')!r}) [RANGERPRE-S12]")
+        r["team_token"] = tok
+        for k in ("token_due", "token_due_tick", "token_prelude_sent"):
+            r.pop(k, None)
+        _fc = (lambda x: int(x).to_bytes(4, "big").decode("latin1")
+               if x is not None else "?")
+        print(f"[c{conn_id}] [ANIMAL-TURN] agent {aid} ({r.get('name', '?')}) "
+              f"turns {_fc(was)!r} -> {_fc(tok)!r} on the tick after its "
+              f"provoke" + (" (its whole burst: no player word carried the "
+                            "prelude)" if whole else "") + " [RANGERPRE-S12]",
+              flush=True)
+        out.append(aid)
     return out
 
 
@@ -32652,6 +32861,9 @@ def enemy_move_tick(send, state, conn_id, rec=None):
     tick, stopping at ENEMY_MELEE_RANGE.
     """
     player_pools(state)
+    # RANGERPRE-S12: a provoked animal turns ('anim' -> 'anin', 0x002F) before
+    # the chase below opens -- retail's [0x002F, 0x002B, 0x002A] after the tick.
+    send_due_tokens(send, state, conn_id)
     px, py = state.get("pos", (0.0, 0.0))
     now = time.time()
     pm = state.get("pathmap")
@@ -32711,6 +32923,10 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             # no chase, under either targeting arm.
             agent["moving"] = False
             agent["follow"] = None
+            continue
+        if not _ally and animal_turn_pending(agent):
+            # RANGERPRE-S12: provoked on THIS simulation tick -- it turns
+            # (send_due_tokens, above) after the next 0x001E, then chases.
             continue
         if not _ally and leash_returning(agent):
             # DESKWORK-D8 step 3: walking home -- no pick, no chase; the
@@ -36062,6 +36278,7 @@ def agent_refill_due(send, state, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id} (deferred)")
+        agent["max_declared_on_hit"] = agent["max_health"]    # MAXHP-1: told
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill agent {agent_id}'s bar (deferred)")
@@ -36261,15 +36478,29 @@ def create_agent_world(send, state, agent_id, entry, why,
          f"AGENT_INITIAL_EFFECTS({agent_id}, "
          f"0x{int(entry.get('effects') or 0):04X})")
 
+    # RANGERPRE-S12: field 12 is the row's TEAM token when it has one (an
+    # "animal": 'anim', then 'anin' once turned -- so a burrow's re-create
+    # carries the current one); `allegiance` stays the foe class.
     send(GAME_SMSG_WORLD_CREATE_AGENT,
          agents.create_agent(agent_id,
                              agents.CHAR_CLASS_MONSTER_BASE | definition,
                              agents.AGENT_KIND_NPC, x, y, plane,
-                             allegiance=entry["allegiance"]),
+                             allegiance=entry.get("team_token") or entry["allegiance"]),
          f"WORLD_CREATE_AGENT({agent_id}) — {why}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
-         f"health {int(entry['max_health'])} on agent {agent_id}")
+    # RANGERPRE-S10 (MAXHP-1): an NPC's maximum is NOT part of its create --
+    # 0 of 526 NPC-class create intervals on 20260929T150923 carry one (0 of
+    # 5,910 over the corpus); it rides the player's first landed word, so the
+    # tracker is marked stale here and declare_body_max_on_hit sends it. A
+    # re-create (the burrow's) resets it the same way -- retail re-declared on
+    # the first hit after a re-create, n = 2. A PARTY body keeps the 42 here
+    # (PARTYMAX, a follow-up), and --npc-max-at-create restores it for all.
+    _max_at_create = NPC_MAX_AT_CREATE or entry.get("allegiance") == agents.ALLEGIANCE_PLAYER
+    if _max_at_create:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
+             f"health {int(entry['max_health'])} on agent {agent_id}")
+    else:
+        entry["max_declared_on_hit"] = None
 
     # --- three of the four named on 2026-08-10, sent here for the first time ---
     #
@@ -36311,7 +36542,10 @@ def create_agent_world(send, state, agent_id, entry, why,
     live[agent_id] = entry
     if conn_id is not None:
         print(f"[c{conn_id}] created agent {agent_id} ({entry.get('name', '?')}) "
-              f"— {why}", flush=True)
+              f"— {why}"
+              + ("" if _max_at_create else
+                 f" -- maximum {int(entry['max_health'])} withheld until the "
+                 f"player's first landed word [MAXHP-1]"), flush=True)
     return entry
 
 
@@ -36811,6 +37045,18 @@ def area_population(area):
         if problem:
             raise PopulationError(problem)
 
+    # THE ALLEGIANCE IS A KNOWN NAME (RANGERPRE-S12). spawn_population indexes
+    # ALLEGIANCE_BY_NAME with it, so an unknown name ("anmial") used to raise a
+    # bare KeyError inside instance bring-up -- where the harness still reports
+    # PASS with the body absent (the level guard's shape above). Refused here.
+    for key, row in rows:
+        name = row.get("allegiance", "hostile")
+        if name not in ALLEGIANCE_BY_NAME:
+            raise PopulationError(
+                f"spawn row {key!r} in area {area!r} says allegiance {name!r}, "
+                f"which is not one of {sorted(ALLEGIANCE_BY_NAME)}. The server "
+                f"would raise inside instance bring-up with the body absent")
+
     # THE PARTY CO-LOADS WITH EVERY AREA, so its ids are reserved against area
     # rows even though the rows above are internally consistent. The set checks
     # above cannot see this collision, and it stayed unguarded for a week
@@ -36919,7 +37165,12 @@ def spawn_population(send, state, origin, conn_id, area=None):
             continue
         x, y, moved = spot
 
-        allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
+        _aname = row.get("allegiance", "hostile")
+        allegiance = ALLEGIANCE_BY_NAME[_aname]
+        # RANGERPRE-S12: (create token, turned token) for an "animal", else
+        # None -- the body is then passive and attacks back unless its row
+        # says otherwise, which is what retail's 'anim' body did.
+        _team = TEAM_TOKEN_BY_NAME.get(_aname)
         hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
         # A vault-emitted def_NNNN row deliberately has NO name -- npcdefs.py:
         # "a name comes from a rendered nameplate or it does not exist" -- and
@@ -36988,10 +37239,11 @@ def spawn_population(send, state, origin, conn_id, area=None):
                 row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
-            "attacks_back": bool(row.get("attacks_back", False)),
+            "attacks_back": bool(row.get("attacks_back", _team is not None)),
             # MONSTERAI-J: a passive row notices nothing until it is hit, and
-            # its group joins on the hit. Both default to today's behaviour.
-            "passive": bool(row.get("passive", False)),
+            # its group joins on the hit. Both default to today's behaviour --
+            # except an "animal" row's, which default True (RANGERPRE-S12).
+            "passive": bool(row.get("passive", _team is not None)),
             "group": row.get("group"),
             # MONSTERAI-S8: a `stationary = true` row never scatters (copied here,
             # or the field could never reach a spawned row -- R3-F3).
@@ -37051,6 +37303,8 @@ def spawn_population(send, state, origin, conn_id, area=None):
                     "level": _hlevel,
                     "name": label,
                 }
+        if _team is not None:                           # RANGERPRE-S12
+            entry["team_token"], entry["token_on_provoke"] = _team
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
         if row.get("weapon_item"):
@@ -37191,6 +37445,10 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
     # displacement scan finds, so either GWCA's offsets are for a different
     # build or the write is computed. Do not send 0x002F for this purpose again
     # without settling that first.
+    #
+    # (0x002F IS sent since RANGERPRE-S12 -- for the DISPLAYED token it
+    # writes, a provoked animal's 'anim' -> 'anin' in send_due_tokens, which is
+    # retail's own use of it; not for attackability, which this note is about.)
     #
     # The health and attack-speed sends that used to sit here moved into
     # create_agent_world, unchanged and in the same order, so that a burrow
@@ -39476,6 +39734,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     delta_ms = int((now - prev_tick) * 1000)
                     if delta_ms > 0:
                         prev_tick = now
+                        # RANGERPRE-S12: the count of 0x001E, which
+                        # send_due_tokens reads -- a provoked animal turns on
+                        # the tick AFTER its hit, as retail's did. Counted
+                        # BEFORE the send: a hit landing from the client
+                        # thread in between stamps the new count and waits
+                        # one tick more, never one tick less.
+                        state["sim_ticks"] = state.get("sim_ticks", 0) + 1
                         try:
                             # quiet: 20 of these a second would bury the log.
                             send(GAME_SMSG_WORLD_SIMULATION_TICK, [delta_ms],
@@ -46536,6 +46801,23 @@ def main():
         print("PLAYER MAX ALWAYS: the player's property 42 goes out before every "
               "armour-ignoring word, as until 2026-09-22 (retail: never immediately "
               "ahead of a damage word at the observer, 0 of 3 / 0 of 401).",
+              flush=True)
+
+    if a.npc_max_at_create:
+        global NPC_MAX_AT_CREATE
+        NPC_MAX_AT_CREATE = True
+        print("NPC MAX AT CREATE: every NPC's property 42 goes out in its create "
+              "burst and ahead of every armour-ignoring word, as until 2026-09-29 "
+              "(retail: on the player's first landed word only, 12 of 12) "
+              "[RANGERPRE-S10 revert]", flush=True)
+
+    if a.no_animal_token_flip:
+        global ANIMAL_TOKEN_FLIP
+        ANIMAL_TOKEN_FLIP = False
+        print("NO ANIMAL TOKEN FLIP: an 'animal' row keeps 'anim' after its first "
+              "landed hit -- no prop 65 / 0x009B / prop 36 prelude and no 0x002F "
+              "(retail turned it to 'anin' on the tick after the hit, "
+              "20260929T150923 :55934 t=565.0302) [RANGERPRE-S12 revert]",
               flush=True)
 
     if a.no_adren_bar_gate:

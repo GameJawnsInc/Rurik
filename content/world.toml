@@ -3420,3 +3420,61 @@ verified = """Ours: the Assassin henchman's standing spot in the Great Temple (2
 2026-09-25). The template is the retail Assassin henchman's (hench_assassin, \
 capture 20260819T132414); position, id, map and allegiance (`noncombatant`, \
 RECONSTRUCTION) are chosen here."""
+
+
+# ---------------------------------------------------------------------------
+# THE CHARMABLE-ANIMAL PROBE -- RANGERPRE-S12 (2026-09-30). One body, spawned
+# only under `--area animal_probe`, so every other run is unchanged. It stands
+# passive until the player's first landed hit, then turns 'anim' -> 'anin' on
+# the wire and fights back (authsrv.send_due_tokens; agents.TOKEN_ANIMAL).
+
+[spawn.animal_probe]
+area = "animal_probe"
+npc = "animal_1343"
+agent_id = 96
+definition = 1343
+offset_x = 400.0
+offset_y = 0.0
+allegiance = "animal"
+max_health = 80
+attack_speed = 2.0
+skills = []
+enabled = true
+
+[spawn.animal_probe.provenance]
+source = "invented"
+note = """Ours, for a loopback run. The placement is ours: 400 u east of the \
+arrival (the spawn faces +x), inside AGGRO_RANGE 1012, so standing still shows \
+the passivity. agent_id 96 is an allocator choice, clear of the party's \
+reserved 1 / 30 / 200-206 and of the corridor's 90-94 / 98 / 99. definition \
+1343 is retail's own slot, so the create's model word is retail's 536872255 \
+byte for byte -- and it is the first loopback create above definition 72 \
+(every gamesrv log under vault/captures/harness, 2026-09-30). max_health 80 \
+and attack_speed 2.0 are the capture's (Reforged; the template's own \
+provenance). skills = [] because definition 1343 cast nothing on the tape: no \
+0x00A0 prop 50 or 60 from agent 161. `passive` and `attacks_back` default True \
+for allegiance "animal". `damage` is unset, so the fraction model applies \
+(ENEMY_HIT_FRACTION, 10 percent of the player's maximum per swing) where \
+retail landed 3 to 5 of 100 -- named, not modelled."""
+
+[spawn.animal_probe_control]
+area = "animal_probe"
+npc = "hatcher"
+agent_id = 97
+definition = 5
+offset_x = 0.0
+offset_y = 900.0
+allegiance = "hostile"
+passive = true
+attacks_back = false
+max_health = 100
+enabled = true
+
+[spawn.animal_probe_control.provenance]
+source = "invented"
+note = """Ours: the COLOUR's positive control for the animal probe's run. A \
+'mons' body reads red on our client (studies/enemy/PLAN.md 6e), so the frame \
+that scores the animal's dot before and after its turn carries a known red \
+one. 900 u to the side -- farther than the animal's 400 u, so a client \
+'nearest foe' pick that lands HERE says the client does not count 'anim' as \
+a foe. Passive and never attacks back: it stands for the whole run."""

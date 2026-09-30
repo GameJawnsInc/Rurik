@@ -131,6 +131,9 @@ ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
 #              Shing Jea training monsters (definitions 3965/3975)
 #   0x616E698F 6   'ani' + 0x8F -- consistent across 6 creates of definition
 #              3973, so a real value rather than corruption
+#   anin       never at a create: the token 0x002F turns a HIT 'anim' body to
+#              (RANGERPRE-S12, 20260929T150923 :55934 t=565.0302; TOKEN_ANIMAL
+#              below). It is not a client literal.
 #
 # WHAT SURVIVES of the old claim: the BINARY scan. 'mons' is still not a dword
 # constant in Gw.exe, and the client still renders any unrecognised token
@@ -144,6 +147,29 @@ ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
 # 3-character class plus a team/variant byte. 'play', 'nonc' and 'band' are
 # ordinary four-letter words, so that reading is RECONSTRUCTION and one more
 # area would test it.
+
+# THE CHARMABLE ANIMAL'S TWO TOKENS (RANGERPRE-S12, 2026-09-30). A content row
+# says allegiance = "animal"; the FOE CLASS stays ALLEGIANCE_HOSTILE (every foe
+# predicate, AI tick and reward reads that), and these two ride the wire.
+#   'anim'  the create's field 12. OBSERVED on 81 of 81 creates of definition
+#           1343 on file 16689 (npcdefs.read per build, re-run 2026-09-30:
+#           32 in 2026-07-29, 49 in 2026-09-01); SOURCED as a client literal -- the
+#           smsg naming pass found 'anim' at two compare sites beside the
+#           'nonc'/'nonn' predicate (studies/smsg/FINDINGS.md, 0x0020 field 12),
+#           which corrects "the only allegiance-shaped constants" above.
+#   'anin'  what 0x002F turns it to after the PLAYER's first landed hit.
+#           OBSERVED n=1: 20260929T150923 :55934 t=565.0302, agent 161
+#           (definition 1343), the only 0x002F on that connection. Retail's
+#           client pressed an attack skill at the 'anim' body before the turn
+#           (c2s 0x0027 [394, 0, 161, 0] at 563.717), so 'anim' is attackable.
+# NOT MODELLED: 'aniv' (3 creates of slot 1428, never engaged), and the
+# 'ani'+0x8F tutorial bodies (definitions 3972-3974), which are AGGRESSIVE --
+# 20+ attack starts under their create token, 17 damaged with no 0x002F -- so
+# passive-until-hit-then-turn is OBSERVED for 'anim' only, not for the family.
+# Definition 1387 ('anim', level 15) was turned to 'mon1' INSIDE its create
+# tick (20260818T094648, agent 96): not modelled either.
+TOKEN_ANIMAL = 0x616E696D             # 'anim'
+TOKEN_ANIMAL_PROVOKED = 0x616E696E    # 'anin'
 
 # Agent property ids (float channel, GAME_SMSG 0x00A3 -- prop_id, target, cause,
 # value). Which ones the client acts on is SOURCED from its own jump tables;
@@ -173,6 +199,16 @@ PROP_LEVEL = 36           # int channel (0x009F): the agent's DISPLAYED level.
                           # 0x00812D6E writes entry+0x2C keyed by the agent id
                           # (unitsetup Q3/Q4). Retail sends it BEFORE the
                           # player's create (344/366, createburst census).
+PROP_PVP_TEAM = 65        # int channel (0x009F). UPSTREAM name (OpenTyria's
+                          # PvPTeam). SOURCED mechanism: 0x007F7BD0 writes byte
+                          # +5 of the per-agent appearance record, guarded
+                          # (compare, then a refresh) -- studies/skillcast
+                          # section 16.4. OBSERVED: [65, agent, 0] rides the
+                          # same instant as 44 of 44 retail 0x002F turns and
+                          # never goes out without one; 1 and 2 only at arena
+                          # creates (RANGERPRE-S12's design lane corpus). What
+                          # 0 does to a body whose byte is already 0 is
+                          # UNVERIFIED -- it is sent because retail sends it.
 PROP_DAMAGE = 16          # SUBTRACTS fraction x max. Floors at 1: cannot kill.
 PROP_HEALTH_ABSOLUTE = 34 # badly named: it SETS health to fraction x max, and is the one the client range-checks. SILENT: no damage number.
 PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum; see below.
