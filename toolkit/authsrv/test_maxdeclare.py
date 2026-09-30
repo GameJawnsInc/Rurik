@@ -15,7 +15,9 @@ WHAT THIS PINS, and what each part rests on:
     the exact rise of the connection's 42 (120 -> 135). NEGATIVE CONTROL: the
     sword the same connection equipped at 930.405 (697, no 564) drew no 42.
     And every load after the equip declares 135 (3 of 3) while every load
-    before it declares 100 or 120 (8 of 8) -- the reader reads either value.
+    before it declares 100 or 120 (8 of 8) -- the reader reads either value;
+    RANGERPRE-S21 (critic C10) pins those three by connection and wire t
+    (LATER_LOADS: :53753 994.024, :53756 998.208, :59427 1217.429).
   * §2 OURS (bare machine: the tracked starter_sword / starter_shield rows,
     the shield given retail's 564 word by a patched item_template for the
     drive): the bonus is in player_max_health and NOT player_full_max_health
@@ -29,7 +31,11 @@ WHAT THIS PINS, and what each part rests on:
     and the plain shield's switch none; the load's 42 (the real
     _handle_request_players burst after the dress) is base + 15 with the 564
     shield in set 0 -- that part needs the overlay's attribute rows, as
-    test_skillloadorder's drives do, and declares a skip without them.
+    test_skillloadorder's drives do, and declares a skip without them. THE
+    LATER LOAD (RANGERPRE-S21, same rows): set 0 = the bow, the 564 shield
+    equipped IN GAME under --persist, then a new connection -- under
+    --hand-restore the next load's 42 is the equip's base+15 (retail's 135
+    after the equip), with the arm off (KNOWN-BAD, the default) it is base.
   * §3 SOURCE: the bonus term in player_max_health only; held_max_moved in
     _item_moves_commit after _item_hands_mirror with the bonus read before the
     batch, and in select_weapon_set after the energy pair with the bonus read
@@ -59,7 +65,7 @@ import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 import combatmath                                            # noqa: E402
 
-led = checks.Ledger("a held item's maximum health (RANGERPRE-S11)", floor=20)   # 2026-09-29: 20 from the first green run with the vault (§1 5, §2 11, §3 4); a bare machine (RURIK_VAULT at an empty directory) runs 14 and declares §1 and the load's check skipped, under the floor on purpose -- the retail fixture counts inside it, so a missing capture is RED
+led = checks.Ledger("a held item's maximum health (RANGERPRE-S11)", floor=22)   # 2026-09-29: 20 from the first green run with the vault (§1 5, §2 11, §3 4); 22 at RANGERPRE-S21 (critic C10: §1's LATER_LOADS pin, §2's LATER LOAD drive, both vault-gated); a bare machine (RURIK_VAULT at an empty directory) runs 14 and declares §1 and the two load checks skipped, under the floor on purpose -- the retail fixture counts inside it, so a missing capture is RED
 
 INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT             # 0x009F
 CHG = authsrv.GAME_SMSG_ITEM_CHANGE_LOCATION                  # 0x014B
@@ -79,6 +85,9 @@ RETAIL_EQUIP_BATCH = [(0x014B, [2, 696, 5, 1]), (0x006F, [9, 1, 696]),
 RETAIL_SWORD_BATCH = [(0x0152, [2, 698, 697]), (0x006F, [9, 0, 697])]   # t=930.441
 RETAIL_SHIELD_WORDS = [0x21A83205, 0x23480F00, 0xA3C80400]     # item 696
 RETAIL_SWORD_WORDS = [0x24B80200, 0xA4880705]                  # item 697
+# RANGERPRE-S21 (critic C10): the loads after the equip, (connection port, the own
+# load 42's wire t), each declaring 135 with the shield restored into the hand.
+LATER_LOADS = {("53753", 994.024), ("53756", 998.208), ("59427", 1217.429)}
 TICK = authsrv.GAME_SMSG_WORLD_SIMULATION_TICK                 # 0x001E closes a batch
 SHIELD_564 = RETAIL_SHIELD_WORDS[1]                            # 564 arg 15
 
@@ -86,7 +95,7 @@ _saved = {k: getattr(authsrv, k) for k in
           ("PERSIST", "ITEM_MOVES_ENABLED", "EXPLORABLE", "OUTPOST", "EQUIP_WEAPON",
            "EQUIP_ARMOUR", "EQUIP_COSTUME", "EQUIP_COSTUME_HEAD", "WEAPON_SETS",
            "PLAYER_SWING_DAMAGE", "WEAPON_ATTACK_SPEED", "ATTACK_INTERVAL",
-           "HELD_HEALTH", "SPAWN_PROFESSION", "SPAWN_SECONDARY")}
+           "HELD_HEALTH", "SPAWN_PROFESSION", "SPAWN_SECONDARY", "HAND_RESTORE")}
 _saved_off, _saved_wpn = authsrv.agents.PLAYER_OFFHAND, authsrv.agents.PLAYER_WEAPON
 _saved_slots, _saved_over = dict(authsrv.WEAPON_SET_BACKPACK_SLOTS), dict(authsrv.SET_ITEMS_OVERRIDE)
 _saved_bar = list(authsrv.SKILLBAR)
@@ -157,7 +166,7 @@ def section_retail():
         vaultpath.require_dir("captures", "live", why="the shield-equip witness")
     except (Exception, SystemExit) as exc:                     # noqa: BLE001
         # require_dir raises SystemExit on a bare machine (test_srclint's rule)
-        led.skip("1. retail's shield equip", f"no live captures: {exc} -- 5 checks")
+        led.skip("1. retail's shield equip", f"no live captures: {exc} -- 6 checks")
         return
     import livewire
     import adrenjoin
@@ -235,6 +244,14 @@ def section_retail():
            "every load before it declares 100 or 120 (8 of 8) -- the maximum the shield "
            "held at load carries, and the same reader reads the other values",
            f"after {after}, before {earlier}")
+    # RANGERPRE-S21 (critic C10): the three later loads by connection and wire t --
+    # what §2's LATER LOAD drive reproduces under --hand-restore.
+    pinned = {(g.split("_")[1].split("-")[0], t) for g, t, _x in after}
+    led.ok(pinned == LATER_LOADS,
+           "the three later loads declaring 135 are :53753 t=994.024, :53756 t=998.208 and "
+           ":59427 t=1217.429 -- the loads after the in-game equip, which §2's LATER LOAD drive "
+           "reproduces under --hand-restore",
+           f"{sorted(pinned)}")
 
 
 # ---- §2 ours --------------------------------------------------------------------------
@@ -336,7 +353,7 @@ def section_ours():
     # THE LOAD: the real burst after the dress, set 0 = sword + 564 shield
     if not authsrv.agents.WORLD.rows("attribute"):
         led.skip("2. the load's 42", "no attribute cost rows in the content "
-                 "(clientscan/attribpoints.py --emit-content) -- 1 check")
+                 "(clientscan/attribpoints.py --emit-content) -- 2 checks")
         return
     got = {}
     for with_564 in (True, False):
@@ -351,6 +368,71 @@ def section_ours():
            "THE LOAD (_handle_request_players after the dress): the player's 42 is base+15 "
            "with the 564 shield held in set 0, base with the plain one -- the later loads' "
            "135 on retail", f"{got}")
+
+    # THE LATER LOAD (RANGERPRE-S21, critic C10): the 564 shield EQUIPPED IN GAME under
+    # --persist, then a new connection -- retail's :56064 equip then :53753 / :53756 /
+    # :59427 (LATER_LOADS, §1). Only --hand-restore puts the shield back in the hand at
+    # the dress, so only it carries the equip's maximum into the next load's 42.
+    later = {arm: later_load(arm) for arm in (True, False)}
+    led.ok(later[True] == ([int(base) + 15], [int(base) + 15])
+           and later[False] == ([int(base) + 15], [int(base)]),
+           "THE LATER LOAD: the in-game equip declares base+15 (S11) and, under --hand-restore, "
+           "the NEXT load's 42 is base+15 too -- retail's 135 on the three loads after the equip "
+           "(:53753 994.024, :53756 998.208, :59427 1217.429); KNOWN-BAD (the default, the "
+           "hands at set 0's record): the next load drops back to base", f"{later}")
+
+
+def later_load(arm):
+    """(the equip's own 42s, the next load's own 42s) for set 0 = the bow and set 1 =
+    sword + the 564 shield: c2s 0x0030 [sword] then [shield] in a field under
+    --persist (a temporary store the load's find_character is pointed at), then a new
+    connection's item half of the dress (item_layout_begin, item_hands_at_dress) and
+    the real _handle_request_players."""
+    import shutil
+    import tempfile
+    import charstore
+    base_dir = tempfile.mkdtemp(prefix="maxdeclare-hands-")
+    uuid = "6" * 32
+    store = charstore.Store.open("hands@rurik.invalid", base=base_dir)
+    store.ensure_character(uuid, "Hands", "ee" * 37)
+    saved_find = authsrv.charstore.find_character
+    authsrv.charstore.find_character = lambda u, base=None: (store, store.character_by_uuid(u))
+    lead_id, off_id = authsrv.WEAPON_SET_ITEM_IDS[0]
+    try:
+        authsrv.agents.item_template = template_with_564
+        authsrv.HELD_HEALTH, authsrv.HAND_RESTORE = True, arm
+        authsrv.PERSIST, authsrv.ITEM_MOVES_ENABLED = True, True
+        authsrv.EQUIP_WEAPON, authsrv.EQUIP_ARMOUR = True, True
+        authsrv.EQUIP_COSTUME, authsrv.EQUIP_COSTUME_HEAD = False, False
+        authsrv.OUTPOST, authsrv.EXPLORABLE = False, True
+        authsrv.WEAPON_SETS = [{"lead": "starter_bow", "off": None}, None, None, None]
+        authsrv.agents.PLAYER_OFFHAND = None
+        authsrv.SET_ITEMS_OVERRIDE.clear()
+        authsrv.WEAPON_SET_BACKPACK_SLOTS.clear()
+        authsrv.SPAWN_PROFESSION, authsrv.SPAWN_SECONDARY = 1, 0
+        del authsrv.SKILLBAR[:]
+        authsrv.SKILLBAR.extend(_saved_bar)
+        eq_sent, eq_send = recorder()
+        load_sent, load_send = recorder()
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.apply_party_character({"player_weapon": "starter_bow"})
+            authsrv.configure_weapon_sets(["1=starter_sword+starter_shield"])
+            st = {"agents": {}, "char_uuid": uuid, "map_id": 160}
+            authsrv.item_layout_begin(st, 0)
+            authsrv.player_pools(st)
+            authsrv.handle_equip_item([authsrv.GAME_CMSG_EQUIP_ITEM, lead_id], eq_send, st, 0)
+            authsrv.handle_equip_item([authsrv.GAME_CMSG_EQUIP_ITEM, off_id], eq_send, st, 0)
+            st2 = {"agents": {}, "char_uuid": uuid, "map_id": 146}
+            authsrv.item_layout_begin(st2, 0)
+            authsrv.item_hands_at_dress(st2, 0)
+            authsrv._handle_request_players(load_send, st2, 0, threading.Event(), FakeRec())
+        own = [P42, P]
+        return ([v[2] for op, v in eq_sent if op == INT and v[:2] == own],
+                [v[2] for op, v in load_sent if op == INT and v[:2] == own and v[2] != 1])
+    finally:
+        authsrv.charstore.find_character = saved_find
+        authsrv.agents.item_template = _real_template
+        shutil.rmtree(base_dir, ignore_errors=True)
 
 
 class FakeRec:

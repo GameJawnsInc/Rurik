@@ -7215,7 +7215,36 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   review, +25 on the refusal at the cap; 79 / 94 at the kick lane's commit, +3 at its review; 49 / 64
   before the kick; the landing's floor of 27 was
   above its own bare run of 23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
-  `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
+  `toolkit/authsrv/test_itemmoves.py` (**2026-09-29, RANGERPRE-S21 (WEAPONREFUSE-B) —
+  THE HANDS PERSIST under `--hand-restore` (DEFAULT OFF until a loopback run answers
+  whether the client takes one item named in two weapon sets at a load, 0 of 21 retail
+  loads).** §3b `itemstore.hands_legal`'s limits and `restore`'s `hand_ok`: retail's
+  swap stored (the sword into the bow's hand, the bow at the sword's old cell, the
+  shield into the empty off hand) is restored as ONE unit; a doubly occupied hand, the
+  shield beside the two-handed bow, an EMPTY lead, a hand move onto another stored
+  item's cell, into a non-hand equipped cell or outside its bag each revert ONLY the
+  hands (the head's stored cell still applies); `hand_ok=None` is the old rule byte
+  for byte (KNOWN-BAD). §7 THE SERVER (set 0 = the bow, set 1 = sword + shield,
+  `--persist`, a temporary store): the two equips are retail's two shapes with our ids;
+  the next dress with the arm off is the bow again (KNOWN-BAD, the default); with it on,
+  item 1 is still CREATED as the bow (ENG-B4) and `item_hands_at_dress` leaves hands
+  (11, 12), 0x0147 set 0 = (11, 12) (set 1's own row too — the UNVERIFIED exposure),
+  the bow at the sword's old cell, 0x006E [11, 12], the swing model sword + shield,
+  the launch record the bow; load 3 identical; the bow re-equipped persists and the
+  call is then a no-op; an EMPTY stored lead reverts the hands and keeps the head's
+  cell; no store without `--persist`. Locks: `hand_ok` only under `HAND_RESTORE`, the
+  ONE call between the creates / `declare_weapon_sets` and the 0x0148 / 0x0147 rows,
+  the function's gate and mirror, `main()` wiring `--hand-restore` (its mutation
+  reddens) and `serverargs.py` defining it. §7b (vault-gated) retail from
+  `20260929T150923`: :56064's load held the bow alone and equipped [697] then [696];
+  :53753, :53756 and :59427 each dressed set 0 = [sword, shield], sets 1-3 empty,
+  0x0148 set 0, the bow at the backpack's slot 1 — the sword's old cell. With the
+  three code hunks reverted in place (`item_layout_begin`'s `hand_ok`,
+  `item_hands_at_dress`'s body, `restore`'s hand collection), 13 of 211 go red —
+  §3b's seven restore checks, §7's load-2 hands, 0x006E / swing model, load 3 and
+  re-equip checks, and two locks; each hunk alone reddens 5, 4 and 11 — while every
+  KNOWN-BAD arm and §7b stay green. Floor 160 -> 183 bare, 211 vaulted.
+  **2026-09-23, DESKWORK-D1 step 8: the inventory
   messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
   item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`
   §DESKWORK-D1 "Inventory" and "Inventory, the owner's confirmation". §1c RETAIL'S BAG
@@ -7323,9 +7352,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   closed (ENG-8); locks for `equipped_bag_slot`'s one argument, `OFF_HAND_ITEM_IDS`,
   `storage_bag_ids()`, the wrapper's `place` / `avoid` and the commit's two merchant
   rules. Floor 78 -> 102 -> 137 -> 159 -> 160 (the CLEANUP-3 lane's KNOWN-BAD town arm,
-  2026-09-24) from the green run with `RURIK_VAULT` pointed at
-  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 185
-  vaulted), ~13 s),
+  2026-09-24) -> 183 (RANGERPRE-S21) from the green run with `RURIK_VAULT` pointed at
+  an empty directory (the bare-machine core; §1b's 17, §1c's 8 and §7b's 3 ride the
+  vault, 211 vaulted), ~13 s),
   `toolkit/authsrv/test_visstatus.py` (**2026-09-28, CASTAI-Z1: §2's "every connection
   decoded ok" went red at 105 of 106: the first GAPPED live connection, 20260928T103123
   :65009, which `decode_conn` refuses by design. `livewire.live_connections(set_aside=)`
@@ -8514,7 +8543,15 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   2), while §1, the negative controls and the KNOWN-BAD arm stay green. 20 checks, floor 20, from the green run on this
   machine; a bare machine runs 14 and declares §1 and the load's check skipped, under the
   floor on purpose. MAXHP-1 (an NPC's maximum on the player's first landed hit) is a later
-  step and not pinned here. Read-only on the vault; no client. ~15 s),
+  step and not pinned here. **2026-09-29, RANGERPRE-S21 (critic C10): +2, both
+  vault-gated.** §1 pins the three later loads by connection and wire t (`LATER_LOADS`:
+  :53753 994.024, :53756 998.208, :59427 1217.429, each 135); §2's THE LATER LOAD drives
+  set 0 = the bow and set 1 = sword + the 564 shield, the two equips IN GAME under
+  `--persist` (a temporary store the load's `find_character` is pointed at), then a new
+  connection's dress and the real `_handle_request_players`: under `--hand-restore` the
+  next load's 42 is the equip's base+15, with the arm off (KNOWN-BAD, the default) base —
+  red with any one of the three S21 code hunks reverted. 22 checks, floor 22; a bare
+  machine still runs 14. Read-only on the vault; no client. ~15 s),
   `toolkit/authsrv/test_recharge.py` (**2026-09-28, CASTAI-Z1: §2 went red on the
   Zaishen tape, 3 of 19 (the six, P3 AS WRITTEN, the six pooled). The pinned numbers are
   scored as of the pin (`rechargeprobe.upto`, stamps before 20260928T103123): the six
