@@ -719,3 +719,10 @@ flags 5. That is 24 of 25 live rises, and the 25th is the flags alone.
 - **Left:** a party body's rise (`revive_party_body`), which still uses the setter.
 
 **The party body's third, 2026-09-30 [desk; UNMEASURED on the client].** `revive_party_body` now heals with `0x00A2 [55, body, f]` in the rise. Retail has 36 skill raises across 3 captures, each status, the 55 (1.0 on 34, 0.5892 on 2) and flags 9, with 0 carrying a `[42]` or a `[34]`. No harness run has raised a party body by a skill, so the complaint check has never met this path. The rig is a two-hero sandbox, SANDBOX U2 (`PLAN.md` §8.1).
+
+**The party body's client run, 2026-09-30 [OBSERVED, n = 69].** `20260930T185003`: two Monk heroes raised each other 69 times by Resurrection Signet.
+- **The wire:** every raise was status, `[43]`, `[52]`, `[55]`, flags 9.
+- **The complaint:** 0 `Health non-zero on resurrect`.
+- **The pools:** the first hit after each raise came off the full 140 (68 of 68).
+- **So the gain lands clean on all three paths:** NPC 0 of 5, player 0 of 15, party body 0 of 69.
+- **A different severity-2 line appeared once per cast:** `Pending skill 2 copy 0 not found`. That is our `0x00E3` SKILL_ACTIVATED, not the rise (PLAN-LOG, "REVIVE-HEAL, the party body's client run").

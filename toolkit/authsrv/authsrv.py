@@ -14622,6 +14622,12 @@ PLAYER_REVIVE_HEAL_GAIN = True   # --no-player-revive-heal-gain reverts
 # (the three party rises on record are shrine re-creates, alive before the rise),
 # so this path is UNMEASURED on our client either way. The NPC's 0 of 5 and the
 # player's 0 of 15 are the same client mechanism.
+#   * RESULT, 20260930T185003, the two-hero sandbox (SANDBOX U2's first client
+#     run: "Mo3 Tahlkora" and "Mo3 Dunkoro" in two bodies, loaded and fought):
+#     69 skill raises, heroes raising each other by the signet, every one status,
+#     [43], [52], [55], flags 9, and 0 `Health non-zero on resurrect`. The first
+#     hit after every raise came off the full 140 (68 of 68), and the party panel
+#     drew the risen hero's bar filled.
 # --no-party-revive-heal-gain restores the [42] + [34] burst.
 PARTY_REVIVE_HEAL_GAIN = True   # --no-party-revive-heal-gain reverts
 

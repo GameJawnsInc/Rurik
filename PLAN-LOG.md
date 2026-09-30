@@ -28,6 +28,53 @@ move back.
 
 ---
 
+### REVIVE-HEAL, the party body's client run -- 2026-09-30 -- **69 hero raises by Resurrection Signet, every one retail's segment, 0 resurrect complaints, the risen hero at full health on both sides. SANDBOX U2 answered in part. And a separate, pre-existing client error is traced to our `0x00E3`**
+
+**The rig.** Spec `revheal2`, compiled by `sandbox.py` into `vault/sandbox/revheal2`.
+- **The party:** heroes 3 and 7, both Monks in `academy_monk`, each with only Resurrection
+  Signet on the bar.
+- **The hostile:** a raider (agent 110) at (1301, 3850): level 10, 3,000 health, 40-60
+  damage, no skills.
+- **The launch:** straight into the corridor, `--map 168 --party sandbox --area sandbox` on
+  `vault/run/slice`, with no `--persist`, so the spec's bars win and the store is untouched.
+  The player reached the raider through the `attack:110` mailbox.
+- **The run:** `20260930T185003`, owner hands off, questions registered before launch.
+
+**The results:**
+- **U2-Q0, the gate, held:** two heroes in two bodies loaded and fought, with no assert and
+  `PASS`. The party window drew "Mo3 Tahlkora" and "Mo3 Dunkoro" (index 7 = Dunkoro, now
+  OBSERVED).
+- **PARTY-Q1, exposure, held:** 69 skill raises. The raider picked the softer Monk and
+  killed it, the other signeted it, and the two alternated. No player death and no wipe.
+- **PARTY-Q2, the wire, held:** 69 of 69 raises were status, `[43]`, `[52]`, `[55]`,
+  flags 9, with no `[42]` or `[34]`.
+- **PARTY-Q3, the complaint, held:** 0 `Health non-zero on resurrect`.
+- **PARTY-Q4, the pools, held:** the first hit after every raise came off the full 140, 68 of
+  68. The party panel drew the risen hero's bar filled, then drained by the raider's hits.
+- **The store** hash is unchanged.
+
+**REVIVE-HEAL is done on all three paths.** NPC 0 of 5, player 0 of 15, party body 0 of 69.
+
+**SANDBOX U2, answered in part** (`studies/sandbox/PLAN.md`): both heroes had the same body
+and bar, so the different-bodies half it was written for is still open.
+
+**A separate finding, not the heal's: `Error: Pending skill 2 copy 0 not found`, 69 times,
+one per hero signet.**
+- **The static trace** (the slice client):
+  - The string is at `0x00A95C94`, and its only reference is at `0x008230E2`, inside
+    `0x00823090(agent, skill, copy)`.
+  - That function looks up `(skill << 16) | copy` in the character's `+0xA8` container and
+    logs at severity 2 when the key is missing.
+  - It is reached from `0x0091F650`, the handler shared by GAME_SMSG `0x00E2` and `0x00E3`
+    (table entries at `0x00BC97A4` / `0x00BC97B0`).
+- **The cause:** our `0x00E3 SKILL_ACTIVATED [hero, 2, 0]`, sent at every hero cast since
+  JARIN-S, names a pending record the client does not hold.
+- **It is not new:** 61 harness runs since 2026-09-14 carry the line, on skills 179, 185, 197,
+  234, 281, 346, 382 and 394 (the player's too), usually once or twice. The single-hero
+  SLICE-H3 run, before JARIN's `0x00E3`, has none.
+- **Registered in `PLAN.md` §8.1:** what creates the record, and which message we are not
+  sending.
+
 ### REVIVE-HEAL, the party body's third -- 2026-09-30 -- **a hero's or henchman's rise heals with retail's `0x00A2 [55, body, f]`, with no `[42]` + `[34]` burst. Landed at the desk; the client run needs a rig that does not exist yet**
 
 **Retail:** 36 rises on the live corpus follow a cast at the corpse, `[60, caster, body,
