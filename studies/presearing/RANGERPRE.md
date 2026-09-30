@@ -135,22 +135,26 @@ Only the load-bearing shape of each is here; the design specs carry the byte-lev
 
 Order and the conflicts behind it are the critic's; D = desk-verifiable against the capture,
 L = needs a loopback client run. Status is kept here until each lands, then in PLAN-LOG.
+**2026-09-29: the eleven D steps landed** on branch `rangerpre`, each implemented in a lane
+worktree and APPROVED by an independent reviewer who re-ran its tests and its
+fails-without-fix check (PLAN-LOG "RANGERPRE"). The commit named is each step's first; its
+review fixes follow it on the same lane.
 
 | step | item | what | D/L | status |
 |---|---|---|---|---|
-| RANGERPRE-S1 | DEEPWOUND | floor the reduction; `deepwoundjoin.predicted_max` | D | open |
-| RANGERPRE-S2 | WEAPONREFUSE-A | always send #1985 + `0x005E` + `0x00E2` | D | open |
-| RANGERPRE-S3 | IMMUNE-2a | the +0.0 regen zero | D | open |
-| RANGERPRE-S4 | SECONDARY-A | `0x00DA` before `0x00DB` at load | D | open |
-| RANGERPRE-S5 | QUESTFLOW-H1 | reward skills after the gold | D | open |
-| RANGERPRE-S6 | KILLXP-a | per-foe kill xp; Reforged +5% seam, Prophecies-scoped, off by default | D | open |
-| RANGERPRE-S7 | KILLXP-b | the since-load 75-xp morale tick (supersedes QUESTFLOW-H2) | D | open |
-| RANGERPRE-S8 | QUESTFLOW-H3 | `[20, own, 7]` after `0x004A` in a hand-in | D | open |
-| RANGERPRE-S9 | DODGE | the across/along hit test against the retail band | D | open |
+| RANGERPRE-S1 | DEEPWOUND | floor the reduction; `deepwoundjoin.predicted_max` | D | **landed** `e913db63` |
+| RANGERPRE-S2 | WEAPONREFUSE-A | always send #1985 + `0x005E` + `0x00E2` | D | **landed** `959b21b5` |
+| RANGERPRE-S3 | IMMUNE-2a | the +0.0 regen zero | D | **landed** `a20fd763` |
+| RANGERPRE-S4 | SECONDARY-A | `0x00DA` before `0x00DB` at load | D | **landed** `fcc0ddff` |
+| RANGERPRE-S5 | QUESTFLOW-H1 | reward skills after the gold | D | **landed** `3a0de649` |
+| RANGERPRE-S6 | KILLXP-a | per-foe kill xp; Reforged +5% seam, Prophecies-scoped, off by default | D | **landed** `75629da9` |
+| RANGERPRE-S7 | KILLXP-b | the since-load 75-xp morale tick (supersedes QUESTFLOW-H2) | D | **landed** `c5a9e972` |
+| RANGERPRE-S8 | QUESTFLOW-H3 | `[20, own, 7]` after `0x004A` in a hand-in | D | **landed** `22ef7cc3` |
+| RANGERPRE-S9 | DODGE | the across/along hit test against the retail band | D | **landed** `55ce30e6` |
 | RANGERPRE-S10 | MAXHP-1 | an NPC's max declared on the player's first landed hit | L | open |
-| RANGERPRE-S11 | MAXHP-2 | a held max-health modifier (the shield) moves the player's max | D | open |
+| RANGERPRE-S11 | MAXHP-2 | a held max-health modifier (the shield) moves the player's max | D | **landed** `0ed70713` |
 | RANGERPRE-S12 | ANIMAL | `anim` spawn, `anin` on first hit, fights back | L | open |
-| RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | open |
+| RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | **landed** `31112797` |
 | RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | open |
 | RANGERPRE-S15 | LOOT-1 | gold drop on kill, pickup, purse credit (straight walk) | L | open |
 | RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | open |

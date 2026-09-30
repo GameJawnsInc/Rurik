@@ -2300,6 +2300,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   The overspent-store load fix (PLAN-LOG, 2026-09-25) is offline only: its client check spends past 10
   points under a larger budget, then launches `--party slice` -- the load completes, the panel at 0 of 10.
 
+**The Reforged pre-Searing run, 2026-09-29** — [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md) §4-§5
+
+* **RANGERPRE-S10, S12, S14-S21** are open, each specified: S14 (immunity + #1957) is
+  desk-verifiable; the rest need one pre-registered loopback run. Also open there: serving
+  the Reforged effect 3434, and a wire-derived game_mode that can contradict a manifest.
+
 ### 8.2 Waiting on the owner, or on a live capture
 
 * **DESKWORK-D14's off-disk vault copy** waits on a second disk: the owner has none

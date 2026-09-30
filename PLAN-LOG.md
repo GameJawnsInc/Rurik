@@ -28,6 +28,37 @@ move back.
 
 ---
 
+### RANGERPRE, the Reforged pre-Searing Ranger -- 2026-09-29 -- **the owner's casual live run captured and read; Reforged Mode found ON the wire (every pre-Searing capture is Reforged); eleven desk-verifiable server diffs SHIPPED, each reviewed**
+
+**The run** ([studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md)): live capture
+`20260929T150923`, build 38888, owner-driven, a new Reforged Ranger through the tutorial,
+Lakeside County (146) and Green Hills County (160); plan `ranger_presearing_roam.txt` sealed
+before launch, seals AGREE, 12/12 connections decrypted, 23 owner notes bound on wire time.
+- **F1, R4c-2 coverage:** pre-Searing hostile slots in the 2026-09-01 pool 13 -> 18 (new
+  1414, 1415, 1438, 1439; 1434 recovered). The sealed prediction held on all three parts;
+  max health is declared on the player's first landed hit, 12 of 12.
+- **F2, Reforged Mode is derivable:** `0x003C` own-player bit 2 = summary flag bit 16 =
+  Reforged (the client's skill-price tables match WIKI's two rows); `0x0041` skill 3434 on
+  15/15 pre-Searing explorable loads, 0/112 elsewhere; create dword bit 0 = the Reforged box
+  (owner: only that box was checked). **The September pre-Searing Warrior is Reforged** (owner
+  confirmed the badge), so its four `base` manifests are wrong and no base-mode pre-Searing
+  capture exists. Manifests NOT edited; `npcdefs.resolve_mode` refusing the 09-01 pool is
+  the mislabel surfacing.
+- **F3:** retail-vs-ours divergences, ordered into RANGERPRE-S1..S21 by a design workflow
+  (11 Opus specs + a critic that caught two cross-spec conflicts and one text-lock break).
+
+**Shipped** (four lane worktrees merged into `rangerpre`; every step APPROVED by an
+independent reviewer who re-ran its tests and its fails-without-fix check):
+S1 Deep Wound floored, 64 -> 52 (`e913db63`); S2 #1985 on a weapon mismatch, always
+(`959b21b5`); S3 a zero regen rate is +0.0 (`a20fd763`); S4 the bar `0x00DA` before the
+library `0x00DB` at load (`fcc0ddff`); S5 hand-in reward skills after the gold (`3a0de649`);
+S6 per-foe kill xp, the +5% seam Prophecies-scoped and off (`75629da9`); S7 the since-load
+75-xp morale tick (`c5a9e972`); S8 `0x009F [20, own, 7]` after a hand-in's `0x004A`
+(`22ef7cc3`); S9 the projectile hit test across/along the line of fire, fitted and labelled
+so (`55ce30e6`); S11 a held item's max-health modifier moves the player's max (`0ed70713`);
+S13 condition `[6]`/`[7]` effect words and the aura book keyed by (wearer, buff)
+(`31112797`). Each carries a known-bad revert flag. Open: S10, S12, S14-S21 (PLAN.md 8.1).
+
 ### CASTAI-Z2, the Smiting Monks -- 2026-09-29 -- **the owner's live run scored (P1-P4 and P6 held, P5 failed 1 of 43); the Monk's hex class marker 19 and retail's regen-rate rounding SHIPPED; the tape's 6 suite reds repaired by 5 reviewed lanes**
 
 **The run** (monsterai §18.3): live capture `20260929T100038`, five matches, all against the
