@@ -2406,6 +2406,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "apply, 54 of 54 on the live corpus (Bleeding 23, Blind "
                          "24, Burning 25, Disease 26, Poison 27, Dazed 28, Weakness "
                          "and Cracked Armor 29; Crippled and Deep Wound none).")
+    ap.add_argument("--no-condition-immunity", action="store_true",
+                    help="RANGERPRE-S14 REVERT: every creature is fleshy -- a body "
+                         "whose model file content marks non-fleshy (creature_trait, "
+                         "content/npcs.toml) takes Bleeding, Disease and Poison like "
+                         "any other and the inflicting player hears no #1957, this "
+                         "server's bytes until 2026-09-29. Retail refused the "
+                         "player's Sever Artery on a non-fleshy creature with "
+                         "0x005D #1957 + 0x005E [1, 7] and no Bleeding "
+                         "(20260929T150923 :53756 t=1057.415; WIKI 'Fleshy').")
     ap.add_argument("--no-snare-status-bit", action="store_true",
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "
@@ -2784,10 +2793,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the bare release. DEFAULT OFF: #1986 is on no wire "
                          "we hold, so the bare release -- retail's own shape "
                          "for 3 of 43 refusals -- stays the default. The "
-                         "OBSERVED ids 1934, 1960, 1961 and 1985 are sent "
+                         "OBSERVED ids 1934, 1957, 1960, 1961 and 1985 are sent "
                          "either way; the weapon gate's #1985 (DAGGERS-B4) "
                          "rode this flag until RANGERPRE-S2 (2026-09-29) "
-                         "observed it on retail's wire, 20260929T150923.")
+                         "observed it on retail's wire, 20260929T150923. Its "
+                         "other consumer is the immunity sentence for Disease "
+                         "and Poison (#1958 / #1959, RANGERPRE-S14), on no wire.")
     ap.add_argument("--no-skill-labels", action="store_true",
                     help="drop the LABEL tier at startup: every skill_effect "
                          "row carrying tier = \"label\" (vault/content/"

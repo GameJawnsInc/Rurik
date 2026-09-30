@@ -142,7 +142,7 @@ REFUSAL_REASONS = {
     1954: "cannot_pick_up_item",
     1955: "gold_capacity_reached",
     1956: "item_reserved_for_other_player",
-    1957: "target_immune_bleeding",
+    1957: "target_immune_bleeding",          # OBSERVED 1 of 1 (20260929T150923 :53756 1057.415)
     1958: "target_immune_disease",
     1959: "target_immune_poison",
     1960: "not_enough_adrenaline",           # OBSERVED 39 of 39 (above)
@@ -188,7 +188,7 @@ REFUSAL_REASONS = {
 # [9, 40, 0] -- the sentence AFTER the ack and BEFORE the release, an order no
 # 1960 refusal uses. 1964 carries the same sentence in the archive and has never
 # been on any wire we hold (skills 38.5); the id retail sends is 1988.
-REFUSAL_OBSERVED = {1934, 1960, 1961, 1985, 1988}   # every other id is RECONSTRUCTION
+REFUSAL_OBSERVED = {1934, 1957, 1960, 1961, 1985, 1988}   # every other id is RECONSTRUCTION
 REFUSAL_TEMPLATED = {1942, 1943}            # take arguments; never sent bare
 REFUSAL_BLOCK = (1934, 1993)                # inclusive; the plain span
 REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001))
@@ -204,6 +204,21 @@ REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001
 # always, as 1960 is; n = 1 does not isolate the cause (UNVERIFIED), and which
 # of the weapon and resource gates retail checks first is NOT OBSERVED.
 REFUSE_WEAPON_TYPE = 1985
+# THE IMMUNITY SENTENCES (RANGERPRE-S14, IMMUNE-1; authsrv.CONDITION_IMMUNITY's
+# banner). 1957 is OBSERVED 1 of 1: 20260929T150923 :53756, the player's Sever
+# Artery (382) completing on definition 1414 (a non-fleshy creature, file
+# 17253) at t=1057.415 -- 0x009F [46, 9, 0], 0x00CF [9, 25], the damage word,
+# 0x005D [0x08A5] = #1957, 0x005E [1, 7], 0x00E3 [9, 382, 0], and no Bleeding
+# (no [6], no 0x00F1, no [44] naming the target until its death). It is the
+# only 1957 on the live corpus (127 connections); 1958 and 1959 are on none
+# (NOT FOUND on the wire) and are RECONSTRUCTION from the block's own ordering,
+# sent only under --refusal-reasons. The three are exactly the WIKI's fleshy set
+# (GWW "Fleshy" rev 2611793: Bleeding, Disease, Poison), which the block
+# CORROBORATES. Keyed by the CONDITION'S NAME (effects.CONDITION_SKILLS).
+REFUSE_IMMUNE = {"Bleeding": 1957, "Disease": 1958, "Poison": 1959}
+for _cond, _sid in REFUSE_IMMUNE.items():
+    assert REFUSAL_REASONS[_sid] == "target_immune_" + _cond.lower(), (_cond, _sid)
+del _cond, _sid
 # THE PARTY-TARGET GATE'S REASONS (2026-09-26; authsrv.party_body's banner).
 # 1934 is the id OBSERVED answering the operator action that gate refuses:
 # 20260819T132414 :52606 t=238.496, the selection an allied body carrying the

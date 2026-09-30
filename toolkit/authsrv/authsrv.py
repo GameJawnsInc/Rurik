@@ -11945,16 +11945,18 @@ GAME_SMSG_SKILL_REFUSED = 0x00E2
 REFUSAL_SILENT = False
 # Set from --refusal-reasons (DESKWORK-D5 step 7). OFF by default: the table
 # `chatdefs.REFUSAL_REASONS` names the client's whole refusal block by id, but
-# only 1934, 1960, 1961, 1985 and 1988 are OBSERVED answering a condition (the
-# fix pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988
-# x1; RANGERPRE-S2 added the weapon gate's 1985 x1, 20260929T150923 :53756
-# t=1056.002); every other row is RECONSTRUCTION from the sentence's own
+# only 1934, 1957, 1960, 1961, 1985 and 1988 are OBSERVED answering a condition
+# (the fix pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1,
+# 1988 x1; RANGERPRE-S2 added the weapon gate's 1985 x1, 20260929T150923 :53756
+# t=1056.002; RANGERPRE-S14 the immunity sentence 1957 x1, the same connection
+# t=1057.415); every other row is RECONSTRUCTION from the sentence's own
 # statement, and a reconstructed sentence on the warning panel is invented
 # traffic until a tape shows it. Every OBSERVED id this server sends (1934,
-# 1960, 1961, 1985; nothing here sends 1988) goes out regardless of this flag
-# -- the weapon gate's #1985 since 2026-09-29, when it stopped riding the flag
-# -- so its one consumer left is the party-target gate's #1986 on a foe
-# spell. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
+# 1957, 1960, 1961, 1985; nothing here sends 1988) goes out regardless of this
+# flag -- the weapon gate's #1985 since 2026-09-29, when it stopped riding the
+# flag -- so its consumers left are the party-target gate's #1986 on a foe
+# spell and the immunity sentences 1958 / 1959 (Disease, Poison: WIKI, on no
+# wire). (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
 REFUSAL_REASON_IDS = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
@@ -25700,6 +25702,71 @@ def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
                       skill_knock_down_seconds(skill_id))
 
 
+# CONDITION IMMUNITY (RANGERPRE-S14, the IMMUNE item's first half, 2026-09-29).
+# A NON-FLESHY creature takes no Bleeding, Disease or Poison: the apply opens no
+# episode and sends no 0x0042, no [6], no status word and no rate, and the
+# inflicting PLAYER is told why on the warning panel -- #1957 / #1958 / #1959
+# (chatdefs.REFUSE_IMMUNE), refuse_press's 0x005D + 0x005E [1, 7] pair WITHOUT a
+# 0x00E2, since nothing was pressed and refused: the skill completed.
+#
+# OBSERVED (Bleeding, n = 1): 20260929T150923 :53756 (build 38888, Reforged),
+# the player's Sever Artery (382) completing on agent 22 -- definition 1414, file
+# 17253 -- at t=1057.415 is [46, 9, 0], 0x00CF [9, 25], the damage word, 0x005D
+# #1957, 0x005E [1, 7], 0x00E3 [9, 382, 0]; nothing names 22 again ([6], 0x00F1,
+# [44]) until its death word at 1060.488. The same skill on file 141274 draws
+# [6, T, 23], 0x00F1 [T, 3], [44, T, -0.09375], 3 of 3 (test_condwords). Gash
+# (384) on 22 at 1058.906 is a plain hit, no Deep Wound: its requires_condition
+# gate reads the target's LIVE conditions (attack_skill_terms), and an immune
+# target never holds one -- so that falls out of this gate with no code of its own.
+# WIKI (GWW "Fleshy" rev 2611793; "Bleeding" rev 2673942): non-fleshy creatures,
+# Elementals among them, are immune to Bleeding, Disease and Poison -- the two
+# we have never seen refused ride the wiki alone (1958 / 1959 NOT FOUND on any
+# wire, sent only under --refusal-reasons).
+#
+# WHO IS NON-FLESHY is content: the `creature_trait` row keyed by the body's
+# model file (content/npcs.toml, agents.creature_fleshy), RECONSTRUCTION as a key.
+# The player is always fleshy. WHO HEARS THE SENTENCE is the inflicter when it is
+# the player (`by_agent`); a body inflicting on a non-fleshy one is refused in
+# silence -- whether a party member's controller would hear it is NOT MEASURABLE
+# on a solo instance (UNVERIFIED). The call sites that pass no `by_agent` (the
+# player's ranged strike, areas and bursts) are still refused, silently: the #1957
+# sentence rides the melee attack-skill path only, the one on tape.
+# --no-condition-immunity is the known-bad arm: every creature is fleshy, the
+# pre-S14 server.
+CONDITION_IMMUNITY = True
+
+
+def agent_fleshy(state, agent_id):
+    """Is this agent open to the fleshy conditions? The player always is; a
+    body by its npc template's model file (agents.creature_fleshy)."""
+    if agent_id == PLAYER_AGENT_ID:
+        return True
+    row = state.get("agents", {}).get(agent_id) or {}
+    return agents.creature_fleshy((row.get("npc") or {}).get("file_id"))
+
+
+def condition_refused_immune(send, target_id, condition_id, conn_id, by_skill,
+                             by_agent):
+    """The apply a non-fleshy target refuses (CONDITION_IMMUNITY's banner): the
+    sentence to the inflicting player, when there is one and its id may go out
+    (OBSERVED, or --refusal-reasons), and a log line always."""
+    name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    sid = chatdefs.REFUSE_IMMUNE[name]
+    told = (by_agent == PLAYER_AGENT_ID
+            and (sid in chatdefs.REFUSAL_OBSERVED or REFUSAL_REASON_IDS))
+    if told:
+        send(GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.refusal_body(sid)],
+             f"CHAT_MESSAGE_CORE[refusal #{sid}: the target is immune to {name}]")
+        send(GAME_SMSG_CHAT_MESSAGE_SERVER, [PLAYER_NUMBER, chatdefs.CHANNEL_WARNING],
+             f"CHAT_MESSAGE_SERVER(player {PLAYER_NUMBER}, Warning)")
+    print(f"[c{conn_id}] {name} REFUSED on agent {target_id}: non-fleshy, immune "
+          f"(skill {by_skill}, inflicter {by_agent if by_agent is not None else '?'}) "
+          + (f"-- #{sid} on the inflicter's warning panel" if told else
+             "-- no sentence (the inflicter is not the player, or the id is "
+             "RECONSTRUCTION without --refusal-reasons)")
+          + " [RANGERPRE-S14]", flush=True)
+
+
 def apply_condition(send, state, target_id, condition_id, seconds, rank,
                     conn_id, by_skill, by_agent=None):
     """Put a condition on an agent, as an episode on the same effect channel.
@@ -25728,6 +25795,14 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     if not EFFECTS:
         return None
     name = effects.CONDITION_SKILLS.get(condition_id, "?")
+    # RANGERPRE-S14: a non-fleshy target refuses Bleeding, Disease and Poison
+    # before anything opens -- no episode, no wire but the sentence
+    # (CONDITION_IMMUNITY's banner).
+    if (CONDITION_IMMUNITY and name in chatdefs.REFUSE_IMMUNE
+            and not agent_fleshy(state, target_id)):
+        condition_refused_immune(send, target_id, condition_id, conn_id, by_skill,
+                                 by_agent)
+        return None
     table = effect_table(state)
     now = time.time()
     _held = None                        # an extended condition's live visual (S13)
@@ -45503,6 +45578,13 @@ def main():
               "wearer, id] at its apply and no [7] at its close (the 0x0042 / 0x00F1 "
               "/ [44] alone), this server's bytes until 2026-09-29 [RANGERPRE-S13 "
               "revert]", flush=True)
+    if a.no_condition_immunity:
+        global CONDITION_IMMUNITY
+        CONDITION_IMMUNITY = False
+        print("CONDITIONS: --no-condition-immunity -- every creature is fleshy: a "
+              "non-fleshy body (content creature_trait) takes Bleeding, Disease and "
+              "Poison and no #1957 goes out, this server's bytes until 2026-09-29 "
+              "[RANGERPRE-S14 revert]", flush=True)
     if a.no_snare_status_bit:
         global SNARE_STATUS_BIT
         SNARE_STATUS_BIT = False
