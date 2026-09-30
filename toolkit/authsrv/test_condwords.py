@@ -310,7 +310,15 @@ def section_server():
           "and the book re-files the visual under the new buff, so its expiry sends [7, me, "
           "23] once", (shorter, ext, book, closes))
 
-    # 2f. a bleeding foe killed: its [7] rides the death batch
+    # 2f. a bleeding foe killed: its [7] rides the death batch. The death word OPENING the
+    # batch, the condition bit still up, is RETAIL'S order (OBSERVED: 20260929T150923
+    # :53756 1140.933 opens 0x00F1 [27, 19], 1117.822 opens [30, 51]; :54071 634.746 opens
+    # [8, 2099]) -- kill_agent's 4/4 since the D6 review. Do not "fix" it back to the pre-D6
+    # order, where the [7]s went ahead of it. Our two older divergences sit elsewhere in
+    # the batch and are not pinned here: ONE step-down where retail steps per condition
+    # (1117.822: [7, 30, 23], 0x00F1 [30, 50], [44], 0x00F1 [30, 16]), and our [44, 27, 0]
+    # AHEAD of the step-down where retail's is behind it (1140.933: [7, 27, 23], 0x00F1
+    # [27, 16], [44, 27, 0]).
     st = world(27)
     sent, send = collector()
     authsrv.apply_condition(send, st, 27, BLEED, 5.0, 0, 0, SEVER, by_agent=PLAYER)
@@ -325,8 +333,9 @@ def section_server():
     check(st["agents"][27]["dead"] and [sent[i][1] for i in i_7] == [[7, 27, 23]]
           and None not in (i_dead, i_step) and i_dead < i_7[0] < i_step,
           "2f. a bleeding foe killed: [7, 27, 23] once, behind the death word and ahead of "
-          "the step-down 0x00F1 [27, 0x10] (retail 1140.933: [7, 27, 23] then 0x00F1 [27, "
-          "16]; the death word ahead of it is our older 'ONE step' deviation, unchanged)",
+          "the step-down 0x00F1 [27, 0x10] -- retail's order (1140.933: 0x00F1 [27, 19] "
+          "opens the batch, then [7, 27, 23], then 0x00F1 [27, 16]; the death word first is "
+          "retail's, not a deviation)",
           [(hex(op), v) for op, v in sent])
 
     # 2g. THE RECYCLED BUFF ID AT A DEATH: why the book is keyed by (wearer, buff)
