@@ -329,15 +329,35 @@ def check_accept_grants(row, item_rows):
                 raise ValueError(f"accept_skills holds {sid!r}, not a skill id")
 
 
+def check_handin_items(row, item_rows):
+    """Refuse a row's hand-in item columns unless each resolves (RANGERPRE-S20,
+    QUESTFLOW-H4): `handin_items` (what the hand-in takes back) and
+    `reward_items` (what it grants) are lists of content/items.toml keys
+    present in `item_rows`. Either may be absent. Raises ValueError naming
+    the bad entry; returns None."""
+    for column in ("handin_items", "reward_items"):
+        keys = row.get(column)
+        if keys is None:
+            continue
+        if not isinstance(keys, (list, tuple)):
+            raise ValueError(f"{column} = {keys!r} is not a list of item keys")
+        for key in keys:
+            if not isinstance(key, str) or key not in item_rows:
+                raise ValueError(
+                    f"{column} names {key!r}, which is not a content item "
+                    f"row -- the hand-in could neither find nor declare it, "
+                    f"so the loader refuses it now")
+
+
 def load(world=None):
     """{quest_id: row} for every content quest row.
 
     Keyed by the u32 the WIRE uses, not by the TOML section name, because that
     is what arrives in GAME_CMSG 0x0012 and what the server has to look up.
 
-    A row's `quest_log_flags` and its accept-time grants are validated HERE
-    (RANGERPRE-S18), so a bad one stops the server at startup rather than at
-    the first accept.
+    A row's `quest_log_flags`, its accept-time grants and (RANGERPRE-S20) its
+    hand-in items are validated HERE (RANGERPRE-S18), so a bad one stops the
+    server at startup rather than at the first accept or hand-in.
     """
     world = world or content.load()
     out = {}
@@ -356,6 +376,9 @@ def load(world=None):
             if row.get("accept_items") is not None \
                     or row.get("accept_skills") is not None:
                 check_accept_grants(row, world.rows("item"))
+            if row.get("handin_items") is not None \
+                    or row.get("reward_items") is not None:
+                check_handin_items(row, world.rows("item"))
         except ValueError as exc:
             raise ValueError(f"content quest row {name!r}: {exc}") from None
         row = dict(row)
@@ -441,13 +464,83 @@ def reward_run(slot_a, slot_b=None):
     return "".join(chr(u) for u in units)
 
 
+# THE REWARD ITEM LINE -- RANGERPRE-S20 (QUESTFLOW-H4). A quest that hands
+# over an item draws it as one more run after slot B, inside the same coded
+# string. OBSERVED byte for byte on 21 strings across 5 captures (15 0x004C
+# descriptions of quest 62, 6 0x0080 dialog lines; every one q62's shield,
+# "Armor 4"), e.g. the turn-in screen 20260929T150923 :53880 726.6797 and that
+# hand-in's 0x004C re-send at 727.4875:
+#
+#   0002 | 2AEF F690 D06E 4C53 | 010A <the item's name units> 0001 |
+#          010B 0A86 010A 0A44 0001 0101 0104 0001
+#
+# -- ref 10735 (needs_key, like the three reward refs above) with two
+# arguments: 0x010A introduces the item's NAME, and it is byte-identical to the
+# name units of the 0x0161 that hand-in delivered (item 1607, 727.4875); 0x010B
+# introduces its STAT LINE, template 2438 `%str1%: %num1%` fed label 2372 and a
+# 0x100-biased numeric -- exactly the pair clientscan/itemmods.py records for
+# the armour-rating modifier 572's handler, and the numeric (4) equals the
+# delivered shield's own 572 argument (0xA3C80400; CORROBORATED, n = 1). What
+# 0x010A / 0x010B MEAN is RECONSTRUCTION (str1 / str2 argument markers, by
+# position); the words are OBSERVED.
+#
+# A SHIELD'S LINE ONLY. A weapon's line swaps the stat for template 2441 with
+# label 2382 and a DAMAGE-TYPE string id (0x08DE at :53880 771.875, 0x08E4 at
+# :55934 631.202), and the table from 587's argument to that id is NOT FOUND in
+# this repo -- so a weapon reward is granted but not drawn (authsrv's
+# quest_item_lines says so). A name-only item line (ref 10733, 20260819T132414
+# :52606 q440, a type-30 item) exists too; no content row asks for it yet.
+REWARD_ITEM_REF = (0x2AEF, 0xF690, 0xD06E, 0x4C53)  # ref 10735
+ITEM_NAME_ARG = 0x010A        # precedes the name (RECONSTRUCTION: %str1%)
+ITEM_STAT_ARG = 0x010B        # precedes the stat line (RECONSTRUCTION: %str2%)
+STAT_LINE_TEMPLATE = 0x0A86   # id 2438, `%str1%: %num1%` (itemmods, 572)
+ARMOUR_LABEL = 0x0A44         # id 2372, 572's label (drawn "Armor" on screen)
+ARG_END = 0x0001              # closes an argument (below WORD_VALUE_BASE)
+
+assert codedstr.decode_id([STAT_LINE_TEMPLATE]) == (2438, 1)
+assert codedstr.decode_id([ARMOUR_LABEL]) == (2372, 1)
+assert codedstr.decode_id(list(REWARD_ITEM_REF))[0] == 10735
+
+
+def reward_item_run(name_units, armour):
+    """One reward item's line, as a codec-ready str: 15 units plus the name.
+
+    `name_units` are the item's own name code units -- the SAME units its
+    0x0161 declares (agents.named_item sends the row's enc_name), because the
+    tape's line and its delivered item agree on them. `armour` is its 572
+    argument, the number drawn after the label. Refuses an empty name, a
+    name unit that is a marker (< 0x100: a name must open with a string id,
+    the rule coded_literal's TextApi.cpp:585 note is about) or past a u16,
+    and an armour that does not survive the 0x100 bias in one u16."""
+    name = [int(u) for u in name_units]
+    if not name or not all(0x100 <= u <= 0xFFFF for u in name):
+        raise ValueError(
+            f"item name units {name!r} are not a coded string id (each "
+            f"0x0100..0xFFFF, at least one)")
+    if isinstance(armour, bool) or not isinstance(armour, int) \
+            or not (0 <= armour <= 0xFFFF - 0x100):
+        raise ValueError(
+            f"armour {armour!r} does not fit a 0x100-biased u16 argument; "
+            f"the range is 0..{0xFFFF - 0x100}")
+    units = ([RUN_SEPARATOR] + list(REWARD_ITEM_REF)
+             + [ITEM_NAME_ARG] + name + [ARG_END]
+             + [ITEM_STAT_ARG, STAT_LINE_TEMPLATE,
+                ITEM_NAME_ARG, ARMOUR_LABEL, ARG_END,
+                NUMERIC_ARG, 0x100 + armour, ARG_END])
+    return "".join(chr(u) for u in units)
+
+
 def with_reward(text, slot_a, slot_b=None, framing="template",
-                limit=FIELD_UNITS):
+                limit=FIELD_UNITS, items=()):
     """A description with its reward block appended, length-checked AFTER.
 
     The order matters and is the whole reason this is not two calls at the call
     site: the reward costs 19 units, so a description that passes a 122-unit
     check on its own can overflow once the block is on. Check the total.
+
+    `items` (RANGERPRE-S20) is [(name units, armour)], one reward_item_run
+    each, appended AFTER slot B -- quest 62's order on every string that
+    carries one -- and counted in the same check.
     """
     # THE PARAGRAPH BREAK IS NOT COSMETIC, and the first run without it proved
     # so on screen: the pane read "...then return to me.Reward:" with our last
@@ -462,10 +555,13 @@ def with_reward(text, slot_a, slot_b=None, framing="template",
     # 0x0102 draws a line end. Each break is its own run (separator + id 2),
     # never two ids in one run, which the codec would read as an argument.
     out = body + PARAGRAPH_BREAK + PARAGRAPH_BREAK + reward_run(slot_a, slot_b)
+    for name_units, armour in items:
+        out += reward_item_run(name_units, armour)
     if len(out) > limit:
         raise ValueError(
-            f"{len(body)} units of text plus a 19-unit reward block is "
-            f"{len(out)}, over the {limit}-unit field. Shorten the text.")
+            f"{len(body)} units of text plus a {len(out) - len(body)}-unit "
+            f"reward block is {len(out)}, over the {limit}-unit field. Shorten "
+            f"the text.")
     return out
 
 

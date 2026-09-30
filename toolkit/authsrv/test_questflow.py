@@ -86,9 +86,30 @@ WHAT THIS CHECKS:
          cross-map markers within 387 u of the player's last position before
          the transfer to that map, and :53880's one exit for three labels.
 
-§5, §8 and §10 share ONE decode of the corpus (corpus()); §7 and on share one of
-20260929T150923 (tape_s18()). Nothing binds a port, launches a client, or
-touches vault/state.
+  * RANGERPRE-S20 (QUESTFLOW-H4), THE HAND-IN'S ITEMS. A hand-in takes its
+    quest item back (0x014D) and grants its reward item (0x0161 then
+    0x013E) into the cell the quest item vacated, all BEFORE the first
+    0x0052 -- retail's q62 (20260929T150923 :53880 727.4875), the corpus's
+    only hand-in with a 0x014D, and q440 (20260819T132414 :52606, a reward
+    item with no quest item). The screens draw a shield's line after the
+    reward, byte-identical to q62's. Ours sent none of it until S20;
+    --no-quest-items is that, kept as the KNOWN-BAD arm. The rules
+    (items_before_remove, vacated_refilled) are the tape's.
+      §13 (bare): turn_in_quest for a quest item back and a shield out, the
+         bytes and the cell (the vacated one, not the lowest); the item not
+         held; a dressed item with the same key never taken; grant_item's
+         named-cell fallback; the known-bad arm; the rules' near misses;
+         _quest_prose's shield line and its refused weapon line;
+         reward_item_run's and questdefs' refusals; the flag and main().
+      §14 (vault-gated): q62's batch reduced exactly, 3359's cell refilled
+         by 1607; our reward_item_run fed 1607's own name and 572 argument
+         EQUAL to the screen's and the 0x004C's tail (armour + 1 unequal);
+         OURS vs TAPE; sabotaged tapes red; q440; the corpus's every
+         item-bearing hand-in.
+
+§5, §8, §10 and §14 share ONE decode of the corpus (corpus()); §7 and on share
+one of 20260929T150923 (tape_s18()). Nothing binds a port, launches a client,
+or touches vault/state.
 """
 
 import os
@@ -103,12 +124,12 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 48 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks, §3's six, §6's eleven, §9's twelve and §11's ten. §2 adds 15
-# with the four captures present, §4 7, §5 3, §7 7, §8 3, §10 7 and §12 4 (94
-# in all), each declaring a LEDGER.skip for what is absent. Set from the run,
-# never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=48)
+# Floor 61 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
+# nine checks, §3's six, §6's eleven, §9's twelve, §11's ten and §13's
+# thirteen. §2 adds 15 with the four captures present, §4 7, §5 3, §7 7, §8 3,
+# §10 7, §12 4 and §14 8 (115 in all), each declaring a LEDGER.skip for what
+# is absent. Set from the run, never above it.
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=61)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -1443,6 +1464,391 @@ def section_12():
            "first hop's exit, the final map's label", f"{multi}")
 
 
+# ---------------------------------------------------------------- S20 / H4
+DEL = authsrv.merchant.GAME_SMSG_ITEM_REMOVED          # 0x014D
+ITEM_KINDS = ("DEL", "ITEM", "IADD")
+TAPE_S20 = "20260929T150923"
+# q62's hand-in on :53880 (OBSERVED, livewire): 0x014D [92, 3359] -- the quest
+# item the 700.7599 load placed at [92, 3359, 452, 0] -- then 0x0161 [1607, type
+# 24] and 0x013E [92, 1607, 452, 0], then the doubled 0x0052 frame. Its
+# turn-in screen is the 0x0080 at 726.6797.
+Q62_PORT, Q62_T, Q62_LOAD_T, Q62_SCREEN_T = "53880", 727.4875, 700.7599, 726.6797
+Q62_HANDIN = ["DEL", "ITEM", "IADD", "RM", "EE0", "GOLD", "RM", "UNL"]
+# q440's hand-in, 20260819T132414 :52606 (OBSERVED): no quest item; a type-30
+# item declared and placed at [4, 652, 8, 0] (bag 8 that connection's
+# backpack, slot 0 its lowest free cell) before the first 0x0052.
+Q440 = ("20260819T132414", "52606", 145.4870, 440)
+Q440_HANDIN = ["ITEM", "IADD", "RM", "EE0", "GOLD", "RM", "UNL"]
+# The in-test row: q62's own numbers, a quest item back and a shield out.
+H4_ROW = {"reward_experience": 250, "reward_gold": 25,
+          "handin_items": ["starter_sword"], "reward_items": ["starter_shield"]}
+
+
+def reduce_handin(seq):
+    """A hand-in batch reduced to its item lines and reduce_batch's kinds, in
+    sequence: DEL (0x014D), ITEM (a 0x0161 whose id a 0x013E of the SAME
+    batch places -- an NPC's gear declared in a hand-in batch, :55934
+    293.809's 480 / 481, is not the player's), IADD (0x013E). Ids read from
+    the END: 0x0161 [.., id, 12 fields], 0x013E [.., key, id, bag, slot]."""
+    placed = {v[-3] for op, v in seq if op == IADD}
+    out = []
+    for op, v in seq:
+        if op == DEL:
+            out.append("DEL")
+        elif op == ITEM and v[-13] in placed:
+            out.append("ITEM")
+        elif op == IADD:
+            out.append("IADD")
+        else:
+            out += reduce_batch([(op, v)])
+    return out
+
+
+def items_before_remove(red):
+    """The tape's rule, 2 of 2 item-bearing hand-ins: at least one item line;
+    every item line BEFORE the first 0x0052; every 0x014D before every
+    0x0161 (the quest item goes before the reward arrives); each 0x013E
+    preceded by at least as many 0x0161 (declared before placed)."""
+    kinds = [r.split(":")[0] for r in red]
+    lines = [i for i, k in enumerate(kinds) if k in ITEM_KINDS]
+    if not lines or "RM" not in kinds or max(lines) > kinds.index("RM"):
+        return False
+    dels = [i for i, k in enumerate(kinds) if k == "DEL"]
+    items = [i for i, k in enumerate(kinds) if k == "ITEM"]
+    if dels and items and max(dels) > min(items):
+        return False
+    return all(kinds[:i].count("ITEM") > kinds[:i].count("IADD")
+               for i, k in enumerate(kinds) if k == "IADD")
+
+
+def vacated_refilled(seq, cells):
+    """The q62 cell rule: the first 0x013E puts its item into the (bag, slot)
+    the first 0x014D's item held. `cells` {item id: (bag, slot)} before the
+    batch. False without a 0x014D, a 0x013E, or a known cell."""
+    gone = next((v[-1] for op, v in seq if op == DEL), None)
+    add = next((v for op, v in seq if op == IADD), None)
+    if gone is None or add is None or gone not in cells:
+        return False
+    return (add[-2], add[-1]) == tuple(cells[gone])
+
+
+def h4_state(**kw):
+    """A hand-in state whose backpack holds a plain item at slot 0 and the
+    quest's granted sword (kind 'reward', id 5000) at slot 5 -- so the cell
+    it vacates (5) is NOT the lowest free one (1)."""
+    bp = authsrv.BACKPACK_BAG_ID
+    items = {7: {"bag": bp, "slot": 0, "key": None, "kind": None,
+                 "item_type": 24},
+             5000: {"bag": bp, "slot": 5, "key": "starter_sword",
+                    "kind": "reward", "item_type": 27}}
+    st = fresh_state(quests={1463}, items=items, backpack={5: 5000},
+                     next_purchased_item=5001)
+    st.update(kw)
+    return st
+
+
+def ours_handin(row, state, **flags):
+    """OUR raw turn_in_quest batch [(op, values)] for `row` on `state`, with
+    any authsrv flag in `flags`; flags and the bar restored."""
+    saved = {k: getattr(authsrv, k) for k in
+             ["REWARD_IN_FRAME", "QUEST_ITEMS_ENABLED"] + list(flags)}
+    saved_bar = list(authsrv.SKILLBAR)
+    authsrv.REWARD_IN_FRAME = True
+    authsrv.QUEST_ITEMS_ENABLED = True
+    for k, v in flags.items():
+        setattr(authsrv, k, v)
+    authsrv.SKILLBAR[:] = [0] * authsrv.SKILLBAR_SLOTS
+    sent, send = collect()
+    try:
+        authsrv.turn_in_quest(send, state, 1463, row, 0)
+    finally:
+        for k, v in saved.items():
+            setattr(authsrv, k, v)
+        authsrv.SKILLBAR[:] = saved_bar
+    return sent
+
+
+def section_13():
+    print("\n13. RANGERPRE-S20 (QUESTFLOW-H4): OURS -- the quest item back, the "
+          "reward item into its cell, the shield's line on the screen")
+    import contextlib
+    import io
+    import questdefs
+    bp, key = authsrv.BACKPACK_BAG_ID, authsrv.PLAYER_INVENTORY_KEY
+    st = h4_state()
+    seq = ours_handin(H4_ROW, st)
+    red = reduce_handin(seq)
+    led.ok(red == ["DEL", "ITEM", "IADD", "RM", "EE0", "GOLD", "UNL"]
+           and items_before_remove(red),
+           "turn_in_quest for {handin_items [starter_sword], reward_items "
+           "[starter_shield], 250 xp, 25 gold}: 0x014D, 0x0161, 0x013E, THEN "
+           "the 0x0052 frame -- q62's order (its doubled 0x0052 is ours as one), "
+           "and the tape's rule holds", f"{red}")
+    shield = authsrv.agents.item_template("starter_shield")
+    led.ok(first(seq, DEL) == [key, 5000]
+           and first(seq, ITEM) == authsrv.agents.named_item(5001, shield)
+           and first(seq, IADD) == [key, 5001, bp, 5]
+           and vacated_refilled(seq, {5000: (bp, 5)}),
+           "the bytes: 0x014D [key, 5000] takes the granted sword; the shield "
+           "is declared as item 5001 (the purchase counter) and placed at "
+           "backpack slot 5 -- the cell the sword vacated, NOT the lowest free "
+           "cell (1)", f"{seq[:3]}")
+    led.ok(5000 not in st["items"] and st["backpack"] == {5: 5001}
+           and st["items"].get(5001) == {"bag": bp, "slot": 5,
+                                         "key": "starter_shield",
+                                         "kind": "reward", "item_type": 24},
+           "the store and the merchant's map lose the sword and hold the "
+           "shield (kind 'reward', so it stays per-session like a purchase)",
+           f"backpack {st['backpack']} items {st['items']}")
+    # The quest item not held: nothing taken, the reward to the lowest cell.
+    st2 = h4_state(backpack={})
+    st2["items"].pop(5000)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        seq2 = ours_handin(H4_ROW, st2)
+    red2 = reduce_handin(seq2)
+    led.ok(red2 == ["ITEM", "IADD", "RM", "EE0", "GOLD", "UNL"]
+           and first(seq2, IADD) == [key, 5001, bp, 1]
+           and "QUEST ITEM 'starter_sword' (quest 1463 handed in) NOT taken"
+           in buf.getvalue(),
+           "no granted sword held: no 0x014D, the shield to the lowest free "
+           "cell (1), and the log says the quest item was NOT taken",
+           f"{red2} {first(seq2, IADD)}")
+    # A DRESSED item with the same key is never the quest item.
+    st3 = h4_state(backpack={})
+    st3["items"][5000].update(kind="set 1 lead")
+    seq3 = ours_handin(H4_ROW, st3)
+    led.ok(DEL not in [op for op, _v in seq3] and 5000 in st3["items"],
+           "a weapon set's backpack sword (same key, kind 'set 1 lead') is NOT "
+           "taken -- only an item grant_item minted is a quest item",
+           f"{reduce_handin(seq3)}")
+    # grant_item's named cell falls back when it is not free.
+    st4 = h4_state()
+    sent4, send4 = collect()
+    authsrv.grant_item(send4, st4, 0, "starter_shield", "S20 test", slot=0)
+    led.ok(first(sent4, IADD) == [key, 5001, bp, 1],
+           "grant_item: a named cell that is occupied (slot 0) falls back to the "
+           "lowest free one (1)", f"{first(sent4, IADD)}")
+    # KNOWN-BAD: --no-quest-items.
+    st5 = h4_state()
+    bad = reduce_handin(ours_handin(H4_ROW, st5, QUEST_ITEMS_ENABLED=False))
+    led.ok(bad == ["RM", "EE0", "GOLD", "UNL"] and not items_before_remove(bad)
+           and 5000 in st5["items"],
+           "KNOWN-BAD arm (--no-quest-items): no 0x014D, 0x0161 or 0x013E -- "
+           "the pre-S20 hand-in, the sword still held -- and the rule goes RED",
+           f"{bad}")
+    misses = {"no item line": ["RM", "EE0", "UNL"],
+              "the item after the 0x0052": ["RM", "ITEM", "IADD", "UNL"],
+              "the 0x014D after the 0x0161": ["ITEM", "DEL", "IADD", "RM"],
+              "placed before declared": ["IADD", "ITEM", "RM"],
+              "no 0x0052": ["DEL", "ITEM", "IADD"]}
+    rmiss = {k: items_before_remove(m) for k, m in misses.items()}
+    led.ok(not any(rmiss.values()) and items_before_remove(Q62_HANDIN)
+           and items_before_remove(Q440_HANDIN)
+           and not vacated_refilled([(DEL, [1, 9]), (IADD, [1, 8, 2, 3])],
+                                    {9: (2, 4)}),
+           "VACUITY: the rule refuses each near miss and accepts q62's and "
+           "q440's batches; the cell rule refuses a placement one slot off",
+           f"{rmiss}")
+    # THE SCREEN: the shield's line after the reward, the weapon's refused.
+    rows = questdefs.load()
+    b = dict(rows[BANDITS], reward_items=["starter_shield"])
+    text = b["turn_in_dialogue"]
+    drawn = authsrv._quest_prose(b, text)
+    run = questdefs.reward_item_run([0x2186], 3)
+    led.ok(drawn.endswith(run)
+           and drawn == questdefs.with_reward(text, 250, None,
+                                              limit=questdefs.DIALOG_UNITS,
+                                              items=[([0x2186], 3)])
+           and [ord(c) for c in run] == [
+               0x0002, 0x2AEF, 0xF690, 0xD06E, 0x4C53, 0x010A, 0x2186, 0x0001,
+               0x010B, 0x0A86, 0x010A, 0x0A44, 0x0001, 0x0101, 0x0103, 0x0001],
+           "_quest_prose for the bandits + reward_items [starter_shield]: the "
+           "reward block then ref 10735, the shield's name (0x2186, its "
+           "0x0161's), template 2438 with label 2372 and its 572 argument 3",
+           f"{[hex(ord(c)) for c in drawn[-16:]]}")
+    saved = authsrv.QUEST_ITEMS_ENABLED
+    authsrv.QUEST_ITEMS_ENABLED = False
+    try:
+        off = authsrv._quest_prose(b, text)
+    finally:
+        authsrv.QUEST_ITEMS_ENABLED = saved
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        sword = authsrv._quest_prose(dict(b, reward_items=["starter_sword"]), text)
+    led.ok(off == sword == questdefs.with_reward(text, 250, None,
+                                                 limit=questdefs.DIALOG_UNITS)
+           and "reward item 'starter_sword' (type 27) is granted but NOT DRAWN"
+           in buf.getvalue() and "587" in buf.getvalue(),
+           "--no-quest-items draws no item line; a WEAPON reward draws none "
+           "either and says why (587's damage-type string table NOT FOUND)",
+           buf.getvalue().strip())
+    refused = []
+    for name, armour in (([], 3), ([0x0041], 3), ([0x2186], -1),
+                         ([0x2186], 0xFF00), ([0x2186], True)):
+        try:
+            questdefs.reward_item_run(name, armour)
+        except ValueError:
+            refused.append((name, armour))
+    over = False
+    long_text = "x" * (questdefs.DIALOG_UNITS - 3 - 4 - 12)
+    fits = questdefs.with_reward(long_text, 1, None,
+                                 limit=questdefs.DIALOG_UNITS)
+    try:
+        questdefs.with_reward(long_text, 1, None, limit=questdefs.DIALOG_UNITS,
+                              items=[([0x2186], 3)])
+    except ValueError:
+        over = True
+    led.ok(len(refused) == 5 and len(fits) == questdefs.DIALOG_UNITS and over,
+           "reward_item_run refuses an empty name, a marker unit, and an "
+           "armour past the biased u16 (a bool included); with_reward counts "
+           "the item line in the SAME length check (a string that fits bare "
+           "overflows with it)", f"refused {len(refused)}")
+    world_items = {"starter_shield": {}}
+    bad_rows = [{"reward_items": ["no_such_item"]},
+                {"reward_items": "starter_shield"},
+                {"handin_items": [7]}, {"handin_items": ["nope"]}]
+    nref = 0
+    for r in bad_rows:
+        try:
+            questdefs.check_handin_items(r, world_items)
+        except ValueError:
+            nref += 1
+
+    class _World:
+        def rows(self, kind):
+            return ({"q": {"quest_id": 7, "reward_items": ["nope"]}}
+                    if kind == "quest" else world_items)
+    try:
+        questdefs.load(_World())
+        load_msg = ""
+    except ValueError as exc:
+        load_msg = str(exc)
+    led.ok(nref == 4 and "'q'" in load_msg and "'nope'" in load_msg
+           and questdefs.check_handin_items(H4_ROW, {"starter_sword": {},
+                                                     "starter_shield": {}})
+           is None,
+           "questdefs.check_handin_items refuses an unknown key, a bare string "
+           "and a non-string in either column and passes the in-test row; load "
+           "names the row at startup", f"refused {nref}; {load_msg}")
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.no_quest_items:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--no-quest-items"]).no_quest_items
+           and not ap.parse_args([]).no_quest_items
+           and authsrv.QUEST_ITEMS_ENABLED is True
+           and "global QUEST_ITEMS_ENABLED\n" in window
+           and "QUEST_ITEMS_ENABLED = False\n" in window,
+           "--no-quest-items parses, the default takes and grants, and main() "
+           "sets QUEST_ITEMS_ENABLED = False under it", f"window found={at >= 0}")
+
+
+def section_14():
+    import questdefs
+    print(f"\n14. RANGERPRE-S20 (QUESTFLOW-H4): the TAPE {TAPE_S20} :{Q62_PORT} "
+          "q62, 20260819T132414 q440, and the corpus's item-bearing hand-ins")
+    conns = tape_s18()
+    if conns is None:
+        led.skip(f"the tape {TAPE_S20}", "no capture directory (bare machine)")
+    else:
+        merged = next((m for p, _mp, m, _ok in conns if p == Q62_PORT), [])
+        batch = [(op, v) for t, d, op, v in merged
+                 if d == "s2c" and abs(t - Q62_T) < 0.0005]
+        red = reduce_handin(batch)
+        led.ok(red == Q62_HANDIN and items_before_remove(red),
+               f"TAPE :{Q62_PORT} {Q62_T} q62: the hand-in reduces to "
+               + " ".join(Q62_HANDIN) + ", and the rule holds", f"{red}")
+        load = {v[-3]: (v[-2], v[-1]) for t, d, op, v in merged
+                if d == "s2c" and op == IADD and abs(t - Q62_LOAD_T) < 0.0005}
+        it, ia, gone = first(batch, ITEM), first(batch, IADD), first(batch, DEL)
+        led.ok(gone is not None and gone[-1] == 3359 and load.get(3359) == (452, 0)
+               and it is not None and ia is not None and it[-13] == ia[-3] == 1607
+               and it[-11] == 24 and vacated_refilled(batch, load),
+               "TAPE: the 0x014D takes 3359, which the load put at (452, 0); the "
+               "0x013E places the 0x0161's item (1607, type 24 -- a shield) at "
+               "(452, 0) -- the cell 3359 vacated", f"{gone} {ia} {load.get(3359)}")
+        # THE LINE, VERBATIM: our builder fed the delivered item's own name
+        # units and 572 argument equals the screen's and the 0x004C's tail.
+        name = [ord(c) for c in it[-2]]
+        rating = next(((w >> 8) & 0x3FF for (w,) in it[-1]
+                       if (w >> 20) & 0x3FF == 572), None)
+        screen = next((v[-1] for t, d, op, v in merged if d == "s2c"
+                       and op == 0x0080 and abs(t - Q62_SCREEN_T) < 0.0005), "")
+        desc = next((v[-2] for op, v in batch if op == 0x004C and v[-3] == 62), "")
+
+        def tail(s):
+            u = [ord(c) for c in s]
+            k = u.index(0x2AEF) if 0x2AEF in u else None
+            return u[k - 1:] if k else None
+        ours_run = [ord(c) for c in questdefs.reward_item_run(name, rating)]
+        led.ok(rating == 4 and tail(screen) == ours_run == tail(desc),
+               "TAPE: reward_item_run(1607's name units, its 572 argument 4) "
+               "EQUALS the tail of the turn-in screen's 0x0080 (726.6797) and of "
+               "the hand-in's q62 0x004C, from the 0x0002 before ref 10735 to "
+               "the end", f"ours {ours_run} screen {tail(screen)}")
+        bad_run = [ord(c) for c in questdefs.reward_item_run(name, rating + 1)]
+        led.ok(bad_run != tail(screen),
+               "KNOWN-BAD: armour 5 does NOT equal the screen", f"{bad_run}")
+        ours = ours_handin(H4_ROW, h4_state())
+        bad = ours_handin(H4_ROW, h4_state(), QUEST_ITEMS_ENABLED=False)
+        led.ok(reduce_handin(ours) == collapse_remove(red)
+               and vacated_refilled(ours, {5000: (authsrv.BACKPACK_BAG_ID, 5)})
+               and reduce_handin(bad) != collapse_remove(red),
+               "OURS vs TAPE: turn_in_quest for q62's shape equals the tape on "
+               "every reduced kind (its doubled 0x0052 collapsed), and refills "
+               "the vacated cell as it does; --no-quest-items does NOT equal it",
+               f"ours {reduce_handin(ours)} tape {collapse_remove(red)}")
+        late = list(batch)
+        ai = next(i for i, (op, _v) in enumerate(late) if op == IADD)
+        ri = next(i for i, (op, _v) in enumerate(late) if op == REMOVE)
+        late.insert(ri, late.pop(ai))
+        off = [(op, list(v[:-1]) + [v[-1] + 1] if op == IADD else v)
+               for op, v in batch]
+        led.ok(not items_before_remove(reduce_handin(late))
+               and not vacated_refilled(off, load),
+               "KNOWN-BAD: a sabotaged tape -- the 0x013E moved after the first "
+               "0x0052, or placed one slot off -- FAILS the rule / the cell rule",
+               f"{reduce_handin(late)}")
+    import livewire
+    cap, port, t440, qid = Q440
+    capdir = vaultpath.vault_path("captures", "live", cap)
+    if not os.path.isdir(capdir):
+        led.skip(f"the tape {cap} :{port}", f"no {capdir} (bare machine)")
+    else:
+        gf = [g for g in livewire.connections(capdir) if f"_{port}-to-" in g]
+        m440 = livewire.decode_conn(capdir, gf[0])[1] if len(gf) == 1 else []
+        b440 = [(op, v) for t, d, op, v in m440
+                if d == "s2c" and abs(t - t440) < 0.0005]
+        led.ok(reduce_handin(b440) == Q440_HANDIN
+               and items_before_remove(reduce_handin(b440))
+               and first(b440, IADD)[-3:] == [652, 8, 0],
+               f"TAPE {cap} :{port} {t440} q{qid}: no quest item, the reward "
+               "item declared and placed at (8, 0) before the first 0x0052, "
+               "and the rule holds", f"{reduce_handin(b440)}")
+    c = corpus()
+    if c is None:
+        led.skip("section 14's corpus half", "no live captures")
+        return
+    bearing = [(cc, gf, round(t, 4), q, reduce_handin(b))
+               for cc, gf, t, q, _o, b in c["handins"]
+               if any(k in ITEM_KINDS for k in reduce_handin(b))]
+    led.ok(len(bearing) >= 2
+           and sum("DEL" in r for *_x, r in bearing) >= 1
+           and all(items_before_remove(r) for *_x, r in bearing),
+           f"CORPUS: every item-bearing hand-in ({len(bearing)}, floor 2 -- q62 "
+           f"and q440; {sum('DEL' in r for *_x, r in bearing)} with a 0x014D, "
+           "floor 1) takes and grants BEFORE its first 0x0052",
+           f"{[(cc, t, q, r) for cc, _g, t, q, r in bearing if not items_before_remove(r)]}")
+
+
 def main():
     section_1()
     section_2()
@@ -1456,6 +1862,8 @@ def main():
     section_10()
     section_11()
     section_12()
+    section_13()
+    section_14()
     return led.verdict()
 
 

@@ -1080,6 +1080,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "a sword, then skills 382, 384 and 1, then 0x0049) and "
                          "20260819T132414 :52606 228.313 (q270: two skills). "
                          "KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-quest-items", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S20's hand-in items "
+                         "(QUESTFLOW-H4): a hand-in takes no handin_items back "
+                         "and grants no reward_items, and the offer and "
+                         "turn-in screens draw no item line, as every run "
+                         "before this step. The default sends, BEFORE the "
+                         "first 0x0052 (turn_in_quest), 0x014D for each quest "
+                         "item taken back (take_quest_item), then 0x0161 and "
+                         "0x013E for each reward (grant_item) into the cell a "
+                         "taken item vacated, and draws a shield's name and "
+                         "armour line after the reward (questdefs."
+                         "reward_item_run) -- OBSERVED on 20260929T150923 "
+                         ":53880 727.4875 (q62: 0x014D [92, 3359], then the "
+                         "shield 1607 into [92, 1607, 452, 0], the cell 3359 "
+                         "had held) and 20260819T132414 :52606 145.487 (q440). "
+                         "KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--quest-marker-at-player", action="store_true",
                     help="THE REVERT ARM for RANGERPRE-S18's accept marker "
                          "(QUESTFLOW-A2): the accept's 0x0049 marks the "

@@ -587,7 +587,35 @@ def turn_in_quest(send, state, qid, row, conn_id):
     (QUEST_COMPLETE_VISUAL_ID; what it draws is UNREAD). It follows the 0x004A
     under either --no-reward-in-frame arm, so pass 1's order keeps it there too;
     --no-quest-complete-visual drops it, as every run before S8.
+
+    THE ITEMS COME FIRST (RANGERPRE-S20, QUESTFLOW-H4), ahead of the 0x0052:
+    the row's `handin_items` are taken back (take_quest_item: 0x014D), then
+    its `reward_items` are granted (grant_item: 0x0161 then 0x013E), each
+    reward into the cell a taken item vacated, in order, while one is left.
+    Retail puts both before the first 0x0052 on 2 of 2 item-bearing hand-ins
+    (OBSERVED): 20260929T150923 :53880 727.4875 (q62: 0x014D [92, 3359], then
+    0x0161 [1607, type 24] and 0x013E [92, 1607, 452, 0] -- the cell 3359
+    had held) and 20260819T132414 :52606 145.487 (q440: no quest item; 0x0161
+    [652, type 30], 0x013E [4, 652, 8, 0]). They are not reward LINES, so they
+    stay ahead of the 0x0052 under --no-reward-in-frame too. The objective
+    lines retail sends between the 0x014D and the 0x0161 on q62 (0x004D +
+    0x004C, the objective met at the hand-in NPC) are not sent here.
+    --no-quest-items takes and grants nothing, as every run before S20.
     """
+    if QUEST_ITEMS_ENABLED:
+        vacated = []
+        for key in row.get("handin_items") or ():
+            cell = take_quest_item(send, state, conn_id, str(key),
+                                   f"quest {qid} handed in")
+            if cell is not None:
+                vacated.append(cell)
+        for key in row.get("reward_items") or ():
+            grant_item(send, state, conn_id, str(key), f"quest {qid} reward",
+                       slot=vacated.pop(0) if vacated else None)
+    elif row.get("handin_items") or row.get("reward_items"):
+        print(f"[c{conn_id}] quest {qid}: handin_items / reward_items NOT "
+              f"taken or granted (--no-quest-items, as every run before "
+              f"RANGERPRE-S20)", flush=True)
     send(GAME_SMSG_QUEST_REMOVE, [qid],
          f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
     state.setdefault("quests", set()).discard(qid)
@@ -606,11 +634,21 @@ def turn_in_quest(send, state, qid, row, conn_id):
         grant_quest_reward(send, state, qid, row, conn_id)
 
 
-def grant_item(send, state, conn_id, key, why):
+def grant_item(send, state, conn_id, key, why, slot=None):
     """Put one content item (content/items.toml `key`) in the player's
     backpack: mint a per-session id, declare it (0x0161), then place it
     (0x013E [key, id, backpack, slot]) -- RANGERPRE-S18 (QUESTFLOW-A3), the
-    one helper every server-side grant shares (the quest accept's today).
+    one helper every server-side grant shares (the quest accept's, and since
+    RANGERPRE-S20 the hand-in's reward; LOOT's pickup is meant to reuse it).
+
+    `slot` NAMES A CELL (RANGERPRE-S20): the hand-in passes the backpack cell
+    its quest item just vacated, retail's q62 cell (20260929T150923 :53880
+    727.4875: 0x014D [92, 3359] took the item the load had put at [92, 3359,
+    452, 0], and the shield went to [92, 1607, 452, 0]; OBSERVED, n = 1). It is
+    used when it is inside the backpack and free by the same test the lowest
+    cell passes; otherwise the rule below decides, and says so. On that one
+    witness the vacated cell was also the lowest free one, so which rule
+    retail follows is RECONSTRUCTION -- this one says what the tape shows.
 
     THE SHAPE IS RETAIL'S: 0x0161 then 0x013E, declared before placed -- the
     q75 accept's sword, 20260929T150923 :56064 921.1613, 0x0161 [704, type
@@ -634,8 +672,18 @@ def grant_item(send, state, conn_id, key, why):
     items = state.get("items")
     held = state.setdefault("backpack", {})
     size = player_bags().get(BACKPACK_BAG_ID, merchant.BACKPACK_SLOT_COUNT)
-    slot = itemstore.first_free(items or {}, BACKPACK_BAG_ID, size,
-                                avoid=set(held) | reserved_backpack_slots(state))
+    avoid = set(held) | reserved_backpack_slots(state)
+    used = set(itemstore.in_bag(items or {}, BACKPACK_BAG_ID)) | avoid
+    named = slot
+    if named is not None and 0 <= int(named) < size and int(named) not in used:
+        slot = int(named)
+    else:
+        slot = itemstore.first_free(items or {}, BACKPACK_BAG_ID, size,
+                                    avoid=avoid)
+        if named is not None:
+            print(f"[c{conn_id}] ITEM GRANT {key!r}: the named cell {named} is "
+                  f"not a free backpack cell -- the lowest free one instead "
+                  f"[RANGERPRE-S20]", flush=True)
     if slot is None:
         print(f"[c{conn_id}] ITEM GRANT {key!r} ({why}) NOT granted: the "
               f"backpack is full ({size} slots) -- nothing sent; retail's "
@@ -654,8 +702,53 @@ def grant_item(send, state, conn_id, key, why):
          [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
          f"ITEM_MOVED_TO_LOCATION({new_id} -> backpack slot {slot})")
     print(f"[c{conn_id}] ITEM GRANT {key!r} as item {new_id} into backpack "
-          f"slot {slot} ({why}) [RANGERPRE-S18]", flush=True)
+          f"slot {slot}"
+          + (" -- the named cell" if named is not None and slot == named else "")
+          + f" ({why}) [RANGERPRE-S18]", flush=True)
     return new_id
+
+
+def take_quest_item(send, state, conn_id, key, why):
+    """Take one quest item back out of the player's backpack at a hand-in:
+    0x014D [key, id] -- RANGERPRE-S20 (QUESTFLOW-H4). Returns the backpack
+    slot it vacated, or None when nothing was taken.
+
+    RETAIL'S SHAPE, OBSERVED n = 1 (the only hand-in batch in the live corpus
+    carrying a 0x014D): 20260929T150923 :53880 727.4875, q62 -- 0x014D [92,
+    3359] removes the quest item (type 21) the load had declared at [92, 3359,
+    452, 0], at the HEAD of the batch, before the reward item's 0x0161 /
+    0x013E and before the first 0x0052. The same message the merchant's sale
+    sends (merchant.handle_item_sale; 8 of 8 sales), and like a sale nothing
+    moves: the item ceases to exist.
+
+    WHICH ITEM IS OURS (RECONSTRUCTION): the lowest-id item in the BACKPACK
+    whose content key is `key` and whose kind is "reward" -- one grant_item
+    minted, the accept's accept_items being how a quest hands one over today.
+    Never a dressed item (a weapon set's backpack sword carries the same key
+    and kind "set k lead"), never an equipped one. Not held -- never granted,
+    sold, moved out of the backpack, or lost with the per-session connection
+    that granted it -- takes nothing and says so; retail's hand-in without
+    its quest item is NOT FOUND."""
+    items = state.get("items") or {}
+    mine = sorted(iid for iid, r in items.items()
+                  if r.get("key") == key and r.get("kind") == "reward"
+                  and r.get("bag") == BACKPACK_BAG_ID)
+    if not mine:
+        print(f"[c{conn_id}] QUEST ITEM {key!r} ({why}) NOT taken: no granted "
+              f"{key!r} in the backpack -- nothing sent; retail's hand-in "
+              f"without its quest item is NOT FOUND [RANGERPRE-S20]", flush=True)
+        return None
+    iid = mine[0]
+    slot = int(items[iid]["slot"])
+    items.pop(iid)
+    held = state.setdefault("backpack", {})
+    for s in [s for s, h in held.items() if h == iid]:
+        del held[s]
+    send(merchant.GAME_SMSG_ITEM_REMOVED, [PLAYER_INVENTORY_KEY, iid],
+         f"ITEM_REMOVED({key} item {iid} from backpack slot {slot}; {why})")
+    print(f"[c{conn_id}] QUEST ITEM {key!r} item {iid} taken out of backpack "
+          f"slot {slot} ({why}) [RANGERPRE-S20]", flush=True)
+    return slot
 
 
 def accept_quest(send, state, qid, row, conn_id):
@@ -1121,14 +1214,57 @@ def _quest_prose(row, text):
     framing = row.get("wire_framing", "template")
     xp = row.get("reward_experience")
     if xp is None:
+        if QUEST_ITEMS_ENABLED and row.get("reward_items"):
+            print(f"[quests] quest {row.get('quest_id')}: reward_items are NOT "
+                  f"drawn -- the row has no reward_experience, so there is no "
+                  f"reward block to carry an item line (a header with items "
+                  f"alone is NOT FOUND on tape) [RANGERPRE-S20]", flush=True)
         return questdefs.coded_literal(text, framing,
                                        limit=questdefs.DIALOG_UNITS)
     # SLOT B FOLLOWS THE FLAG (the D9 fix pass, ENG-9): --no-quest-gold is
     # "as before this arc", and before this arc the screen drew no gold line;
     # a promise the server then refuses to pay is the worse half of a revert.
     gold = row.get("reward_gold") if QUEST_GOLD_ENABLED else None
+    # THE ITEM LINES FOLLOW THEIR FLAG the same way (RANGERPRE-S20):
+    # --no-quest-items grants nothing, so it draws nothing.
+    items = quest_item_lines(row) if QUEST_ITEMS_ENABLED else ()
     return questdefs.with_reward(text, int(xp), gold,
-                                 framing, limit=questdefs.DIALOG_UNITS)
+                                 framing, limit=questdefs.DIALOG_UNITS,
+                                 items=items)
+
+
+# The wire's shield type byte: quest 62's delivered reward 1607 is type 24
+# (0x0161 at 20260929T150923 :53880 727.4875), the Warrior henchman's shield
+# too (F33). OBSERVED; holds_shield's literal 24 is the same number.
+SHIELD_ITEM_TYPE = 24
+
+
+def quest_item_lines(row):
+    """[(name units, armour)] -- the reward_items this row's screens DRAW
+    (questdefs.reward_item_run), RANGERPRE-S20 (QUESTFLOW-H4).
+
+    A SHIELD ONLY: an item of wire type 24 carrying an armour-rating (572)
+    word, drawn as its name and `Armor: <572's argument>` -- the one line on
+    tape (quest 62's shield, 21 strings; its numeric equal to the delivered
+    shield's own 572 argument, n = 1). Every other reward item is GRANTED at
+    the hand-in but NOT DRAWN, and this prints why: a weapon's line needs a
+    damage-type string id from 587's argument, a table NOT FOUND in this repo
+    (0x08DE / 0x08E4 are the two seen); anything else has no stat template
+    observed for it."""
+    out = []
+    for key in row.get("reward_items") or ():
+        item = agents.item_template(str(key))
+        rating = item_word(item, ARMOR_RATING_MODIFIER)
+        if int(item.get("item_type", -1)) == SHIELD_ITEM_TYPE and rating is not None:
+            out.append(([ord(c) for c in item["enc_name"]], int(rating[0])))
+            continue
+        why = ("a weapon: its line's damage-type string (from 587's argument) "
+               "is NOT FOUND" if item_word(item, ITEM_WORD_DAMAGE_TYPE)
+               else "no observed line template for its type")
+        print(f"[quests] quest {row.get('quest_id')}: reward item {key!r} "
+              f"(type {item.get('item_type')}) is granted but NOT DRAWN on the "
+              f"screen -- {why} [RANGERPRE-S20]", flush=True)
+    return out
 
 
 def _quest_screen(send, agent_id, qid, code, row):
@@ -13322,6 +13458,16 @@ ACCEPT_REWARDS = True          # False (--no-accept-rewards): a quest row's
                                # them BEFORE the 0x0049 -- retail's order on 2
                                # of 2 grant-carrying accepts (OBSERVED;
                                # 20260929T150923 :56064 921.161, q75).
+QUEST_ITEMS_ENABLED = True     # False (--no-quest-items): a hand-in takes no
+                               # handin_items back and grants no reward_items,
+                               # and the screens draw no item line, as every
+                               # run before RANGERPRE-S20. Default ON:
+                               # turn_in_quest sends 0x014D per taken item, then
+                               # 0x0161 + 0x013E per reward (into the vacated
+                               # cell) BEFORE the first 0x0052 -- 2 of 2 retail
+                               # item-bearing hand-ins (OBSERVED; 20260929T150923
+                               # :53880 727.4875, q62) -- and _quest_prose draws
+                               # a shield's line (questdefs.reward_item_run).
 QUEST_MARKER_AT_OBJECTIVE = True  # False (--quest-marker-at-player): the
                                # accept's 0x0049 marker is the player's own
                                # position on this map, plane 0, as every run
@@ -44625,6 +44771,16 @@ def main():
               "before RANGERPRE-S18. KNOWN-BAD against the tape: retail grants "
               "them before the 0x0049 on 2 of 2 grant-carrying accepts "
               "(accept_quest).", flush=True)
+    if a.no_quest_items:
+        global QUEST_ITEMS_ENABLED
+        QUEST_ITEMS_ENABLED = False
+        print("[quests] --no-quest-items: a hand-in takes no handin_items back "
+              "(no 0x014D), grants no reward_items (no 0x0161 / 0x013E), and "
+              "the screens draw no item line, as every run before "
+              "RANGERPRE-S20. KNOWN-BAD against the tape: retail removes the "
+              "quest item and adds the reward item into its cell before the "
+              "first 0x0052 (q62, 20260929T150923 :53880 727.4875) "
+              "(turn_in_quest).", flush=True)
     if a.quest_marker_at_player:
         global QUEST_MARKER_AT_OBJECTIVE
         QUEST_MARKER_AT_OBJECTIVE = False

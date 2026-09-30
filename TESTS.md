@@ -3414,7 +3414,38 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S18 review: the accept's
+  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
+  hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
+  0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`
+  minted, kind `reward`; never a dressed item) and its `reward_items` granted through the
+  shared `grant_item` (0x0161 then 0x013E) into the cell a taken item VACATED, all BEFORE
+  the first 0x0052 -- retail's q62 (20260929T150923 :53880 727.4875: 0x014D [92, 3359],
+  the quest item the 700.7599 load put at [92, 3359, 452, 0], then the shield 1607 into
+  [92, 1607, 452, 0]; the corpus's ONLY hand-in with a 0x014D, OBSERVED) and q440
+  (20260819T132414 :52606 145.487, a reward item and no quest item). The offer and turn-in
+  screens draw a SHIELD's line after the reward (`questdefs.reward_item_run`: ref 10735,
+  the item's own name units, template 2438 with label 2372 and its 572 argument); a weapon
+  is granted but NOT drawn (587's damage-type string table NOT FOUND) and the log says so.
+  `--no-quest-items` is the pre-S20 hand-in, the KNOWN-BAD arm. The rules:
+  `items_before_remove` (an item line; every one before the first 0x0052; the 0x014D before
+  the 0x0161; each 0x013E after its 0x0161) and `vacated_refilled` (the first 0x013E lands
+  in the first 0x014D's cell). §13 OURS (bare): `DEL ITEM IADD RM EE0 GOLD UNL`; the bytes
+  (0x014D [key, 5000], the shield declared as item 5001, placed at slot 5 -- the vacated
+  cell, NOT the lowest free 1); the store and the merchant's map; the quest item not held
+  (no 0x014D, the lowest cell, the log line); a weapon set's same-key sword never taken;
+  `grant_item`'s occupied named cell falling back; KNOWN-BAD `RM EE0 GOLD UNL` and the rule
+  red; VACUITY; `_quest_prose`'s shield line exact, `--no-quest-items` and a sword reward
+  drawing none; `reward_item_run`'s and `check_handin_items`' refusals, `load` naming the
+  row; the flag and `main()`'s flip. §14 THE TAPE (vault-gated): q62's batch reduces to
+  exactly `DEL ITEM IADD RM EE0 GOLD RM UNL` and 3359's cell is refilled by 1607;
+  `reward_item_run(1607's name units, its 572 argument 4)` EQUALS the turn-in screen's
+  0x0080 (726.6797) and the hand-in's q62 0x004C from the 0x0002 before ref 10735 to the
+  end (armour 5 unequal); OURS vs TAPE equal (the doubled 0x0052 collapsed) and the
+  known-bad arm unequal; a sabotaged tape (the 0x013E after the 0x0052, or one slot off)
+  red; q440 reduces to `ITEM IADD RM EE0 GOLD RM UNL` at (8, 0); the CORPUS: every
+  item-bearing hand-in (2, floor 2; 1 with a 0x014D, floor 1) takes and grants first.
+  Floor 48 → 61 from the bare green run (115 vaulted).**
+  **2026-09-30, RANGERPRE-S18 review: the accept's
   grants summary (`quest Q accept grants, BEFORE the 0x0049: ...`, a run-sheet readout) named
   a skill `grant_skill` had REFUSED -- an id past the served skill table, nothing sent,
   nothing stored. `accept_quest` now names a skill only below `SKILL_TABLE_ROWS`, the bound
