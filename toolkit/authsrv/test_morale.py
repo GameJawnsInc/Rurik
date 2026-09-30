@@ -49,7 +49,11 @@ from codec import Codec  # noqa: E402
 # when the refill is immediate and two when it is deferred. The floor is the
 # smaller of the two REAL runs rather than the larger, since a floor above what
 # a healthy run produces is a test that fails for being configured differently.
-LEDGER = checks.Ledger("morale and death penalty", floor=63)
+# REVIVE-HEAL (2026-09-30): section 6 reads the shipped heal arm (two checks: no
+# maximum and retail's gain; retail's seven-message order) and 6b adds two (the
+# known-bad arm on its own death; the switch). 65 on the green runs, vaulted and
+# bare alike.
+LEDGER = checks.Ledger("morale and death penalty", floor=65)
 
 # THE OBSERVATION, pinned as literals so this file states what it is testing
 # against rather than deriving it from the code under test. Capture
@@ -304,12 +308,43 @@ def main():
         # ---- 6. the revive does not hand the penalty back -------------------
         print("\n6. standing back up restores the pools, not the maxima")
         state["player_died_at"] = 0.0          # long enough ago to be due
+        # 6b's known-bad arm gets its OWN death (the state holds an RLock, so it
+        # cannot be copied): the same kill_player on a fresh character.
+        state_b = {"map_id": 146, "level": 1}
+        collect(authsrv.kill_player, state_b, 1, "for the known-bad arm")
+        state_b["player_died_at"] = 0.0
         sent = collect(authsrv.player_revive_due, state, 1)
         health_max = [v[2] for op, v, _w in sent
                       if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                       and v[0] == agents.PROP_HEALTH_MAX]
         deferred = state.get("player_refill_due_at")
-        if health_max:
+        if authsrv.PLAYER_REVIVE_HEAL_GAIN:
+            # REVIVE-HEAL: retail's rise, 24 of 24 on the live corpus -- one
+            # segment, NO maximum (the death batch declared the reduced one) and
+            # the heal a GAIN of the whole reduced pool. This state is a real
+            # kill_player's, so the death's hold is set and must be released.
+            heal = [v for op, v, _w in sent
+                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+                    and v[0] == agents.GV_HEALTH_GAIN]
+            LEDGER.ok(not health_max and deferred is None
+                      and heal == [[agents.GV_HEALTH_GAIN, authsrv.PLAYER_AGENT_ID,
+                                    authsrv._f32(1.0)]],
+                      "the rise re-sends NO maximum and arms no refill; it heals by "
+                      "retail's gain 0x00A2 [55, me, 1.0], a fraction of the REDUCED "
+                      "maximum the death batch declared, so the penalty stands",
+                      f"max {health_max} deferred {deferred} heal {heal}")
+            shape = [(op, v[0] if op in (0x9F, 0xA2) else None) for op, v, _w in sent]
+            want = [(0xF1, None), (0xA2, 43), (0x9F, 8), (0xA2, 52), (0x9F, 54),
+                    (0xA2, 55), (0x26, None)]
+            LEDGER.ok(shape == want and sent[0][1] == [authsrv.PLAYER_AGENT_ID, 0]
+                      and sent[2][1] == [8, authsrv.PLAYER_AGENT_ID, 0]
+                      and sent[-1][1] == [authsrv.PLAYER_AGENT_ID, 5]
+                      and state.get("action_hold", 0) == 0,
+                      "and in retail's ORDER, one segment: status, [43] the rate, "
+                      "[8, me, 0] the death's hold released, [52] the energy, [54] the "
+                      "callout, [55] the heal, flags 5 (24 of 24)",
+                      f"{[(hex(o), p) for o, p in shape]}")
+        elif health_max:
             LEDGER.ok(health_max[0] == ours_health,
                       "the revive re-sends the REDUCED maximum",
                       f"{health_max} -- restoring PLAYER_HEALTH here deletes "
@@ -335,6 +370,38 @@ def main():
         LEDGER.ok(state["player_health"] == float(ours_health),
                   "and their health topped up to the penalised maximum",
                   str(state["player_health"]))
+
+        # ---- 6b. the known-bad arm, on its own death -----------------------
+        print("\n6b. --no-player-revive-heal-gain: the pre-REVIVE-HEAL rise")
+        saved_gain = authsrv.PLAYER_REVIVE_HEAL_GAIN
+        authsrv.PLAYER_REVIVE_HEAL_GAIN = False
+        try:
+            sent_b = collect(authsrv.player_revive_due, state_b, 1)
+        finally:
+            authsrv.PLAYER_REVIVE_HEAL_GAIN = saved_gain
+        ops_b = [op for op, _v, _w in sent_b]
+        gains_b = [v for op, v, _w in sent_b
+                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+                   and v[0] == agents.GV_HEALTH_GAIN]
+        armed = state_b.get("player_refill_due_at") is not None
+        LEDGER.ok(not gains_b and state_b.get("action_hold", 0) == 1
+                  and (armed or authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET in ops_b),
+                  "KNOWN-BAD ARM: no heal gain, the refill deferred (or the [34] setter "
+                  "inline), and the death's hold LEFT SET -- the rise this server sent "
+                  "before REVIVE-HEAL",
+                  f"ops {[hex(o) for o in ops_b]} armed {armed} hold "
+                  f"{state_b.get('action_hold', 0)}")
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        import serverargs
+        sa = open(serverargs.__file__, encoding="utf-8").read()
+        i_main = src.find("\ndef main():")
+        i_flag = src.find("    if a.no_player_revive_heal_gain:", i_main)
+        LEDGER.ok(authsrv.PLAYER_REVIVE_HEAL_GAIN is True
+                  and authsrv.capture_flags().get("PLAYER_REVIVE_HEAL_GAIN") is True
+                  and '"--no-player-revive-heal-gain"' in sa and 0 < i_main < i_flag
+                  and "PLAYER_REVIVE_HEAL_GAIN = False" in src[i_flag:i_flag + 140],
+                  "the switch ships ON, on the capture's flags row, with its revert "
+                  "--no-player-revive-heal-gain wired in main()")
 
         # ---- 7. and experience walks it back -------------------------------
         print("\n7. kills buy the penalty back at the wiki's rate")

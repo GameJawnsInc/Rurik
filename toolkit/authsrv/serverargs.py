@@ -1387,6 +1387,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "tick after the status -- instead of retail's 0x00A2 [55, "
                          "agent, 1.0] in the status's own segment (88 of 88 retail "
                          "revives). Known-bad arm on the wire.")
+    ap.add_argument("--no-player-revive-heal-gain", action="store_true",
+                    help="REVIVE-HEAL REVERT, the player's half: the player's rise "
+                         "sends the status and flags 5, then one tick later 0x009F [42] "
+                         "+ 0x00A3 [34] + the energy half, and leaves the death's hold "
+                         "set -- instead of retail's one segment: status, [43], "
+                         "[8, me, 0], [52], [54], 0x00A2 [55, me, 1.0], flags 5 (24 of "
+                         "24). Known-bad arm on the wire.")
     ap.add_argument("--no-revive-flags", action="store_true",
                     help="RANGERLOOP-F10 REVERT: an NPC's timer revive sends the "
                          "0x00F1 status ALONE, without the 0x0026 [agent, 9] that "

@@ -14574,6 +14574,25 @@ REVIVE_SENDS_ALIVE_FLAGS = True   # --no-revive-flags reverts
 #     it. Why is UNVERIFIED: agentprops 1g.
 # --no-revive-heal-gain restores the deferred [42] + [34] refill.
 REVIVE_HEAL_GAIN = True   # --no-revive-heal-gain reverts
+# REVIVE-HEAL, THE PLAYER'S HALF (2026-09-30). RETAIL'S RISE IS ONE SEGMENT, 24 of
+# the 25 player rises on the live corpus (the 25th is the flags alone):
+#   status [me, 0]; 0x00A2 [43, me, rate]; 0x009F [8, me, 0] (the death's hold
+#   released); 0x00A2 [52, me, f]; 0x009F [54, me, N]; 0x00A2 [55, me, 1.0];
+#   0x0026 [me, 5].
+# The 55 is 1.0 on all 24, including the Resurrection Signet's rises, whose energy
+# is 0.25 (studies/morale 1: the shrine rise at 88.857). NO 0x009F [42]: the death
+# batch already carried the reduced maxima (MORALE-Q8; kill_player sends them),
+# and retail never re-sends them at the rise.
+# OURS until now: the status and the flags, then a tick later [42] + [34] + the
+# energy half (REVIVE_REFILL_DEFER). The hold stayed set until the player moved.
+# The [42] + [34] burst drew `Health non-zero on resurrect` 13 of 13 (agentprops
+# 1f). The NPC's in-segment gain drew 0 in 5 (REVIVE_HEAL_GAIN's run), which is
+# this switch's prediction for the player.
+# One arm covers all three ways up: the timer, the shrine and a resurrection
+# skill (revive_player). The 55 carries the raise's health fraction, and the
+# energy half carries its energy fraction.
+# --no-player-revive-heal-gain restores the defer.
+PLAYER_REVIVE_HEAL_GAIN = True   # --no-player-revive-heal-gain reverts
 
 
 # WEAPON DAMAGE moved to combatmath.py (REFACTOR-A12), banner and all; its lazy
@@ -23060,8 +23079,13 @@ def energy_tick(send, state, conn_id):
                   f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
 
 
-def restore_player_energy(send, state, conn_id, why, fraction=1.0):
+def restore_player_energy(send, state, conn_id, why, fraction=1.0, after_rate=None):
     """The resurrect batch's energy half: a full refill and the rate back on.
+
+    `after_rate` (REVIVE-HEAL, the player's rise) is called between the rate and
+    the gain, where retail's rise releases the death's hold, [8, me, 0] (24 of
+    24). With ENERGY off it is still called, so the release never depends on the
+    energy model.
 
     OBSERVED n=1 and it is one instant of capture `20260817T183756`: the death
     bit clears, property 43 goes back to the agent's own rate, property 52
@@ -23077,6 +23101,8 @@ def restore_player_energy(send, state, conn_id, why, fraction=1.0):
     the orb draws and the reading is wrong; nothing else here would change.
     """
     if not ENERGY:
+        if after_rate is not None:
+            after_rate()
         return
     pool = player_energy(state)
     # Guard before effect: the fraction is validated before the pool is filled
@@ -23096,6 +23122,8 @@ def restore_player_energy(send, state, conn_id, why, fraction=1.0):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
          [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(pool.rate)],
          f"energy regeneration back to {pool.pips} pip(s) ({why})")
+    if after_rate is not None:
+        after_rate()
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
          [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, gain],
          f"energy set to {pool.current:.0f} of {pool.maximum:.0f} ({why})")
@@ -37073,6 +37101,7 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
     # (test_guards section 6).
     frac = _fraction(health_frac, agents.GV_HEALTH,
                      "refill the player to a full pool")
+    heal = _fraction(health_frac, agents.GV_HEALTH_GAIN, "the rise's heal")
     state["player_dead"] = False
     state["corpse_reports"] = 0
     # THE GRACE WINDOW STARTS HERE, not at the refill: a player who is put back
@@ -37081,6 +37110,24 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
     state["player_revived_at"] = time.time()
     state["player_health"] = player_max_health(state) * health_frac
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
+    # REVIVE-HEAL, the player's half: retail's rise in one segment, the census on
+    # PLAYER_REVIVE_HEAL_GAIN. No 0x009F [42]: the death batch already declared
+    # the reduced maximum, and the rise never re-sends it.
+    if PLAYER_REVIVE_HEAL_GAIN:
+        restore_player_energy(
+            send, state, conn_id, f"revived{why}", fraction=energy_frac,
+            after_rate=lambda: action_hold(send, state, 0,
+                                           f"the rise releases the death's hold{why}"))
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.GV_HEALTH_GAIN, PLAYER_AGENT_ID, heal],
+             f"the rise's heal on the player: property 55, +{health_frac:g} of its "
+             f"maximum [REVIVE-HEAL]")
+        send(GAME_SMSG_AGENT_UPDATE_FLAGS, [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_ALIVE],
+             f"flags {AGENT_FLAGS_PLAYER_ALIVE} on the risen player")
+        print(f"[c{conn_id}] the player is back up{why}: status, the energy half, the "
+              f"heal +{health_frac:g}, flags {AGENT_FLAGS_PLAYER_ALIVE} in one segment "
+              f"[REVIVE-HEAL]", flush=True)
+        return
     # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
     # `Health non-zero on resurrect` on every revive we send -- 49 times across the
     # vault -- because at the moment the death bit clears it requires
@@ -45784,6 +45831,13 @@ def main():
         print("[combat] --no-revive-heal-gain: an NPC's timer revive heals by the "
               "deferred 0x009F [42] + 0x00A3 [34] refill a tick after the status, not "
               "retail's 0x00A2 [55, agent, 1.0] in the status's own segment (88 of 88). "
+              "KNOWN-BAD arm on the wire [REVIVE-HEAL revert]", flush=True)
+    if a.no_player_revive_heal_gain:
+        global PLAYER_REVIVE_HEAL_GAIN
+        PLAYER_REVIVE_HEAL_GAIN = False
+        print("[combat] --no-player-revive-heal-gain: the player's rise defers "
+              "[42] + [34] + the energy half a tick, and leaves the death's hold set, "
+              "instead of retail's one segment with 0x00A2 [55, me, 1.0] (24 of 24). "
               "KNOWN-BAD arm on the wire [REVIVE-HEAL revert]", flush=True)
     if a.no_revive_flags:
         global REVIVE_SENDS_ALIVE_FLAGS
