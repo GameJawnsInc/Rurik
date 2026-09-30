@@ -19,9 +19,13 @@ WHO IS NON-FLESHY is content: content/npcs.toml's `creature_trait.file_17253` (f
 false), keyed by model file, and `npc.stone_elemental` -- definition 1414 as npcdefs.py
 compiles it -- so a spawn can name the creature. Section 1 re-derives both rows from the
 bytes (npcdefs is re-run and must agree field for field). Section 2 is the server,
-offline, against section 1's literals: the real content, the real apply_condition, and the
-player's own press -> cast_tick for Sever Artery and Gash end to end. Section 3 is the
-known-bad arm, --no-condition-immunity, which must fail the literals retail passes.
+offline, against section 1's literals: the LOADED content, the real apply_condition, and
+the player's own press -> cast_tick for Sever Artery and Gash end to end. Only 2a reads the
+tracked rows alone (content.load(vault_dir="")); creature_fleshy, the npc template, the
+slice party and the skill rows 2h uses all read agents.WORLD, which merges vault/content
+over the tracked rows wherever a vault exists -- so on a bare machine section 2 runs on the
+tracked content only, and it is green there. Section 3 is the known-bad arm,
+--no-condition-immunity, which must fail the literals retail passes.
 
 Section 1 needs the vault (declared a skip on a machine with no captures/live; a vault that
 has captures but not this one dies loudly in require_dir). Sections 2 and 3 need none.
@@ -47,8 +51,8 @@ import effects                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-29 on a machine with NO captures (RURIK_VAULT at an
-# empty directory; section 1 a declared skip): 11. With the vault: 18.
-LEDGER = checks.Ledger("condition immunity", floor=11)
+# empty directory; section 1 a declared skip): 12 since 2b2 (11 before it). With the vault: 19.
+LEDGER = checks.Ledger("condition immunity", floor=12)
 check = checks.adopt(LEDGER)
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -247,7 +251,8 @@ def sword_duel(file_id):
 
 
 def section_server():
-    print("\n2. the server against retail's literals (offline, the real content)")
+    print("\n2. the server against retail's literals (offline, the loaded content: tracked, "
+          "plus vault/content where a vault exists)")
     tracked = content.load(vault_dir="")
     check((tracked.rows("creature_trait").get("file_17253") or {}).get("fleshy") is False
           and agents.creature_fleshy(IMMUNE_FILE) is False
@@ -264,6 +269,16 @@ def section_server():
           and authsrv.agent_fleshy(st, 99),
           "2b. agent_fleshy: the player always; a body by its npc's file -- a body whose "
           "npc is None, a body with no npc and an agent id with no row read fleshy")
+    # 2b2. the template-to-immunity join: a body whose npc is built the way
+    # spawn_population builds it (dict(npc_template(key), level=...)), not by hand
+    tmpl = agents.npc_template("stone_elemental")
+    spawned = body(None, npc=dict(tmpl, level=tmpl.get("level", 0)))
+    check(tmpl.get("file_id") == IMMUNE_FILE
+          and authsrv.agent_fleshy(world(a22=spawned), 22) is False,
+          "2b2. a body spawned from npc_template('stone_elemental') the way "
+          "spawn_population builds its entry reads NON-fleshy: the template carries file "
+          "17253 through to agent_fleshy, so a spawn row naming it is immune",
+          (tmpl.get("file_id"), tmpl.get("level")))
 
     # 2c. the apply on the immune body, inflicted by the player
     st = world(a22=body(IMMUNE_FILE), a30=body(FLESHY_FILE, pos=(150.0, 0.0)))

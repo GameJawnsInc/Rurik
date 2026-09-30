@@ -25728,9 +25728,15 @@ def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
 # The player is always fleshy. WHO HEARS THE SENTENCE is the inflicter when it is
 # the player (`by_agent`); a body inflicting on a non-fleshy one is refused in
 # silence -- whether a party member's controller would hear it is NOT MEASURABLE
-# on a solo instance (UNVERIFIED). The call sites that pass no `by_agent` (the
-# player's ranged strike, areas and bursts) are still refused, silently: the #1957
-# sentence rides the melee attack-skill path only, the one on tape.
+# on a solo instance (UNVERIFIED). The sentence rides the player's two cast_tick
+# completion sites that pass by_agent=PLAYER_AGENT_ID: Desperation Blow's random
+# condition (the skill_random_condition arm) and the `inflicted` apply after the
+# damage -- and that second site completes the player's NON-attack targeted casts
+# as well as its attack skills (in the loaded content, 131 and 985 are non-attack
+# Bleeding inflicters that reach it). On an attack skill the sentence is OBSERVED
+# (Sever Artery, 1057.415); on a non-attack skill's Bleeding it is RECONSTRUCTION,
+# no tape having one on a non-fleshy target. The call sites that pass no `by_agent`
+# (the player's ranged strike, areas and bursts) are still refused, silently.
 # --no-condition-immunity is the known-bad arm: every creature is fleshy, the
 # pre-S14 server.
 CONDITION_IMMUNITY = True
@@ -25771,7 +25777,10 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
                     conn_id, by_skill, by_agent=None):
     """Put a condition on an agent, as an episode on the same effect channel.
     `by_agent` (B4): the inflicter's agent id when the caller knows it --
-    named in Dazed's on-application interrupt, nowhere else.
+    named in Dazed's on-application interrupt, and (RANGERPRE-S14) the one who
+    hears the immunity sentence: a non-fleshy target's refusal goes to
+    condition_refused_immune, which tells the inflicter only when `by_agent` is
+    the player (CONDITION_IMMUNITY's banner). None refuses in silence.
 
     Conditions are not a separate mechanism: retail applies them with the same
     `0x0042` that carries a hex or a stance, and `bufflog` reads six of them

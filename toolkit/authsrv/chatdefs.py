@@ -211,10 +211,12 @@ REFUSE_WEAPON_TYPE = 1985
 # 0x005D [0x08A5] = #1957, 0x005E [1, 7], 0x00E3 [9, 382, 0], and no Bleeding
 # (no [6], no 0x00F1, no [44] naming the target until its death). It is the
 # only 1957 on the live corpus (127 connections); 1958 and 1959 are on none
-# (NOT FOUND on the wire) and are RECONSTRUCTION from the block's own ordering,
-# sent only under --refusal-reasons. The three are exactly the WIKI's fleshy set
-# (GWW "Fleshy" rev 2611793: Bleeding, Disease, Poison), which the block
-# CORROBORATES. Keyed by the CONDITION'S NAME (effects.CONDITION_SKILLS).
+# (NOT FOUND on the wire) and are RECONSTRUCTION from the text's own statement
+# of its condition, the rule above: the archive sentence textrec resolves for
+# each names Disease and Poison respectively (re-read 2026-09-29, the owner's
+# archive, build 38797), not the ids' order. Sent only under --refusal-reasons.
+# The three are exactly the WIKI's fleshy set (GWW "Fleshy" rev 2611793:
+# Bleeding, Disease, Poison), which the block CORROBORATES. Keyed by the CONDITION'S NAME (effects.CONDITION_SKILLS).
 REFUSE_IMMUNE = {"Bleeding": 1957, "Disease": 1958, "Poison": 1959}
 for _cond, _sid in REFUSE_IMMUNE.items():
     assert REFUSAL_REASONS[_sid] == "target_immune_" + _cond.lower(), (_cond, _sid)
