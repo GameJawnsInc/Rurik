@@ -187,8 +187,14 @@ import vaultpath  # noqa: E402
 # movement predicate runs its CONTROL and KNOWN-BAD arms corpus-free, so both
 # count bare; the relation and shoulder were re-scoped as of the pin and the
 # whole-corpus signature added (vault only).
+# 2026-09-30 (RANGERPRE, 20260929T150923): 146 -> 148, MEASURED with `RURIK_VAULT`
+# at a missing directory (148, the same 7 declared skips; 206 vaulted). sec.16's
+# predicate reads a body's speed off its own 0x0020 create too, and grants a start
+# FROM REST up to LATE_STAMP_MAX: one corpus-free CONTROL and one KNOWN-BAD group
+# count bare; the whole-corpus signature and the from-rest row's witness are vault
+# only.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=146)
+                       floor=148)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1296,9 +1302,33 @@ def main():
     # structural for two consecutive reports of one connection; it is asserted
     # against the raw stream so a report that `steps` never paired (a malformed or
     # filtered one) is seen rather than walked over.
-    OP_SPEED_BASE, OP_HALT = 0x0027, 0x0028
+    #
+    # FAILED AS WRITTEN 2026-09-30, on RANGERPRE's tape (20260929T150923 :56025,
+    # map 146), and re-stated in two terms -- each with its own control and
+    # known-bad arm below, and neither touching the Zaishen row's verdict:
+    #   (1) THE DECLARATION. The row was refused "no declared 0x0027 speed", and the
+    #       body's speed WAS declared: its own 0x0020 create, field 9 x field 10 =
+    #       288.0 x 1.0 (studies/smsg/FINDINGS.md: "field 9 x field 10 is the
+    #       effective move speed"; studies/mapload/FINDINGS.md: 288.0 on every player
+    #       create). 0x0027 is sent on a CHANGE, and that body never changed speed.
+    #       So the speed in force is the latest of either, at or before t0.
+    #   (2) A START FROM REST. With (1) the row is still 0.137 u past 288 x dt:
+    #       557.149 u in 1.9341 s, 288.071 u/s -- a start stamp 0.48 ms late. The
+    #       wire's stamps are that noisy everywhere: of 957 retail intervals of
+    #       >= 1.0 s between 280 and 296 u/s, 392 read above 288.0 and 189 faster than
+    #       this row. A zero-slack bound is only fair where a late START would show, and
+    #       `movesync.late_stamp`'s pair rule says where that is: a late stamp
+    #       lengthens the interval that ends on it, so a MOVING predecessor reads
+    #       slow. When the predecessor moved 0 u -- a start from rest, as here, from
+    #       a 0x0047 stop at the same point 1.839 s earlier -- the lengthening is
+    #       invisible, and the start may be up to `movesync.LATE_STAMP_MAX` (67 ms,
+    #       NPCTRACK, the bound late_stamp already uses) late: the integral starts
+    #       that much before t0. Only then. The Zaishen row's predecessor moved
+    #       (497.05 u at 381.9 u/s), so it keeps a zero-slack bound, and its planted
+    #       +1 u arm is byte-for-byte what it was.
+    OP_SPEED_BASE, OP_HALT, OP_CREATE = 0x0027, 0x0028, 0x0020
 
-    def continuous_bound(r, c2s, s2c, body):
+    def continuous_bound(r, c2s, s2c, body, from_rest=False):
         """-> (bound, end, reasons); reasons == [] is CONTINUOUS MOVEMENT."""
         why = []
         if r.get("server_set") is not None:
@@ -1311,13 +1341,18 @@ def main():
         halts = [t for t, op, v in s2c if op == OP_HALT and len(v) > 1 and v[1] == body
                  and r["t0"] < t < r["t"]]
         end = halts[0] if halts else r["t"]
-        spd = sorted((t, float(v[2])) for t, op, v in s2c
-                     if op == OP_SPEED_BASE and len(v) > 2 and v[1] == body and t <= end)
+        spd = sorted([(t, float(v[2])) for t, op, v in s2c
+                      if op == OP_SPEED_BASE and len(v) > 2 and v[1] == body and t <= end]
+                     + [(t, float(v[9]) * float(v[10])) for t, op, v in s2c
+                        if op == OP_CREATE and len(v) > 10 and v[1] == body
+                        and t <= end])
         before = [s for s in spd if s[0] <= r["t0"]]
         if body is None or not before:
-            why.append(f"no declared 0x0027 speed for body {body} at t0")
+            why.append(f"no declared speed (0x0027, or its own 0x0020 create) for "
+                       f"body {body} at t0")
             return None, end, why
-        marks = [(r["t0"], before[-1][1])] + [s for s in spd if s[0] > r["t0"]]
+        start = r["t0"] - (movesync.LATE_STAMP_MAX if from_rest else 0.0)
+        marks = [(start, before[-1][1])] + [s for s in spd if s[0] > r["t0"]]
         bound = sum(v * ((marks[i + 1][0] if i + 1 < len(marks) else end) - t)
                     for i, (t, v) in enumerate(marks))
         if r["dist"] > bound:
@@ -1350,6 +1385,37 @@ def main():
           "KNOWN-BAD ARMS: the predicate REFUSES a teleport-like jump past the bound, a "
           "0x002C set, a self-report inside, and a row with no declared speed for ITS body",
           "; ".join(f"{k}: {w}" for k, (_b, _e, w) in bad_arms.items()))
+    # THE TWO 2026-09-30 TERMS, corpus-free. A body whose only declaration is its
+    # create (288 x 1.0, no 0x0027), walking 1.9 s from rest with its start stamp
+    # 10 ms late: 288 x 1.91 u, continuous only with BOTH terms.
+    rest = {"t0": 20.0, "t": 21.9, "dist": 288.0 * 1.91}
+    rest_s2c = [(18.0, OP_CREATE, [32, 7, 0, 1, 5, (0.0, 0.0), 0, (1.0, 0.0), 1,
+                                   288.0, 1.0])]
+    rest_c2s = [(20.3, 0x0039)]
+    b_rest, e_rest, w_rest = continuous_bound(rest, rest_c2s, rest_s2c, 7, from_rest=True)
+    check(not w_rest and abs(e_rest - 21.9) < 1e-9
+          and abs(b_rest - 288.0 * (1.9 + movesync.LATE_STAMP_MAX)) < 1e-9,
+          "CONTROL: a body declared ONLY by its 0x0020 create (288 x 1.0) walks 1.9 s from "
+          "REST with its start stamp 10 ms late, and is CONTINUOUS -- bound = 288 x (1.9 + "
+          "LATE_STAMP_MAX), the create's speed in force and the start allowed to be late",
+          f"bound {b_rest}, end {e_rest}, reasons {w_rest}")
+    create_half = [(18.0, OP_CREATE, rest_s2c[0][2][:10] + [0.5])]
+    rest_arms = {
+        "the same row NOT from rest (a moving predecessor would show the late stamp)":
+            continuous_bound(rest, rest_c2s, rest_s2c, 7),
+        "from rest, 1 u past the late start's reach":
+            continuous_bound(dict(rest, dist=288.0 * (1.9 + movesync.LATE_STAMP_MAX) + 1.0),
+                             rest_c2s, rest_s2c, 7, from_rest=True),
+        "another body's create": continuous_bound(rest, rest_c2s, rest_s2c, 8,
+                                                  from_rest=True),
+        "field 10 = 0.5 halves the create's speed":
+            continuous_bound(rest, rest_c2s, create_half, 7, from_rest=True),
+    }
+    check(all(w for _b, _e, w in rest_arms.values()),
+          "KNOWN-BAD ARMS: the late start is granted ONLY from rest, only up to "
+          "LATE_STAMP_MAX, and the create declares only ITS OWN body's speed, field 9 "
+          "times field 10",
+          "; ".join(f"{k}: {w}" for k, (_b, _e, w) in rest_arms.items()))
     # THE CALIBRATION ITSELF, and it is a claim about ArenaNet's client rather
     # than about ours. 520 u is only a bar because retail never clears it, and a
     # constant justified in a comment is justified nowhere. Read from the LIVE
@@ -1628,15 +1694,22 @@ def main():
         # is re-planted here on the control's own wire (1 u past its bound).
         zst = "20260928T103123"
         zconn = "10.0.0.210:58544->98.95.137.136:80"
+        # RANGERPRE's row (2026-09-30), the first over the bar from REST.
+        RP_STAMP, RP_CONN = "20260929T150923", "10.0.0.210:56025->3.233.201.47:80"
+        RP_T0 = 777.785
         if zst not in stamps:
             LEDGER.skip("the 2 s window's continuous-movement signature",
                         f"capture {zst}, its positive control, not in this corpus (before "
                         f"it, no row clears the bar -- the frozen record above)")
         else:
-            over2 = [(st, c, r) for st, c, rr in tracks for r in rr
+            # A row STARTS FROM REST when the interval before it, on its own
+            # connection, moved exactly 0 u (the 2026-09-30 term, above). Carried
+            # as the verdict's tenth element.
+            over2 = [(st, c, r, i > 0 and rr[i - 1]["dist"] == 0.0)
+                     for st, c, rr in tracks for i, r in enumerate(rr)
                      if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
             wires, verdicts = {}, []
-            for st, c, r in over2:
+            for st, c, r, rest in over2:
                 if st not in wires:
                     wires[st] = (cmsgstream.timed(st, "c2s", "game"),
                                  cmsgstream.timed(st, "s2c", "game"))
@@ -1644,27 +1717,53 @@ def main():
                 w_s2c = [(t, op, v) for t, cn, op, v in wires[st][1] if cn == c]
                 body = movesync.named_players([(t, c, op, v) for t, op, v in w_s2c]).get(c)
                 verdicts.append((st, c, r, body, w_c2s, w_s2c)
-                                + continuous_bound(r, w_c2s, w_s2c, body))
+                                + continuous_bound(r, w_c2s, w_s2c, body, from_rest=rest)
+                                + (rest,))
             bad = [v for v in verdicts if v[8]]
             ctrl = [v for v in verdicts
                     if (v[0], v[1], round(v[2]["t0"], 3)) == (zst, zconn, 587.058)]
             planted = (continuous_bound(dict(ctrl[0][2], dist=ctrl[0][6] + 1.0),
-                                        *ctrl[0][4:6], ctrl[0][3])
+                                        *ctrl[0][4:6], ctrl[0][3], from_rest=ctrl[0][9])
                        if ctrl and ctrl[0][6] is not None else (None, None, []))
-            check(verdicts and not bad and len(ctrl) == 1 and planted[2],
+            # RANGERPRE's from-rest row, where its tape is in the corpus: continuous
+            # WITH the late start, refused 1 u past that bound, and refused WITHOUT
+            # it -- the term is load-bearing on exactly this row, said out loud.
+            wit = [v for v in verdicts
+                   if (v[0], v[1], round(v[2]["t0"], 3)) == (RP_STAMP, RP_CONN, RP_T0)]
+            if RP_STAMP in stamps:
+                w_planted = (continuous_bound(dict(wit[0][2], dist=wit[0][6] + 1.0),
+                                              *wit[0][4:6], wit[0][3], from_rest=True)
+                             if len(wit) == 1 and wit[0][6] is not None
+                             else (None, None, []))
+                w_zero = (continuous_bound(wit[0][2], *wit[0][4:6], wit[0][3])
+                          if len(wit) == 1 else (None, None, []))
+                wit_ok = (len(wit) == 1 and wit[0][9] and not wit[0][8]
+                          and w_planted[2] and w_zero[2])
+            else:
+                w_planted = w_zero = (None, None, ["tape not in this corpus"])
+                wit_ok = True
+            check(verdicts and not bad and len(ctrl) == 1 and not ctrl[0][9]
+                  and planted[2] and wit_ok,
                   f"SIGNATURE (whole corpus): every retail interval over "
                   f"{movesync.HARD_JUMP_UNITS:.0f} u inside 2.0 s is CONTINUOUS MOVEMENT -- "
-                  f"its distance within the body's latest declared 0x0027 speed "
-                  f"integrated to its halt or its end, no 0x002C and no self-report "
-                  f"inside: {len(verdicts) - len(bad)} of {len(verdicts)}, the Zaishen "
-                  f"row among them as the positive control, and that row moved 1 u past "
-                  f"its own bound is refused",
+                  f"its distance within the body's latest declared speed (0x0027, or its "
+                  f"own 0x0020 create) integrated to its halt or its end, from up to "
+                  f"LATE_STAMP_MAX before its start only when it starts FROM REST, no "
+                  f"0x002C and no self-report inside: {len(verdicts) - len(bad)} of "
+                  f"{len(verdicts)}, the Zaishen row among them as the positive control "
+                  f"(not from rest, zero slack) and refused 1 u past its own bound; "
+                  f"RANGERPRE's from-rest row refused 1 u past its bound and refused at "
+                  f"zero slack",
                   "; ".join(f"{st} {c[-26:]} t0={r['t0']:.3f} {r['dist']:.2f} u / "
-                            f"{r['dt']:.3f} s, body {b}, bound "
+                            f"{r['dt']:.3f} s, body {b}, "
+                            f"{'from rest' if rest else 'moving before'}, bound "
                             f"{'none' if bd is None else f'{bd:.2f}'} u to {e:.3f}, "
                             f"reasons {w}"
-                            for st, c, r, b, _c2, _s2, bd, e, w in verdicts)
-                  + f"; planted {planted[2]}")
+                            for st, c, r, b, _c2, _s2, bd, e, w, rest in verdicts)
+                  + f"; planted {planted[2]}; RANGERPRE planted {w_planted[2]}, at zero "
+                  f"slack {w_zero[2]}. FAILED AS WRITTEN 2026-09-30: the 0x0027-only, "
+                  f"zero-slack predicate refused RANGERPRE's row ('no declared 0x0027 "
+                  f"speed for body 31 at t0'), 1 of 2")
         # WHAT THE LONE ROW IS (2026-09-28, CASTAI-Z1), measured. The owner's Zaishen
         # capture, match 4: the observer's last self-report before an attack order's
         # auto-approach, then silence -- the client does not report while it walks
@@ -1716,6 +1815,73 @@ def main():
                   f"{[(round(r['t0'], 3), round(r['dist'], 2)) for r in zrow]}; "
                   f"c2s inside {[(round(t, 3), hex(op)) for t, op in zc2s]}; halt {halt}; "
                   f"boost {boost[-1:] if boost else None}; observer {obs}")
+        # THE FIRST ROW OVER THE BAR FROM REST (2026-09-30, RANGERPRE), measured. The
+        # Reforged Ranger's map-146 connection, 2.7 s after it opened: a 0x0047 stop at
+        # the spawn point, then a 0x003D heading from that same point, then silence
+        # while the client targets and INTERACTS with agent 38 and the server answers
+        # with a 0x002A follow -- an interact's auto-approach at range (RANGERPRE.md
+        # section 3), the Zaishen row's shape at the base speed. The body is never sent
+        # a 0x0027: its only declaration is its own 0x0020 create. Pinned exactly, and
+        # skipped for the capture's absence and nothing else, like the Zaishen row.
+        if RP_STAMP not in stamps:
+            LEDGER.skip("the 2 s window's first from-rest row",
+                        f"capture {RP_STAMP} not in this corpus")
+        else:
+            rp_rr = [rr for st, conn, rr in tracks if (st, conn) == (RP_STAMP, RP_CONN)]
+            rp_rr = rp_rr[0] if rp_rr else []
+            rp_i = [i for i, r in enumerate(rp_rr) if round(r["t0"], 3) == RP_T0]
+            rp = rp_rr[rp_i[0]] if rp_i else None
+            prev = rp_rr[rp_i[0] - 1] if rp_i and rp_i[0] > 0 else None
+            rp_over = [(st, round(r["t0"], 3)) for st, conn, rr in tracks if st == RP_STAMP
+                       for r in rr if r["dt"] <= 2.0 and r["dist"] >= movesync.HARD_JUMP_UNITS]
+            rc2s = [(t, op, v) for t, cn, op, v in cmsgstream.timed(RP_STAMP, "c2s", "game")
+                    if cn == RP_CONN]
+            rs2c = [(t, op, v) for t, cn, op, v in cmsgstream.timed(RP_STAMP, "s2c", "game")
+                    if cn == RP_CONN]
+            robs = movesync.named_players([(t, RP_CONN, op, v) for t, op, v in rs2c]).get(RP_CONN)
+            r_t0 = rp["t0"] if rp else float("nan")
+            r_t = rp["t"] if rp else float("nan")
+            r_c2s = [op for t, op, _v in rc2s if r_t0 < t < r_t]
+            r_speed = [v for _t, op, v in rs2c if op == OP_SPEED_BASE and v[1] == robs]
+            r_create = [(round(t, 3), float(v[9]), float(v[10])) for t, op, v in rs2c
+                        if op == OP_CREATE and len(v) > 10 and v[1] == robs and t < r_t0]
+            r_follow = [(round(t, 3), v[5]) for t, op, v in rs2c
+                        if op == 0x002A and len(v) > 5 and v[1] == robs and r_t0 < t < r_t]
+            r_halt = [t for t, op, v in rs2c if op == OP_HALT and len(v) > 1
+                      and v[1] == robs and r_t0 < t < r_t]
+            r_excess = (rp["dist"] - 288.0 * rp["dt"]) if rp else float("nan")
+            base = [r for r in rows if r["dt"] >= 1.0 and 280.0 <= r["speed"] <= 296.0]
+            check(rp is not None and rp_over == [(RP_STAMP, RP_T0)]
+                  and round(r_t, 3) == 779.719 and round(rp["dist"], 2) == 557.15
+                  and rp.get("server_set") is None
+                  and prev is not None and prev["dist"] == 0.0
+                  and round(prev["dt"], 3) == 1.839
+                  and [op for t, op, _v in rc2s if round(t, 3) == round(prev["t0"], 3)]
+                  == [movesync.OP_CANCEL_REPORT]
+                  and robs == 31 and not r_speed
+                  and r_create == [(775.753, 288.0, 1.0)]
+                  and movesync.OP_SET_HEADING not in r_c2s
+                  and movesync.OP_CANCEL_REPORT not in r_c2s
+                  and 0x0039 in r_c2s and r_follow == [(778.25, 38)] and not r_halt
+                  and round(r_excess, 3) == 0.137
+                  and 0.0 < r_excess / 288.0 <= movesync.LATE_STAMP_MAX,
+                  f"NEW (OBSERVED, {RP_STAMP} :56025): the first row over the bar FROM "
+                  f"REST is the observer's {rp['dist'] if rp else float('nan'):.2f} u / "
+                  f"{rp['dt'] if rp else float('nan'):.3f} s from t={r_t0:.3f}, after a "
+                  f"0x0047 stop at the same point; no self-report inside, only an interact "
+                  f"(0x0039) the server answers with a 0x002A follow of agent 38; no 0x002C, "
+                  f"no halt; its speed declared ONLY by its 0x0020 create (288.0 x 1.0, no "
+                  f"0x0027 on the connection); and {r_excess:.3f} u past 288 x dt -- a start "
+                  f"stamp {r_excess / 288.0 * 1000.0:.2f} ms late, inside LATE_STAMP_MAX",
+                  f"rows over the bar inside 2 s on the tape {rp_over}; predecessor "
+                  f"{(round(prev['dist'], 3), round(prev['dt'], 4)) if prev else None}; c2s "
+                  f"inside {[hex(op) for op in r_c2s]}; create {r_create}; 0x0027 for the "
+                  f"body {r_speed}; follow {r_follow}; halts {r_halt}. The wire's stamp "
+                  f"noise, reported: of {len(base)} retail intervals of >= 1.0 s between "
+                  f"280 and 296 u/s, {sum(1 for r in base if r['speed'] > 288.0)} read above "
+                  f"288.0 and "
+                  f"{sum(1 for r in base if rp and r['speed'] > rp['speed'])} faster than "
+                  f"this row ({rp['speed'] if rp else float('nan'):.3f} u/s)")
 
     # ---------------------------------------------------------------------
     print("\n17. the AgTrack fence: movetap's selftest 5-7, in the SUITE")

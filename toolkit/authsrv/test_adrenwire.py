@@ -490,6 +490,18 @@ DARK_WARRIOR_FIGHTS = 4
 DARK_WARRIOR_HITS = 163
 DARK_LEARNED_FIGHTS = 14
 DARK_DEATHS = 11
+# THE FIRST MID-CONNECTION FLIPS (2026-09-30), on RANGERPRE's tape and nowhere
+# before it -- the Reforged pre-Searing Ranger that took Warrior as secondary
+# (studies/presearing/RANGERPRE.md). EXACT on the tape that witnessed them, as
+# connection -> each flip's direction in order: on map 160 :56064's dark
+# [394, 446] is armed 14.33 s in by three 0x00D9 writes (382, 384, 1), and
+# :53756's armed bar is cleared and refilled INSIDE ONE BATCH at t 193.41, the
+# secondary's grant (slots 4/2/3 zeroed, 0x00B7 [2, 1], 382/384/1 written back).
+# Neither is fought across: 0 hits and 0 damage on :56064, and :53756's 37 hits
+# and 15 damage words all land on the side it opened on.
+RANGERPRE_TAPE = "20260929T150923"
+RANGERPRE_FLIPS = {"10.0.0.210:53756->34.196.135.145:80": ["dark", "armed"],
+                   "10.0.0.210:56064->34.196.135.145:80": ["armed"]}
 # And the rounding rule, re-fitted on the armed rows alone -- the population
 # that is not selected on the outcome AND not contaminated by the gate.
 #
@@ -2623,7 +2635,10 @@ def section_bar_gate(agg):
     # ---- THE CONFOUND, BROKEN (2026-09-22; skills 34.11) -------------------
     # `by_connection` is a SECOND walk of the corpus with its own counters, so
     # its arm sizes and family totals must reproduce `scan()`'s before anything
-    # it says about professions is believed.
+    # it says about professions is believed. RED 2026-09-30 at 70/56 against
+    # 69/57, and it was right to be: the two walks disagreed on RANGERPRE's
+    # :56064, armed only by 0x00D9 slot writes, which `scan()` did not read.
+    # The fix is in `scan()` (it reads them now); this check is unchanged.
     conns = adrenjoin.by_connection()
     dark_c = [r for r in conns if r["arm"] == "dark"]
     armed_c = [r for r in conns if r["arm"] == "armed"]
@@ -2697,14 +2712,55 @@ def section_bar_gate(agg):
     # before the observer's first own 0x00DA, and no family message ever
     # arrives while the bar is dark. The first tape that breaks any of these
     # is the dark-to-armed transition witness the gate says it lacks.
-    LEDGER.ok(not any(r["flips"] for r in conns)
+    #
+    # FAILED AS WRITTEN 2026-09-30, and re-scoped rather than loosened.
+    # RANGERPRE's tape flips three times on two connections (RANGERPRE_FLIPS),
+    # so "0 mid-connection flips" is false -- and it was never the claim, only
+    # its proxy. What the gate's caveat needs is a hit or a damage word on a
+    # FLIPPED side: the side opposite the one the connection's bar opened on,
+    # where "the bar at gain time" and "the bar the connection opened with"
+    # predict different grants. Neither flip is fought across. So: 0 flips
+    # EXACT as of the tape (stamps before it), the tape's flips EXACT, and over
+    # the whole corpus no fighting on a flipped side. A later tape that flips
+    # without fighting across it stays green; the first that fights across one
+    # reddens this and IS the witness. POSITIVE CONTROL: the flipping
+    # connections are not quiet -- :53756 fought on its opening side.
+    pin_flips = [(r["capture"], r["connection"]) for r in conns
+                 if r["flips"] and r["capture"] < RANGERPRE_TAPE]
+    tape_flips = {r["connection"]: [f["to"] for f in r["flips"]] for r in conns
+                  if r["flips"] and r["capture"] == RANGERPRE_TAPE}
+
+    def _fought(r, side):
+        return r["hits_" + side] + r["damage_" + side]
+
+    flipped = [r for r in conns if r["flips"]]
+    crossed = [r for r in flipped
+               if _fought(r, "dark" if r["opens"] == "armed" else "armed")]
+    LEDGER.ok(not pin_flips
+              and tape_flips == RANGERPRE_FLIPS
+              and flipped and not crossed
+              and all(r["opens"] in ("armed", "dark") for r in flipped)
+              and any(_fought(r, r["opens"]) for r in flipped)
               and sum(r["hits_before_bar"] for r in conns) == 0
               and sum(r["family_dark"] + r["family_before_bar"] for r in conns) == 0,
-              "the dark-to-armed TRANSITION is UNOBSERVED: 0 mid-connection "
-              "flips, 0 hits before the bar, 0 family messages while dark",
-              f"over {len(conns)} connections. `bar_holds_adrenal` reads the "
+              "the dark-to-armed TRANSITION UNDER FIRE is UNOBSERVED: 0 "
+              f"mid-connection flips before {RANGERPRE_TAPE}, its "
+              f"{sum(len(v) for v in tape_flips.values())} flip(s) on "
+              f"{len(tape_flips)} connection(s) exactly as pinned, no hit or "
+              f"damage word on a flipped side, 0 hits before the bar, 0 family "
+              f"messages while dark",
+              f"over {len(conns)} connections; before the tape {pin_flips}; "
+              f"flips "
+              + "; ".join(f"{r['capture']} {r['connection'][-26:]} opens "
+                          f"{r['opens']}, {[(f['t'], f['to']) for f in r['flips']]}, "
+                          f"fought dark {_fought(r, 'dark')} / armed "
+                          f"{_fought(r, 'armed')}" for r in flipped)
+              + f"; crossed {[(r['capture'], r['connection']) for r in crossed]}. "
+              f"FAILED AS WRITTEN 2026-09-30: '0 mid-connection flips' held on "
+              f"every tape before {RANGERPRE_TAPE}. `bar_holds_adrenal` reads the "
               f"bar at gain time, so a mid-fight drag arms the sender on the "
-              f"next hit -- the smaller claim, said at the call site")
+              f"next hit -- the smaller claim, said at the call site, and still "
+              f"without a retail witness")
 
     # AND THE CLEAR IS GATED TOO: retail's dark connections hold player deaths
     # and not one 0x00D0, which is what puts the gate on `kill_player`'s clear.
