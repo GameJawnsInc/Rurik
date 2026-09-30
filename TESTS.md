@@ -7270,7 +7270,27 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   review, +25 on the refusal at the cap; 79 / 94 at the kick lane's commit, +3 at its review; 49 / 64
   before the kick; the landing's floor of 27 was
   above its own bare run of 23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
-  `toolkit/authsrv/test_itemmoves.py` (**2026-09-29, RANGERPRE-S21 (WEAPONREFUSE-B) —
+  `toolkit/authsrv/test_itemmoves.py` (**2026-09-30, RANGERPRE-S21's flip — the hand
+  restore is the DEFAULT under `--persist`; `--no-hand-restore` is the revert arm.** The
+  loopback gate below PASSED (build 38797, tree rangerpre e968131a, agent-piloted): harness
+  `20260930T102914` sent 0x0147 [1, 0, 11, 12] AND [1, 1, 11, 12] and the client loaded,
+  drew the sword + shield on the doll and the body and stayed alive to teardown; the doubled
+  load was accepted again on three fresh loads and a zone pair (maps 146 and 148) — OBSERVED
+  on our client, while retail's 0 of 21 stays UNVERIFIED. §7's restore arm now runs under
+  the MODULE's value, never a literal True, and its KNOWN-BAD arm under an explicit False;
+  the old wiring lock and its mutation became a LOCK on the module default True and
+  `serverargs` parsing both flags (each default off), a LOCK on `main()` wiring
+  `--no-hand-restore` → False and `--hand-restore` → True (kept because the gate's run
+  cards name it: the default spelled out) and refusing both with `ap.error`, and one
+  KNOWN-BAD whose four mutations (the default False, the revert arm setting True,
+  `--hand-restore` setting False, the refusal removed) must each fail the locks — a
+  mutation that does not apply counts as NOT failing. With only the module default
+  reverted to False on a `git archive` export (authsrv.py sha256 85d52e60… → 4187e5d5…),
+  6 of 212 go red — load 2's hands and 0x0147, its 0x006E / swing model, load 3, the
+  re-equip, the default lock and the mutation check — while the KNOWN-BAD arm and the
+  create check stay green. Floor 183 → 184 bare (measured, RURIK_VAULT at an empty
+  directory), 212 vaulted.
+  **2026-09-29, RANGERPRE-S21 (WEAPONREFUSE-B) —
   THE HANDS PERSIST under `--hand-restore` (DEFAULT OFF until a loopback run answers
   whether the client takes one item named in two weapon sets at a load, 0 of 21 retail
   loads).** §3b `itemstore.hands_legal`'s limits and `restore`'s `hand_ok`: retail's
@@ -8650,7 +8670,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `test_mechanics` §29's second-swing check), the refill tracker's 1; §4 and the MAXHP-2
   sections stay green. 42 checks, floor 42, from the green run on this machine; a bare
   machine runs 31 and declares §1, §4, the load's check and the splash skipped, under the
-  floor on purpose. **Merged on rangerpre 2026-09-30 (S10 + S21 together): 44 checks, floor 44, measured with the vault; a bare machine runs 31, under the floor on purpose.** Read-only on the vault; no client. ~30 s),
+  floor on purpose. **Merged on rangerpre 2026-09-30 (S10 + S21 together): 44 checks, floor 44, measured with the vault; a bare machine runs 31, under the floor on purpose.**
+  **2026-09-30, RANGERPRE-S21's flip: +1, overlay-gated.** The hand restore is the default
+  under `--persist` (the loopback gate, harness `20260930T102914`, PASSED); §2's THE LATER
+  LOAD now drives a third arm, the MODULE DEFAULT untouched, and pins it to the restore
+  arm's base+15 — red (base) with only the default reverted to False on a `git archive`
+  export, while the explicit-arm check (restore base+15, `--no-hand-restore` base) stays
+  green. 45 checks, floor 45, measured with the vault; a bare machine still runs 31 (the
+  load's skip now names 3 checks). Read-only on the vault; no client. ~30 s),
   `toolkit/authsrv/test_recharge.py` (**2026-09-28, CASTAI-Z1: §2 went red on the
   Zaishen tape, 3 of 19 (the six, P3 AS WRITTEN, the six pooled). The pinned numbers are
   scored as of the pin (`rechargeprobe.upto`, stamps before 20260928T103123): the six

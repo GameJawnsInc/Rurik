@@ -6,8 +6,11 @@ docstring for the tapes).
 
     python toolkit/authsrv/test_itemmoves.py
 
-  * THE HANDS PERSIST (RANGERPRE-S21, WEAPONREFUSE-B, 2026-09-29; --hand-restore,
-    DEFAULT OFF until a loopback run): §3b itemstore.hands_legal's limits and
+  * THE HANDS PERSIST (RANGERPRE-S21, WEAPONREFUSE-B, 2026-09-29; shipped behind
+    --hand-restore, DEFAULT ON since 2026-09-30 when the loopback gate passed --
+    harness 20260930T102914, build 38797: our client took a load naming items
+    11/12 in set 0 AND set 1, OBSERVED; retail's 0 of 21 stays UNVERIFIED --
+    and --no-hand-restore is the revert arm): §3b itemstore.hands_legal's limits and
     restore's `hand_ok` -- retail's swap stored is restored as ONE unit; a
     doubly occupied hand, the shield beside the two-handed bow, an EMPTY lead,
     a hand move onto another stored item's cell, into a non-hand equipped cell
@@ -15,14 +18,17 @@ docstring for the tapes).
     applies); hand_ok=None is the old rule byte for byte (KNOWN-BAD). §7 the
     server: set 0 = the bow, set 1 = sword + shield, --persist; the two equips
     are retail's two shapes; the next dress with the arm OFF is the bow again
-    (KNOWN-BAD, the default), with it ON item 1 is still CREATED as the bow
+    (KNOWN-BAD, --no-hand-restore, the pre-flip default), with it ON (the
+    default) item 1 is still CREATED as the bow
     (ENG-B4) and item_hands_at_dress leaves hands (11, 12), 0x0147 set 0 =
     (11, 12), the bow at the sword's old cell, 0x006E [11, 12], the swing model
     the sword + shield -- load 3 identical; the bow re-equipped persists and the
     call is then a no-op; an EMPTY stored lead reverts the hands and keeps the
     head's cell; no store without --persist. Locks: the hand_ok gate, the ONE
     call between the creates and the 0x0148/0x0147 rows, the function's gate,
-    main()'s wiring (mutation reddens). §7b (vault-gated) retail from
+    the module default ON, main()'s wiring of --no-hand-restore -> False (the
+    revert arm) and of --hand-restore -> True (the default spelled out), both
+    flags parsed, naming both refused (each mutation reddens). §7b (vault-gated) retail from
     20260929T150923: :56064's load held the bow and equipped [697] then [696];
     :53753, :53756, :59427 each dressed set 0 = [sword, shield] with the bow at
     the backpack's slot 1.
@@ -134,7 +140,7 @@ import charstore                                             # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=183)   # 2026-09-29 (RANGERPRE-S21, the hands persist: +23 bare -- §3b 9, §7 9, its locks 5), from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass -> 160 at CLEANUP-3 -> 183); §1b's 17, §1c's 8 and §7b's 3 ride the vault (211 vaulted)
+led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=184)   # 2026-09-30 (RANGERPRE-S21's flip, hand restore the default: +1 bare -- the old wiring lock + its mutation became a default/parse lock, a main() wiring lock and one four-mutation KNOWN-BAD), from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass -> 160 at CLEANUP-3 -> 183 at S21 -> 184); §1b's 17, §1c's 8 and §7b's 3 ride the vault (212 vaulted)
 
 CHG, SWAP, VIS = 0x014B, 0x0152, 0x006F
 MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
@@ -966,7 +972,9 @@ try:
     led.ok(itf[7]["bag"] == BP and itf[7]["slot"] == 2,
            "a FRESH dress puts the head where it was left (backpack 2)")
     led.ok(itf[W]["bag"] == EQ and itf[W]["slot"] == 0,
-           "...but the HAND is restored to its default (the weapon sets own slot 0; said in the log)")
+           "...but the HAND is restored to its default: the stored change leaves an EMPTY lead, which "
+           "the hand restore (the default since RANGERPRE-S21's flip) refuses as one unit, and "
+           "--no-hand-restore never applies a hand change (said in the log either way)")
     led.ok(authsrv.item_cell(fresh, 7, EQ, HEAD_BAG) == [BP, 2] and authsrv.item_cell(fresh, 3, EQ, 2) == [EQ, 2]
            and authsrv.item_cell({}, 7, EQ, HEAD_BAG) == [EQ, HEAD_BAG],
            "item_cell hands the dress the stored cell for the head, the default for the body, and "
@@ -1261,7 +1269,7 @@ try:
     authsrv._assign_backpack_slots()
     authsrv.SET_ITEMS_OVERRIDE.clear()
 
-    # ---- §7 THE HANDS PERSIST (RANGERPRE-S21, WEAPONREFUSE-B; --hand-restore) -------------
+    # ---- §7 THE HANDS PERSIST (RANGERPRE-S21, WEAPONREFUSE-B; the default since 2026-09-30) --
     # Retail, 20260929T150923 (§7b pins it from the vault): :56064's load held the
     # bow (set 0 = [2, 0, 698, 0]); c2s 0x0030 [697] was answered by 0x0152 [2, 698,
     # 697] + 0x006F [9, 0, 697] and [696] by 0x014B [2, 696, 5, 1] + 0x006F [9, 1,
@@ -1310,19 +1318,25 @@ try:
            "0x006F [player, 0, sword]; 0x014B [1, shield, 1, 1] + 0x006F [player, 1, shield]) and the "
            "store holds the bow at the sword's old cell, the sword and shield in the hands",
            f"{e1} {e2} {stored7}")
-    # KNOWN-BAD ARM FIRST (the store is unchanged by a dress): --hand-restore off
+    # KNOWN-BAD ARM FIRST (the store is unchanged by a dress): --no-hand-restore, the
+    # pre-flip default (every dress before 2026-09-30)
     authsrv.HAND_RESTORE = False
     s7k, it7k, created7k, placed7k, ret7k = dress7()
     led.ok(itemstore.hand_items(it7k, EQ) == (W, 0) and authsrv.weapon_set_items(0) == (W, 0)
            and ret7k is None and authsrv.agents.PLAYER_WEAPON.get("item_type") == 5
            and authsrv.player_worn_array(s7k)[:2] == [W, 0],
-           "KNOWN-BAD ARM (the default, every dress before today): the next load is the bow again -- "
+           "KNOWN-BAD ARM (--no-hand-restore, the pre-flip default, every dress before 2026-09-30): "
+           "the next load is the bow again -- "
            "hands (1, 0), 0x0147 set 0 = (1, 0), 0x006E [bow, 0] -- where retail's three loads named "
            "the sword and the shield", f"hands {itemstore.hand_items(it7k, EQ)} set0 {authsrv.weapon_set_items(0)}")
-    authsrv.HAND_RESTORE = True
+    # THE DEFAULT ARM (since 2026-09-30, the loopback gate harness 20260930T102914 PASSED):
+    # the MODULE's value, not a literal True, so a default reverted to False reddens
+    # the load-2/load-3 checks below -- the default is pinned by behaviour, not only by
+    # the source lock.
+    authsrv.HAND_RESTORE = _saved["HAND_RESTORE"]
     s72, it72, created72, placed72, ret72 = dress7()
     led.ok(created72 == (5, False),
-           "--hand-restore, load 2: item 1 is still CREATED from set 0's record, the bow (type 5), and "
+           "THE DEFAULT (hand restore), load 2: item 1 is still CREATED from set 0's record, the bow (type 5), and "
            "no off hand is created -- the swing model is re-applied from the record before the creates "
            "(ENG-B4: moving the mirror into item_layout_begin would create item 1 as a sword)",
            f"{created72}")
@@ -1332,8 +1346,9 @@ try:
            and (it72[W]["bag"], it72[W]["slot"]) == (BP, home7)
            and placed72.get(11) == [EQ, 0] and placed72.get(12) == [EQ, 1]
            and len(cells72) == len(set(cells72)),
-           "--hand-restore, load 2: the hands are (11, 12), the 0x0147 row for set 0 names them (and set "
-           "1's own row too -- the UNVERIFIED two-sets exposure), the bow sits at the sword's old cell "
+           "THE DEFAULT (hand restore), load 2: the hands are (11, 12), the 0x0147 row for set 0 names them (and set "
+           "1's own row too -- the two-sets load: retail UNVERIFIED, 0 of 21; our client OBSERVED to "
+           "accept it, harness 20260930T102914), the bow sits at the sword's old cell "
            "(retail's bow at (4, 1)), declare_weapon_sets places 11 and 12 into equipped 0 and 1, and "
            "every item has a cell of its own",
            f"ret {ret72} sets {[authsrv.weapon_set_items(k) for k in range(4)]} bow {it72[W]} placed {placed72}")
@@ -1374,9 +1389,9 @@ try:
     charstore.Store.open("hands@rurik.invalid", base=base).set_item_location(UUID7, 11, EQ, 0)
     s76, it76, created76, placed76, ret76 = dress7()
     led.ok(ret76 is None and itemstore.hand_items(it76, EQ) == (W, 0),
-           "CONTROL: --hand-restore without --persist reads no store -- the constants' hands (the "
+           "CONTROL: the hand restore without --persist reads no store -- the constants' hands (the "
            "repo's rule: no item cell survives a load without --persist)")
-    authsrv.HAND_RESTORE = False
+    authsrv.HAND_RESTORE = _saved["HAND_RESTORE"]
     authsrv.WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
     authsrv._assign_backpack_slots()
     authsrv.SET_ITEMS_OVERRIDE.clear()
@@ -1586,16 +1601,71 @@ try:
            and "before = weapon_set_items(0)" in ihd,
            "LOCK: item_hands_at_dress is gated on HAND_RESTORE and mirrors the hands against set 0's "
            "items -- the in-session door, so the launch records stand")
-    led.ok(main_wires("hand_restore", "HAND_RESTORE", True) and _saved["HAND_RESTORE"] is False
-           and '"--hand-restore"' in ARGS,
-           "LOCK: main() wires --hand-restore -> HAND_RESTORE = True, the module default is OFF (until "
-           "the loopback run), and serverargs defines the flag")
-    main_fn_saved = main_fn
-    main_fn = _func(ast.parse(SRC.replace("        HAND_RESTORE = True\n", "        HAND_RESTORE = False\n", 1)),
-                    "main")
-    led.ok(not main_wires("hand_restore", "HAND_RESTORE", True),
-           "KNOWN-BAD: a main() whose --hand-restore sets nothing fails the lock")
-    main_fn = main_fn_saved
+    # RANGERPRE-S21's flip (2026-09-30): the loopback gate PASSED (harness 20260930T102914,
+    # build 38797 -- our client took 0x0147 [1, 0, 11, 12] AND [1, 1, 11, 12]; OBSERVED on
+    # loopback, retail's 0 of 21 stays UNVERIFIED), so the module default is ON and
+    # --no-hand-restore is THE REVERT ARM; --hand-restore stays, the default spelled out.
+    def hr_lock(tree):
+        """(module default constants, --no-hand-restore -> False, --hand-restore -> True,
+        naming both arms refused by ap.error) read from one parse of authsrv.py."""
+        fn = _func(tree, "main")
+
+        def wires(attr, value):
+            return any(isinstance(n, ast.If) and isinstance(n.test, ast.Attribute) and n.test.attr == attr
+                       and any(isinstance(s, ast.Assign) and isinstance(s.targets[0], ast.Name)
+                               and s.targets[0].id == "HAND_RESTORE" and isinstance(s.value, ast.Constant)
+                               and s.value.value is value for s in n.body)
+                       for n in ast.walk(fn))
+        top = [n.value.value for n in tree.body if isinstance(n, ast.Assign)
+               and any(isinstance(t, ast.Name) and t.id == "HAND_RESTORE" for t in n.targets)
+               and isinstance(n.value, ast.Constant)]
+        both = any(isinstance(n, ast.If) and isinstance(n.test, ast.BoolOp) and isinstance(n.test.op, ast.And)
+                   and sorted(v.attr for v in n.test.values if isinstance(v, ast.Attribute))
+                   == ["hand_restore", "no_hand_restore"]
+                   and any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                           and c.func.attr == "error" for st_ in n.body for c in ast.walk(st_))
+                   for n in ast.walk(fn))
+        return top, wires("no_hand_restore", False), wires("hand_restore", True), both
+
+    hr_top, hr_no, hr_yes, hr_both = hr_lock(TREE)
+    import serverargs                                                  # noqa: E402
+    ap_hr = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    a_hr0 = ap_hr.parse_args([])
+    a_hrn, a_hry = ap_hr.parse_args(["--no-hand-restore"]), ap_hr.parse_args(["--hand-restore"])
+    led.ok(hr_top == [True] and _saved["HAND_RESTORE"] is True
+           and a_hr0.no_hand_restore is False and a_hr0.hand_restore is False
+           and a_hrn.no_hand_restore is True and a_hry.hand_restore is True,
+           "LOCK: HAND_RESTORE defaults True at module level (the flip, 2026-09-30: the loopback gate "
+           "harness 20260930T102914 PASSED) and serverargs parses --no-hand-restore (the revert arm) "
+           "and --hand-restore (kept, the default spelled out), each default off",
+           f"top {hr_top} imported {_saved['HAND_RESTORE']}")
+    led.ok(hr_no and hr_yes and hr_both,
+           "LOCK: main() wires --no-hand-restore -> HAND_RESTORE = False (THE REVERT ARM: every dress "
+           "before 2026-09-30) and --hand-restore -> True, and refuses naming both arms with ap.error",
+           f"no {hr_no} yes {hr_yes} both-refused {hr_both}")
+    hr_mutants = {
+        "the module default reverted to False":
+            SRC.replace("HAND_RESTORE = True            #", "HAND_RESTORE = False           #", 1),
+        "--no-hand-restore sets True":
+            SRC.replace("        HAND_RESTORE = False\n", "        HAND_RESTORE = True\n", 1),
+        "--hand-restore sets False":
+            SRC.replace("        HAND_RESTORE = True\n", "        HAND_RESTORE = False\n", 1),
+        "no both-arms refusal":
+            SRC.replace('        ap.error("--hand-restore and --no-hand-restore name both arms")',
+                        "        pass", 1),
+    }
+    hr_red = {}
+    for why, msrc in hr_mutants.items():
+        m_top, m_no, m_yes, m_both = hr_lock(ast.parse(msrc))
+        hr_red[why] = msrc != SRC and not (m_top == [True] and m_no and m_yes and m_both)
+    led.ok(all(hr_red.values()),
+           "KNOWN-BAD: each of four mutations of authsrv.py fails the two locks above -- the module "
+           "default reverted to False, --no-hand-restore setting True, --hand-restore setting False, "
+           "the both-arms refusal removed", f"{hr_red}")
 
     # ---- §7b retail's hands across the loads (vault-gated) -------------------------------------
     TAPE7 = "20260929T150923"
@@ -1668,7 +1738,7 @@ try:
                    "OBSERVED: each of the next three loads (:53753, :53756, :59427 -- two fields and an "
                    "outpost) dressed set 0 = [sword, shield] into the hands, sets 1-3 empty, 0x0148 set 0, "
                    "and the bow at the backpack's slot 1 -- the sword's old cell -- with no equip of its own: "
-                   "the ACTIVE set's record took the equipped items (what --hand-restore reproduces)",
+                   "the ACTIVE set's record took the equipped items (what the hand restore -- the default since 2026-09-30 -- reproduces)",
                    f"{[(x['hands'], x['sets'][:1], x['bows']) for x in later]}")
 finally:
     for k, v in _saved.items():

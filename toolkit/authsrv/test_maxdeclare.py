@@ -34,9 +34,12 @@ WHAT THIS PINS, and what each part rests on (§1-§3 MAXHP-2, §4-§6 MAXHP-1):
     shield in set 0 -- that part needs the overlay's attribute rows, as
     test_skillloadorder's drives do, and declares a skip without them. THE
     LATER LOAD (RANGERPRE-S21, same rows): set 0 = the bow, the 564 shield
-    equipped IN GAME under --persist, then a new connection -- under
-    --hand-restore the next load's 42 is the equip's base+15 (retail's 135
-    after the equip), with the arm off (KNOWN-BAD, the default) it is base.
+    equipped IN GAME under --persist, then a new connection -- with the hand
+    restore on the next load's 42 is the equip's base+15 (retail's 135 after
+    the equip), with the arm off (KNOWN-BAD, --no-hand-restore, the pre-flip
+    default) it is base, and with the MODULE DEFAULT (no flag; ON since
+    2026-09-30, when the loopback gate harness 20260930T102914 passed) it is
+    the restore arm's base+15.
   * §3 SOURCE: the bonus term in player_max_health only; held_max_moved in
     _item_moves_commit after _item_hands_mirror with the bonus read before the
     batch, and in select_weapon_set after the energy pair with the bonus read
@@ -94,7 +97,7 @@ import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 import combatmath                                            # noqa: E402
 
-led = checks.Ledger("maximum-health declarations (RANGERPRE-S10, S11)", floor=44)   # 2026-09-29: 20 from the first green run with the vault (§1 5, §2 11, §3 4); RANGERPRE-S21 +2 (critic C10: §1's LATER_LOADS pin, §2's LATER LOAD drive, both vault-gated); 2026-09-30 RANGERPRE-S10 (MAXHP-1) +22 (§4 4, §5 14, §6 4); merged on rangerpre 2026-09-30 (S10 + S21): 44 with the vault, 31 bare (both measured) -- a bare machine (RURIK_VAULT at an empty directory) runs fewer and declares §1, §4, the load checks and the splash skipped, under the floor on purpose -- the retail fixtures count inside it, so a missing capture is RED
+led = checks.Ledger("maximum-health declarations (RANGERPRE-S10, S11)", floor=45)   # 2026-09-29: 20 from the first green run with the vault (§1 5, §2 11, §3 4); RANGERPRE-S21 +2 (critic C10: §1's LATER_LOADS pin, §2's LATER LOAD drive, both vault-gated); 2026-09-30 RANGERPRE-S10 (MAXHP-1) +22 (§4 4, §5 14, §6 4); merged on rangerpre 2026-09-30 (S10 + S21): 44 with the vault, 31 bare (both measured); 2026-09-30 RANGERPRE-S21's flip +1 (§2's LATER LOAD under the module default, vault/overlay-gated): 45 with the vault, 31 bare (both measured) -- a bare machine (RURIK_VAULT at an empty directory) runs fewer and declares §1, §4, the load checks and the splash skipped, under the floor on purpose -- the retail fixtures count inside it, so a missing capture is RED
 
 INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT             # 0x009F
 CHG = authsrv.GAME_SMSG_ITEM_CHANGE_LOCATION                  # 0x014B
@@ -276,12 +279,12 @@ def section_retail():
            "held at load carries, and the same reader reads the other values",
            f"after {after}, before {earlier}")
     # RANGERPRE-S21 (critic C10): the three later loads by connection and wire t --
-    # what §2's LATER LOAD drive reproduces under --hand-restore.
+    # what §2's LATER LOAD drive reproduces with the hand restore (the default).
     pinned = {(g.split("_")[1].split("-")[0], t) for g, t, _x in after}
     led.ok(pinned == LATER_LOADS,
            "the three later loads declaring 135 are :53753 t=994.024, :53756 t=998.208 and "
            ":59427 t=1217.429 -- the loads after the in-game equip, which §2's LATER LOAD drive "
-           "reproduces under --hand-restore",
+           "reproduces with the hand restore (the default since 2026-09-30)",
            f"{sorted(pinned)}")
     return decoded
 
@@ -385,7 +388,7 @@ def section_ours():
     # THE LOAD: the real burst after the dress, set 0 = sword + 564 shield
     if not authsrv.agents.WORLD.rows("attribute"):
         led.skip("2. the load's 42", "no attribute cost rows in the content "
-                 "(clientscan/attribpoints.py --emit-content) -- 2 checks")
+                 "(clientscan/attribpoints.py --emit-content) -- 3 checks")
         return
     got = {}
     for with_564 in (True, False):
@@ -403,15 +406,22 @@ def section_ours():
 
     # THE LATER LOAD (RANGERPRE-S21, critic C10): the 564 shield EQUIPPED IN GAME under
     # --persist, then a new connection -- retail's :56064 equip then :53753 / :53756 /
-    # :59427 (LATER_LOADS, §1). Only --hand-restore puts the shield back in the hand at
-    # the dress, so only it carries the equip's maximum into the next load's 42.
-    later = {arm: later_load(arm) for arm in (True, False)}
+    # :59427 (LATER_LOADS, §1). Only the hand restore puts the shield back in the hand at
+    # the dress, so only it carries the equip's maximum into the next load's 42. arm
+    # None = the MODULE DEFAULT, untouched: ON since RANGERPRE-S21's flip (2026-09-30), so
+    # a default reverted to False reddens the third check.
+    later = {arm: later_load(arm) for arm in (True, False, None)}
     led.ok(later[True] == ([int(base) + 15], [int(base) + 15])
            and later[False] == ([int(base) + 15], [int(base)]),
-           "THE LATER LOAD: the in-game equip declares base+15 (S11) and, under --hand-restore, "
-           "the NEXT load's 42 is base+15 too -- retail's 135 on the three loads after the equip "
-           "(:53753 994.024, :53756 998.208, :59427 1217.429); KNOWN-BAD (the default, the "
-           "hands at set 0's record): the next load drops back to base", f"{later}")
+           "THE LATER LOAD: the in-game equip declares base+15 (S11) and, with the hand restore "
+           "on, the NEXT load's 42 is base+15 too -- retail's 135 on the three loads after the "
+           "equip (:53753 994.024, :53756 998.208, :59427 1217.429); KNOWN-BAD (--no-hand-restore, "
+           "the pre-flip default: the hands at set 0's record): the next load drops back to base",
+           f"{later}")
+    led.ok(later[None] == ([int(base) + 15], [int(base) + 15]),
+           "THE LATER LOAD under the MODULE DEFAULT (no flag): base+15 -- the default is the hand "
+           "restore since 2026-09-30 (the loopback gate, harness 20260930T102914, PASSED)",
+           f"{later[None]} imported HAND_RESTORE {_saved['HAND_RESTORE']}")
 
 
 def later_load(arm):
@@ -419,7 +429,8 @@ def later_load(arm):
     sword + the 564 shield: c2s 0x0030 [sword] then [shield] in a field under
     --persist (a temporary store the load's find_character is pointed at), then a new
     connection's item half of the dress (item_layout_begin, item_hands_at_dress) and
-    the real _handle_request_players."""
+    the real _handle_request_players. `arm` is HAND_RESTORE for the drive; None
+    leaves the module default the import saw (_saved)."""
     import shutil
     import tempfile
     import charstore
@@ -432,7 +443,8 @@ def later_load(arm):
     lead_id, off_id = authsrv.WEAPON_SET_ITEM_IDS[0]
     try:
         authsrv.agents.item_template = template_with_564
-        authsrv.HELD_HEALTH, authsrv.HAND_RESTORE = True, arm
+        authsrv.HELD_HEALTH = True
+        authsrv.HAND_RESTORE = _saved["HAND_RESTORE"] if arm is None else arm
         authsrv.PERSIST, authsrv.ITEM_MOVES_ENABLED = True, True
         authsrv.EQUIP_WEAPON, authsrv.EQUIP_ARMOUR = True, True
         authsrv.EQUIP_COSTUME, authsrv.EQUIP_COSTUME_HEAD = False, False

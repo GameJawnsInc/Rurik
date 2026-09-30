@@ -3429,8 +3429,9 @@ WEAPON_SET_BACKPACK_SLOTS = {}
 # swaps re-send no 0x0147 (its four earlier witnesses, and these two). What
 # retail does to ANOTHER set's record when that set's item is equipped into
 # set 0 is NOT OBSERVED (retail's sword and shield were in no set). Under
-# --hand-restore item_hands_at_dress re-fills this map at the dress from the
-# restored hands; off, the dress clears it and the hands are the records'.
+# HAND_RESTORE (the default since 2026-09-30) item_hands_at_dress re-fills this
+# map at the dress from the restored hands; under --no-hand-restore the dress
+# clears it and the hands are the records'.
 SET_ITEMS_OVERRIDE = {}
 
 
@@ -13486,7 +13487,7 @@ ITEM_MOVES_ENABLED = True      # False (--no-item-moves): c2s 0x004F ITEM_MOVE
                                # lead rule (0x014B into an EMPTIED hand, never
                                # a 0x0152 with a 0) and the store-built 0x006E
                                # -- with no in-game move nothing differs.
-HAND_RESTORE = False           # True (--hand-restore), RANGERPRE-S21
+HAND_RESTORE = True            # False (--no-hand-restore), RANGERPRE-S21
                                # (WEAPONREFUSE-B): under --persist a stored
                                # HAND change -- an in-game equip into equipped
                                # 0/1 -- is put back at the next dress
@@ -13501,14 +13502,30 @@ HAND_RESTORE = False           # True (--hand-restore), RANGERPRE-S21
                                # loads (:53753 t0 993.31, :53756 997.62,
                                # :59427 1216.74) dressed set 0 = [sword,
                                # shield], 0x0148 set 0, the bow at the
-                               # sword's old backpack cell. DEFAULT OFF until
-                               # a loopback run answers one question: the
+                               # sword's old backpack cell. DEFAULT ON since
+                               # 2026-09-30: shipped OFF (3ab6b017) until a
+                               # loopback run answered one question -- the
                                # restored load names a set-1..3 item in BOTH
-                               # set 0 and its own set, which 0 of 21 retail
-                               # loads with two or more non-empty sets do
-                               # (UNVERIFIED client acceptance). Off is every
-                               # dress before it: the hands at the defaults,
-                               # a stored hand change said in the log.
+                               # set 0 and its own set -- and the run PASSED.
+                               # OBSERVED on OUR client (build 38797, tree
+                               # rangerpre e968131a, agent-piloted): harness
+                               # 20260930T102914 sent 0x0147 [327,1,0,11,12]
+                               # AND [327,1,1,11,12], spawn checkpoints passed,
+                               # no crash dialog, heartbeat alive to teardown,
+                               # doll and body drew the restored sword+shield;
+                               # the doubled load was accepted on 4 fresh loads
+                               # (T102914, T103106, T103314, T103453) and 2 zone
+                               # loads (T104128 c2 map 146, c3 map 148); F2/F1
+                               # in the doubled state answered by 0x0148 only.
+                               # What RETAIL does stays UNVERIFIED: 0 of 21
+                               # retail loads with two or more non-empty sets
+                               # name one item twice. The revert arm is the
+                               # pre-flip default, every dress before
+                               # 2026-09-30: the hands at the defaults, a
+                               # stored hand change said in the log (KNOWN-BAD:
+                               # T102741 and zone pair T103808 loaded the bow
+                               # after the sword+shield equips). --hand-restore
+                               # is still accepted: the default spelled out.
 EQUIPPED_VISUAL_ORDER = False  # True (--equipped-visual-order): dress the armour
                                # into the EQUIPPED BAG at its 0x006E position
                                # (body 2, boots 3, legs 4, gloves 5, head 6) --
@@ -32190,13 +32207,15 @@ def item_layout_begin(state, conn_id=0):
     """Decide every item's cell for this dress and seed state["items"]
     (DESKWORK-D1 step 8). The constants' layout, then -- under --persist with
     the arm on -- the character's stored cells through itemstore.restore,
-    which keeps the HANDS at their defaults (the weapon sets own slots 0/1;
-    a stored hand change is logged, not applied) and drops the whole store on
-    an illegal or colliding cell. UNDER --hand-restore (RANGERPRE-S21,
-    WEAPONREFUSE-B) a stored hand change is applied instead, as one unit,
-    when itemstore.hands_legal accepts the pair (_hands_legal_for) -- retail's
-    three loads after :56064's equips (OBSERVED, n=1) -- and the swing model
-    follows at the dress's END (item_hands_at_dress), never here: the creates
+    which drops the whole store on an illegal or colliding cell. UNDER
+    HAND_RESTORE (RANGERPRE-S21, WEAPONREFUSE-B; the default since
+    2026-09-30, the loopback gate harness 20260930T102914 PASSED) a stored
+    hand change is applied, as one unit, when itemstore.hands_legal accepts
+    the pair (_hands_legal_for) -- retail's three loads after :56064's
+    equips (OBSERVED, n=1); under --no-hand-restore (the pre-flip default)
+    restore keeps the HANDS at their defaults (the weapon sets own slots
+    0/1; a stored hand change is logged, not applied). The swing model
+    follows restored hands at the dress's END (item_hands_at_dress), never here: the creates
     below still read set 0's RECORD through agents.PLAYER_WEAPON /
     PLAYER_OFFHAND (ENG-B4). The set items' backpack slots follow, so
     select_weapon_set moves a shield to where it really sits (and
@@ -32401,7 +32420,8 @@ def _item_hands_mirror(state, conn_id, before):
 
 
 def item_hands_at_dress(state, conn_id):
-    """RANGERPRE-S21 (WEAPONREFUSE-B), under --hand-restore: the RESTORED hands
+    """RANGERPRE-S21 (WEAPONREFUSE-B), under HAND_RESTORE (the default since
+    2026-09-30; --no-hand-restore reverts): the RESTORED hands
     become set 0's items for this session and the swing model -- the in-session
     mirror (_item_hands_mirror) against set 0's record, so a load after an
     in-game equip is the state the equip left: 0x0147 set 0 and the load's 42
@@ -32410,13 +32430,19 @@ def item_hands_at_dress(state, conn_id):
     set 0's RECORD, ENG-B4 -- moving this into item_layout_begin would create
     item 1 as the sword and lose the bow) and BEFORE the 0x0148/0x0147 rows.
     A no-op when the hands ARE the record's, so a dress with no stored hand
-    change is byte-identical; a no-op with the arm off (the default).
+    change is byte-identical; a no-op with the arm off (--no-hand-restore,
+    the pre-flip default).
 
     OBSERVED shape, n=1: 20260929T150923 :53753 / :53756 / :59427 each named
     set 0 = [sword, shield] after :56064's two equips, and their own 42 was
     135 (994.024, 998.208, 1217.429) -- the shield's 564 held at load.
-    UNVERIFIED: the load now names a set-1..3 item in set 0 AND its own set,
-    which no retail load does (0 of 21) -- the loopback run's question."""
+    The load then names a set-1..3 item in set 0 AND its own set. RETAIL:
+    UNVERIFIED, no retail load does (0 of 21). OUR CLIENT: OBSERVED to accept
+    it -- the loopback gate, build 38797, 2026-09-30: harness 20260930T102914
+    sent 0x0147 [327,1,0,11,12] and [327,1,1,11,12], spawn checkpoints
+    passed, no crash dialog, heartbeat to teardown, doll and body drew the
+    sword+shield; accepted again on T103106, T103314, T103453 and the zone
+    pair T104128 (maps 146 and 148)."""
     if not (HAND_RESTORE and EQUIP_WEAPON and state.get("items")):
         return None
     before = weapon_set_items(0)
@@ -40981,12 +41007,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [1, COSTUME_HEAD_ITEM_ID] + _cell,
                                  f"ITEM_MOVED_TO_LOCATION({COSTUME_HEAD_KEY} -> "
                                  f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, COSTUME_HEAD_SLOT)})")
-                        # RANGERPRE-S21 (--hand-restore): the RESTORED hands
-                        # become set 0's items and the swing model HERE --
-                        # after every create above (they read set 0's record,
-                        # ENG-B4) and before the 0x0148/0x0147 rows below that
-                        # name them. A no-op by default and whenever the hands
-                        # are the record's.
+                        # RANGERPRE-S21 (HAND_RESTORE, the default since
+                        # 2026-09-30): the RESTORED hands become set 0's items
+                        # and the swing model HERE -- after every create above
+                        # (they read set 0's record, ENG-B4) and before the
+                        # 0x0148/0x0147 rows below that name them. A no-op
+                        # under --no-hand-restore and whenever the hands are
+                        # the record's.
                         item_hands_at_dress(state, conn_id)
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
@@ -45596,18 +45623,32 @@ def main():
               "are ignored and no stored item cell is read -- every run before "
               "DESKWORK-D1 step 8 (2026-09-23): the dress is the constants' and a "
               "drag or double-click in the inventory gets no reply.", flush=True)
+    if a.hand_restore and a.no_hand_restore:
+        ap.error("--hand-restore and --no-hand-restore name both arms")
+    global HAND_RESTORE
     if a.hand_restore:
-        global HAND_RESTORE
+        # The default since 2026-09-30, spelled out: kept because today's run
+        # cards and scripts name it (RANGERPRE-S21's loopback gate).
         HAND_RESTORE = True
-        print("[items] --hand-restore: under --persist a stored HAND change (an "
-              "in-game equip into equipped 0/1) is put back at the next dress -- "
-              "set 0, the hands, 0x0147, 0x006E and the load's 42 name the equipped "
-              "items, retail's three loads after 20260929T150923 :56064's equips "
-              "(OBSERVED n=1). UNVERIFIED: a set-1..3 item restored into the hands "
-              "is named by set 0 AND its own set at the load (0 of 21 retail loads) "
-              "[RANGERPRE-S21]" + ("" if a.persist else "  -- NOTE: --persist is "
-                                   "OFF, so no item cell survives a load and this "
-                                   "does nothing"), flush=True)
+        print("[items] --hand-restore: the default since 2026-09-30, spelled out "
+              "-- under --persist a stored HAND change is put back at the next "
+              "dress [RANGERPRE-S21]" + ("" if a.persist else "  -- NOTE: "
+                                        "--persist is OFF, so no item cell "
+                                        "survives a load and this does nothing"),
+              flush=True)
+    if a.no_hand_restore:
+        HAND_RESTORE = False
+        print("[items] --no-hand-restore: THE REVERT ARM for RANGERPRE-S21's flip "
+              "(2026-09-30) -- a stored HAND change (an in-game equip into equipped "
+              "0/1) is NOT put back at the next dress: the hands, set 0, 0x0147 and "
+              "the load's 42 are set 0's record again, the change said in the log, "
+              "as every dress before 2026-09-30. KNOWN-BAD against retail's three "
+              "loads after 20260929T150923 :56064's equips (OBSERVED n=1), and the "
+              "loopback gate's known-bad arms (harness 20260930T102741, zone pair "
+              "T103808) loaded the bow." + ("" if a.persist else "  -- NOTE: "
+                                           "--persist is OFF, so no item cell "
+                                           "survives a load and this changes "
+                                           "nothing"), flush=True)
     if a.equipped_visual_order:
         global EQUIPPED_VISUAL_ORDER
         EQUIPPED_VISUAL_ORDER = True
