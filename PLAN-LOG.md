@@ -28,6 +28,54 @@ move back.
 
 ---
 
+### RANGERLOOP-F8 -- 2026-09-30 -- **fixed at the desk: an avoid halt on a pickup walk no longer cancels the pickup. The fix goes in 1z-dj's park, not in the mirror's pass. Client confirmation is still open**
+
+**The defect** ([CONFIRM-2026-09-30.md](studies/presearing/CONFIRM-2026-09-30.md) §7):
+- On Run A (`20260930T133106`), 3 of 3 S15 pickups beside the revived practice Hatcher
+  printed `CANCELLED ... the walk ended short of the item`. Each came right after a
+  `[model] AVOID HALT [MOVECODE-1z-dj]`.
+- The mirror's avoidance pass halted the player's copy at the Hatcher's 80 u disc. Its
+  "target covered" exit fired because the pile lies 30 u from the Hatcher. The 1z-dj park
+  then cleared the walk's dest, and `pickup_tick` read that as a walk ended short.
+
+**What was decided, and on what evidence:**
+- **The client's body walks INTO the disc to reach the item.** OBSERVED, n = 3 arrivals:
+  the first report after the walk stood 0.0 u from pile 401 on Run A, and 3.0 u and 0.0 u
+  from piles 400 and 401 on Run A' (`134310`, `--no-model-avoid-halt`). Two of the three
+  walks started outside the disc, and A' 400's line passed 21.6 u from the Hatcher's centre.
+- **Retail serves on the server's own clock.** The arrival comes the straight-line time
+  after the `0x002A` (2 of 2), with no report during the walk (3 of 3, `loot.py`).
+- **Option (a), "the pass does not halt when the target is inside the disc": REFUSED.**
+  That exit is the decode's (`0x006005D8`), and 14 of 14 keyboard-lead halts plus 1 of 1
+  out of sample confirm it (NPCTRACK-F14). The pickup evidence is the body's report, not
+  world-0. Whether world-0 halts on a pickup walk is UNVERIFIED: the decode says it does,
+  and no tap has read it.
+- **Option (b) as first posed, "trust the client's arrival report": IMPOSSIBLE.** The
+  client sends none. On Run A it sent 111 `0x0009`s and nothing else between the cancel
+  and the operator's next key press.
+- **The retail corpus cannot decide it.** The 3 pickups on `20260929T150923` (:53756
+  1124.02, :55934 392.51, :56025 863.86) had only corpses within 300 u of the pile, and
+  `_npc_obstacles` skips a corpse. So everything past this one rig is RECONSTRUCTION.
+
+**What shipped:** `PICKUP_WALKS_THROUGH_AVOID_HALT`, with the revert
+`--no-pickup-through-avoid-halt`. While a pickup's leg still owns the model's dest,
+`_model_park_on_avoid_halt` counts a halt as seen, writes a `kbd_leg act=avoid-halt-pickup`
+row and does NOT park. The model walks on, and the pickup is served at its eta. The pass,
+the mirror and every other walk are untouched.
+
+**Tests:** `test_loot` §7 (floor 37 → 45 bare, 46 → 54 with the capture) runs the real guard
+and the real pass at the runs' coordinates. Proved red: the exemption disabled reddens 7a
+and 7b. The seven tests that bear on the change were run, not the full suite.
+
+**Still open** (`PLAN.md` §8.1):
+- **The client run.** Run A's rig under the default arm, with `agenttap --agents 1` to read
+  world-0.
+- **The residual.** After a served pickup, the mirror's copy is still at the halt point.
+  On Run A the next keyboard STOP-ECHO halted it again there and parked the model 45 u from
+  the body (`gamesrv.log` line 685).
+- **The race.** A park landing between `_approach_send`'s dest write and its pickup write
+  still cancels. That window is two statements.
+
 ### RANGERPRE's loopback confirmation -- 2026-09-30 -- **S10, S12, S15-S18, S20 and S21 landed and run on our client: six CONFIRMED, S16 CONFIRMED on its first approach, and S15's pickup FAILS by default beside a standing NPC; six shipped steps confirmed beside them; the hand restore ships ON; nine findings (RANGERLOOP-F1..F9)**
 
 **Landed** on lanes `rp2-a`..`rp2-d`, merged into `rangerpre` at `e968131a` and `d2fc95e1`.

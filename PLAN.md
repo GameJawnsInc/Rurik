@@ -2312,9 +2312,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest;
   three corpus tests still red (test_wearmap, test_routerbench, test_weaponcensus).
-* **RANGERLOOP-F8, a defect:** MOVECODE-1z-dj's avoid halt cancels an S15 pickup beside a
-  standing NPC while the client reaches the pile
-  ([CONFIRM-2026-09-30.md](studies/presearing/CONFIRM-2026-09-30.md) §7, §10).
+* **RANGERLOOP-F8 is fixed at the desk** (PLAN-LOG 2026-09-30, `--no-pickup-through-avoid-halt`).
+  Open: the client run on Run A's rig, with `agenttap --agents 1` reading world-0 on the
+  pickup walk, and the post-pickup residual, where the mirror's copy stays at the halt point.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a

@@ -25,7 +25,10 @@ frame); 3 the pickup through handle_pickup / pickup_tick / serve_pickup; 4 the v
 5 the source (the drop's slot in kill_agent AHEAD of the morale tick -- the critic's C1 --
 the world tick, the dispatch arm, the flags); 6 THE TAPE, which skips ONLY when the
 capture's directory is absent: ours re-encoded with retail's ids must be byte-identical
-to the plaintext, and a sabotaged tape must fail the same comparator. Sections 1-5 need no
+to the plaintext, and a sabotaged tape must fail the same comparator; 7 the pickup beside a
+standing NPC (RANGERLOOP-F8): the real AgTrack guard and avoidance pass at Run A's and Run
+A''s coordinates -- the halt must not cancel the pickup, the known-bad arm must, and 1z-dj's
+park must still take everything that is not a pickup walk. Sections 1-5 and 7 need no
 vault, no socket and no client.
 """
 import math
@@ -54,8 +57,9 @@ from codec import Codec                                        # noqa: E402  (au
 # (section 6 a declared skip). Section 6 adds 9 when the capture is present (44).
 # The review round adds two fixture-free checks (3j, 3k: the pickup/world-tick race),
 # so both move by 2, each read off a real green run: 37 bare (1 declared skip), 46
-# with the capture.
-LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=37)
+# with the capture. Section 7 (RANGERLOOP-F8, fixture-free) adds 8: 45 bare, 54 with
+# the capture, both from the green runs of 2026-09-30.
+LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=45)
 check = checks.adopt(LEDGER)
 
 STAMP = "20260929T150923"
@@ -848,6 +852,223 @@ def section_tape(codec):
           f"removed {removed}, recreated {recreated}, picked {picked}")
 
 
+# --------------------------------------------------------------------------- 7
+# RANGERLOOP-F8: the pickup beside a standing NPC. The practice Hatcher revives at
+# (10126, 8077) standing 30 u from its own drops. On 20260930T133106 (Run A) the
+# mirror's avoidance pass halted the player's copy at its 80 u disc on 3 of 3 pickups,
+# 1z-dj's park cleared the walk's dest, and each pickup CANCELLED "short of the item"
+# while the client's body reached the pile. The rig is rebuilt here with the REAL guard,
+# the REAL pass and the REAL _npc_obstacles, fed through the send() choke point's own
+# feed, at the runs' own coordinates.
+HATCHER_AT = (10126.0, 8077.0)
+RUN_A = ((10047.0, 8077.0), (10131.0, 8107.0))    # the approach's disc stop -> pile 401
+RUN_A2 = ((10008.0, 8077.0), (10142.0, 8052.0))   # Run A' 400: 136 u out, the line 21.6 u off
+
+
+class Rec:
+    def __init__(self):
+        self.rows = []
+
+    def event(self, kind, **kw):
+        self.rows.append(dict(kw, kind=kind))
+
+    def acts(self, act):
+        return [r for r in self.rows if r["kind"] == "kbd_leg" and r.get("act") == act]
+
+
+class Globals:
+    """Set authsrv's two avoid-halt switches for a block, and put them back."""
+
+    def __init__(self, through=True, park=True):
+        self.want = (through, park)
+
+    def __enter__(self):
+        self.saved = (authsrv.PICKUP_WALKS_THROUGH_AVOID_HALT,
+                      authsrv.MODEL_PARKS_ON_AVOID_HALT)
+        authsrv.PICKUP_WALKS_THROUGH_AVOID_HALT, authsrv.MODEL_PARKS_ON_AVOID_HALT = self.want
+
+    def __exit__(self, *exc):
+        authsrv.PICKUP_WALKS_THROUGH_AVOID_HALT, authsrv.MODEL_PARKS_ON_AVOID_HALT = self.saved
+
+
+def beside(start, pile, hatcher_dead=False, park_in_send=None):
+    """The rig: a seeded AgTrack guard, the Hatcher standing (or dead) at HATCHER_AT,
+    the player at `start`, a 6-gold pile (ground agent 401) at `pile`. -> (st, sent,
+    send). `send` feeds the guard exactly as the live choke point does, so the pickup's
+    0x002A reaches the mirror; `park_in_send` (a Rec) also runs 1z-dj's park INSIDE the
+    0x002A's send, before handle_pickup writes the walk's dest -- the recv/world-tick
+    interleaving where the grant's own setter halts the copy."""
+    foe = foe_entry(HATCHER_AT)
+    foe["dead"] = hatcher_dead
+    st = fresh(pos=start, agents={10: foe})
+    authsrv._agtrack_guard_seed(st, start, 0, 0)
+    st["ground_items"] = {401: {"item": 5001, "gold": 6, "pos": pile, "plane": 0,
+                                "source": 10, "shown": True}}
+    sent = []
+
+    def send(op, v, label="", quiet=False):
+        sent.append((op, list(v)))
+        authsrv._agtrack_shadow_emit(st, op, list(v), None)
+        if park_in_send is not None and op == OP_WALK:
+            authsrv._model_park_on_avoid_halt(st, park_in_send, time.time())
+    return st, sent, send
+
+
+def walk_out(st, send, rec, press=True, step=0.05):
+    """handle_pickup (unless `press` is False), then the world tick's halves on a
+    virtual clock -- the guard's tick, 1z-dj's park, pickup_tick -- until the pickup
+    resolves. -> (pickup_tick's result or None, the tick it resolved on, the record)."""
+    t = time.time()
+    if press:
+        authsrv.handle_pickup([0x803F, 401, 0], send, st, 0)
+    pk = dict(st.get("pickup") or {})
+    end = pk.get("eta", t) + 0.5
+    while t < end:
+        t += step
+        authsrv._agtrack_guard_call(st, "tick", t)
+        authsrv._model_park_on_avoid_halt(st, rec, t)
+        r = authsrv.pickup_tick(send, st, 0, now=t)
+        if r is not None:
+            return r, t, pk
+    return None, t, pk
+
+
+def halts(st):
+    g = st.get("agtrack_guard")
+    return -1 if g is None else int(g.mirror.sync.n_avoid_halt)
+
+
+def section_beside():
+    print("\n7. the pickup beside a standing NPC (RANGERLOOP-F8): the avoid halt does not "
+          "cancel it")
+    walk_msg = lambda pile: (OP_WALK, [PLAYER, pile, 0, 0, 401])   # noqa: E731
+
+    rec = Rec()
+    with Globals():
+        st, sent, send = beside(*RUN_A)
+        r, t, pk = walk_out(st, send, rec)
+    check(halts(st) >= 1 and r is True and t >= pk.get("eta", INF)
+          and sent == [walk_msg(RUN_A[1])] + arrival_list(5001, 401, 6)
+          and st.get("purse") == 6 and st.get("pos") == RUN_A[1]
+          and len(rec.acts("avoid-halt-pickup")) >= 1 and not rec.acts("avoid-halt"),
+          "7a. HEADLINE, Run A's pile 401 from the approach's disc stop: the real pass "
+          "halts the copy at the Hatcher's disc (the exposure -- no halt, no test), the "
+          "halt is NOT parked, and at the leg's eta the pickup is served in retail's frame, "
+          "purse 0 -> 6, the body at the pile",
+          f"halts {halts(st)} result {r} purse {st.get('purse')} pos {st.get('pos')} "
+          f"rows {rec.rows} sent {[(hex(o), v) for o, v in sent]}")
+
+    rec = Rec()
+    with Globals():
+        st, sent, send = beside(*RUN_A2)
+        r, t, pk = walk_out(st, send, rec)
+    row = (rec.acts("avoid-halt-pickup") or [{}])[0]
+    at = row.get("point") or [INF, INF]
+    d_hatcher = math.hypot(at[0] - HATCHER_AT[0], at[1] - HATCHER_AT[1])
+    check(halts(st) >= 1 and r is True and st.get("purse") == 6
+          and st.get("pos") == RUN_A2[1] and 60.0 <= d_hatcher <= 80.5
+          and (row.get("short") or 0) > 50.0,
+          "7b. Run A' 400, 136 u out on a line passing 21.6 u from the Hatcher's centre: the "
+          "pass halts the copy on the disc (60-80 u from its centre, over 50 u short of "
+          "the pile) mid-walk, and the pickup is still served",
+          f"halts {halts(st)} result {r} purse {st.get('purse')} row {row} "
+          f"d {d_hatcher:.1f}")
+
+    got = []
+    for geo in (RUN_A, RUN_A2):
+        rec = Rec()
+        with Globals(through=False):
+            st, sent, send = beside(*geo)
+            r, t, pk = walk_out(st, send, rec)
+        got.append((halts(st), r, st.get("purse"), st.get("pickup"), sent[1:],
+                    len(rec.acts("avoid-halt"))))
+    check(all(h >= 1 and r is False and purse is None and pk is None and rest == []
+              and parks >= 1 for h, r, purse, pk, rest, parks in got),
+          "7c. KNOWN-BAD ARM (--no-pickup-through-avoid-halt), both geometries: 1z-dj parks "
+          "the model at the halt, the walk's dest is gone, and the pickup CANCELS with "
+          "nothing sent -- Run A's 3 of 3, reproduced at the desk",
+          f"{got}")
+
+    rec = Rec()
+    with Globals():
+        st, sent, send = beside(RUN_A2[0], RUN_A2[1])
+        st.pop("ground_items")
+        lead = RUN_A2[1]
+        send(0x0029, [PLAYER, lead, 0, 0])
+        st["dest"] = lead
+        t = time.time()
+        for _ in range(12):
+            t += 0.05
+            authsrv._agtrack_guard_call(st, "tick", t)
+            authsrv._model_park_on_avoid_halt(st, rec, t)
+    parked = rec.acts("avoid-halt")
+    pos = st.get("pos") or (INF, INF)
+    check(halts(st) >= 1 and st.get("dest") is None and parked
+          and math.hypot(pos[0] - parked[0]["point"][0], pos[1] - parked[0]["point"][1]) < 0.1
+          and not rec.acts("avoid-halt-pickup"),
+          "7d. SCOPE: a plain 0x0029 lead to the same point inside the disc, no pickup on "
+          "record, is still parked by 1z-dj (pos at the halt, dest cleared) -- the "
+          "exemption does not swallow the keyboard class the park was built for",
+          f"halts {halts(st)} dest {st.get('dest')} pos {st.get('pos')} rows {rec.rows}")
+
+    rec_in, rec = Rec(), Rec()
+    with Globals():
+        st, sent, send = beside(*RUN_A, park_in_send=rec_in)
+        r, t, pk = walk_out(st, send, rec)
+    check(halts(st) >= 1 and len(rec_in.acts("avoid-halt")) == 1
+          and r is True and st.get("purse") == 6,
+          "7e. THE THREADS: the grant's own setter halts the copy inside send() and a tick "
+          "parks it there, before handle_pickup writes the walk's dest -- 1z-dj parks and "
+          "clears a dest that _approach_send then overwrites, and the pickup is served",
+          f"halts {halts(st)} in-send rows {rec_in.rows} result {r} purse {st.get('purse')}")
+
+    # Run A's geometry halts at the grant's own setter, so the halt is pending the
+    # moment handle_pickup returns; the park then runs on a dest another order wrote
+    # (the world tick parks BEFORE pickup_tick, so this is the tick that sees it).
+    rec = Rec()
+    with Globals():
+        st, sent, send = beside(*RUN_A)
+        authsrv.handle_pickup([0x803F, 401, 0], send, st, 0)
+        st["dest"] = (9000.0, 8077.0)     # another order took the model's dest
+        parked_now = authsrv._model_park_on_avoid_halt(st, rec, time.time() + 0.05)
+    check(halts(st) >= 1 and parked_now is True and st.get("dest") is None
+          and rec.acts("avoid-halt") and not rec.acts("avoid-halt-pickup")
+          and st.get("pickup") is not None,
+          "7f. keyed on the DEST: with a pickup still on record but another order's dest "
+          "in the model, the halt is parked as before (1z-dj) -- the exemption is the "
+          "pickup's WALK, not the pickup's record",
+          f"halts {halts(st)} parked {parked_now} dest {st.get('dest')} rows {rec.rows}")
+
+    got = []
+    for through in (True, False):
+        rec = Rec()
+        with Globals(through=through):
+            st, sent, send = beside(*RUN_A, hatcher_dead=True)
+            r, t, pk = walk_out(st, send, rec)
+        got.append((halts(st), r, st.get("purse")))
+    check(got == [(0, True, 6), (0, True, 6)],
+          "7g. a CORPSE is no obstacle (_npc_obstacles skips the dead): with the Hatcher "
+          "dead there is no halt and both arms serve -- which is why retail's three "
+          "pickups (only corpses within 300 u of each pile) never exposed this, and why "
+          "the practice target's revive did",
+          f"{got}")
+
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    import serverargs
+    sa = open(serverargs.__file__, encoding="utf-8").read()
+    i_main = src.find("\ndef main():")
+    i_flag = src.find("    if a.no_pickup_through_avoid_halt:", i_main)
+    i_park = src.find("\ndef _model_park_on_avoid_halt(")
+    check(authsrv.PICKUP_WALKS_THROUGH_AVOID_HALT is True
+          and authsrv.capture_flags().get("PICKUP_WALKS_THROUGH_AVOID_HALT") is True
+          and '"--no-pickup-through-avoid-halt"' in sa
+          and 0 < i_main < i_flag
+          and "PICKUP_WALKS_THROUGH_AVOID_HALT = False" in src[i_flag:i_flag + 160]
+          and "PICKUP_WALKS_THROUGH_AVOID_HALT and pk" in src[i_park:i_park + 2600],
+          "7h. ships ON, on the capture's flags row, with its revert "
+          "--no-pickup-through-avoid-halt wired in main() and read by the park")
+
+
 def main():
     codec = Codec()
     section_leaf(codec)
@@ -856,6 +1077,7 @@ def main():
     section_view()
     section_source()
     section_tape(codec)
+    section_beside()
     return LEDGER.verdict()
 
 
