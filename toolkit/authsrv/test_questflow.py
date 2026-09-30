@@ -70,6 +70,21 @@ WHAT THIS CHECKS:
          placed, OURS vs TAPE equal on every kind, skill id and bar slot,
          the known-bad arm and a sabotaged tape red; the corpus's every
          grant-carrying accept granting first.
+  * RANGERPRE-S18 (QUESTFLOW-A2), THE ACCEPT MARKER. Retail's 0x0049 marks
+    the OBJECTIVE -- an NPC's exact create spot and plane (5 of
+    20260929T150923's 12), or the exit toward the objective's map labelled
+    with that map (5 of 12) -- never the player. Ours marked the player's
+    own position until S18; --quest-marker-at-player is that, kept as the
+    KNOWN-BAD arm. The rule (marker_placed) is the tape's.
+      §11 (bare): the errand marks the scout, the bandits the corridor exit
+         labelled 168; the live body's plane; portal_route's first hop and
+         final label; the placeholder's three causes; the probe binding and
+         the giver fallback; the known-bad arm; the rule's near misses; the
+         flag and main()'s flip.
+      §12 (vault-gated on 20260929T150923): the 12 markers' three kinds, the
+         rule on the five create-spot markers (plane 26 included), the
+         cross-map markers within 387 u of the player's last position before
+         the transfer to that map, and :53880's one exit for three labels.
 
 §5, §8 and §10 share ONE decode of the corpus (corpus()); §7 and on share one of
 20260929T150923 (tape_s18()). Nothing binds a port, launches a client, or
@@ -88,11 +103,12 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 37 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks, §3's six, §6's eleven and §9's eleven. §2 adds 15 with the four
-# captures present, §4 7, §5 3, §7 7, §8 3 and §10 7 (79 in all), each
-# declaring a LEDGER.skip for what is absent. Set from the run, never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=37)
+# Floor 47 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
+# nine checks, §3's six, §6's eleven, §9's eleven and §11's ten. §2 adds 15
+# with the four captures present, §4 7, §5 3, §7 7, §8 3, §10 7 and §12 4 (93
+# in all), each declaring a LEDGER.skip for what is absent. Set from the run,
+# never above it.
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=47)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -1193,6 +1209,209 @@ def section_10():
            f"{[(cc, p, t, q) for cc, p, t, q, r in carrying if not grants_before_add(r)]}")
 
 
+# ---------------------------------------------------------------- S18 / A2
+MOVE_MARKER = authsrv.GAME_SMSG_QUEST_MOVE_MARKER      # 0x0051
+TRANSFER = 0x01A5                                      # the tape's handoff
+# The tape's 12 accept markers by where they sit (OBSERVED, livewire):
+# exactly on an NPC's 0x0020 create spot with its plane; naming a map other
+# than the accepting one; neither.
+ON_SPOT_S18 = {79, 86, 54, 80, 89}
+CROSS_MAP_S18 = {90, 62, 68, 1462, 222}
+OTHER_S18 = {52, 75}
+
+
+def marker_of(add):
+    """(pos, plane, map) of a 0x0049, read from the END: [.., qid, pos,
+    plane, map, flags, s1, s2, s3, home]."""
+    return tuple(add[-8]), add[-7], add[-6]
+
+
+def marker_placed(add, here, spots, exits):
+    """The tape's rule for 10 of its 12 accepts: a marker on THIS map sits
+    exactly on an objective body's (x, y, plane); one naming ANOTHER map sits
+    on an exit of this map, plane 0. `spots` {(x, y, plane)}, `exits` {(x, y)}."""
+    (x, y), plane, mmap = marker_of(add)
+    if mmap == here:
+        return (float(x), float(y), plane) in spots
+    return plane == 0 and (float(x), float(y)) in exits
+
+
+def section_11():
+    print("\n11. RANGERPRE-S18 (QUESTFLOW-A2): OURS -- the accept marker on the "
+          "objective, or on the exit toward it")
+    import questdefs
+    rows = questdefs.load()
+    nm_e = questdefs.enc_string(rows[ERRAND]["enc_name"])
+    nm_b = questdefs.enc_string(rows[BANDITS]["enc_name"])
+    scout = {"pos": (8933.0, 7752.0), "plane": 0}
+    live = {"agents": {98: dict(scout)}}
+    e, b = drive(rows, [("accept", ERRAND, 148, live),
+                        ("accept", BANDITS, 148, live)])
+    add_e, add_b = first(e, ACCEPT), first(b, ACCEPT)
+    led.ok(add_e == [ERRAND, (8933.0, 7752.0), 0, 148, 32, nm_e, nm_e, nm_e, 148],
+           "the errand's 0x0049 marks the scout (errand_scout, 8933, 7752) with "
+           "its live plane on this map", f"{add_e}")
+    led.ok(add_b == [BANDITS, (9326.0, 8077.0), 0, 168, 32, nm_b, nm_b, nm_b, 148],
+           "the bandits' 0x0049 marks the exit ascalon_to_corridor (9326, 8077) "
+           "on 148, plane 0, labelled 168 -- the kill target's map", f"{add_b}")
+    spots = {(8933.0, 7752.0, 0)}
+    exits = {(float(r["x"]), float(r["y"])) for _k, r in authsrv.portal_rows(148)}
+    led.ok(marker_placed(add_e, 148, spots, exits)
+           and marker_placed(add_b, 148, spots, exits),
+           "and the tape's rule (marker_placed) holds on both",
+           f"{marker_of(add_e)} {marker_of(add_b)}")
+    st = {"map_id": 148, "pos": (9826.0, 8077.0)}
+    m3 = authsrv.quest_accept_marker(dict(st, agents={98: {"pos": (8933.0, 7752.0),
+                                                          "plane": 3}}),
+                                     rows[ERRAND])
+    m0 = authsrv.quest_accept_marker(dict(st, agents={}), rows[ERRAND])
+    led.ok(m3[:3] == ((8933.0, 7752.0), 3, 148) and m0[:3] == ((8933.0, 7752.0), 0, 148)
+           and "no live body" in m0[3],
+           "the plane is the LIVE body's (3 here, as q80's 26 is agent 40's); "
+           "a body not live marks plane 0 and says so", f"{m3} {m0}")
+    syn = {148: [("a", {"to_map": 146, "x": 1.0, "y": 2.0}),
+                 ("z", {"to_map": 999, "x": 9.0, "y": 9.0})],
+           146: [("b", {"to_map": 168, "x": 3.0, "y": 4.0}),
+                 ("c", {"to_map": 148, "x": 5.0, "y": 6.0})]}
+
+    def rows_of(m):
+        return syn.get(int(m), [])
+    route = authsrv.portal_route(148, 168, rows_of)
+    m2 = authsrv.quest_accept_marker(dict(st, agents={}), rows[BANDITS], rows_of)
+    led.ok([k for k, _r in route or []] == ["a", "b"]
+           and authsrv.portal_route(148, 148, rows_of) == []
+           and authsrv.portal_route(148, 777, rows_of) is None
+           and m2[:3] == ((1.0, 2.0), 0, 168) and "hop 1 of 2" in m2[3],
+           "portal_route: a two-hop route 148 -> 146 -> 168 marks the FIRST "
+           "exit and names the FINAL map (retail's (7311, 5438) exit for "
+           "objectives on 146, 160 and 164); here is [], unreachable None",
+           f"{route} {m2}")
+    m_none = authsrv.quest_accept_marker(dict(st, agents={}), rows[BANDITS],
+                                         lambda m: [])
+    m_empty = authsrv.quest_accept_marker(dict(st, agents={}), {})
+    m_typo = authsrv.quest_accept_marker(dict(st, agents={}),
+                                         {"objective_kill": "no_such_row"})
+    led.ok(all(m[:3] == ((9826.0, 8077.0), 0, 148)
+               for m in (m_none, m_empty, m_typo))
+           and "no portal route" in m_none[3]
+           and "names no objective" in m_empty[3]
+           and "'no_such_row'" in m_typo[3],
+           "no route, no target, or a key naming no spawn row: the pre-S18 "
+           "placeholder (the player, plane 0, this map), each saying why",
+           f"{m_none[3]} | {m_empty[3]} | {m_typo[3]}")
+    m_probe = authsrv.quest_accept_marker(
+        dict(st, agents={98: {"pos": (100.0, 200.0), "plane": 5}}),
+        {"objective_agent": 98})
+    m_giver = authsrv.quest_accept_marker(dict(st, agents={}),
+                                          {"giver_spawn": "errand_giver"})
+    led.ok(m_probe[:3] == ((100.0, 200.0), 5, 148)
+           and m_giver[:3] == ((10026.0, 8077.0), 0, 148),
+           "the probe binding marks the live objective_agent's body and plane; "
+           "a row with only a giver marks the giver (q79's shape, n = 1)",
+           f"{m_probe} {m_giver}")
+    # KNOWN-BAD: --quest-marker-at-player.
+    be, bb = drive(rows, [("accept", ERRAND, 148, live),
+                          ("accept", BANDITS, 148, live)],
+                   QUEST_MARKER_AT_OBJECTIVE=False)
+    bad_e, bad_b = first(be, ACCEPT), first(bb, ACCEPT)
+    led.ok(marker_of(bad_e) == marker_of(bad_b) == ((9826.0, 8077.0), 0, 148)
+           and not marker_placed(bad_e, 148, spots, exits)
+           and not marker_placed(bad_b, 148, spots, exits),
+           "KNOWN-BAD arm (--quest-marker-at-player): both markers at the "
+           "player's own (9826, 8077) on 148 -- every run before S18 -- and "
+           "the rule goes RED on both", f"{marker_of(bad_e)} {marker_of(bad_b)}")
+    near = {"off the spot by 1 u": [1, (8934.0, 7752.0), 0, 148],
+            "the spot on the wrong plane": [1, (8933.0, 7752.0), 2, 148],
+            "cross-map off every exit": [1, (1.0, 1.0), 0, 168],
+            "an exit on plane 3": [1, (9326.0, 8077.0), 3, 168]}
+    rnear = {k: marker_placed(v + [32, "", "", "", 148], 148, spots, exits)
+             for k, v in near.items()}
+    led.ok(not any(rnear.values()),
+           "VACUITY: the rule refuses each near miss", f"{rnear}")
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.quest_marker_at_player:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--quest-marker-at-player"]).quest_marker_at_player
+           and not ap.parse_args([]).quest_marker_at_player
+           and authsrv.QUEST_MARKER_AT_OBJECTIVE is True
+           and "global QUEST_MARKER_AT_OBJECTIVE\n" in window
+           and "QUEST_MARKER_AT_OBJECTIVE = False\n" in window,
+           "--quest-marker-at-player parses, the default marks the objective, "
+           "and main() sets QUEST_MARKER_AT_OBJECTIVE = False under it",
+           f"window found={at >= 0}")
+
+
+def section_12():
+    print(f"\n12. RANGERPRE-S18 (QUESTFLOW-A2): the TAPE {TAPE_S18} -- where its "
+          "12 accept markers sit")
+    import math
+    conns = tape_s18()
+    if conns is None:
+        led.skip(f"the tape {TAPE_S18}", "no capture directory (bare machine)")
+        return
+    cat = {"spot": set(), "cross": set(), "other": set()}
+    placed, depart, multi = [], [], {}
+    for port, cmap, merged, _ok in conns:
+        creates = {(float(v[5][0]), float(v[5][1]), v[6])
+                   for t, d, op, v in merged if d == "s2c" and op == 0x0020}
+        accs = [(t, v) for t, d, op, v in merged if d == "s2c" and op == ACCEPT]
+        for t, v in accs:
+            (x, y), plane, mmap = marker_of(v)
+            if mmap != cmap:
+                cat["cross"].add(v[1])
+            elif (float(x), float(y), plane) in creates:
+                cat["spot"].add(v[1])
+                placed.append((v[1], marker_placed(v, cmap, creates, set()),
+                               plane))
+            else:
+                cat["other"].add(v[1])
+        tr = [(t, v) for t, d, op, v in merged if d == "s2c" and op == TRANSFER]
+        cross = [(t, v) for t, v in accs if marker_of(v)[2] != cmap]
+        if tr and cross:
+            t_tr, v_tr = tr[-1]
+            pts = [v[1] for t, d, op, v in merged if d == "c2s" and op == 0x003D
+                   and t < t_tr and isinstance(v[1], tuple)]
+            for t, v in cross:
+                (x, y), _pl, mmap = marker_of(v)
+                if mmap != v_tr[4] or not pts:
+                    continue    # left for another map: not this marker's exit
+                depart.append((port, v[1], round(math.hypot(
+                    pts[-1][0] - x, pts[-1][1] - y)), mmap))
+        if port == "53880":
+            for t, d, op, v in merged:
+                if d == "s2c" and op == MOVE_MARKER and v[-1] != cmap \
+                        and v[-3][0] != float("inf"):
+                    multi.setdefault(tuple(v[-3]), set()).add(v[-1])
+    led.ok(cat["spot"] == ON_SPOT_S18 and cat["cross"] == CROSS_MAP_S18
+           and cat["other"] == OTHER_S18,
+           "TAPE: 5 accept markers sit EXACTLY on an NPC's 0x0020 create spot "
+           "(q79 86 54 80 89), 5 name another map (q90 62 68 1462 222), 2 "
+           "neither (q52 75)", f"{cat}")
+    led.ok(len(placed) == 5 and all(ok for _q, ok, _p in placed)
+           and sorted(p for q, _ok, p in placed if q in (80, 89)) == [26, 26],
+           "TAPE: the rule (marker_placed) holds on all five create-spot "
+           "markers, the plane included -- q80 and q89 on agent 40's plane 26",
+           f"{placed}")
+    led.ok(sorted(depart) == [("53880", 90, 202, 146), ("55934", 62, 387, 164),
+                              ("59969", 222, 168, 146), ("59969", 1462, 168, 146)],
+           "TAPE: each cross-map marker whose connection then LEFT for the "
+           "marker's map sits within 387 u of the player's last position before "
+           "that transfer (168, 202, 387 u) -- the marker is the exit",
+           f"{depart}")
+    led.ok(multi == {(7311.0, 5438.0): {146, 160, 164}},
+           "TAPE :53880 (map 148): every 0x0051 marker naming another map uses "
+           "the ONE exit (7311, 5438), for objectives on 146, 160 and 164 -- the "
+           "first hop's exit, the final map's label", f"{multi}")
+
+
 def main():
     section_1()
     section_2()
@@ -1204,6 +1423,8 @@ def main():
     section_8()
     section_9()
     section_10()
+    section_11()
+    section_12()
     return led.verdict()
 
 

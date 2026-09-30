@@ -252,6 +252,114 @@ def quest_agent(row, which):
     return None if v is None else int(v)
 
 
+def spawn_row_map(row, here):
+    """The map a spawn row is FOR: its own `map`, else its area's map_id,
+    else `here` -- spawn_row_on_map's rule, as a value."""
+    if row.get("map") is not None:
+        return int(row["map"])
+    try:
+        arow = agents.WORLD.get("area", str(row.get("area")))
+    except Exception:                                          # noqa: BLE001
+        return int(here)
+    return int(here) if arow.get("map_id") is None else int(arow["map_id"])
+
+
+def portal_route(here, target, rows_of=None):
+    """[(portal key, portal row)] -- the fewest enabled portal hops from map
+    `here` to map `target`, ties broken by portal key; [] when here IS the
+    target, None when no route exists. `rows_of(map_id)` is portal_rows by
+    default (a test passes its own)."""
+    from collections import deque
+    rows_of = rows_of or portal_rows
+    here, target = int(here), int(target)
+    prev = {here: None}
+    queue = deque([here])
+    while queue and target not in prev:
+        m = queue.popleft()
+        for key, prow in rows_of(m):
+            nxt = int(prow["to_map"])
+            if nxt not in prev:
+                prev[nxt] = (m, key, prow)
+                queue.append(nxt)
+    if target not in prev:
+        return None
+    hops, m = [], target
+    while prev[m] is not None:
+        m, key, prow = prev[m]
+        hops.append((key, prow))
+    return hops[::-1]
+
+
+def quest_accept_marker(state, row, rows_of=None):
+    """(pos, plane, map, why) for a quest's 0x0049 marker -- RANGERPRE-S18
+    (QUESTFLOW-A2). Retail puts it ON THE OBJECTIVE, never at the player.
+
+    OBSERVED on 20260929T150923's 12 accepts: 5 sit exactly (0.0 u) on an
+    NPC's 0x0020 create spot with its plane -- q80 (:59969 184.441) and q89
+    (:59427 1244.849) on agent 40 at (11715, 3517) PLANE 26, q79 on 41, q86 on
+    43, q54 on 142. 5 name ANOTHER map: the point is the EXIT on the current
+    map and the map is where the objective is -- CORROBORATED on the three
+    connections that then left: the player's last position before the
+    transfer sits 168 u (:59969), 202 u (:53880) and 387 u (:55934) from the
+    marker, and each transfer's destination is the marker's map. A route of
+    more than one hop keeps the FIRST exit and names the FINAL map: :53880's
+    0x0051 markers use the same (7311, 5438) exit to 146 for objectives on 146,
+    160 and 164 (CORROBORATED, positional). 2 sit on no agent (q52, q75).
+
+    THE TARGET, in this order: the row's `objective_spawn` or
+    `objective_kill` spawn row; else its `giver_spawn` (RECONSTRUCTION: q79's
+    marker sat on its giver, n = 1); else the probe world's live
+    `objective_agent` / `giver_agent` body. A spawn row on THIS map marks its
+    x, y with the live body's plane (plane 0 when the body is not live:
+    RECONSTRUCTION); a kill target marks its spawn point, not its body
+    (RECONSTRUCTION: q75's marker is 34 u off agent 30, n = 1). A spawn row
+    on ANOTHER map marks the first portal of portal_route toward it, plane
+    0, and names the target's map. No target, or no route: the pre-S18
+    placeholder (the player's own position, plane 0, this map), and `why`
+    says which."""
+    here = int(state["map_id"])
+    placeholder = (tuple(state["pos"]), 0, here)
+    target = None
+    for col in ("objective_spawn", "objective_kill", "giver_spawn"):
+        key = row.get(col)
+        if not key:
+            continue
+        try:
+            target = (col, str(key), agents.WORLD.get("spawn", str(key)))
+        except Exception as exc:                              # noqa: BLE001
+            return placeholder + (f"{col} = {key!r} names no spawn row "
+                                  f"({exc}); the marker stays at the player",)
+        break
+    if target is None:
+        for col in ("objective_agent", "giver_agent"):
+            aid = row.get(col)
+            body = (state.get("agents") or {}).get(aid) if aid is not None else None
+            if body is not None and body.get("pos") is not None:
+                x, y = body["pos"]
+                return ((float(x), float(y)), int(body.get("plane", 0) or 0),
+                        here, f"{col} {aid}'s live body (the probe binding)")
+        return placeholder + ("the row names no objective or giver the "
+                              "marker could point at; it stays at the player",)
+    col, key, srow = target
+    tmap = spawn_row_map(srow, here)
+    x, y = float(srow["x"]), float(srow["y"])
+    if tmap == here:
+        body = (state.get("agents") or {}).get(int(srow.get("agent_id", -1)))
+        plane = int(body.get("plane", 0) or 0) if body is not None else 0
+        return ((x, y), plane, here,
+                f"{col} {key!r} on this map"
+                + ("" if body is not None else " (no live body: plane 0)"))
+    route = portal_route(here, tmap, rows_of)
+    if not route:
+        return placeholder + (f"{col} {key!r} is on map {tmap} and no portal "
+                              f"route leads there from {here}; the marker "
+                              f"stays at the player",)
+    pkey, prow = route[0]
+    return ((float(prow["x"]), float(prow["y"])), 0, tmap,
+            f"{col} {key!r} is on map {tmap}: the exit {pkey!r}, hop 1 of "
+            f"{len(route)}, labelled with the objective's map")
+
+
 def _quest_lines(state):
     """[(quest_id, code, row)] this NPC can act on, given what the player holds.
 
@@ -578,10 +686,13 @@ def accept_quest(send, state, qid, row, conn_id):
     across connections for _replay_quests. --no-retail-quest-log sends 32
     and records nothing, as every run before S18.
 
-    The marker still goes at the player's own position and the map ids are
-    the instance's, which is a PLACEHOLDER: a real giver would put it at the
-    objective. The quest row has no marker column yet, and inventing
-    coordinates it does not carry would be a number nobody measured.
+    THE MARKER IS ON THE OBJECTIVE (RANGERPRE-S18, QUESTFLOW-A2): the
+    objective NPC's spot and plane, or the exit toward the objective's map
+    labelled with that map -- quest_accept_marker has the tape and the
+    rules. It needs no marker column: the point is the objective's own spawn
+    row or the portal row, both already content. Until S18 it was the
+    player's own position on the instance's map, a placeholder;
+    --quest-marker-at-player keeps that as the known-bad arm.
     """
     granted = []
     if ACCEPT_REWARDS:
@@ -603,9 +714,19 @@ def accept_quest(send, state, qid, row, conn_id):
     mid = state["map_id"]
     nm = questdefs.enc_string(row.get("enc_name") or [])
     flags = questdefs.log_flags(row) if QUEST_LOG_RETAIL else 32
+    if QUEST_MARKER_AT_OBJECTIVE:
+        mpos, mplane, mmap, why = quest_accept_marker(state, row)
+    else:
+        mpos, mplane, mmap, why = (tuple(state["pos"]), 0, mid,
+                                   "--quest-marker-at-player: the pre-S18 "
+                                   "placeholder")
+    print(f"[c{conn_id}] quest {qid} accept marker: ({mpos[0]:.0f}, "
+          f"{mpos[1]:.0f}) plane {mplane} map {mmap} -- {why} "
+          f"(RANGERPRE-S18, QUESTFLOW-A2)", flush=True)
     send(GAME_SMSG_QUEST_ADD,
-         [qid, tuple(state["pos"]), 0, mid, flags, nm, nm, nm, mid],
-         f"QUEST_ADD[{qid}] (accepted; log flags {flags}, home {mid})")
+         [qid, tuple(mpos), mplane, mmap, flags, nm, nm, nm, mid],
+         f"QUEST_ADD[{qid}] (accepted; marker map {mmap}, log flags {flags}, "
+         f"home {mid})")
     state.setdefault("quests", set()).add(qid)
     if QUEST_LOG_RETAIL:
         state.setdefault("quest_home", {})[qid] = mid
@@ -13195,7 +13316,16 @@ ACCEPT_REWARDS = True          # False (--no-accept-rewards): a quest row's
                                # them BEFORE the 0x0049 -- retail's order on 2
                                # of 2 grant-carrying accepts (OBSERVED;
                                # 20260929T150923 :56064 921.161, q75).
-MAP_TRAVEL_ENABLED = True     # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
+QUEST_MARKER_AT_OBJECTIVE = True  # False (--quest-marker-at-player): the
+                               # accept's 0x0049 marker is the player's own
+                               # position on this map, plane 0, as every run
+                               # before RANGERPRE-S18. Default ON: the
+                               # objective's spot and plane, or the exit toward
+                               # its map labelled with that map
+                               # (quest_accept_marker; retail's 5 of 12 on a
+                               # create spot, 5 of 12 cross-map, OBSERVED /
+                               # CORROBORATED on 20260929T150923).
+MAP_TRAVEL_ENABLED = True    # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
                                # the transfer pair -- for a served, non-explorable
@@ -44489,6 +44619,14 @@ def main():
               "before RANGERPRE-S18. KNOWN-BAD against the tape: retail grants "
               "them before the 0x0049 on 2 of 2 grant-carrying accepts "
               "(accept_quest).", flush=True)
+    if a.quest_marker_at_player:
+        global QUEST_MARKER_AT_OBJECTIVE
+        QUEST_MARKER_AT_OBJECTIVE = False
+        print("[quests] --quest-marker-at-player: the accept's 0x0049 marker "
+              "is the player's own position on this map, plane 0, as every run "
+              "before RANGERPRE-S18. KNOWN-BAD against the tape: retail marks "
+              "the objective's spot and plane, or the exit toward its map "
+              "(quest_accept_marker).", flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "

@@ -1080,6 +1080,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "a sword, then skills 382, 384 and 1, then 0x0049) and "
                          "20260819T132414 :52606 228.313 (q270: two skills). "
                          "KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--quest-marker-at-player", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S18's accept marker "
+                         "(QUESTFLOW-A2): the accept's 0x0049 marks the "
+                         "player's own position on this map, plane 0, as every "
+                         "run before this step. The default marks the "
+                         "objective (quest_accept_marker): the objective or "
+                         "kill spawn row's spot with the live body's plane "
+                         "when it is on this map, else the first portal toward "
+                         "its map labelled with that map -- OBSERVED on "
+                         "20260929T150923, where 5 of 12 accepts sit exactly "
+                         "on an NPC's create spot (q80 :59969 184.441 at "
+                         "(11715, 3517) plane 26) and 5 name another map at "
+                         "the exit the player then took. KNOWN-BAD against "
+                         "the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

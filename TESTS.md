@@ -3414,7 +3414,30 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S18 (QUESTFLOW-A3): the
+  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S18 (QUESTFLOW-A2): the
+  accept marker is on the OBJECTIVE -- retail's 0x0049 marks an NPC's exact 0x0020 create spot
+  with its plane on 5 of 20260929T150923's 12 accepts (q80 and q89 on agent 40 at (11715,
+  3517) PLANE 26; OBSERVED) and, on 5, the exit toward the objective's map labelled with that
+  map (CORROBORATED: the player's last position before the transfer to that map is 168 / 202
+  / 387 u from the marker). Ours marked the player's own position; `--quest-marker-at-player`
+  keeps that as the KNOWN-BAD arm. `quest_accept_marker`: the objective / kill spawn row, else
+  the giver's, else the probe's live body; on this map its x, y with the live body's plane
+  (0 when not live), on another map the first portal of `portal_route` (BFS, ties by key)
+  labelled with the target's map; no target / no route / a bad key: the placeholder and a
+  printed why. The rule `marker_placed`: on this map exactly a body's (x, y, plane), on
+  another an exit of this map at plane 0. §11 OURS (bare): the errand's 0x0049 is `[1463,
+  (8933.0, 7752.0), 0, 148, 32, nm, nm, nm, 148]`, the bandits' `[1464, (9326.0, 8077.0), 0,
+  168, ...]`; the rule holds on both; plane 3 from a live scout, 0 when not live; a synthetic
+  148 → 146 → 168 route marks exit 'a' labelled 168, `portal_route` [] for here and None when
+  unreachable; the three placeholder causes each say why; the probe's body (plane 5) and the
+  giver fallback; KNOWN-BAD both at (9826, 8077) on 148 and the rule red; VACUITY (four near
+  misses); the flag parses and `main()` flips `QUEST_MARKER_AT_OBJECTIVE`. §12 THE TAPE
+  (vault-gated): the 12 markers split 5 create-spot / 5 cross-map / 2 neither, pinned by qid;
+  the rule on the five create-spot markers, q80 / q89 on plane 26; the cross-map markers whose
+  connection then transferred to the marker's map at 202 / 387 / 168 / 168 u; :53880's 0x0051
+  markers naming another map all on the ONE exit (7311, 5438), for 146, 160 and 164. Floor 37
+  → 47 from the bare green run (93 vaulted).**
+  **2026-09-30, RANGERPRE-S18 (QUESTFLOW-A3): the
   accept-time grants -- a quest row's `accept_items` (content item keys, through the new
   shared `grant_item`: 0x0161 then 0x013E into the lowest free backpack cell, a per-session id
   from the purchase counter, kind `reward`) and `accept_skills` (through `grant_skill`) go out
