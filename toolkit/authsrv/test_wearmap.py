@@ -35,7 +35,14 @@ import wearmap      # noqa: E402
 # `test_compositetrap.py` the same day, which had the same latent bug for the
 # same reason -- a floor read off a full green run on a machine that always
 # has the vault.
-LEDGER = checks.Ledger("wear mapping", floor=20)
+#
+# AND THE CORE IS 16, NOT 20 (2026-09-30, measured with RURIK_VAULT at a path
+# that does not exist): section 2's four checks need the PINNED client, and
+# the pinned client lives in the vault -- section 2's own comment has said so
+# since 2026-08-31. So the correction above made the same mistake one section
+# later, and a bare run failed "ONLY 16 OF A DECLARED FLOOR OF 20" while
+# declaring both skips. With the vault: 42.
+LEDGER = checks.Ledger("wear mapping", floor=16)
 check = checks.adopt(LEDGER)
 
 W = wearmap
@@ -138,10 +145,26 @@ except Exception as exc:                                    # noqa: BLE001
     table = None
 
 LOW, HIGH, EQ_ALL, EQ_ONE = 0x015E, 0x0161, 0x006E, 0x006F
+# THE OTHER TWO DECLARES (2026-09-30). 0x015F is 0x015E's layout and 0x0162 is
+# 0x0161's -- the REPLACE half of each pair (reconstruction FINDINGS 6.4, the
+# handlers that call the item-table removal helper). This census read only the
+# CREATE half, and was green because playercomposite FINDINGS 9.30 had both
+# NOT FOUND. Then RANGERPRE's tape 20260929T150923 :53880, an outpost, declared
+# 34 other players' pieces by 0x015F alone, each one BEFORE its wear, and the
+# check went red with undeclared=34: all 34 of them, on that one connection.
+# The same class as adrenjoin's 0x00D9 that morning -- a second message that
+# declares the same fact. The CREATE pair's claim is kept exact AS OF THE PIN.
+LOW_RE, HIGH_RE = 0x015F, 0x0162
+DECLARES = (LOW, LOW_RE, HIGH, HIGH_RE)
+PIN_015F = "20260929T150923"      # the first capture to declare a worn item by 0x015F
 MASK = 0x7FFFFFFF
 codec = Codec()
 
-declares = wears = undeclared = 0
+declares = wears = undeclared = late = 0
+declares_by_op = collections.Counter()
+worn_by_op = collections.Counter()      # the opcode that FIRST declared each worn id
+pin_wears = pin_undeclared_create = 0   # captures before PIN_015F, CREATE pair only
+witness_015f = 0                        # PIN_015F's wears declared by 0x015F
 slot_type = collections.Counter()
 type_rectype = collections.Counter()
 flag_comp = collections.Counter()
@@ -165,13 +188,19 @@ for stamp in sorted(os.listdir(live)):
         except Exception:                                   # noqa: BLE001
             continue
         items = {}
-        for _t, op, v in msgs:
-            if op in (LOW, HIGH) and len(v) > 9:
+        first = {}                      # item id -> (message index, opcode)
+        created = set()                 # ids the CREATE pair declares: the old census
+        for n, (_t, op, v) in enumerate(msgs):
+            if op in DECLARES and len(v) > 9:
                 items[int(v[1])] = (int(v[3]), int(v[2]), int(v[8]))
+                first.setdefault(int(v[1]), (n, op))
+                if op in (LOW, HIGH):
+                    created.add(int(v[1]))
                 declares += 1
+                declares_by_op[op] += 1
                 if int(v[3]) == W.WIRE_TYPE_COSTUME_HEAD:
                     t45_ids.add(int(v[2]) & MASK)
-        for _t, op, v in msgs:
+        for n, (_t, op, v) in enumerate(msgs):
             worn = []
             if op == EQ_ALL and len(v) > 10:
                 worn = [(s, int(v[2 + s])) for s in range(9)]
@@ -184,9 +213,16 @@ for stamp in sorted(os.listdir(live)):
                 if not iid:
                     continue
                 wears += 1
+                if stamp < PIN_015F:
+                    pin_wears += 1
+                    pin_undeclared_create += iid not in created
                 if iid not in items:
                     undeclared += 1
                     continue
+                late += first[iid][0] > n       # "declared first" is a claim, so read it
+                worn_by_op[first[iid][1]] += 1
+                witness_015f += (stamp == PIN_015F and first[iid][1] == LOW_RE
+                                 and iid not in created)
                 wt, fid, fl = items[iid]
                 comp = bool(fl & W.ITEM_FLAG_COMPOSITE)
                 slot_type[(slot, wt)] += 1
@@ -204,12 +240,29 @@ for stamp in sorted(os.listdir(live)):
 
 # ---------------------------------------------------------------- section 3
 print("== 3. retail's wire obeys the mapping (the census) ==")
-check(declares >= 6445 and wears >= 5709 and undeclared == 0,
+# RE-SCOPED 2026-09-30, not loosened: the four declares above, and "first" is
+# now READ -- the census had checked that a worn id was declared somewhere on
+# the connection, never that the declare came before the wear. 0 wears precede
+# their declare over the whole corpus, so the words were true; now they are checked.
+check(declares >= 6445 and wears >= 5709 and undeclared == 0 and late == 0,
       "corpus floors: >= 6,445 declares, >= 5,709 non-null wears, every "
-      "worn item declared first on its own connection (an early census said "
+      "worn item declared first on its own connection, by any of the four "
+      "declares (an early census said "
       "5,710: one 0x006F UNEQUIP, item id 0, misread by an order-probe "
       "heuristic -- the binary-confirmed order counts 5,709)",
-      f"declares={declares} wears={wears} undeclared={undeclared}")
+      f"declares={declares} {({hex(k): n for k, n in sorted(declares_by_op.items())})} "
+      f"wears={wears} undeclared={undeclared} declared-after-the-wear={late}")
+check(pin_wears >= 5709 and pin_undeclared_create == 0,
+      f"and before {PIN_015F}, the CREATE pair 0x015E/0x0161 alone declares "
+      f"every worn item -- the claim as it was pinned, exact on the captures it "
+      f"was written from",
+      f"wears={pin_wears} not created={pin_undeclared_create}")
+check(witness_015f == 34 and worn_by_op.get(LOW_RE, 0) >= 34,
+      f"0x015F declares worn gear: the 34 pieces on {PIN_015F} :53880 (RANGERPRE's "
+      f"outpost, other players' gear) are declared by 0x015F and by nothing "
+      f"else, each before its wear -- playercomposite FINDINGS 9.30 had it NOT FOUND",
+      f"on the witness {witness_015f}; worn ids by first declare "
+      f"{({hex(k): n for k, n in sorted(worn_by_op.items())})}")
 worn_pairs = {(s, ty) for (s, ty), n in slot_type.items()}
 body_pairs = {(s, ty) for (s, ty) in worn_pairs if s >= 2}
 check(all(ty in W.WORN_TYPES[s] for s, ty in body_pairs),

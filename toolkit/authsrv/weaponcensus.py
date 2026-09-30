@@ -233,8 +233,11 @@ def _mode(gaps, width=0.02):
 
 
 def attackers(s2c, min_gaps=3):
-    """One row per agent with >= min_gaps clean start-to-start gaps (no skill between)."""
+    """One row per agent with >= min_gaps clean start-to-start gaps (no skill between).
+    `player` is True when a 0x006E named the body's hands -- a player (WEAPONS-Q8),
+    whose cycle is its weapon's; an NPC's (0x006D) is the AI's pacing (WEAPONS-C5)."""
     items, hands = items_of(s2c), hands_timeline(s2c)
+    players = {v[1] for _t, op, v in s2c if op == PLAYER_HANDS and len(v) > 3}
     starts, skills, launches, _arr, _words = _events(s2c)
     rows = []
     for agent, ts in starts.items():
@@ -250,7 +253,7 @@ def attackers(s2c, min_gaps=3):
                 continue
             mode, n_mode = _mode(gaps)
             rows.append({"agent": agent, "lead": lead, "gaps": gaps,
-                         "mode": mode, "n_mode": n_mode,
+                         "mode": mode, "n_mode": n_mode, "player": agent in players,
                          "type": None if lead is None else held_type(items, lead),
                          "launches": len(launches.get(agent, ()))})
     return rows

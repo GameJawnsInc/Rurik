@@ -2310,8 +2310,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
-  serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest;
-  three corpus tests still red (test_wearmap, test_routerbench, test_weaponcensus).
+  serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
 * **RANGERLOOP-F8 is fixed at the desk** (PLAN-LOG 2026-09-30, `--no-pickup-through-avoid-halt`).
   Open: the client run on Run A's rig, with `agenttap --agents 1` reading world-0 on the
   pickup walk, and the post-pickup residual, where the mirror's copy stays at the halt point.
