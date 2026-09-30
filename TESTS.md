@@ -13456,17 +13456,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the first own attack start after a server `0x002A` follow carries `0x00A0 [4, me, T, 0]`,
   `0x009F [8, me, 1]`, a `0x001E` and `0x0028 [me]` in one segment, 12 of 12
   (20260929T150923 :55934 x5, 20260914T005758 :56011 x5, 20260810T235916 :61624,
-  20260807T143055 :62994); the swing's launch releases nothing (0 of 10); the chain's later
-  starts are `[4]` alone; at-rest starts carry neither (37 of 37); melee is mixed. Ours sent
-  `[4]` alone, so nothing stopped the drawn body at range. §1 (offline) drives the bow press
+  20260807T143055 :62994); the swing's launch releases nothing (0 of 10); the hold's first
+  release answers a keyboard report 7 times, a re-approach once, a skill press twice and the
+  target's death twice; the chain's later starts are `[4]` alone; at-rest starts carry
+  neither (37 of 37); melee is mixed. Ours sent `[4]` alone, so nothing stopped the drawn
+  body at range. §1 (offline) drives the bow press
   from 2000 u through `begin_attack` / `attack_tick` / `approach_tick`: one `0x002A`, then at
   arrival exactly retail's three (headline 1b); the hold is the approach's and the arrival
   marker is consumed; the launch is `0x00A4` alone; the next start `[4]` alone; a
   re-approach sends `[8, me, 0]` adjacent to its `0x002A`; the mid-chain re-approach's
   start (held by the interval) carries the batch; a re-path releases nothing; a move
-  (`cancel_on_move`) releases it; a hold that is NOT the approach's still ends at the launch
-  (control); the KNOWN-BAD arm `--no-approach-start-halt` is `[4]` alone; a sword's arrival,
-  a bow already in range and a marker naming another target are `[4]` alone;
+  (`cancel_on_move`) releases it, and so does the target's death after the launch
+  (`attack_tick`'s target-gone site); a hold that is NOT the approach's still ends at the
+  launch (control); the KNOWN-BAD arm `--no-approach-start-halt` is `[4]` alone; a sword's
+  arrival, a bow already in range and a marker naming another target are `[4]` alone;
   `_approach_abandon` and `action_hold(0)` forget their markers. §2 the flag parses, `main()`
   flips it, the default is on and `capture_flags` carries it, and the halt sits right behind
   the `[4]` send. §3 THE TAPES (a declared skip without `captures/live`; a missing capture
@@ -13475,14 +13478,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   between hold and halt on 12 of 12 (RECORDED, not reproduced -- ours rides the start's
   tick); OURS == RETAIL with the ids substituted 12 of 12 and the known-bad batch 0 of 12;
   10 launches, none releasing; the at-rest control 37 of 37 over every connection of
-  20260929T150923; :53756's melee starts mixed (neither x2, hold x1, both x1). ROUTE-B / C /
-  C2 / D are not built and add their sections when they land. Proved red, each hunk of
-  `authsrv.py` reverted in place and restored (sha256 checked): the `attack_tick` halt
-  disabled, 4 (1b, 1c, 1g, 3d); `approach_tick`'s arrival marker removed, the same 4; the
-  launch gate removed, 1d; the re-approach release removed, 1f and 1g (the start then
-  carries `[4]`, `0x0028` with no hold -- transition-only); `_approach_abandon`'s pop
-  removed, 1o; `action_hold`'s pop removed, 1f, 1i, 1p. Floor 20 from the bare green run
-  (the tapes add 8: 28 vaulted). No socket, no client, ~2 s),
+  20260929T150923; :53756's melee starts mixed (neither x2, hold x1, both x1); what ends each
+  hold, its first own `[8, me, 0]` classified by what it rides -- keyboard x7 (:55934
+  461.5991), re-approach x1 (337.5687), skill press x2 (338.1238, 517.4328), the target's
+  death x2 (:55934 384.3644, :62994 86.2717), never the launch (the review follow-up: the
+  first commit cited :55934 339.4568 as the keyboard end, and that release ends 338.1238's
+  SKILL hold, not the approach's). ROUTE-B / C / C2 / D are not built and add their
+  sections when they land. Proved red, each hunk of `authsrv.py` reverted in place and
+  restored (sha256 checked): the `attack_tick` halt disabled, 5 (1b, 1c, 1g, 1r, 3d);
+  `approach_tick`'s arrival marker removed, the same 5; the launch gate removed, 1d and 1r;
+  the re-approach release removed, 1f and 1g (the start then carries `[4]`, `0x0028` with
+  no hold -- transition-only); `_approach_abandon`'s pop removed, 1o; `action_hold`'s pop
+  removed, 1f, 1i, 1p, 1r; the pre-existing target-gone `action_hold(0)` removed, 1r; and
+  3i with the first commit's claim (339.4568 a keyboard end) as its table, red. Floor 21
+  from the bare green run (the tapes add 9: 30 vaulted). No socket, no client, ~2 s),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-29, CASTAI-Z2 (the z2-wpn lane): the
   second Zaishen tape (20260929T100038) turned the bare-bow arrow signature red on the
   Zaishen Archer's Power Shot (680 with Kindle Arrows' 344) -- the SCANNER's defect, not

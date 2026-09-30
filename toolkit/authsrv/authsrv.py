@@ -19547,10 +19547,24 @@ APPROACH_STOPS_AT_RANGE = True      # --legacy-ranged-approach reverts to the di
 # its launch); 20260810T235916 :61624 at 95.4709; 20260807T143055 :62994 at 82.7741.
 # The hold is NOT released at the launch: the swing's own 0x00A4 segment carries no
 # [8, me, 0] on 0 of 10 (336.2391, 380.5511, 454.7078, 516.6069 ...; 338.0686 and
-# 361.9119 never launched -- a skill press, a move). It ends with the next
-# movement answer -- the keyboard report's (339.4568) or a re-approach's, where
-# [8, me, 0] sits immediately ahead of the new 0x002A (337.5687). The chain's later
-# starts are [4] alone (381.8887, 456.0487): the hold is transition-only.
+# 361.9119 never launched -- a skill press, a move). It ends at the next thing
+# that releases a hold. The FIRST own [8, me, 0] after each of the 12 starts is:
+#   - a keyboard report's answer, 7 -- [8, me, 0] then the 0x0029 leg, the c2s
+#     0x003D under 60 ms ahead: :55934 461.5991 (0x003D at 461.5639; the 453.5679
+#     hold stayed up 8.0 s across its launches), :56011 171.2864 (0x003D at
+#     171.2508), 224.8611, 362.1789, 365.3111, 584.6648, :61624 99.8772 (0.33 s
+#     after its target died, but riding the report's leg);
+#   - a re-approach, 1 -- [8, me, 0] immediately ahead of the new 0x002A (337.5687);
+#   - a skill press, 2 -- [8, me, 0] opens the press's own burst (338.1238:
+#     [8, 31, 0], [3, 31, 0], 0x00A0 [50, 31, 45, 394], [8, 31, 1]; 517.4328);
+#   - the target's death, 2 -- :55934 384.3644, 0.79 s after agent 46 dies at
+#     383.5733; :62994 86.2717.
+# Every one is an action_hold(0) site here already (cancel_on_move, _approach_send,
+# the skill press, attack_tick's target-gone), and action_hold's pop forgets the
+# approach's hold at each: the hold has no release site of its own. (This block
+# first cited 339.4568 as the keyboard end. It is not the approach's: it releases
+# the hold 338.1238's skill press set.) The chain's later starts are [4] alone
+# (381.8887, 456.0487): the hold is transition-only.
 #
 # CONTROL: every start with the body at rest (the last own movement event a c2s
 # 0x0047, or a server 0x0028 / 0x002C) carries neither message -- 37 of 37 on
@@ -20031,7 +20045,9 @@ def _land_player_swing(send, state, conn_id, swing):
         # RANGERPRE-S16: NOT when the hold is the approach's. Retail keeps
         # that one through the launch -- 0 of 10 launches after a ranged
         # approach's start carry [8, me, 0] (:55934 336.2391, 380.5511,
-        # 454.7078, 516.6069 ...) -- and ends it at the next movement answer.
+        # 454.7078, 516.6069 ...) -- and ends it at the next release: a
+        # keyboard move, a re-approach, a skill press or the target's death
+        # (the census at APPROACH_START_HALTS).
         if LANDING_HOLD_RELEASE and not state.get("approach_hold"):
             action_hold(send, state, 0,
                         "the shot is away -- movement is legal now")
@@ -20435,7 +20451,8 @@ def attack_tick(send, state, conn_id, rec=None):
         print(f"[c{conn_id}] APPROACH HALT [RANGERPRE-S16]: ranged swing at "
               f"agent {target_id} opens {math.hypot(ax - _fx, ay - _fy):.0f} u "
               f"out (range {attack_reach():.0f}) -- [4], [8,1], 0x0028 sent; "
-              f"the hold stays up through the launch until a move",
+              f"the hold stays up through the launch until a move, a re-approach, "
+              f"a skill press or the target's death",
               flush=True)
     leader_engaged(state, target_id, now, "swing")        # SLICE-H4
     _press_answered(state, rec, conn_id, "swing")

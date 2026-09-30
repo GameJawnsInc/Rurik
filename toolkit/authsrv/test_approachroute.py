@@ -11,9 +11,11 @@ four live connections whose player shoots, the FIRST own attack start after a se
 a 0x001E tick and 0x0028 [me] -- 12 of 12 (20260929T150923 :55934 335.0923, 338.0686,
 379.4129, 453.5679, 515.4825; 20260914T005758 :56011 169.8902, 223.5783, 361.9119,
 363.9707, 583.1255; 20260810T235916 :61624 95.4709; 20260807T143055 :62994 82.7741).
-The swing's own launch segment carries no [8, me, 0] (0 of 10); the chain's later starts
-are [4] alone; a start with the body at rest carries neither message (37 of 37 on
-20260929T150923). Melee is mixed (:53756, 1 of 4 with both) and is not this rule.
+The swing's own launch segment carries no [8, me, 0] (0 of 10); the hold's first release
+answers a keyboard report 7 times, a re-approach once, a skill press twice and the
+target's death twice; the chain's later starts are [4] alone; a start with the body at
+rest carries neither message (37 of 37 on 20260929T150923). Melee is mixed (:53756, 1 of
+4 with both) and is not this rule.
 
 What ours sent: [4] alone -- no hold (ANIMREF-RE 35 took it off every auto swing) and
 no halt, so nothing stopped the drawn body at range: the 0x002A names the target and
@@ -24,9 +26,10 @@ attack_tick / approach_tick / _approach_send / _land_player_swing / cancel_on_mo
 with the known-bad arm (--no-approach-start-halt) and the controls (a sword, a bow
 already in range, another target). 2 the flag and main()'s rebind. 3 THE TAPES:
 the census, OURS == RETAIL on all 12 with the ids substituted, the known-bad batch
-matching none, the launches, the at-rest control and the melee split. Section 3 is a
-declared skip on a machine with no captures/live; a vault that has captures but not
-these dies loudly in require_dir. Sections 1-2 need no vault, no socket and no client.
+matching none, the launches, what ends each hold, the at-rest control and the melee
+split. Section 3 is a declared skip on a machine with no captures/live; a vault that
+has captures but not these dies loudly in require_dir. Sections 1-2 need no vault, no
+socket and no client.
 """
 import os
 import sys
@@ -45,8 +48,9 @@ import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-30 with RURIK_VAULT at an EMPTY directory (section 3
-# a declared skip): 20. Section 3 adds 8 when the captures are present (28).
-LEDGER = checks.Ledger("the approach (ROUTE-A)", floor=20)
+# a declared skip): 21 (20 until the review follow-up added 1r). Section 3 adds 9 when
+# the captures are present (30).
+LEDGER = checks.Ledger("the approach (ROUTE-A)", floor=21)
 check = checks.adopt(LEDGER)
 
 PLAYER, FOE, OTHER = authsrv.PLAYER_AGENT_ID, 10, 11
@@ -60,6 +64,11 @@ RANGED = (("20260929T150923", "55934", 31), ("20260914T005758", "56011", 29),
 FOLLOW_FIRST = {"55934": [335.0923, 338.0686, 379.4129, 453.5679, 515.4825],
                 "56011": [169.8902, 223.5783, 361.9119, 363.9707, 583.1255],
                 "61624": [95.4709], "62994": [82.7741]}
+# what ends each of those holds: its first own [8, me, 0], by what it rides (first_release)
+RELEASE_FIRST = {"keyboard": [461.5991, 171.2864, 224.8611, 362.1789, 365.3111, 584.6648,
+                              99.8772],
+                 "re-approach": [337.5687], "skill": [338.1238, 517.4328],
+                 "death": [384.3644, 86.2717]}
 CONTROL_STAMP = "20260929T150923"
 MELEE = ("20260929T150923", "53756", 9)
 
@@ -227,13 +236,14 @@ def section_server():
         check(ops(rp_sent) == [OP_FOLLOW] and st.get("approach_hold") is True,
               "1h. a RE-PATH (the target moved, the same follow re-issued) releases nothing",
               show(rp_sent))
-        # 1i: a movement answer ends it
+        # 1i: a keyboard move ends it (7 of retail's 12 first releases, 3i)
         mv_sent, mv_send = collect()
         authsrv.cancel_on_move(mv_send, st, 1, moved=50.0)
         check((OP_INT, [8, PLAYER, 0]) in mv_sent and "approach_hold" not in st
               and st.get("action_hold") == 0,
               "1i. a MOVE releases it: cancel_on_move sends [8, me, 0] and forgets the "
-              "approach's hold (retail :55934 339.4568, the keyboard report's answer)",
+              "approach's hold (retail :55934 461.5991, answering the c2s 0x003D at "
+              "461.5639; :56011 171.2864, answering 171.2508)",
               show(mv_sent))
 
         # 1j: the launch gate reads the APPROACH's hold, not any hold
@@ -296,6 +306,21 @@ def section_server():
         authsrv.action_hold(held_send, {"approach_hold": True, "action_hold": 0}, 1, "t")
         check(held_sent == [(OP_INT, [8, PLAYER, 1])],
               "1q. and a SET leaves it alone (only a release forgets it)", show(held_sent))
+        # 1r: the target's death ends it (2 of retail's 12 first releases, 3i). The skill
+        # press (2 more) is the press's own action_hold(0), and 1p shows the pop does not
+        # depend on which site calls it.
+        st_d, send_d, start_d, _p = approach("starter_bow")
+        launch_d = land(st_d, send_d, start_d)
+        up = st_d.get("approach_hold") is True and ops(launch_d) == [OP_LAUNCH]
+        st_d["agents"][FOE]["dead"] = True
+        die_sent, die_send = collect()
+        authsrv.attack_tick(die_send, st_d, 1)
+        check(up and die_sent == [(OP_INT, [8, PLAYER, 0])] and "approach_hold" not in st_d
+              and st_d.get("action_hold") == 0,
+              "1r. the TARGET'S DEATH releases it: after the launch, attack_tick's "
+              "target-gone site sends [8, me, 0] and forgets the approach's hold (retail "
+              ":55934 384.3644, 0.79 s after agent 46 dies; :62994 86.2717)",
+              f"held through the launch {up}; {show(die_sent)}")
     return batches
 
 
@@ -379,6 +404,35 @@ def batch_of(seg, me):
     return picked, tick
 
 
+def first_release(merged, me, t_start, target):
+    """What ends the hold a start set: the first own [8, me, 0] after it, classified by
+    what it rides, tested in this order -- 're-approach' (its segment carries the
+    player's new 0x002A), 'keyboard' (its segment carries the player's 0x0029 leg and a
+    c2s 0x003D lies under 0.1 s ahead), 'skill' (a c2s 0x0027 under 0.1 s ahead),
+    'death' (the target's 0x0026 [T, 8] between the start and it), else 'other'.
+    -> (kind, t), or ('none', None) when no release follows."""
+    k = next((i for i, (t, d, op, v) in enumerate(merged)
+              if t > t_start and d == "s2c" and op == OP_INT
+              and list(v)[1:] == [8, me, 0]), None)
+    if k is None:
+        return "none", None
+    t = merged[k][0]
+    seg = [(op, list(v)[1:]) for t2, d, op, v in merged if d == "s2c" and t2 == t]
+    ahead = [op for t2, d, op, _v in merged if d == "c2s" and t - 0.1 <= t2 <= t]
+    if any(op == OP_FOLLOW and w[0] == me for op, w in seg):
+        kind = "re-approach"
+    elif any(op == 0x0029 and w[0] == me for op, w in seg) and 0x003D in ahead:
+        kind = "keyboard"
+    elif 0x0027 in ahead:
+        kind = "skill"
+    elif any(d == "s2c" and op == 0x0026 and list(v)[1:3] == [target, 8]
+             for t2, d, op, v in merged if t_start < t2 <= t):
+        kind = "death"
+    else:
+        kind = "other"
+    return kind, round(t, 4)
+
+
 def decode(stamp, port):
     import livewire
     capdir = vaultpath.require_dir("captures", "live", stamp)
@@ -396,13 +450,16 @@ def section_tape(batches):
                                  "(bare machine)")
         return
     import adrenjoin
-    rows, idents = [], []
+    rows, idents, releases = [], [], {}
     for stamp, port, me in RANGED:
         conn, merged, ok = decode(stamp, port)
         who = adrenjoin.whose_agent([(t, op, v) for t, d, op, v in merged if d == "s2c"])
         idents.append((port, ok, who))
-        rows += [(port, me, s) for s in own_starts(merged, who)
-                 if s["klass"] == "follow-first"]
+        firsts = [s for s in own_starts(merged, who) if s["klass"] == "follow-first"]
+        rows += [(port, me, s) for s in firsts]
+        for s in firsts:
+            kind, t_rel = first_release(merged, who, s["t"], s["target"])
+            releases.setdefault(kind, []).append(t_rel)
     found = {}
     for port, _me, s in rows:
         found.setdefault(port, []).append(s["t"])
@@ -469,6 +526,13 @@ def section_tape(batches):
           "3h. WHY RANGED ONLY: :53756's melee approach starts are mixed -- neither twice, "
           "the hold alone once, both once -- so the rule is not melee's",
           f"{[[hex(o) for o in k] for k in kinds]}")
+    check(releases == RELEASE_FIRST,
+          "3i. what ENDS the hold: the first own [8, me, 0] after each of the 12 starts "
+          "answers a keyboard report 7 times (:55934 461.5991 among them), a re-approach "
+          "once (337.5687), a skill press twice (338.1238, 517.4328) and the target's death "
+          "twice (:55934 384.3644, :62994 86.2717) -- never the launch. Ours releases at "
+          "each through action_hold(0) (1i, 1f, the press, 1r). 339.4568 is NOT one: it "
+          "ends 338.1238's skill hold", str(releases))
 
 
 def main():
