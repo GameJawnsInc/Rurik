@@ -3414,7 +3414,16 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S18 (QUESTFLOW-A2): the
+  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S18 review: the accept's
+  grants summary (`quest Q accept grants, BEFORE the 0x0049: ...`, a run-sheet readout) named
+  a skill `grant_skill` had REFUSED -- an id past the served skill table, nothing sent,
+  nothing stored. `accept_quest` now names a skill only below `SKILL_TABLE_ROWS`, the bound
+  `grant_skill` applies (its None return also means "bar full, learned", so it cannot be the
+  test). §9 +1: `[382, SKILL_TABLE_ROWS]` sends 382's three lines, the 0x0049 and the 0x0081,
+  and the summary ends `skill 382 (RANGERPRE-S18, QUESTFLOW-A3)`; `[SKILL_TABLE_ROWS]` alone
+  sends `ADD SHOW` and prints no summary; each prints REFUSED once. Floor 47 → 48 from the
+  bare green run (94 vaulted).**
+  **2026-09-30, RANGERPRE-S18 (QUESTFLOW-A2): the
   accept marker is on the OBJECTIVE -- retail's 0x0049 marks an NPC's exact 0x0020 create spot
   with its plane on 5 of 20260929T150923's 12 accepts (q80 and q89 on agent 40 at (11715,
   3517) PLANE 26; OBSERVED) and, on 5, the exit toward the objective's map labelled with that

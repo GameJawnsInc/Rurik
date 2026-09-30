@@ -103,12 +103,12 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 47 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks, §3's six, §6's eleven, §9's eleven and §11's ten. §2 adds 15
-# with the four captures present, §4 7, §5 3, §7 7, §8 3, §10 7 and §12 4 (93
+# Floor 48 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
+# nine checks, §3's six, §6's eleven, §9's twelve and §11's ten. §2 adds 15
+# with the four captures present, §4 7, §5 3, §7 7, §8 3, §10 7 and §12 4 (94
 # in all), each declaring a LEDGER.skip for what is absent. Set from the run,
 # never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=47)
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=48)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -1070,6 +1070,31 @@ def section_9():
     led.ok(reduce_accept(acc4)[2:5] == ["SKC:382", "SKB:0:382", "SKC:384"],
            "a skill the account already holds sends no 0x001C",
            f"{reduce_accept(acc4)}")
+    # A skill past the served table is REFUSED by grant_skill (nothing sent,
+    # nothing stored): the grants summary -- a run-sheet readout -- must not
+    # name it, and a row whose only grant is refused prints no summary.
+    import contextlib
+    import io
+    past = authsrv.SKILL_TABLE_ROWS
+    lines = {}
+    for tag, sids in (("mixed", [382, past]), ("only", [past])):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got, = drive(rows_with({ERRAND: {"accept_skills": sids}}),
+                         [("accept", ERRAND, 148, {})])
+        said = buf.getvalue().splitlines()
+        lines[tag] = (reduce_accept(got),
+                      [s for s in said if "accept grants, BEFORE" in s],
+                      sum(f"grant of skill {past} REFUSED" in s for s in said))
+    mixed, only = lines["mixed"], lines["only"]
+    led.ok(mixed[0] == ["SKC:382", "SKB:0:382", "SKU:382", "ADD", "SHOW"]
+           and len(mixed[1]) == 1 and mixed[1][0].endswith(
+               "BEFORE the 0x0049: skill 382 (RANGERPRE-S18, QUESTFLOW-A3)")
+           and mixed[2] == 1
+           and only[0] == ["ADD", "SHOW"] and only[1] == [] and only[2] == 1,
+           f"a skill past the served table ({past}) is refused and the grants "
+           "summary does NOT name it: [382, it] says 'skill 382' alone, [it] "
+           "prints no summary; each says REFUSED once", f"{lines}")
     # KNOWN-BAD: --no-accept-rewards.
     bad, = drive(rows, [("accept", ERRAND, 148, {})], ACCEPT_REWARDS=False)
     led.ok(reduce_accept(bad) == ["ADD", "SHOW"] and not grants_before_add(

@@ -703,7 +703,13 @@ def accept_quest(send, state, qid, row, conn_id):
         for sid in row.get("accept_skills") or ():
             grant_skill(send, state, int(sid), conn_id,
                         unlocked=int(sid) in state.get("skills_known", set()))
-            granted.append(f"skill {int(sid)}")
+            # grant_skill REFUSES an id past the served skill table (nothing
+            # sent, nothing stored) and says so; the summary below names only
+            # what went out. Its None return cannot tell this apart -- None
+            # is also "the bar was full, learned" -- so the table bound is
+            # the test, the same one grant_skill applies.
+            if int(sid) < SKILL_TABLE_ROWS:
+                granted.append(f"skill {int(sid)}")
     elif row.get("accept_items") or row.get("accept_skills"):
         print(f"[c{conn_id}] quest {qid}: accept_items / accept_skills NOT "
               f"granted (--no-accept-rewards, as every run before "
