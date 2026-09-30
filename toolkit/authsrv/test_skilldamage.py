@@ -424,11 +424,15 @@ def main():
     ep = authsrv.apply_condition(send, state, 10, 478, 9.0, 3, 0, 382)
     check(ep is not None and sent
           and not [1 for op, _v, _w in sent if op == effects.OP_EFFECT_APPLY]
-          and sent[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+          and (sent[0][0], sent[0][1]) == (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                                           [agents.PROP_AURA_ON, 10, 23])
+          and sent[1][0] == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
           and state.get("effect_list_suppressed") == 1,
-          "MANTID: on a FOE no 0x0042 goes out -- the status word carries the "
-          "condition (retail: 0 of 369 effect-list messages name anyone but "
-          "the player)", f"{[(hex(op), v) for op, v, _w in sent][:3]}")
+          "MANTID: on a FOE no 0x0042 goes out -- the visual [6, 10, 23] and the "
+          "status word carry the condition (retail: 0 of 369 effect-list messages "
+          "name anyone but the player; [6, T, 23] then 0x00F1 on the Reforged "
+          "capture's three bleeding foes, 3 of 3 -- RANGERPRE-S13, test_condwords)",
+          f"{[(hex(op), v) for op, v, _w in sent][:3]}")
     sent = []
     state = {"agents": {}, "pos": (0.0, 0.0), "player_health": 100.0}
     authsrv.player_pools(state)
@@ -793,21 +797,27 @@ def main():
         i_7 = [i for i, (op, v) in enumerate(d_ops) if op == 0x009F and v[0] == 7]
         i_step = next((i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x10]), None)
         i_flags = next((i for i, (op, v) in enumerate(d_ops) if op == 0x0026), None)
+        i_6 = [i for i, (op, v) in enumerate(d_ops) if op == 0x009F and v[0] == 6]
         check(words(dead_batch) == [[16, FOE, PLAYER], [16, 11, PLAYER]]
+              and adds(dead_batch) == [(6, 11, 25)]
               and removes(dead_batch) == [(7, FOE, 1), (7, FOE, 12)]
               and status(dead_batch) == [(FOE, 0x810), (11, 0x002), (FOE, 0x10)]
               and None not in (i_kill, i_rew, i_pay, i_step, i_flags) and len(i_7) == 2
-              and i_kill < i_rew < i_pay < i_7[0] < i_7[1] < i_step < i_flags
+              and i_kill < i_rew < i_pay < i_6[0] < i_7[0] < i_7[1] < i_step < i_flags
               and st["agents"][FOE]["dead"] and st["agents"][11]["health"] == 8980.0
               and st["agents"][12]["health"] == 9000.0
-              and eps(st) == [] and not words(sent) and not removes(sent),
+              and eps(st) == [] and not words(sent) and removes(sent) == [(7, 11, 25)],
               "the target killed at +0 s -- RETAIL'S DEATH BATCH ORDER (631.935 / 642.688, 2/2; "
               "the review's EV-1 / EV-2 / R34-1): the death word FIRST with the hex bit still up "
               "(0x810), the kill reward, THEN the payoff EARLY on the foe beside the corpse (20, "
-              "Burning) and not on the corpse, THEN the corpse's [7, 10, 1] [7, 10, 12], the "
-              "step-down 0x00F1 [10, 0x10], the flags byte LAST; the episode is gone and the tick "
-              "that would have expired it fires NOTHING more (end_fired: once per hex)",
-              (str([(hex(op), v) for op, v in dead_batch]), eps(st)))
+              "Burning with its [6, 11, 25] -- RANGERPRE-S13; retail :54071 634.746 [6, 9, 25] on "
+              "the neighbour, then the corpse's [7]s) and not on the corpse, THEN the corpse's "
+              "[7, 10, 1] [7, 10, 12] -- ITS OWN, though the Burning took the corpse's freed buff "
+              "id (the (wearer, buff) book; keyed by the buff alone the corpse's REMOVE sent [7, "
+              "11, 25] here), the step-down 0x00F1 [10, 0x10], the flags byte LAST; the episode is "
+              "gone and the tick that would have expired it fires NOTHING more (end_fired: once "
+              "per hex) -- the neighbour's Burning ends on its own with [7, 11, 25]",
+              (str([(hex(op), v) for op, v in dead_batch]), eps(st), removes(sent)))
         # (d') the review's M5: the payoff KILLS ITS OWN WEARER at expiry -- once
         st, sent, send = player_cast(179)
         st["agents"][FOE]["health"] = 5.0

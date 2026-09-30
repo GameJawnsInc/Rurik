@@ -2353,6 +2353,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "own `auras` (Empathy) still go, in the pre-D6 slot (behind the "
                          "0x00F1 at the apply, ahead of the 0x0044 at the close) and "
                          "without the reference count.")
+    ap.add_argument("--no-condition-effect-words", action="store_true",
+                    help="RANGERPRE-S13 REVERT: a condition sends no [6, wearer, id] "
+                         "at its apply and no [7, wearer, id] at its close -- the "
+                         "0x0042 / 0x00F1 / property 44 alone, this server's bytes "
+                         "until 2026-09-29. Retail sends the id on every fresh "
+                         "apply, 54 of 54 on the live corpus (Bleeding 23, Blind "
+                         "24, Burning 25, Disease 26, Poison 27, Dazed 28, Weakness "
+                         "and Cracked Armor 29; Crippled and Deep Wound none).")
     ap.add_argument("--no-snare-status-bit", action="store_true",
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "
@@ -2557,6 +2565,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the pre-2026-09-09 wire, where the only status "
                          "messages were death and revive. Retail sends the "
                          "word behind every such apply and close.")
+    ap.add_argument("--regen-zero-signed", action="store_true",
+                    help="RANGERPRE-S3 REVERT: a health-regeneration rate that "
+                         "returns to zero (a condition's expiry) goes out as "
+                         "-0.0 (0x80000000) in the 0x00A2 property-44 word, "
+                         "the pre-2026-09-29 wire. Retail's zero is +0.0, 561 "
+                         "of 561 on the live corpus.")
     ap.add_argument("--no-effects", action="store_true",
                     help="do not open or close effect episodes. The control "
                          "for the 0x0042/0x0044 channel: with it a stance is "

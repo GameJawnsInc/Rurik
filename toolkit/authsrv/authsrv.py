@@ -5292,7 +5292,8 @@ EFFECTS = True
 #
 # Deep Wound (482) is the one condition whose mechanic is on the WIRE rather
 # than in the client: retail's apply batch is [0x0042 482, 0x00F1, 0x009F
-# 42 = max*0.8] and its close [0x0044, 0x00F1, 0x009F 42 = max], 2 of 2 each
+# 42 = max - floor(max/5), cap 100] and its close [0x0044, 0x00F1, 0x009F
+# 42 = max], 2 of 2 each
 # in the Isle capture (isle 8.2, mechanised by deepwoundjoin.py). The CLIENT
 # then applies the maximum change as a SIGNED delta to current health --
 # `--probe health_shrink` (studies/unitsetup 8 Q5): 25 + (50-100) = -25 in
@@ -5305,7 +5306,7 @@ EFFECTS = True
 # known-bad arm: the episode opens and times out, the maximum never moves.
 STATUS_WORD = True     # False (--no-status-word): no 0x00F1 rides an effect.
 DEEP_WOUND = True      # False (--no-deep-wound): 482 is an icon and nothing else.
-DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"
+DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"; FLOORED, OBSERVED (skills 41.7)
 DEEP_WOUND_CAP = 100             # WIKI: "never ... by more than 100 health"
 DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 #
@@ -15535,6 +15536,20 @@ HEX_EFFECT_CLASS = {
 HEX_EFFECT_BASE = 1             # every hex, 38/39 sent + 1 withheld (already live)
 HEX_TYPE_CODE = 4               # effects.EFFECT_TYPES' hex, areatime.HEX_TYPE
 _HEX_CLASS_UNWITNESSED = set()
+# THE CONDITION'S VISUAL WORDS (RANGERPRE-S13, 2026-09-29), on EVERY wearer: a
+# condition's apply sends [6, T, id] between the 0x0042 and the 0x00F1 and its
+# close [7, T, id] ahead of the 0x00F1 -- the ids and their witnesses are
+# effects.CONDITION_EFFECT_IDS (OBSERVED, 54 of 54 fresh applies; Crippled and
+# Deep Wound none). A foe's 0x0042 stays unsent (MANTID) and its [6] goes: retail
+# 20260929T150923 :53756, [6, T, 23], 0x00F1 [T, 3], [44, T, -0.09375] 3 of 3,
+# and [7, 27, 23], 0x00F1 [27, 0], [44, 27, +0.0] at the expiry (1137.703). An
+# EXTENSION (a longer re-application) keeps the visual up and sends neither word
+# -- retail's re-applications draw no second [6], 5 of 5; that our extension is a
+# REMOVE + APPLY pair where retail stacks a second episode is the older
+# divergence, unchanged (RECONSTRUCTION for the kept visual). Once conditions
+# carry auras the book in aura_on / aura_off MUST be keyed by (wearer, buff):
+# see aura_off. --no-condition-effect-words reverts: no [6] / [7] for a condition.
+CONDITION_EFFECT_WORDS = True
 # 0x00F1 bit 0x400 while a movement-speed-DECREASE episode is live on the
 # wearer. RECONSTRUCTION: set with Teinai's Prison's 0x0027 x0.34 and cleared
 # at its end while another hex kept 0x800 up (651.779: 0xC00 -> 0x803), 6/6;
@@ -24641,7 +24656,7 @@ def effect_list_send(send, state, op, values, label):
     sent [7, foe, 1] and [7, foe, 4] when the hexed hatchling died."""
     agent_id = values[0]
     if op == GAME_SMSG_EFFECT_REMOVE and not HEX_EFFECT_WORDS:
-        aura_off(send, state, values[1])          # the pre-D6 slot: ahead of the 0x0044
+        aura_off(send, state, agent_id, values[1])    # the pre-D6 slot: ahead of the 0x0044
     if effect_list_visible(state, agent_id):
         send(op, values, label)
         shown = True
@@ -24651,7 +24666,7 @@ def effect_list_send(send, state, op, values, label):
     if op == GAME_SMSG_EFFECT_REMOVE and HEX_EFFECT_WORDS:
         # studies/weapons 43: the [7]s BEHIND the 0x0044 (the observer's copy)
         # and ahead of the caller's 0x00F1 -- retail's end batch, 39/39 hexes.
-        aura_off(send, state, values[1])
+        aura_off(send, state, agent_id, values[1])
     return shown
 
 
@@ -24664,17 +24679,23 @@ def skill_effect_row(skill_id):
 
 def aura_on(send, state, ep, conn_id):
     """Properties 6 for each aura id the skill's content row names (OBSERVED for
-    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by buff for the off.
+    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by (wearer, buff)
+    for the off.
 
     studies/weapons 43 (HEX_EFFECT_WORDS): a HEX whose row names no `auras`
     draws hex_effect_ids -- `1` and its profession's class (OBSERVED 39/39 on
     the single-target hexes); and every id is REFERENCE-COUNTED per wearer,
     so a second live hex holding the `1` sends no second [6, wearer, 1]
     (651.779, once) and the [7] goes out when the last holder closes.
+    RANGERPRE-S13 (CONDITION_EFFECT_WORDS): a CONDITION draws its own id,
+    effects.CONDITION_EFFECT_IDS (OBSERVED 54/54 fresh applies), through the
+    same count -- so Weakness and Cracked Armor share one 29 (RECONSTRUCTION).
     """
     ids = skill_effect_row(ep["skill"]).get("auras") or ()
     if not ids and HEX_EFFECT_WORDS and int(ep.get("type_code", 0)) == HEX_TYPE_CODE:
         ids = hex_effect_ids(ep["skill"])
+    if not ids and CONDITION_EFFECT_WORDS and ep["skill"] in effects.CONDITION_EFFECT_IDS:
+        ids = (effects.CONDITION_EFFECT_IDS[ep["skill"]],)
     if not ids:
         return
     ids = tuple(int(a) for a in ids)
@@ -24688,11 +24709,20 @@ def aura_on(send, state, ep, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_AURA_ON, ep["agent"], aura],
              f"aura {aura} on agent {ep['agent']} (skill {ep['skill']})")
-    state.setdefault("auras_by_buff", {})[ep["buff"]] = (ep["agent"], ids)
+    state.setdefault("auras_by_buff", {})[(ep["agent"], ep["buff"])] = (ep["agent"], ids)
 
 
-def aura_off(send, state, buff):
-    held = state.get("auras_by_buff", {}).pop(buff, None)
+def aura_off(send, state, agent_id, buff):
+    """The [7]s for one closing episode, found by (WEARER, buff) -- never by the
+    buff alone (RANGERPRE-S13). A buff id is ours and is RECYCLED the moment
+    EffectTable.strip_agent frees it, and at a death hex_end_burst's payoff runs
+    in strip_effects BETWEEN the strip and the REMOVE loop: Incendiary Bonds'
+    Burning on the foe beside the corpse takes the corpse's freed id. Keyed by
+    the buff alone, the corpse's REMOVE then popped the neighbour's record and
+    sent [7, 11, 25] in place of the corpse's [7, 10, 1] [7, 10, 12] (the design
+    prototype; test_skilldamage 11c (d) and test_condwords 2g hold it). Latent
+    while only hexes carried auras; live once a condition does."""
+    held = state.get("auras_by_buff", {}).pop((agent_id, buff), None)
     if not held:
         return
     agent_id, ids = held
@@ -25472,6 +25502,7 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     name = effects.CONDITION_SKILLS.get(condition_id, "?")
     table = effect_table(state)
     now = time.time()
+    _held = None                        # an extended condition's live visual (S13)
 
     # A CONDITION NEVER STACKS, and the run is what forced this line.
     # `20260820T191725` put the enemy's Sever Artery on a 0 s recharge and the
@@ -25500,6 +25531,11 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
                   f"stands, nothing sent", flush=True)
             return old_ep
         table.close(old_ep["buff"])
+        if CONDITION_EFFECT_WORDS:
+            # RANGERPRE-S13: the visual rides the extension -- lifted out of the
+            # book before the REMOVE so no [7] goes, re-filed under the new buff
+            # below so no [6] goes (retail's re-application draws none, 5/5).
+            _held = state.get("auras_by_buff", {}).pop((target_id, old_ep["buff"]), None)
         effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [target_id, old_ep["buff"]],
              f"EFFECT_REMOVE(buff {old_ep['buff']}, {name}, EXTENDED from "
              f"{remaining:.1f}s to {seconds:.1f}s)")
@@ -25515,9 +25551,16 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     print(f"[c{conn_id}] {name} on agent {ep['agent']}: buff {ep['buff']}, "
           f"{ep['duration']:.1f}s (inflicted by skill {by_skill} at rank "
           f"{rank})", flush=True)
-    # RETAIL'S BATCH, in retail's order: the apply above, then the status
+    # RETAIL'S BATCH, in retail's order: the apply above, then the condition's
+    # visual [6, T, id] (RANGERPRE-S13: 0x0042 first 54/54, the [6] ahead of the
+    # 0x00F1 48/48; a foe's too, whose 0x0042 is not sent), then the status
     # word (0x02 | the condition's own bit), then -- for Deep Wound alone --
     # the maximum. [0x0042, 0x00F1, 0x009F 42] on 2 of 2 (deepwoundjoin.py).
+    if CONDITION_EFFECT_WORDS:
+        if _held is not None:
+            state.setdefault("auras_by_buff", {})[(ep["agent"], ep["buff"])] = _held
+        else:
+            aura_on(send, state, ep, conn_id)
     push_status(send, state, ep["agent"], conn_id)
     if condition_id == effects.CONDITION_BY_NAME["Deep Wound"]:
         deep_wound_open(send, state, ep["agent"], conn_id)
@@ -25726,6 +25769,16 @@ def agent_pool_max(state, agent_id):
     return float(agent["max_health"]) if agent else None
 
 
+# THE ZERO RATE IS +0.0 (RANGERPRE-S3, 2026-09-29). OBSERVED: every zero prop-44
+# word on the live corpus is 0x00000000 -- 561 of 561 over 38 captures and 127
+# connections, none 0x80000000, while 736 NONZERO rates carry the sign bit
+# (degeneration). The witness is Bleeding's expiry on a foe, 20260929T150923
+# :53756 t=1137.703144: [0x009F [7, 27, 23], 0x00F1 [27, 0], 0x00A2 [44, 27,
+# 0x00000000]]. Ours sent -(0 x 2)/64 = -0.0 (0x80000000), bit-different on every
+# close that returns a rate to zero. --regen-zero-signed is the known-bad arm.
+REGEN_ZERO_POSITIVE = True
+
+
 def push_regen(send, state, agent_id, conn_id):
     """Tell the client this agent's NET health-regeneration rate, if it changed.
 
@@ -25752,6 +25805,8 @@ def push_regen(send, state, agent_id, conn_id):
     live = table.on_agent(agent_id) if table else []
     pips = net_pips(state, agent_id, live)      # conditions + hex rows (B2), one cap
     rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
+    if REGEN_ZERO_POSITIVE and not pips:
+        rate = 0.0                              # retail's +0.0, 561/561 (above)
     seen = state.setdefault("regen_rate", {})
     if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
         return None
@@ -25816,13 +25871,25 @@ def push_status(send, state, agent_id, conn_id):
 
 
 def deep_wound_reduction(maximum):
-    """How much Deep Wound takes off a maximum. WIKI rule, retail-exact at 480.
+    """How much Deep Wound takes off a maximum: 20 % FLOORED, capped at 100.
 
-    round() rather than floor: the one retail witness is 480 -> 384, which
-    every rounding fits; below a multiple of 5 the rounding is UNVERIFIED and
-    named so here rather than hidden in an int().
+    FLOORED, OBSERVED (RANGERPRE-S1, studies/skills 41.7): an NPC at 64 went
+    to 52 (20260929T150923 :53756, agent 30, the edge at t=1116.0485, its
+    [44] f32(-6/52) exactly and the next hit's 42 = 52), n=1; a PvP-arena
+    opponent at 483 went to 387 (20260817T231139 :50513, agent 10, t=460.161,
+    [44] f32(-20/387)). round() sent 51 and 386. Every multiple of 5 -- the
+    480 -> 384 witnessed six times, the capped 555 -> 455 -- fits both, which
+    is why round() stood until a maximum off the 5s was read. The PLAYER's
+    own reduction at such a maximum is RECONSTRUCTION: no player witness sits
+    off a multiple of 5.
+
+    floor(0.2m) == m - ceil(0.8m) for every m, so which of the two retail
+    computes is immaterial. NEVER spell it floor(m * (1.0 - 0.8)): 1.0 - 0.8
+    is 0.19999999999999996 and comes out one short on every multiple of 5
+    (480 -> 95). 0.2's double sits ABOVE 0.2, so this floor is exact on the
+    integers (test_mechanics 18 sweeps 1..2000).
     """
-    return min(DEEP_WOUND_CAP, int(round(float(maximum) * DEEP_WOUND_FRACTION)))
+    return min(DEEP_WOUND_CAP, int(math.floor(float(maximum) * DEEP_WOUND_FRACTION)))
 
 
 def deep_wound_open(send, state, agent_id, conn_id):
@@ -45035,6 +45102,13 @@ def main():
               "wearer, class] at its apply and no [7]s at its close (the status bit "
               "alone; a row's own `auras` in the pre-D6 slot, unrefcounted), this "
               "server's bytes until 2026-09-27 [studies/weapons 43 revert]", flush=True)
+    if a.no_condition_effect_words:
+        global CONDITION_EFFECT_WORDS
+        CONDITION_EFFECT_WORDS = False
+        print("CONDITIONS: --no-condition-effect-words -- a condition sends no [6, "
+              "wearer, id] at its apply and no [7] at its close (the 0x0042 / 0x00F1 "
+              "/ [44] alone), this server's bytes until 2026-09-29 [RANGERPRE-S13 "
+              "revert]", flush=True)
     if a.no_snare_status_bit:
         global SNARE_STATUS_BIT
         SNARE_STATUS_BIT = False
@@ -45236,6 +45310,12 @@ def main():
         STATUS_WORD = False
         print("NO STATUS WORD: no 0x00F1 rides an effect apply or close "
               "(--no-status-word, the known-bad arm).", flush=True)
+    if a.regen_zero_signed:
+        global REGEN_ZERO_POSITIVE
+        REGEN_ZERO_POSITIVE = False
+        print("SIGNED REGEN ZERO: a rate back at zero goes out as -0.0 "
+              "(0x80000000), not retail's +0.0 (--regen-zero-signed, the "
+              "known-bad arm).", flush=True)
     if a.no_overheal_number:
         global OVERHEAL_NUMBER
         OVERHEAL_NUMBER = False
