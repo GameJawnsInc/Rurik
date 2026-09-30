@@ -3407,8 +3407,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   loads credit `[own 0x0144 key, 60/60/60/60/85]` right after the last `0x0147`; the
   :56301 hand-in batch (same timestamp as `0x0140 [2, 25]`) is `0x0052 · 0x00EE [0, 250]
   · 0x0140 · 0x0052 · 0x004A` with `0x004A` the last quest-family message and
-  `0x00EE [10, 0]` present (UNREAD); OURS vs TAPE: `turn_in_quest`'s order equals the
-  tape's with the doubled `0x0052` collapsed, the pass-1 order does NOT (KNOWN-BAD), and a
+  `0x00EE [10, 0]` present (the 75-XP morale tick, which `grant_quest_reward` sends
+  ahead of the xp since RANGERPRE-S7 -- `test_killxp.py` §5); OURS vs TAPE:
+  `turn_in_quest`'s order equals the tape's with the doubled `0x0052` collapsed, the pass-1 order does NOT (KNOWN-BAD), and a
   sabotaged tape (gold before xp) fails the predicate (KNOWN-BAD); 20260807T143055's
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape

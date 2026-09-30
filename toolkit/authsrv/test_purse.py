@@ -574,8 +574,9 @@ def tape_purse_check():
                    "(the 0x009F/0x0080/0x007E dialog lines after it are not the "
                    "quest family)", f"{[hex(o) for o in qfam]}")
             led.ok(any(op == XP and v[-2:] == [10, 0] for op, v in tape_ops),
-                   "TAPE: the batch also carries 0x00EE [10, 0], which stays "
-                   "UNREAD and is not sent by us")
+                   "TAPE: the batch also carries 0x00EE [10, 0] -- the 75-XP "
+                   "morale tick, which grant_quest_reward sends ahead of the xp "
+                   "since RANGERPRE-S7 (test_killxp section 5)")
             # OURS against the TAPE: the four kinds in the same relative order.
             sent, send = collect()
             st = fresh_state(quests={1463})
