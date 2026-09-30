@@ -13325,7 +13325,7 @@ QUEST_MARKER_AT_OBJECTIVE = True  # False (--quest-marker-at-player): the
                                # (quest_accept_marker; retail's 5 of 12 on a
                                # create spot, 5 of 12 cross-map, OBSERVED /
                                # CORROBORATED on 20260929T150923).
-MAP_TRAVEL_ENABLED = True    # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
+MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
                                # the transfer pair -- for a served, non-explorable
