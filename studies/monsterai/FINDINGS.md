@@ -2884,6 +2884,39 @@ each have an exact per-tape witness in the test named.
 | **CASTAI-ZF36** | **Smaller things.** 1. 680 is Power Shot's (394) own projectile, not a new arrow. 2. A Fire Storm tick can land 68 ms late, inside D6's registered 100 ms. 3. A body's `[4]` attack start and `[50]` attack-skill announce can share one instant. 4. A buff id is reused the instant it is freed. 5. A round's end strips every effect on every body in one batch, 8 of 8 rounds. 6. Aura of Restoration is cast as the PvE row 180, which corroborates GWW's bug note. 7. The exe's 276 row has the same (energy, activation, recharge, byte) as 275, so the triple cannot tell the two apart. 8. `0x009F [159, 57, agent, 0]` arrives at ~0.5 s intervals on the monks, meaning NOT FOUND. 9. The monks swing at a median 1.709 s, and their target switches come as a group within ~2 s. | OBSERVED | the lanes' tests; `zaishenrun` |
 | **CASTAI-ZF37** | **The Zaishen Mage's `[61]` cast-time word is intermittent**: 30 words over 107 casts, only in matches 2 and 3 and starting mid-match. Matches 1, 4 and 5 run at table speed. ZF10's "the Mage casts at × 0.67 on every cast" holds on the Z1 tape only. No monk cast carries a `[61]`. The cause is UNVERIFIED. | OBSERVED | `zaishenrun` |
 
+## 19. The charmable animal's turn — RANGERPRE-S12 (2026-09-30)
+
+§12's passive rule (MONSTERAI-J: stand until hit, then fight) had one creature family it
+did not cover on the wire: the **charmable animal**, created with team token `'anim'`.
+The Reforged pre-Searing capture holds one being hit, and the turn is its own batch.
+
+**OBSERVED, n = 1** (20260929T150923 :55934, agent 161, definition 1343, the player agent
+31; `toolkit/authsrv/test_animaltoken.py` §1 re-derives every line). Created at 504.4205
+with `'anim'`; no attack start names it before the hit; the client selected it and pressed
+an attack skill at it (c2s `0x0027 [394, 0, 161, 0]` at 563.717) — so `'anim'` is
+attackable. At 565.0302 the arrow lands, and what names 161, with the tick between, is
+`0x009F [65, 161, 0]`, `0x009B` (its name), `0x009F [36, 161, 1]`, `0x009F [42, 161, 80]`,
+the word `[16, 161, 31, -0.3125]`, **`0x001E`**, then `0x002F [161, 'anin']`, `0x002B
+[161, 1.0, 1]` and the `0x002A` naming the player — the connection's only `0x002F`. Then
+`0x0035 [161, 2.0, 1.0]` and an attack start every 2.0 s (7 gaps, median 2.0). A `'mon1'`
+body's first hit (agents 48 and 215) carries the 42 and the word and none of 65 / `0x009B`
+/ 36 / `0x002F`. The client's `0x00C1 [0, 0]` at 565.1515 drew no reply.
+
+**Shipped** (`authsrv.send_due_tokens`, `animal_turn_prelude`; revert
+`--no-animal-token-flip`). A content row says `allegiance = "animal"`: the FOE CLASS stays
+`'mons'` (every predicate, AI tick and reward reads that) and the wire carries the team
+token — **RECONSTRUCTION**, the split is ours. The prelude rides the player's word from the
+maximum's declaration site, so it sits right before the 42; the turn waits for the next
+simulation tick and goes out ahead of the body's first chase order or swing. Unmodelled and
+named: `'aniv'`; the tutorial's `'ani'`+0x8F bodies, which are AGGRESSIVE (a corpus
+census at design time, not re-run for this entry: 20+ attack starts under the create
+token, 17 damaged with no `0x002F`), so
+passive-then-turn is OBSERVED for `'anim'` only; definition 1387's create-tick flip to
+`'mon1'` (20260818T094648); a group-mate's or a party hit's turn (ours sends the whole
+burst on the next tick — no witness); what prop 65 = 0 does (UPSTREAM name `PvPTeam`).
+Needs one loopback run: the colour of `'anim'` and `'anin'` on our client, whether our
+client orders an attack on an `'anim'` body, and the first `0x009B` our server has sent.
+
 ---
 
 *Written 2026-08-11 from a five-angle fan-out with independent hostile review of every angle, a capture-campaign design and a completeness critic, then a verification pass by the orchestrator over every code-driving claim (§10). Nothing in this document was produced by launching a client or by pointing anything at ArenaNet. Every corpus figure quoted here was reproduced by at least two parties except where n and provenance are stated otherwise, and every claim that did not survive review is in §6 rather than deleted.*

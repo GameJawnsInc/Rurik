@@ -6402,7 +6402,8 @@ def section_opcode_catalog():
     AGENT_UPDATE_FLAGS, AGENT_UPDATE_POSITION, AGENT_UPDATE_SPEED,
     CHARACTER_UPDATE_FACTIONS, CREATE_NAMED_ITEM, MONSTER_COMPOSITE,
     NPC_UPDATE_PROPERTIES, PLAYER_PARTY_SIZE, PLAYER_SET_PARTY
-    (they are sent through a builder, or with a computed list) -- and six more
+    (they are sent through a builder, or with a computed list; AGENT_UPDATE_ALLEGIANCE
+    has had a literal site since RANGERPRE-S12, 2026-09-30) -- and six more
     land on a NEIGHBOUR OF THE SAME ARITY and are invisible to this mechanism:
     AGENT_INITIAL_STATUS 0x00F0, MAP_UPDATE_CURRENT 0x0099,
     PVP_UPDATE_UNLOCKED_SKILLS 0x001D, SKILL_ACTIVATED 0x00E3,

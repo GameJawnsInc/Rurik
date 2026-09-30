@@ -1464,9 +1464,21 @@ GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT = 0x006E
 # -- a server must declare before it references. The noun stays unsettled; see
 # studies/smsg/FINDINGS.md section 2.
 GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
-# agent_id + allegiance byte. The field that decides whether a click is an
-# attack or a conversation; the team token only decides colour.
+# [agent_id, team token] -- the DISPLAYED allegiance, the create's field 12 at
+# agent+0xE8. This comment used to say "allegiance byte. The field that
+# decides whether a click is an attack", which studies/newopcodes/FINDINGS.md's
+# 0x002F section RESOLVED 2026-08-18: 0x002F alone flips the displayed token on
+# our client, and attackability is +0x1B5, written once at construction
+# (studies/enemy/PLAN.md). First SENT by RANGERPRE-S12 (send_due_tokens): a
+# provoked charmable animal turns 'anim' -> 'anin', retail's own use of it.
 GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
+# [agent_id, string16] -- the agent's encoded NAME (schema/overrides.json 155:
+# stored per agent id, compare-else-copy, so an equal repeat is a no-op).
+# First SENT by RANGERPRE-S12, in a provoked animal's turn prelude
+# (animal_turn_prelude). Retail also sent it in that animal's CREATE batch
+# (:55934 t=504.4205, with [36, 161, 1]) and ours does not -- a named
+# follow-up, not that step.
+GAME_SMSG_AGENT_SET_NAME = 0x009B
 # agent_id + a dword CHECKSUM of five fields off the agent's SYNC copy --
 # ArenaNet's own desync detector, decoded 2026-08-23 and never sent by retail in
 # our corpus. The client XORs +0xB4/+0xB0 velocity, +0x80 plane and +0x7C/+0x78
@@ -12492,6 +12504,14 @@ HOSTILE_TARGETS_PARTY = True   # False (--hostile-target-player): the player onl
 # the H3 rule from then on. A row that says nothing behaves as it always did.
 PASSIVE_HOSTILES = True   # False (--no-passive-hostiles): every hostile notices on
                           # proximity, every run before 2026-09-16.
+# RANGERPRE-S12: a PROVOKED ANIMAL TURNS ON THE WIRE. A row whose allegiance is
+# "animal" is created carrying 'anim' (TEAM_TOKEN_BY_NAME); the provoke marks
+# the turn due, the player's landed word carries retail's prelude right before
+# its 42 (animal_turn_prelude, from declare_body_max_on_hit), and the next
+# simulation tick sends 0x002F 'anin' ahead of the body's first chase or swing
+# (send_due_tokens). False (--no-animal-token-flip): the body keeps 'anim' and
+# fights under it -- no prelude, no 0x002F -- the known-bad arm.
+ANIMAL_TOKEN_FLIP = True
 BASE_ARMOUR_BY_PROFESSION = {1: 80, 2: 70, 3: 60, 4: 60, 5: 60, 6: 60,
                              7: 70, 8: 60, 9: 80, 10: 70}
 SCALE_MEANS_RESURRECT = {"Resurrect"}
@@ -13771,6 +13791,17 @@ ALLEGIANCE_BY_NAME = {
     "hostile": agents.ALLEGIANCE_HOSTILE,
     "player": agents.ALLEGIANCE_PLAYER,
     "noncombatant": agents.ALLEGIANCE_NONCOMBATANT,
+    # RANGERPRE-S12: a charmable animal is a FOE CLASS like any hostile (every
+    # foe predicate, AI tick, reward and gate reads this value), and its WIRE
+    # token is TEAM_TOKEN_BY_NAME's -- the two are kept apart on purpose.
+    "animal": agents.ALLEGIANCE_HOSTILE,
+}
+# The names whose create token is NOT the foe class: (created with, turned to
+# on the first landed hit). A row naming one is passive and attacks back unless
+# it says otherwise (spawn_population). RECONSTRUCTION of the split; both
+# tokens OBSERVED on definition 1343 (agents.TOKEN_ANIMAL).
+TEAM_TOKEN_BY_NAME = {
+    "animal": (agents.TOKEN_ANIMAL, agents.TOKEN_ANIMAL_PROVOKED),
 }
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
@@ -20536,7 +20567,14 @@ def declare_body_max_on_hit(send, agent, agent_id, source_id, why, always=False)
     Only the PLAYER's word carries it: 0 of 2,458 party and other-source words
     on an undeclared body did (hurt_agent_row sends none). `always` is the
     --npc-max-at-create arm's armour-ignoring word, which declared before every
-    word from any source until 2026-09-29."""
+    word from any source until 2026-09-29.
+
+    RANGERPRE-S12: a provoked ANIMAL's turn prelude goes out FIRST, from here,
+    so it sits immediately before the 42 at every site that calls this --
+    retail's :55934 t=565.0302 is [65, 161, 0], 0x009B, [36, 161, 1],
+    [42, 161, 80], then the word (animal_turn_prelude; a no-op for any body
+    whose turn is not due)."""
+    animal_turn_prelude(send, agent_id, agent, why)
     if not always:
         if source_id != PLAYER_AGENT_ID:
             return False
@@ -25089,13 +25127,17 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     if not agent or agent.get("dead"):
         return 0.0
     pool = float(agent["max_health"])
+    # MONSTERAI-J's provoke goes FIRST (state only): RANGERPRE-S12's turn
+    # prelude rides the declare call below, so the provoke that marks the turn
+    # due must precede it. It sat after the declare until 2026-09-30, which
+    # changed nothing then -- the provoke sends nothing.
+    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
     # MAXHP-1: the player's first word on the body (or the first after its
     # maximum moved) carries the 42 right before it; a hero's Empathy none.
     declare_body_max_on_hit(send, agent, target_id, source_id, what,
                             always=(declare_max == "always"))
     frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
     agent["health"] = max(0.0, float(agent["health"]) - amount)
-    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_ARMOR_IGNORING, target_id, source_id, frac],
          f"{what}: {amount:.0f} armour-ignoring to agent {target_id}")
@@ -27969,6 +28011,10 @@ def enemy_attack_tick(send, state, conn_id):
     the cause.
     """
     player_pools(state)
+    # RANGERPRE-S12: a provoked animal's 0x002F goes out before its first
+    # swing -- here as well as in enemy_move_tick, because combat_pass runs
+    # this tick without the move tick.
+    send_due_tokens(send, state, conn_id)
     # "Nothing swings at a corpse" was a top-of-function return on the
     # PLAYER's death; since SLICE-H3 it is per hostile, on ITS target, below
     # -- a dead player no longer stops the hostiles fighting the party.
@@ -28003,6 +28049,8 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if animal_turn_pending(agent):                   # RANGERPRE-S12
+            continue                     # provoked this tick: turns first
         # SLICE-H3: THIS hostile's target (enemy_move_tick picks it), and a
         # corpse is not swung at -- the armed swing at a body that died in
         # the windup drops, as it always did for the player.
@@ -29147,7 +29195,13 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
     aims at the hitter (`target_was`). Returns the ids provoked; empty when
     nothing changed (not passive, already provoked, the hitter is a hostile).
     Retail (MONSTERAI 12.7): the hit creature swung 1.2-1.3 s after the
-    player's swing, its group-mate 0.4 s behind it, unhit."""
+    player's swing, its group-mate 0.4 s behind it, unhit.
+
+    RANGERPRE-S12: a provoked row that carries `token_on_provoke` (an
+    "animal" row) is marked to TURN -- `token_due`, stamped with the current
+    simulation tick. State only, as before: the prelude rides the hitter's
+    word (animal_turn_prelude) and the 0x002F goes out after the next 0x001E
+    (send_due_tokens). A group-mate turned unhit gets its whole burst there."""
     if not PASSIVE_HOSTILES:
         return []
     rows = state.get("agents", {})
@@ -29170,12 +29224,104 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
         r["provoked"] = True
         r["target_was"] = attacker_id
         out.append(aid)
+        if (ANIMAL_TOKEN_FLIP and r.get("token_on_provoke") is not None
+                and r.get("team_token") != r["token_on_provoke"]):
+            r["token_due"] = r["token_on_provoke"]              # RANGERPRE-S12
+            r["token_due_tick"] = state.get("sim_ticks", 0)
     if out:
         print(f"[c{conn_id}] agent {attacker_id}'s hit PROVOKES "
               + ", ".join(str(a) for a in out)
               + (f" (group {group!r})" if group is not None and len(out) > 1
                  else "")
               + " -- passive until now (MONSTERAI-J)", flush=True)
+    return out
+
+
+# ---- RANGERPRE-S12: a provoked charmable animal turns 'anim' -> 'anin' -------
+#
+# RETAIL (OBSERVED n=1, capture 20260929T150923, connection :55934, agent 161,
+# definition 1343, the player agent 31). Every message naming 161 at wire
+# t=565.0302, in order, with the simulation ticks between them:
+#   0x009F [65, 161, 0]          prop 65 (agents.PROP_PVP_TEAM)
+#   0x009B [161, <its name>]     AGENT_SET_NAME, the create's own four words
+#   0x009F [36, 161, 1]          its displayed level
+#   0x009F [42, 161, 80]         its maximum (MAXHP-1, declare_body_max_on_hit)
+#   0x00A3 [16, 161, 31, -0.3125]  the player's arrow, 25 of 80
+#   0x001E [110]                 -- the next simulation tick --
+#   0x002F [161, 'anin']         the turn
+#   0x002B [161, 1.0, 1], 0x002A [161, <the player's point>, 0, 0, 31]
+# It was passive before (no 0x00A0 [4, 161, *] with the player within ~258 u),
+# swung 0.64 s later (0x0035 [161, 2.0, 1.0], then [4, 161, 31, 0] every
+# 2.0 s) and the client's c2s 0x00C1 [0, 0] at 565.1515 drew no reply. A
+# 'mon1' body's first hit carries none of 65 / 0x009B / 36 / 0x002F (agent 48
+# at 414.3195, agent 215 at 516.9892).
+#
+# OURS: the prelude from the declare site, the turn from the next tick's
+# first move or swing pass. What is RECONSTRUCTION: the split itself (retail's
+# server is not visible, only the tick between); a group-mate or a party-hit
+# turning with its whole burst on the next tick (no witness); a body that dies
+# before the turn keeps it pending (0x002F is never sent to a corpse).
+
+def animal_turn_prelude(send, agent_id, agent, why="the turn"):
+    """The three messages retail sends ahead of a provoked animal's 42: prop
+    65 = 0, its name (0x009B, when the row carries one) and its level (prop
+    36). Only when the row's turn is DUE and its prelude has not gone out;
+    returns whether it sent."""
+    if agent.get("token_due") is None or agent.get("token_prelude_sent"):
+        return False
+    npc = agent.get("npc") or {}
+    level = int(npc.get("level") or 0)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_PVP_TEAM, agent_id, 0],
+         f"prop 65 = 0 on agent {agent_id}: the turn's prelude, ahead of "
+         f"{why} [RANGERPRE-S12]")
+    if npc.get("enc_name"):
+        send(GAME_SMSG_AGENT_SET_NAME, [agent_id, npc["enc_name"]],
+             f"AGENT_SET_NAME({agent_id}): the turn's prelude [RANGERPRE-S12]")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_LEVEL, agent_id, level],
+         f"level {level} on agent {agent_id}: the turn's prelude [RANGERPRE-S12]")
+    agent["token_prelude_sent"] = True
+    return True
+
+
+def animal_turn_pending(agent):
+    """A provoked animal whose 0x002F has not gone out: it neither moves nor
+    swings until send_due_tokens turns it (no body fights under 'anim')."""
+    return agent.get("token_due") is not None
+
+
+def send_due_tokens(send, state, conn_id):
+    """Turn every live row whose turn is due and was marked on an EARLIER
+    simulation tick: the prelude if its hitter's word did not carry it, then
+    0x002F [agent, token]. Called first in enemy_move_tick and
+    enemy_attack_tick, so the turn precedes the body's first chase order and
+    first swing -- retail's [0x001E, 0x002F, 0x002B, 0x002A]. `sim_ticks` is
+    the world tick's count of 0x001E sent. Returns the ids turned."""
+    now_tick = state.get("sim_ticks", 0)
+    out = []
+    for aid, r in list(state.get("agents", {}).items()):
+        tok = r.get("token_due")
+        if tok is None or r.get("dead"):
+            continue
+        if r.get("token_due_tick", -1) >= now_tick:
+            continue                    # marked on THIS tick: after the next 0x001E
+        whole = animal_turn_prelude(send, aid, r, "its 0x002F")
+        was = r.get("team_token")
+        send(GAME_SMSG_AGENT_UPDATE_ALLEGIANCE, [aid, tok],
+             f"AGENT_UPDATE_ALLEGIANCE({aid}, "
+             f"{int(tok).to_bytes(4, 'big').decode('latin1')!r}) [RANGERPRE-S12]")
+        r["team_token"] = tok
+        for k in ("token_due", "token_due_tick", "token_prelude_sent"):
+            r.pop(k, None)
+        _fc = (lambda x: int(x).to_bytes(4, "big").decode("latin1")
+               if x is not None else "?")
+        print(f"[c{conn_id}] [ANIMAL-TURN] agent {aid} ({r.get('name', '?')}) "
+              f"turns {_fc(was)!r} -> {_fc(tok)!r} on the tick after its "
+              f"provoke" + (" (its whole burst: no player word carried the "
+                            "prelude)" if whole else "") + " [RANGERPRE-S12]",
+              flush=True)
+        out.append(aid)
     return out
 
 
@@ -32183,6 +32329,9 @@ def enemy_move_tick(send, state, conn_id, rec=None):
     tick, stopping at ENEMY_MELEE_RANGE.
     """
     player_pools(state)
+    # RANGERPRE-S12: a provoked animal turns ('anim' -> 'anin', 0x002F) before
+    # the chase below opens -- retail's [0x002F, 0x002B, 0x002A] after the tick.
+    send_due_tokens(send, state, conn_id)
     px, py = state.get("pos", (0.0, 0.0))
     now = time.time()
     pm = state.get("pathmap")
@@ -32242,6 +32391,10 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             # no chase, under either targeting arm.
             agent["moving"] = False
             agent["follow"] = None
+            continue
+        if not _ally and animal_turn_pending(agent):
+            # RANGERPRE-S12: provoked on THIS simulation tick -- it turns
+            # (send_due_tokens, above) after the next 0x001E, then chases.
             continue
         if not _ally and leash_returning(agent):
             # DESKWORK-D8 step 3: walking home -- no pick, no chase; the
@@ -35793,11 +35946,14 @@ def create_agent_world(send, state, agent_id, entry, why,
          f"AGENT_INITIAL_EFFECTS({agent_id}, "
          f"0x{int(entry.get('effects') or 0):04X})")
 
+    # RANGERPRE-S12: field 12 is the row's TEAM token when it has one (an
+    # "animal": 'anim', then 'anin' once turned -- so a burrow's re-create
+    # carries the current one); `allegiance` stays the foe class.
     send(GAME_SMSG_WORLD_CREATE_AGENT,
          agents.create_agent(agent_id,
                              agents.CHAR_CLASS_MONSTER_BASE | definition,
                              agents.AGENT_KIND_NPC, x, y, plane,
-                             allegiance=entry["allegiance"]),
+                             allegiance=entry.get("team_token") or entry["allegiance"]),
          f"WORLD_CREATE_AGENT({agent_id}) — {why}")
     # RANGERPRE-S10 (MAXHP-1): an NPC's maximum is NOT part of its create --
     # 0 of 526 NPC-class create intervals on 20260929T150923 carry one (0 of
@@ -36357,6 +36513,18 @@ def area_population(area):
         if problem:
             raise PopulationError(problem)
 
+    # THE ALLEGIANCE IS A KNOWN NAME (RANGERPRE-S12). spawn_population indexes
+    # ALLEGIANCE_BY_NAME with it, so an unknown name ("anmial") used to raise a
+    # bare KeyError inside instance bring-up -- where the harness still reports
+    # PASS with the body absent (the level guard's shape above). Refused here.
+    for key, row in rows:
+        name = row.get("allegiance", "hostile")
+        if name not in ALLEGIANCE_BY_NAME:
+            raise PopulationError(
+                f"spawn row {key!r} in area {area!r} says allegiance {name!r}, "
+                f"which is not one of {sorted(ALLEGIANCE_BY_NAME)}. The server "
+                f"would raise inside instance bring-up with the body absent")
+
     # THE PARTY CO-LOADS WITH EVERY AREA, so its ids are reserved against area
     # rows even though the rows above are internally consistent. The set checks
     # above cannot see this collision, and it stayed unguarded for a week
@@ -36465,7 +36633,12 @@ def spawn_population(send, state, origin, conn_id, area=None):
             continue
         x, y, moved = spot
 
-        allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
+        _aname = row.get("allegiance", "hostile")
+        allegiance = ALLEGIANCE_BY_NAME[_aname]
+        # RANGERPRE-S12: (create token, turned token) for an "animal", else
+        # None -- the body is then passive and attacks back unless its row
+        # says otherwise, which is what retail's 'anim' body did.
+        _team = TEAM_TOKEN_BY_NAME.get(_aname)
         hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
         # A vault-emitted def_NNNN row deliberately has NO name -- npcdefs.py:
         # "a name comes from a rendered nameplate or it does not exist" -- and
@@ -36534,10 +36707,11 @@ def spawn_population(send, state, origin, conn_id, area=None):
                 row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
-            "attacks_back": bool(row.get("attacks_back", False)),
+            "attacks_back": bool(row.get("attacks_back", _team is not None)),
             # MONSTERAI-J: a passive row notices nothing until it is hit, and
-            # its group joins on the hit. Both default to today's behaviour.
-            "passive": bool(row.get("passive", False)),
+            # its group joins on the hit. Both default to today's behaviour --
+            # except an "animal" row's, which default True (RANGERPRE-S12).
+            "passive": bool(row.get("passive", _team is not None)),
             "group": row.get("group"),
             # MONSTERAI-S8: a `stationary = true` row never scatters (copied here,
             # or the field could never reach a spawned row -- R3-F3).
@@ -36597,6 +36771,8 @@ def spawn_population(send, state, origin, conn_id, area=None):
                     "level": _hlevel,
                     "name": label,
                 }
+        if _team is not None:                           # RANGERPRE-S12
+            entry["team_token"], entry["token_on_provoke"] = _team
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
         if row.get("weapon_item"):
@@ -36737,6 +36913,10 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
     # displacement scan finds, so either GWCA's offsets are for a different
     # build or the write is computed. Do not send 0x002F for this purpose again
     # without settling that first.
+    #
+    # (0x002F IS sent since RANGERPRE-S12 -- for the DISPLAYED token it
+    # writes, a provoked animal's 'anim' -> 'anin' in send_due_tokens, which is
+    # retail's own use of it; not for attackability, which this note is about.)
     #
     # The health and attack-speed sends that used to sit here moved into
     # create_agent_world, unchanged and in the same order, so that a burrow
@@ -39022,6 +39202,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     delta_ms = int((now - prev_tick) * 1000)
                     if delta_ms > 0:
                         prev_tick = now
+                        # RANGERPRE-S12: the count of 0x001E, which
+                        # send_due_tokens reads -- a provoked animal turns on
+                        # the tick AFTER its hit, as retail's did. Counted
+                        # BEFORE the send: a hit landing from the client
+                        # thread in between stamps the new count and waits
+                        # one tick more, never one tick less.
+                        state["sim_ticks"] = state.get("sim_ticks", 0) + 1
                         try:
                             # quiet: 20 of these a second would bury the log.
                             send(GAME_SMSG_WORLD_SIMULATION_TICK, [delta_ms],
@@ -46051,6 +46238,15 @@ def main():
               "burst and ahead of every armour-ignoring word, as until 2026-09-29 "
               "(retail: on the player's first landed word only, 12 of 12) "
               "[RANGERPRE-S10 revert]", flush=True)
+
+    if a.no_animal_token_flip:
+        global ANIMAL_TOKEN_FLIP
+        ANIMAL_TOKEN_FLIP = False
+        print("NO ANIMAL TOKEN FLIP: an 'animal' row keeps 'anim' after its first "
+              "landed hit -- no prop 65 / 0x009B / prop 36 prelude and no 0x002F "
+              "(retail turned it to 'anin' on the tick after the hit, "
+              "20260929T150923 :55934 t=565.0302) [RANGERPRE-S12 revert]",
+              flush=True)
 
     if a.no_adren_bar_gate:
         global ADREN_BAR_GATE

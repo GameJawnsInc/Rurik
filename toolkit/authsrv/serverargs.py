@@ -2911,6 +2911,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "526 creates on 20260929T150923, each right before "
                          "that word). A party body keeps its create-time 42 "
                          "either way.")
+    ap.add_argument("--no-animal-token-flip", action="store_true",
+                    help="RANGERPRE-S12 REVERT: a spawn row of allegiance "
+                         "'animal' keeps its create token 'anim' after the "
+                         "player's first landed hit and fights under it -- no "
+                         "prelude (prop 65, 0x009B, prop 36) ahead of the "
+                         "maximum, and no 0x002F. Retail turned the hit 'anim' "
+                         "body to 'anin' (0x002F on the tick after the hit; "
+                         "20260929T150923 :55934 t=565.0302). The body is "
+                         "still passive until hit and fights back either way.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
