@@ -19579,13 +19579,26 @@ def _approach_abandon(state):
 
 
 def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
-                   rec=None, stop_at=None):
+                   rec=None, stop_at=None, into="approach"):
     """Send the follow and arm the leg it starts. See approach_tick.
 
     `stop_at` (RANGERPRE-S15) overrides where the leg ends, centre to centre:
     None is approach_stop's (the melee disc or the held weapon's range), and a
     pickup walks to the item itself (0.0). The wire is the same 0x002A either
-    way -- the target's own point and its id."""
+    way -- the target's own point and its id.
+
+    `into` names the record the leg is PUBLISHED under, and it is written last,
+    after the dest it names: "approach" (attack_tick's -- it abandons one, dest
+    and all, on every tick it holds no attack target) or "pickup"
+    (pickup_tick's: {agent, t0, eta, dest}). A pickup's leg never touches
+    state["approach"], not even for the length of one print: handle_pickup runs
+    on the CONNECTION thread and attack_tick on the WORLD tick, so a record
+    parked there is one the tick can abandon, clearing the walk's dest while
+    the 0x002A is already on the wire -- the pickup then cancels "short" and
+    the client walks onto a pile nobody serves (RANGERPRE-S15 review: 1 of 400
+    at the tick's cadence, 71 of 400 with a tight tick; test_loot 3j/3k)."""
+    if into not in ("approach", "pickup"):
+        raise ValueError(f"_approach_send: into={into!r} -- 'approach' or 'pickup'")
     plane = int(state.get("plane", 0))
     # MOVECODE-1z-v: the 0x002A follow is a movement order of its own, so
     # a live router chain must not keep granting legs behind it (the
@@ -19724,7 +19737,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                                                     ty - float(lr[1])), 1)),
                       report_age=(None if lr is None else round(now - float(lr[3]), 3)),
                       frame_vs_model=round(math.hypot(px - mx, py - my), 1),
-                      stop=round(stop, 1))
+                      stop=round(stop, 1),
+                      **({"leg": "pickup"} if into == "pickup" else {}))
         except Exception:                              # noqa: BLE001
             pass
     # The dest is the TARGET'S OWN position, not the stop point: that is the
@@ -19733,9 +19747,12 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # plane words carry the mover's plane (61/61 equal on retail).
     send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
          [PLAYER_AGENT_ID, (tx, ty), plane, plane, target_id],
-         f"APPROACH{' re-path' if repath else ''}: player -> agent "
-         f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
-         f"{stop:.0f} u [ANIMREF-RE 38]")
+         (f"PICKUP WALK: player -> ground agent {target_id} at ({tx:.0f},"
+          f"{ty:.0f}), {dist:.0f} u out, to the item itself [RANGERPRE-S15]"
+          if into == "pickup" else
+          f"APPROACH{' re-path' if repath else ''}: player -> agent "
+          f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
+          f"{stop:.0f} u [ANIMREF-RE 38]"))
     # The body is on a leg it walks silently -- the click latch's exact
     # meaning (the client sends nothing between a follow and its swing,
     # 0/7 on retail), bounded by THIS leg's travel time to the stop point.
@@ -19751,6 +19768,12 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # see the body arrive.
     state["dest"] = stop_point if run > 0.0 else None
     state["dest_speed"] = speed
+    if into == "pickup":
+        # RANGERPRE-S15: the pickup's own record, never state["approach"] (the
+        # docstring's race). handle_pickup has already cleared both.
+        state["pickup"] = {"agent": target_id, "t0": now, "eta": leg["eta"],
+                           "dest": (stop_point if run > 0.0 else None)}
+        return
     state["approach"] = {"target": target_id, "t0": now,
                          "told": (tx, ty), "sent_at": now,
                          "eta": leg["eta"]}
@@ -20610,10 +20633,15 @@ def handle_pickup(values, send, state, conn_id, rec=None):
     report during the walk, and the arrival frame about the straight-line walk
     time later. So the walk is `_approach_send` with the stop AT the item
     (stop_at=0.0): the same message, the same leg record, the same integrator.
-    Its record is MOVED OUT of state["approach"] into state["pickup"], because
-    attack_tick abandons an approach every tick it holds no attack target;
-    pickup_tick owns it from here. A body already within loot.PICKUP_REACH is
-    served at once (RECONSTRUCTION: n = 0 on tape).
+    Its record is PUBLISHED straight into state["pickup"] (into="pickup") and
+    never into state["approach"], because attack_tick -- on the world-tick
+    thread -- abandons an approach, dest and all, on every tick it holds no
+    attack target; a record that passed through state["approach"] could be
+    abandoned between the send and the move (the RANGERPRE-S15 review's race,
+    test_loot 3j). For the same reason any follow still on record is abandoned
+    HERE, before the leg's dest is written (3k). pickup_tick owns the walk from
+    here. A body already within loot.PICKUP_REACH is served at once
+    (RECONSTRUCTION: n = 0 on tape).
 
     The press is a move order: it ends a keyboard lead and a click leg in the
     0x0026 arm's own order, and forgets the attack target. RECONSTRUCTION --
@@ -20642,6 +20670,10 @@ def handle_pickup(values, send, state, conn_id, rec=None):
     _kbd_lead_kill(send, state, conn_id, rec, "pickup")
     _press_supersedes(send, state, conn_id, drop, rec=rec)
     state["attacking"] = None
+    # the follow the attack order was walking, if one is still on record: what
+    # attack_tick does on its next tick anyway, done NOW -- once the pickup's
+    # dest is written below, an approach left here would take it with it.
+    _approach_abandon(state)
     state["pickup"] = None
     px, py = _reach_frame(state, now)
     gap = math.hypot(float(g["pos"][0]) - px, float(g["pos"][1]) - py)
@@ -20653,15 +20685,12 @@ def handle_pickup(values, send, state, conn_id, rec=None):
         return True
     _approach_send(send, state, conn_id, drop,
                    {"pos": g["pos"], "name": f"ground item {drop}"}, now,
-                   rec=rec, stop_at=0.0)
-    ap = state.get("approach") or {}
-    state["approach"] = None
-    state["pickup"] = {"agent": drop, "t0": ap.get("t0"), "eta": ap.get("eta", now),
-                       "dest": state.get("dest")}
+                   rec=rec, stop_at=0.0, into="pickup")
+    pk = state.get("pickup") or {}
     print(f"[c{conn_id}] PICKUP of ground agent {drop} (item {g['item']}, "
           f"{g['gold']} gold) at {gap:.0f} u: a STRAIGHT 0x002A to the item's own "
           f"point (retail's reply, 3 of 3); the arrival frame at the leg's eta, "
-          f"{ap.get('eta', now) - now:.2f} s (our straight-line model) "
+          f"{pk.get('eta', now) - now:.2f} s (our straight-line model) "
           f"[RANGERPRE-S15]", flush=True)
     return True
 
@@ -44634,6 +44663,8 @@ def main():
         # would otherwise raise inside the world tick).
         try:
             _dt_row = drop_table_row(a.drop_table)
+            # and the gold row each hit declares, else kill_agent raises mid-frame
+            loot.gold_record(agents.item_template("gold_coins"), _dt_row["gold"][1])
         except (agents.content.ContentError, loot.LootError) as exc:
             raise SystemExit(f"--drop-table {a.drop_table}: {exc}") from None
         global DROP_TABLE

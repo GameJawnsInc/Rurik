@@ -52,7 +52,10 @@ from codec import Codec                                        # noqa: E402  (au
 
 # Floor 35, from the green run of 2026-09-30 with RURIK_VAULT at an EMPTY directory
 # (section 6 a declared skip). Section 6 adds 9 when the capture is present (44).
-LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=35)
+# The review round adds two fixture-free checks (3j, 3k: the pickup/world-tick race),
+# so both move by 2, each read off a real green run: 37 bare (1 declared skip), 46
+# with the capture.
+LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=37)
 check = checks.adopt(LEDGER)
 
 STAMP = "20260929T150923"
@@ -391,8 +394,10 @@ def section_pickup():
     swapped = arrival_list(item, drop, 6)
     swapped[2], swapped[3] = swapped[3], swapped[2]
     check(swapped != arrival_list(item, drop, 6) and sent != swapped,
-          "3e. MUTANT: retail's frame with the credit ahead of 0x0159 fails 3d's comparator "
-          "(built from the literal, so it tests the comparator, not our frame)")
+          "3e. MUTANT: the credit ahead of 0x0159 is a different frame -- the swapped "
+          "literal differs from retail's (3d's comparator can see the swap) AND the frame "
+          "we sent is not the swapped one (so this reads OUR order too, and reddens with "
+          "3d when serve_pickup sends 0x0140 first)")
     at = pk["eta"] + 0.001
     s1, send1 = collect()
     authsrv.pickup_tick(send1, st, 0, now=at + 0.99)
@@ -456,6 +461,64 @@ def section_pickup():
           "3i. the other two arrivals: the copy standing on the item with its dest spent "
           "is served before the eta, and a body already within reach is served at the "
           "press with no walk at all")
+
+    # THE REVIEW'S RACE, made deterministic. handle_pickup runs on the CONNECTION
+    # thread and attack_tick on the WORLD tick; with no attack target attack_tick
+    # abandons any approach on record, dest and all. The first cut published the
+    # pickup's leg in state["approach"] and moved it out only after _approach_send
+    # returned (past a flushed print, which releases the GIL): a tick landing there
+    # left {dest: None} and the next pickup_tick CANCELLED a walk the 0x002A had
+    # already started -- 1 of 400 at the tick's cadence, 71 of 400 with a tight
+    # tick (the reviewer's probe). Here the tick lands at exactly that instant.
+    real_send = authsrv._approach_send
+
+    def raced(send, state, *a, **k):
+        out = real_send(send, state, *a, **k)
+        authsrv.attack_tick(lambda *x, **y: None, state, 0)   # the world tick, HERE
+        return out
+
+    def raced_pickup(seed):
+        s = fresh()
+        dr = ground(s)
+        it = s["ground_items"][dr]["item"]
+        seed(s)
+        _x, sd = collect()
+        authsrv._approach_send = raced
+        try:
+            authsrv.handle_pickup([0x803F, dr, 0], sd, s, 0)
+        finally:
+            authsrv._approach_send = real_send
+        pk = dict(s.get("pickup") or {})
+        out, so = collect()
+        served = authsrv.pickup_tick(so, s, 0, now=pk.get("eta", 0.0) + 0.001)
+        # SERVED, not the frame's order -- that is 3d's, so a reordered arrival
+        # reddens 3d and not these two
+        return (pk.get("dest") == (500.0, 0.0) and served is True
+                and first(out, OP_PICKED) == [it, PLAYER] and s.get("purse") == 6
+                and dr not in s["ground_items"]), pk, [hex(o) for o, _v in out]
+
+    ok, pk, got = raced_pickup(lambda s: None)
+    check(ok,
+          "3j. RACE: a world tick landing right after the pickup's _approach_send returns "
+          "(attack_tick, no attack target) leaves the walk whole -- the pickup keeps dest "
+          "= the item's point and is SERVED at its eta (the leg is never published in "
+          "state['approach'], so there is nothing for the tick to abandon)",
+          f"pickup {pk} arrival {got}")
+
+    def follow_on_record(s):
+        # a follow the attack order was still walking when the pickup was pressed,
+        # its click latch already spent (so _press_supersedes leaves it alone)
+        s["attacking"] = 10
+        s["approach"] = {"target": 10, "t0": 1.0, "told": (100.0, 0.0),
+                         "sent_at": 1.0, "eta": 2.0}
+        s["dest"], s["click_moving_at"] = (80.0, 0.0), None
+
+    ok, pk, got = raced_pickup(follow_on_record)
+    check(ok,
+          "3k. RACE, with a follow still on record: handle_pickup abandons it BEFORE the "
+          "pickup's dest is written, so the same tick cannot take the pickup's dest with "
+          "the follow's -- served at the eta, as 3j",
+          f"pickup {pk} arrival {got}")
 
 
 # --------------------------------------------------------------------------- 4
@@ -545,12 +608,14 @@ def section_source():
           and f.drop_table == "probe_gold" and f.no_drops is True
           and 0 < i_main < i_dt and 0 < i_nd
           and "drop_table_row(a.drop_table)" in src[i_dt:i_dt + 400]
+          and 'loot.gold_record(agents.item_template("gold_coins")' in src[i_dt:i_dt + 500]
           and "DROP_TABLE = a.drop_table" in src[i_dt:i_dt + 700]
           and "LOOT_ENABLED = False" in src[i_nd:i_nd + 120]
           and authsrv.DROP_TABLE is None and authsrv.LOOT_ENABLED is True,
           "5d. the flags: --drop-table defaults to none (NO kill drops -- the owner's "
-          "default) and main() validates it before binding it; --no-drops flips "
-          "LOOT_ENABLED off (the known-bad arm)")
+          "default) and main() validates it -- the table AND the gold_coins row every "
+          "hit declares -- before binding it; --no-drops flips LOOT_ENABLED off (the "
+          "known-bad arm)")
     refused = []
     for key in ("no_such_table",):
         try:

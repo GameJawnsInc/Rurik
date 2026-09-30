@@ -3436,11 +3436,15 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the invented 0.33 table's miss and hit; the scatter point moved onto the mesh, the corpse's
   point where nothing near is ground. §3 `handle_pickup` / `pickup_tick` / `serve_pickup`:
   one `0x002A`; `attack_tick` leaves the walk alone (it abandons an approach record, which
-  is why the pickup's is moved out); nothing before the eta, exactly retail's eight at it
-  (purse 0 -> 6) and a MUTANT order that fails; the hold released once at +1.0 s; refusals
-  (a second press, an unknown agent, a dead player) and cancels (a click, another dest, an
-  attack order, a stop short) send nothing; the integrator's arrival and an in-reach press
-  serve too. §4 the view range: out past 5,000 u by one bare `0x0021`, back by a bare
+  is why the pickup's leg is published straight into `state['pickup']`, never into
+  `state['approach']`); nothing before the eta, exactly retail's eight at it (purse 0 -> 6)
+  and a MUTANT order that fails (3e reads both the literal's swap AND our sent order); the
+  hold released once at +1.0 s; refusals (a second press, an unknown agent, a dead player)
+  and cancels (a click, another dest, an attack order, a stop short) send nothing; the
+  integrator's arrival and an in-reach press serve too; and THE REVIEW'S RACE, made
+  deterministic (3j, 3k): `_approach_send` wrapped so `attack_tick` -- the world tick --
+  runs the instant it returns, with no follow on record and with one still on record, and
+  the pickup keeps its dest and is served at its eta both times. §4 the view range: out past 5,000 u by one bare `0x0021`, back by a bare
   `0x0020`, a hidden item refused, a pickup whose item leaves view cancelled. §5 the source:
   `loot_on_kill` called once in `kill_agent` after the status word and AHEAD of the
   `morale_experience(` tick (the critic's C1, stronger than ahead-of-the-reward); the world
@@ -3457,8 +3461,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   known-bad arm, stays green, being that server); the call moved between the tick and the
   award (the C1 case), 3 (2a, 5a, 6b); `serve_pickup`'s credit ahead of `0x0159`, 4 (3d,
   3e, 3i, 6d); the walk left in `state['approach']`, 5 (3a-3d, 3f); HEAD's `authsrv.py`
-  raises. Floor 35 from the bare green run (the tape adds 9: 44 vaulted). No socket, no
-  client. ~20 s vaulted),
+  raises. Review round: the first cut's `authsrv.py` (3e0851cf, the leg parked in
+  `state['approach']` until `_approach_send` returned) reddens 3j and 3k, plus 5d for the
+  gold-row validation this round also added to `main()`; dropping
+  `handle_pickup`'s abandon of a follow still on record reddens 3k alone; `main()` without
+  the gold-row validation reddens 5d. The same round re-aimed `test_playerswing.py` §9k's
+  `_approach_abandon` census 11 → 12 (the pickup press abandons a follow still on record).
+  Floor 37 from the bare green run (the tape adds 9: 46 vaulted). No socket, no client.
+  ~20 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
   quest-complete visual -- the message right after a hand-in's closing `0x004A` is `0x009F
   [20, own agent, 7]`, OBSERVED on 22 of 22 live hand-ins; what 7 draws is UNREAD. The
