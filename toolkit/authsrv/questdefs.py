@@ -305,14 +305,39 @@ def log_flags(row):
     return v
 
 
+def check_accept_grants(row, item_rows):
+    """Refuse a row's accept-time grants unless each resolves (RANGERPRE-S18,
+    QUESTFLOW-A3): `accept_items` a list of content/items.toml keys present
+    in `item_rows`, `accept_skills` a list of non-negative ints. Either may be
+    absent. Raises ValueError naming the bad entry; returns None."""
+    items = row.get("accept_items")
+    if items is not None:
+        if not isinstance(items, (list, tuple)):
+            raise ValueError(f"accept_items = {items!r} is not a list of item keys")
+        for key in items:
+            if not isinstance(key, str) or key not in item_rows:
+                raise ValueError(
+                    f"accept_items names {key!r}, which is not a content item "
+                    f"row -- the accept would grant nothing the client can be "
+                    f"sent, so the loader refuses it now")
+    skills = row.get("accept_skills")
+    if skills is not None:
+        if not isinstance(skills, (list, tuple)):
+            raise ValueError(f"accept_skills = {skills!r} is not a list of skill ids")
+        for sid in skills:
+            if isinstance(sid, bool) or not isinstance(sid, int) or sid < 0:
+                raise ValueError(f"accept_skills holds {sid!r}, not a skill id")
+
+
 def load(world=None):
     """{quest_id: row} for every content quest row.
 
     Keyed by the u32 the WIRE uses, not by the TOML section name, because that
     is what arrives in GAME_CMSG 0x0012 and what the server has to look up.
 
-    A row's `quest_log_flags` is validated HERE (RANGERPRE-S18), so a bad one
-    stops the server at startup rather than at the first accept.
+    A row's `quest_log_flags` and its accept-time grants are validated HERE
+    (RANGERPRE-S18), so a bad one stops the server at startup rather than at
+    the first accept.
     """
     world = world or content.load()
     out = {}
@@ -328,6 +353,9 @@ def load(world=None):
                 f"never be addressed.")
         try:
             log_flags(row)
+            if row.get("accept_items") is not None \
+                    or row.get("accept_skills") is not None:
+                check_accept_grants(row, world.rows("item"))
         except ValueError as exc:
             raise ValueError(f"content quest row {name!r}: {exc}") from None
         row = dict(row)

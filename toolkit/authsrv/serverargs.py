@@ -1067,6 +1067,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          ":59969 184.441 among them), home = the accepting map "
                          "12 of 12, and every replay carrying it, 37 of 37. "
                          "KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-accept-rewards", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S18's accept-time grants "
+                         "(QUESTFLOW-A3): a quest row's accept_items and "
+                         "accept_skills are NOT granted when the quest is "
+                         "accepted, as every run before this step. The default "
+                         "grants them BEFORE the 0x0049 (accept_quest): the "
+                         "items through grant_item (0x0161 then 0x013E into the "
+                         "lowest free backpack cell), then the skills through "
+                         "grant_skill -- OBSERVED on 2 of 2 grant-carrying "
+                         "retail accepts, 20260929T150923 :56064 921.161 (q75: "
+                         "a sword, then skills 382, 384 and 1, then 0x0049) and "
+                         "20260819T132414 :52606 228.313 (q270: two skills). "
+                         "KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

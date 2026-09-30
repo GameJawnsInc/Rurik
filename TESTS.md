@@ -3414,7 +3414,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S18 (QUESTFLOW-A1): the
+  `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S18 (QUESTFLOW-A3): the
+  accept-time grants -- a quest row's `accept_items` (content item keys, through the new
+  shared `grant_item`: 0x0161 then 0x013E into the lowest free backpack cell, a per-session id
+  from the purchase counter, kind `reward`) and `accept_skills` (through `grant_skill`) go out
+  BEFORE the 0x0049, retail's order on 2 of 2 grant-carrying accepts (OBSERVED: q75 on
+  20260929T150923 :56064 921.1613, q270 on 20260819T132414 :52606 228.313).
+  `--no-accept-rewards` is the pre-S18 accept, the KNOWN-BAD arm. The rule `grants_before_add`:
+  one 0x0049, at least one grant, every grant before it, each 0x013E after its 0x0161. §9 OURS
+  (bare): {starter_sword, skills 382 and 384} reduces to `ITEM IADD SKC SKB SKU SKC SKB SKU ADD
+  SHOW`; the 0x0161 is `named_item(5000, the sword row)`, the 0x013E `[key, 5000, backpack, 0]`,
+  the merchant's map and the item store hold it (kind `reward`, key `starter_sword`, type 27);
+  the cell skips the store's and the merchant's occupied slots; a full backpack sends no item
+  line and the skills and accept still go; a known skill sends no 0x001C; KNOWN-BAD `ADD SHOW`
+  and the rule red; VACUITY (four near misses refused, q75's batch accepted);
+  `questdefs.check_accept_grants` refusals and `load` naming the row; `_item_moves_commit` under
+  `--persist` writes a plain item's moved cell and NOT a reward's; the flag parses and `main()`
+  flips `ACCEPT_REWARDS`. §10 THE TAPE (vault-gated): q75's batch reduces to exactly `ITEM IADD
+  SKC:382 SKB:2:382 SKC:384 SKB:3:384 SKU:384 SKC:1 SKB:4:1 ADD SHOW`, the 0x013E placing the
+  0x0161's item (704, type 27); OURS vs TAPE equal (bar slots 0-1 held, the account holding 382
+  and 1), the known-bad arm unequal, a sabotaged tape red; the CORPUS: every grant-carrying
+  accept (2, floor 2) grants first. Floor 26 → 37 from the bare green run (79 vaulted).**
+  **2026-09-29, RANGERPRE-S18 (QUESTFLOW-A1): the
   quest-log words -- 0x0049's flags are a per-quest constant, 0 or 32 (0 on 5 of
   20260929T150923's 12 accepts, OBSERVED), its home the accepting map (12 of 12), and every
   0x0050 replay repeats both (37 of 37 on home, 27 of them on a load of ANOTHER map; 36 of 37

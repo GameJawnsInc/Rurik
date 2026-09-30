@@ -55,8 +55,23 @@ WHAT THIS CHECKS:
       §8 (vault-gated, the live corpus): at least 30 accepts, flags only 0 /
          32, one value per quest, home = the accepting map on every accept,
          and every replay of an accepted quest carrying its flags and home.
+  * RANGERPRE-S18 (QUESTFLOW-A3), THE ACCEPT-TIME GRANTS. A quest may hand
+    over items and skills when it is accepted, and retail sends them BEFORE
+    the 0x0049 (2 of 2 grant-carrying accepts in the live corpus; q75's
+    sword and three skills on 20260929T150923 :56064 921.1613). Ours granted
+    nothing at an accept until S18; --no-accept-rewards is that, kept as the
+    KNOWN-BAD arm. The rule (grants_before_add) is the tape's order.
+      §9 (bare): accept_quest with accept_items / accept_skills reduces to
+         the tape's order; grant_item's id, cell and registration; a full
+         backpack; a known skill's missing 0x001C; the known-bad arm; the
+         rule's near misses; questdefs' refusals; a granted item's cell never
+         persisted by _item_moves_commit; the flag and main()'s flip.
+      §10 (vault-gated): q75's batch reduced exactly, the item declared then
+         placed, OURS vs TAPE equal on every kind, skill id and bar slot,
+         the known-bad arm and a sabotaged tape red; the corpus's every
+         grant-carrying accept granting first.
 
-§5 and §8 share ONE decode of the corpus (corpus()); §7 and on share one of
+§5, §8 and §10 share ONE decode of the corpus (corpus()); §7 and on share one of
 20260929T150923 (tape_s18()). Nothing binds a port, launches a client, or
 touches vault/state.
 """
@@ -73,11 +88,11 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 26 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks, §3's six and §6's eleven. §2 adds 15 with the four captures
-# present, §4 7, §5 3, §7 7 and §8 3 (61 in all), each declaring a LEDGER.skip
-# for what is absent. Set from the run, never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=26)
+# Floor 37 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
+# nine checks, §3's six, §6's eleven and §9's eleven. §2 adds 15 with the four
+# captures present, §4 7, §5 3, §7 7, §8 3 and §10 7 (79 in all), each
+# declaring a LEDGER.skip for what is absent. Set from the run, never above it.
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=37)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -664,18 +679,20 @@ def rows_with(overrides):
     return rows
 
 
-def drive(rows, steps, retail=True, **flags):
+def drive(rows, steps, retail=True, bar=None, **flags):
     """Run accept_quest / _replay_quests against `rows` (patched in as the
-    server's quest table) with QUEST_LOG_RETAIL = `retail` and any other
-    authsrv flag in `flags`; restores all of it. `steps` is [(kind, qid or
-    held, map_id, state overrides)]; one progress carrier is shared across
-    the steps, as bind_progress shares it across connections. Returns
-    [[(op, values)] per step]."""
+    server's quest table) with QUEST_LOG_RETAIL = `retail`, the skill bar
+    `bar` (an empty bar when None) and any other authsrv flag in `flags`;
+    restores all of it. `steps` is [(kind, qid or held, map_id, state
+    overrides)]; one progress carrier is shared across the steps, as
+    bind_progress shares it across connections. Returns [[(op, values)] per
+    step]; the last step's state is left in drive.state."""
     saved_rows = authsrv._QUEST_ROWS
     saved_flags = {k: getattr(authsrv, k) for k in ["QUEST_LOG_RETAIL"] + list(flags)}
     saved_bar = list(authsrv.SKILLBAR)
     authsrv._QUEST_ROWS = rows
     authsrv.QUEST_LOG_RETAIL = retail
+    authsrv.SKILLBAR[:] = list(bar) if bar is not None else [0] * authsrv.SKILLBAR_SLOTS
     for k, v in flags.items():
         setattr(authsrv, k, v)
     carrier = {"quests": set(), "objectives_done": set(),
@@ -698,6 +715,7 @@ def drive(rows, steps, retail=True, **flags):
             if kind == "accept":
                 carrier["quests"] = st["quests"]
             out.append(sent)
+            drive.state = st
     finally:
         authsrv._QUEST_ROWS = saved_rows
         for k, v in saved_flags.items():
@@ -931,6 +949,250 @@ def section_8():
            f"its home, every one", f"{bad}")
 
 
+# ---------------------------------------------------------------- S18 / A3
+ITEM = authsrv.GAME_SMSG_CREATE_NAMED_ITEM             # 0x0161
+IADD = authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION        # 0x013E
+SHOW = authsrv.GAME_SMSG_NPC_DIALOG_SHOW               # 0x0081
+GRANT_KINDS = ("ITEM", "IADD") + SK_KINDS
+# q75's accept batch, :56064 921.1613, reduced (OBSERVED): the sword, then
+# skills 382 and 384 (0x001C for 384 alone) and 1 into bar slots 2, 3, 4.
+Q75_ACCEPT = ["ITEM", "IADD", "SKC:382", "SKB:2:382", "SKC:384", "SKB:3:384",
+              "SKU:384", "SKC:1", "SKB:4:1", "ADD", "SHOW"]
+
+
+def reduce_accept(seq):
+    """An accept batch reduced to the grants, the 0x0049 and the 0x0081, in
+    sequence -- the skill lines as reduce_batch spells them (id, bar slot)."""
+    out = []
+    for op, v in seq:
+        if op == ITEM:
+            out.append("ITEM")
+        elif op == IADD:
+            out.append("IADD")
+        elif op == ACCEPT:
+            out.append("ADD")
+        elif op == SHOW:
+            out.append("SHOW")
+        elif op in (SKC, SKB, SKU):
+            out += reduce_batch([(op, v)])
+    return out
+
+
+def grants_before_add(red):
+    """The tape's rule, 2 of 2: one 0x0049; at least one grant; every grant
+    line BEFORE the 0x0049; and each 0x013E preceded by at least as many
+    0x0161 (an item declared before it is placed)."""
+    kinds = [r.split(":")[0] for r in red]
+    if kinds.count("ADD") != 1:
+        return False
+    at = kinds.index("ADD")
+    grants = [i for i, k in enumerate(kinds) if k in GRANT_KINDS]
+    if not grants or max(grants) > at:
+        return False
+    return all(kinds[:i].count("ITEM") > kinds[:i].count("IADD")
+               for i, k in enumerate(kinds) if k == "IADD")
+
+
+def section_9():
+    print("\n9. RANGERPRE-S18 (QUESTFLOW-A3): OURS -- the accept's item and "
+          "skill grants, before the 0x0049")
+    import questdefs
+    grant = {"accept_items": ["starter_sword"], "accept_skills": [382, 384]}
+    rows = rows_with({ERRAND: grant})
+    items = {}
+    acc, = drive(rows, [("accept", ERRAND, 148, {"items": items})])
+    st = drive.state
+    red = reduce_accept(acc)
+    led.ok(red == ["ITEM", "IADD", "SKC:382", "SKB:0:382", "SKU:382",
+                   "SKC:384", "SKB:1:384", "SKU:384", "ADD", "SHOW"],
+           "accept_quest for {accept_items [starter_sword], accept_skills "
+           "[382, 384]}: the sword 0x0161 + 0x013E, then 0x00DC / 0x00D9 / "
+           "0x001C per skill, THEN the 0x0049, then the 0x0081 -- q75's order",
+           f"{red}")
+    led.ok(grants_before_add(red), "and the tape's rule holds on it", f"{red}")
+    base = authsrv.merchant.PURCHASED_ITEM_ID_BASE
+    tmpl = authsrv.agents.item_template("starter_sword")
+    led.ok(first(acc, ITEM) == authsrv.agents.named_item(base, tmpl)
+           and first(acc, IADD) == [authsrv.PLAYER_INVENTORY_KEY, base,
+                                    authsrv.BACKPACK_BAG_ID, 0]
+           and st["backpack"] == {0: base} and st["next_purchased_item"] == base + 1
+           and items.get(base) == {"bag": authsrv.BACKPACK_BAG_ID, "slot": 0,
+                                   "key": "starter_sword", "kind": "reward",
+                                   "item_type": 27},
+           "grant_item: the sword row declared as item "
+           f"{base} (the purchase counter), placed in backpack slot 0, and "
+           "registered in the merchant's map and the item store as kind "
+           "'reward' under its content key",
+           f"{first(acc, IADD)} backpack={st.get('backpack')} {items.get(base)}")
+    # The cell: clear of the item store and the merchant's map.
+    bp = authsrv.BACKPACK_BAG_ID
+    items2 = {7: {"bag": bp, "slot": 0, "key": None, "kind": None, "item_type": 24},
+              8: {"bag": bp, "slot": 1, "key": None, "kind": None, "item_type": 27}}
+    acc2, = drive(rows, [("accept", ERRAND, 148,
+                          {"items": items2, "backpack": {2: 4999},
+                           "next_purchased_item": 6000})])
+    led.ok(first(acc2, IADD) == [authsrv.PLAYER_INVENTORY_KEY, 6000, bp, 3],
+           "the cell is the lowest one free of the item store (slots 0, 1) "
+           "and the merchant's map (slot 2): slot 3, id 6000",
+           f"{first(acc2, IADD)}")
+    size = authsrv.player_bags()[bp]
+    full = {100 + s: {"bag": bp, "slot": s, "key": None, "kind": None,
+                      "item_type": 24} for s in range(size)}
+    acc3, = drive(rows, [("accept", ERRAND, 148, {"items": full})])
+    red3 = reduce_accept(acc3)
+    led.ok(red3 == ["SKC:382", "SKB:0:382", "SKU:382", "SKC:384", "SKB:1:384",
+                    "SKU:384", "ADD", "SHOW"],
+           f"a FULL backpack ({size} slots): no 0x0161 / 0x013E, the skills "
+           "and the accept still go", f"{red3}")
+    acc4, = drive(rows, [("accept", ERRAND, 148, {"skills_known": {382}})])
+    led.ok(reduce_accept(acc4)[2:5] == ["SKC:382", "SKB:0:382", "SKC:384"],
+           "a skill the account already holds sends no 0x001C",
+           f"{reduce_accept(acc4)}")
+    # KNOWN-BAD: --no-accept-rewards.
+    bad, = drive(rows, [("accept", ERRAND, 148, {})], ACCEPT_REWARDS=False)
+    led.ok(reduce_accept(bad) == ["ADD", "SHOW"] and not grants_before_add(
+        reduce_accept(bad)),
+           "KNOWN-BAD arm (--no-accept-rewards): no grant at all -- the "
+           "pre-S18 accept -- and the rule goes RED", f"{reduce_accept(bad)}")
+    misses = {"no grant": ["ADD", "SHOW"],
+              "a skill after the 0x0049": ["ITEM", "IADD", "ADD", "SKC:1", "SKB:0:1"],
+              "placed before declared": ["IADD", "ITEM", "ADD"],
+              "two 0x0049": ["SKC:1", "SKB:0:1", "ADD", "ADD"]}
+    rmiss = {k: grants_before_add(m) for k, m in misses.items()}
+    led.ok(not any(rmiss.values()) and grants_before_add(Q75_ACCEPT),
+           "VACUITY: the rule refuses each near miss and accepts q75's batch",
+           f"{rmiss}")
+    # The loader refuses what the accept could not grant.
+    world_items = {"starter_sword": {}}
+    refused = []
+    for bad_row in ({"accept_items": ["no_such_item"]},
+                    {"accept_items": "starter_sword"},
+                    {"accept_skills": [True]}, {"accept_skills": [-1]},
+                    {"accept_skills": 382}):
+        try:
+            questdefs.check_accept_grants(bad_row, world_items)
+        except ValueError:
+            refused.append(bad_row)
+
+    class _World:
+        def rows(self, kind):
+            return ({"q": {"quest_id": 7, "accept_items": ["nope"]}}
+                    if kind == "quest" else world_items)
+    try:
+        questdefs.load(_World())
+        load_msg = ""
+    except ValueError as exc:
+        load_msg = str(exc)
+    led.ok(len(refused) == 5 and "'q'" in load_msg and "'nope'" in load_msg,
+           "questdefs refuses an unknown item key, a bare string, a bool / "
+           "negative skill and a bare int; load names the row at startup",
+           f"refused {len(refused)}; {load_msg}")
+    # A granted item's cell is per-session: _item_moves_commit persists a
+    # plain item's move and NOT a reward's.
+    wrote = []
+
+    class _Store:
+        def set_item_location(self, uuid_hex, iid, bag, slot):
+            wrote.append(int(iid))
+    cells = {base: {"bag": bp, "slot": 0, "key": "starter_sword",
+                    "kind": "reward", "item_type": 27},
+             101: {"bag": bp, "slot": 1, "key": None, "kind": None,
+                   "item_type": 24}}
+    saved_persist = authsrv.PERSIST
+    authsrv.PERSIST = True
+    try:
+        authsrv._item_moves_commit(
+            lambda *a, **k: None,
+            {"items": cells, "backpack": {0: base}, "charstore_game": _Store(),
+             "char_uuid": "u1"}, 0, [], [(base, bp, 5), (101, bp, 6)],
+            "S18 test move")
+    finally:
+        authsrv.PERSIST = saved_persist
+    led.ok(wrote == [101] and cells[base]["slot"] == 5,
+           "_item_moves_commit under --persist writes the plain item's new "
+           "cell and NOT the reward's (both moved)", f"wrote {wrote}")
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.no_accept_rewards:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--no-accept-rewards"]).no_accept_rewards
+           and not ap.parse_args([]).no_accept_rewards
+           and authsrv.ACCEPT_REWARDS is True
+           and "global ACCEPT_REWARDS\n" in window
+           and "ACCEPT_REWARDS = False\n" in window,
+           "--no-accept-rewards parses, the default grants, and main() sets "
+           "ACCEPT_REWARDS = False under it", f"window found={at >= 0}")
+
+
+def section_10():
+    print(f"\n10. RANGERPRE-S18 (QUESTFLOW-A3): the TAPE {TAPE_S18} :56064 q75 "
+          "and the corpus's grant-carrying accepts")
+    conns = tape_s18()
+    if conns is None:
+        led.skip(f"the tape {TAPE_S18}", "no capture directory (bare machine)")
+    else:
+        merged = next((m for p, _mp, m, _ok in conns if p == "56064"), [])
+        t_acc = next((t for t, d, op, v in merged if d == "s2c" and op == ACCEPT
+                      and v[1] == 75 and abs(t - 921.1613) < 0.001), None)
+        batch = [(op, v) for t, d, op, v in merged
+                 if d == "s2c" and t_acc is not None and t == t_acc]
+        red = reduce_accept(batch)
+        led.ok(red == Q75_ACCEPT,
+               "TAPE :56064 921.1613 q75: the accept batch reduces to "
+               + " ".join(Q75_ACCEPT), f"{red}")
+        led.ok(grants_before_add(red),
+               "TAPE: every grant before the 0x0049, the item declared before "
+               "it is placed", f"{red}")
+        it, ia = first(batch, ITEM), first(batch, IADD)
+        led.ok(it is not None and ia is not None and it[1] == ia[-3]
+               and it[3] == 27,
+               "TAPE: the 0x013E places the item the 0x0161 declared (id "
+               f"{it[1] if it else None}, type 27 -- a sword)", f"{it} {ia}")
+        # OURS vs TAPE: q75's own grants, the bar holding two skills and the
+        # account already holding 382 and 1 (the tape's lone 0x001C is 384's).
+        rows = rows_with({ERRAND: {"accept_items": ["starter_sword"],
+                                   "accept_skills": [382, 384, 1]}})
+        bar = [331, 332] + [0] * (authsrv.SKILLBAR_SLOTS - 2)
+        ours_b, = drive(rows, [("accept", ERRAND, 160,
+                                {"skills_known": {382, 1}})], bar=bar)
+        bad_b, = drive(rows, [("accept", ERRAND, 160,
+                               {"skills_known": {382, 1}})], bar=bar,
+                       ACCEPT_REWARDS=False)
+        led.ok(reduce_accept(ours_b) == red,
+               "OURS vs TAPE: accept_quest for q75's grants equals the tape on "
+               "every reduced kind, skill id and bar slot",
+               f"ours {reduce_accept(ours_b)} tape {red}")
+        led.ok(reduce_accept(bad_b) != red,
+               "KNOWN-BAD: --no-accept-rewards does NOT equal the tape",
+               f"{reduce_accept(bad_b)}")
+        sab = list(batch)
+        ai = next(i for i, (op, _v) in enumerate(sab) if op == ACCEPT)
+        si = next(i for i, (op, _v) in enumerate(sab) if op == SKC)
+        sab.insert(si, sab.pop(ai))
+        led.ok(not grants_before_add(reduce_accept(sab)),
+               "KNOWN-BAD: a sabotaged tape (the 0x0049 moved ahead of the "
+               "first skill) FAILS the rule", f"{reduce_accept(sab)}")
+    c = corpus()
+    if c is None:
+        led.skip("section 10's corpus half", "no live captures")
+        return
+    carrying = [(cc, p, t, v[1], reduce_accept(b)) for cc, p, t, v, _m, b
+                in c["accepts"]
+                if any(k.split(":")[0] in GRANT_KINDS for k in reduce_accept(b))]
+    led.ok(len(carrying) >= 2 and all(grants_before_add(r) for *_x, r in carrying),
+           f"CORPUS: every grant-carrying accept ({len(carrying)}, floor 2 -- "
+           "q75 here and q270 on 20260819T132414 :52606) grants BEFORE its "
+           "0x0049, none after",
+           f"{[(cc, p, t, q) for cc, p, t, q, r in carrying if not grants_before_add(r)]}")
+
+
 def main():
     section_1()
     section_2()
@@ -940,6 +1202,8 @@ def main():
     section_6()
     section_7()
     section_8()
+    section_9()
+    section_10()
     return led.verdict()
 
 

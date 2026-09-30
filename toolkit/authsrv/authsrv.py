@@ -498,11 +498,74 @@ def turn_in_quest(send, state, qid, row, conn_id):
         grant_quest_reward(send, state, qid, row, conn_id)
 
 
+def grant_item(send, state, conn_id, key, why):
+    """Put one content item (content/items.toml `key`) in the player's
+    backpack: mint a per-session id, declare it (0x0161), then place it
+    (0x013E [key, id, backpack, slot]) -- RANGERPRE-S18 (QUESTFLOW-A3), the
+    one helper every server-side grant shares (the quest accept's today).
+
+    THE SHAPE IS RETAIL'S: 0x0161 then 0x013E, declared before placed -- the
+    q75 accept's sword, 20260929T150923 :56064 921.1613, 0x0161 [704, type
+    27, model 2982] then 0x013E [2, 704, 4, 2] (OBSERVED; the purchase's
+    mint-then-place is the same order). The CELL is ours: the lowest backpack slot
+    free of the merchant's map, the item store and the off hands' reserved
+    homes -- the purchase's rule (merchant.handle_item_purchase) -- because
+    retail's choice of slot 2 on that tape cannot be read off one sample
+    (RECONSTRUCTION). THE ID is minted from the purchase counter
+    (next_purchased_item), so a grant and a purchase never collide, and the
+    item is PER-SESSION like a purchase: the dress never re-declares it and
+    _item_moves_commit does not persist its cell (a stated limitation, not a
+    claim about retail). It is registered in the merchant's backpack map (so
+    it can be sold) and in the item store under its content key (so an equip
+    drives the swing model from the row).
+
+    A FULL BACKPACK grants nothing: printed, None returned. Retail's answer
+    there is NOT FOUND. An unknown key raises (agents.item_template); the
+    quest loader refuses one at startup first."""
+    row = agents.item_template(key)
+    items = state.get("items")
+    held = state.setdefault("backpack", {})
+    size = player_bags().get(BACKPACK_BAG_ID, merchant.BACKPACK_SLOT_COUNT)
+    slot = itemstore.first_free(items or {}, BACKPACK_BAG_ID, size,
+                                avoid=set(held) | reserved_backpack_slots(state))
+    if slot is None:
+        print(f"[c{conn_id}] ITEM GRANT {key!r} ({why}) NOT granted: the "
+              f"backpack is full ({size} slots) -- nothing sent; retail's "
+              f"answer to a full backpack is NOT FOUND [RANGERPRE-S18]",
+              flush=True)
+        return None
+    new_id = state.get("next_purchased_item", merchant.PURCHASED_ITEM_ID_BASE)
+    state["next_purchased_item"] = new_id + 1
+    held[slot] = new_id
+    if items is not None:
+        itemstore.place(items, new_id, BACKPACK_BAG_ID, slot, key=key,
+                        kind="reward", item_type=row["item_type"])
+    send(GAME_SMSG_CREATE_NAMED_ITEM, agents.named_item(new_id, row),
+         f"CREATE_NAMED_ITEM({key} as item {new_id}; {why})")
+    send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+         [PLAYER_INVENTORY_KEY, new_id, BACKPACK_BAG_ID, slot],
+         f"ITEM_MOVED_TO_LOCATION({new_id} -> backpack slot {slot})")
+    print(f"[c{conn_id}] ITEM GRANT {key!r} as item {new_id} into backpack "
+          f"slot {slot} ({why}) [RANGERPRE-S18]", flush=True)
+    return new_id
+
+
 def accept_quest(send, state, qid, row, conn_id):
-    """The accept batch for one quest: 0x0049, the state add, the marker
-    batch, the bare 0x0081 -- the dispatch's SERVICE_ACCEPT arm calls this
-    (RANGERPRE-S18 moved it here from inline in the 0x003B dispatch, so it
-    can be driven without a socket).
+    """The accept batch for one quest: the accept-time grants, 0x0049, the
+    state add, the marker batch, the bare 0x0081 -- the dispatch's
+    SERVICE_ACCEPT arm calls this (RANGERPRE-S18 moved it here from inline in
+    the 0x003B dispatch, so it can be driven without a socket).
+
+    THE GRANTS COME FIRST (RANGERPRE-S18, QUESTFLOW-A3). A quest may hand
+    over items and skills when it is ACCEPTED, and retail sends them BEFORE
+    the 0x0049 on 2 of 2 grant-carrying accepts in the live corpus, none
+    after: 20260929T150923 :56064 921.1613 (q75: a sword 0x0161 + 0x013E,
+    then 0x00DC/0x00D9 for 382, 384 (+ 0x001C) and 1, then 0x0049) and
+    20260819T132414 :52606 228.313 (q270: two skills, each with its
+    0x001C). The row's `accept_items` (content/items.toml keys, through
+    grant_item) go before its `accept_skills` (grant_skill, whose 0x001C
+    rides only a skill new to the account), q75's order. --no-accept-rewards
+    grants nothing, as every run before S18.
 
     0x0049 is [qid, marker pos, marker plane, marker map, FLAGS, s1, s2, s3,
     HOME]. THE FLAGS ARE THE ROW'S (RANGERPRE-S18, QUESTFLOW-A1): retail sends
@@ -520,6 +583,23 @@ def accept_quest(send, state, qid, row, conn_id):
     objective. The quest row has no marker column yet, and inventing
     coordinates it does not carry would be a number nobody measured.
     """
+    granted = []
+    if ACCEPT_REWARDS:
+        for key in row.get("accept_items") or ():
+            if grant_item(send, state, conn_id, str(key),
+                          f"quest {qid} accepted") is not None:
+                granted.append(str(key))
+        for sid in row.get("accept_skills") or ():
+            grant_skill(send, state, int(sid), conn_id,
+                        unlocked=int(sid) in state.get("skills_known", set()))
+            granted.append(f"skill {int(sid)}")
+    elif row.get("accept_items") or row.get("accept_skills"):
+        print(f"[c{conn_id}] quest {qid}: accept_items / accept_skills NOT "
+              f"granted (--no-accept-rewards, as every run before "
+              f"RANGERPRE-S18)", flush=True)
+    if granted:
+        print(f"[c{conn_id}] quest {qid} accept grants, BEFORE the 0x0049: "
+              f"{', '.join(granted)} (RANGERPRE-S18, QUESTFLOW-A3)", flush=True)
     mid = state["map_id"]
     nm = questdefs.enc_string(row.get("enc_name") or [])
     flags = questdefs.log_flags(row) if QUEST_LOG_RETAIL else 32
@@ -13108,7 +13188,14 @@ QUEST_LOG_RETAIL = True        # False (--no-retail-quest-log): the accept's
                                # log_flags; 0 on 5 of 20260929T150923's 12
                                # accepts) and the ACCEPTING map as home on
                                # every replay (37 of 37) -- OBSERVED.
-MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
+ACCEPT_REWARDS = True          # False (--no-accept-rewards): a quest row's
+                               # accept_items / accept_skills are NOT granted
+                               # (the print names them), as every run before
+                               # RANGERPRE-S18. Default ON: accept_quest grants
+                               # them BEFORE the 0x0049 -- retail's order on 2
+                               # of 2 grant-carrying accepts (OBSERVED;
+                               # 20260929T150923 :56064 921.161, q75).
+MAP_TRAVEL_ENABLED = True     # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
                                # the transfer pair -- for a served, non-explorable
@@ -31233,8 +31320,10 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
-            if (items[iid].get("kind") or "") == "bought":
+            if (items[iid].get("kind") or "") == "bought" \
+                    or (items[iid].get("kind") or "") == "reward":
                 continue        # per-session: the dress never re-declares a purchase
+                                # or a grant (grant_item, RANGERPRE-S18)
             store.set_item_location(state.get("char_uuid", ""), iid,
                                     items[iid]["bag"], items[iid]["slot"])
     where = ", ".join(f"item {i} -> bag {items[i]['bag']} slot {items[i]['slot']}"
@@ -44392,6 +44481,14 @@ def main():
               "against the tape: retail sends the quest's own flags (0 on 5 of "
               "12 accepts) and the accepting map on 37 of 37 replays "
               "(accept_quest, _replay_quests).", flush=True)
+    if a.no_accept_rewards:
+        global ACCEPT_REWARDS
+        ACCEPT_REWARDS = False
+        print("[quests] --no-accept-rewards: a quest row's accept_items and "
+              "accept_skills are NOT granted at the accept, as every run "
+              "before RANGERPRE-S18. KNOWN-BAD against the tape: retail grants "
+              "them before the 0x0049 on 2 of 2 grant-carrying accepts "
+              "(accept_quest).", flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
