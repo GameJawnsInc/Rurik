@@ -3436,7 +3436,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the rule on the five create-spot markers, q80 / q89 on plane 26; the cross-map markers whose
   connection then transferred to the marker's map at 202 / 387 / 168 / 168 u; :53880's 0x0051
   markers naming another map all on the ONE exit (7311, 5438), for 146, 160 and 164. Floor 37
-  → 47 from the bare green run (93 vaulted).**
+  → 47 from the bare green run (93 vaulted, ~28 s; the corpus walk reads a connection's map only
+  where it holds an accept).**
   **2026-09-30, RANGERPRE-S18 (QUESTFLOW-A3): the
   accept-time grants -- a quest row's `accept_items` (content item keys, through the new
   shared `grant_item`: 0x0161 then 0x013E into the lowest free backpack cell, a per-session id

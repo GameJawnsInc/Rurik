@@ -556,7 +556,8 @@ def corpus():
     once; what the sections read is kept, the decoded streams are not:
     'handins' [(capture, file, t, qid, own, batch)], 'accepts' [(capture,
     port, t, values, conn map, batch)] and 'replays' [(capture, port, t,
-    values, conn map)] -- values as decoded, header field in front."""
+    values, conn map)] -- values as decoded, header field in front; the conn
+    map is read only on a connection holding an accept (None elsewhere)."""
     global _CORPUS
     if _CORPUS is not None:
         return _CORPUS or None
@@ -576,10 +577,15 @@ def corpus():
         out["decoded"] += 1 if ok else 0
         cap = os.path.basename(capdir)
         port = gf.split("_")[1].split("-")[0]
-        try:        # None fails §8's home checks by name, never silently
-            cmap = tape.client_version(capdir, conn)["map_id"]
-        except tape.TapeError:
-            cmap = None
+        cmap = None
+        # The connection's map, read only where an accept needs it (the read
+        # walks wire.jsonl; 127 of them cost half a minute). None fails §8's
+        # home checks by name, never silently.
+        if any(d == "s2c" and op == ACCEPT for _t, d, op, _v in merged):
+            try:
+                cmap = tape.client_version(capdir, conn)["map_id"]
+            except tape.TapeError:
+                cmap = None
         for t, qid, own, batch in handins(merged):
             out["handins"].append((cap, gf, t, qid, own, batch))
         by_t = {}
