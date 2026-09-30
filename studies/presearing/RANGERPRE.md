@@ -135,7 +135,7 @@ Only the load-bearing shape of each is here; the design specs carry the byte-lev
 
 Order and the conflicts behind it are the critic's; D = desk-verifiable against the capture,
 L = needs a loopback client run. Status is kept here until each lands, then in PLAN-LOG.
-**2026-09-29: the eleven D steps landed** on branch `rangerpre`, each implemented in a lane
+**2026-09-29: the eleven D steps landed, then S14** on branch `rangerpre`, each implemented in a lane
 worktree and APPROVED by an independent reviewer who re-ran its tests and its
 fails-without-fix check (PLAN-LOG "RANGERPRE"). The commit named is each step's first; its
 review fixes follow it on the same lane.
@@ -155,7 +155,7 @@ review fixes follow it on the same lane.
 | RANGERPRE-S11 | MAXHP-2 | a held max-health modifier (the shield) moves the player's max | D | **landed** `0ed70713` |
 | RANGERPRE-S12 | ANIMAL | `anim` spawn, `anin` on first hit, fights back | L | open |
 | RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | **landed** `31112797` |
-| RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | open |
+| RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | **landed** `ce895d98` |
 | RANGERPRE-S15 | LOOT-1 | gold drop on kill, pickup, purse credit (straight walk) | L | open |
 | RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | open |
 | RANGERPRE-S17 | ROUTE-B | interact served ~75 u, with the stop/serve slack fixed | L | open |
@@ -180,6 +180,11 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
 - Retail's kill frame carries the quest-objective lines (`0x0054`, `0x0051`) before the death flags;
   ours after (n = 1, found in passing by the critic).
 - R4c-2a's "independent connections" needs a ruling (§1).
+- **Found by S14's reviewer, pre-existing:** `cast_tick` applies an attack skill's inflicted
+  condition without checking the hit's result, so a missed or blocked Sever Artery still bleeds
+  a fleshy foe (and, since S14, draws #1957 on a non-fleshy one). WIKI: the condition rides a
+  hit only. Its own item; the repro is in the S14 review. Also open: IMMUNE-3, the #1957
+  sentence on the ranged, area and burst sites (they refuse the condition silently).
 - The five test reds this capture caused (test_wearmap, test_adrenwire, test_movesync,
   test_routerbench, test_weaponcensus; test_npcdefs §8 would add two) are all confirming evidence
   breaking exact pins; the owner chose server diffs first, and they stay open.

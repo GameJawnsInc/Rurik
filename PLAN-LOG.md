@@ -57,7 +57,9 @@ S6 per-foe kill xp, the +5% seam Prophecies-scoped and off (`75629da9`); S7 the 
 (`22ef7cc3`); S9 the projectile hit test across/along the line of fire, fitted and labelled
 so (`55ce30e6`); S11 a held item's max-health modifier moves the player's max (`0ed70713`);
 S13 condition `[6]`/`[7]` effect words and the aura book keyed by (wearer, buff)
-(`31112797`). Each carries a known-bad revert flag. Open: S10, S12, S14-S21 (PLAN.md 8.1).
+(`31112797`); S14 non-fleshy creatures refuse Bleeding, Disease and Poison and the player
+hears #1957, with a tracked capture row for definition 1414 (`ce895d98`). Each carries a
+known-bad revert flag. Open: S10, S12, S15-S21 (PLAN.md 8.1).
 
 ### CASTAI-Z2, the Smiting Monks -- 2026-09-29 -- **the owner's live run scored (P1-P4 and P6 held, P5 failed 1 of 43); the Monk's hex class marker 19 and retail's regen-rate rounding SHIPPED; the tape's 6 suite reds repaired by 5 reviewed lanes**
 
