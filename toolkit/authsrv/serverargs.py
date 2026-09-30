@@ -2433,6 +2433,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "adds nothing to the player's maximum energy -- the pool "
                          "every run before 2026-09-18 had. The party row's typed "
                          "player_energy stays either way.")
+    ap.add_argument("--no-held-health", action="store_true",
+                    help="RANGERPRE-S11 REVERT: a held item's 564 word (+N maximum "
+                         "health, retail's shield 120 -> 135) adds nothing to the "
+                         "player's maximum, and an equip or a set switch sends no "
+                         "0x009F 42 -- the maximum every run before 2026-09-29 had.")
     ap.add_argument("--no-projectiles", action="store_true",
                     help="land a bow's, wand's or staff's word at the swing's WINDUP "
                          "from melee reach, with no 0x00A4 / 0x00A7 -- every run "

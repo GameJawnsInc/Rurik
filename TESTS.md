@@ -8329,6 +8329,45 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   goes red. 18 checks, floor 18, from the green run on this machine; a bare machine runs
   §3's 3 and declares §1 / §2 skipped (the load needs the overlay's attribute rows, as
   `test_secondary`'s drives do). Read-only on the vault; no client. ~10 s),
+  `toolkit/authsrv/test_maxdeclare.py` (**2026-09-29, RANGERPRE-S11 (MAXHP-2) — a held
+  item's 564 word (+N maximum health, `combatmath.HEALTH_MODIFIER`) moves the player's
+  0x009F 42**, `studies/presearing/RANGERPRE.md`. Retail's shield (item 696, 564 arg 15)
+  took the Ranger from 120 to 135 in its equip batch; ours had no equipment term in
+  `player_max_health` and sent the planned item batch alone. §1 RETAIL, vault-gated on
+  capture `20260929T150923` (the live root absent is a declared skip; present without this
+  capture is a FAIL): 11 game connections, origin live, all decoding closed; on :56064 the
+  c2s 0x0030 [696] answered at t=932.526 by exactly 0x014B [2, 696, 5, 1], 0x006F [9, 1,
+  696], 0x009F [42, 9, 135] (the closing 0x001E tick aside) — the 42 LAST; item 696's
+  0x0161 words, from which the server's own `item_word` reads 564 arg 15, the exact rise
+  from the connection's earlier 120; NEGATIVE CONTROL — the sword 697 (no 564) equipped at
+  930.405, answered at 930.441 by exactly 0x0152 [2, 698, 697], 0x006F [9, 0, 697]; every
+  load after the equip declares 135 (3 of 3) and every load before 100 or 120 (8 of 8).
+  §2 OURS (the tracked starter_sword / starter_shield rows; the shield given retail's
+  0x23480F00 by a patched `agents.item_template` for the drive): `held_health_bonus` 15 on
+  `player_max_health` and nothing on `player_full_max_health` (land_swing's blow); VACUITY,
+  the content shield carries no 564; `held_max_moved` sends one 42, moves a seeded book by
+  the signed delta, seeds a fresh one once, and sends nothing on a zero delta; the REAL
+  `handle_equip_item` in a field sends 0x014B, 0x006F, then [42, player, base+15] with
+  health following; the drag back out declares base again (RECONSTRUCTION, no retail
+  unequip of a 564 item); NEGATIVE CONTROL, the plain shield's equip sends the planned two;
+  KNOWN-BAD ARM `--no-held-health`, the 564 shield's equip sends the two and moves nothing;
+  `select_weapon_set` onto the 564 shield ends with [42, player, base+15] in the batch it
+  returns (after the energy pair, INFERRED) and back with [42, player, base], the plain
+  shield's switch none; the real `_handle_request_players` burst after the dress declares
+  base+15 with the 564 shield in set 0 and base with the plain one (needs the overlay's
+  attribute rows, as `test_skillloadorder`'s drive does; a declared skip without them).
+  §3 SOURCE: the bonus a term of `player_max_health` only; `held_max_moved` once in
+  `_item_moves_commit` after `_item_hands_mirror` with the bonus read before the batch, and
+  once in `select_weapon_set` through `_send` after the energy pair with the bonus read
+  before the hands change; `HELD_HEALTH` True at module level; `--no-held-health` parsing
+  through `serverargs.build_parser` and `main()` setting the global False under it. With
+  the three code hunks reverted (the bonus term, the two `held_max_moved` calls), 10 of 20
+  go red: §2's bonus, both `held_max_moved` checks, the equip, the drag-out, the switch and
+  the load, and §3's three locks; each hunk alone reddens its own (term 7, equip 3, switch
+  2), while §1, the negative controls and the KNOWN-BAD arm stay green. 20 checks, floor 20, from the green run on this
+  machine; a bare machine runs 14 and declares §1 and the load's check skipped, under the
+  floor on purpose. MAXHP-1 (an NPC's maximum on the player's first landed hit) is a later
+  step and not pinned here. Read-only on the vault; no client. ~15 s),
   `toolkit/authsrv/test_recharge.py` (**2026-09-28, CASTAI-Z1: §2 went red on the
   Zaishen tape, 3 of 19 (the six, P3 AS WRITTEN, the six pooled). The pinned numbers are
   scored as of the pin (`rechargeprobe.upto`, stamps before 20260928T103123): the six

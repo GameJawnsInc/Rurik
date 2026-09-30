@@ -3078,6 +3078,7 @@ def select_weapon_set(send, state, k, conn_id):
     s = WEAPON_SETS[k]
     player_pools(state)
     old_max_energy = player_max_energy(state)
+    _held_hp = held_health_bonus(state)          # RANGERPRE-S11: the hands' 564, before
     old_base = WEAPON_ATTACK_SPEED
     agents.PLAYER_OFFHAND = None
     # DESKWORK-D1 step 8 (the fix pass, ENG-B4): the swing model follows WHAT
@@ -3130,6 +3131,11 @@ def select_weapon_set(send, state, k, conn_id):
                _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43,
                                           agents.PLAYER_ENERGY, new_max_energy))],
               "energy regeneration, rescaled to the new pool [WEAPONS-W9]")
+    # RANGERPRE-S11: a set whose 564 differs moves the health maximum too, after
+    # the energy pair -- the morale batch's 41, 43, 42 order. INFERRED: the
+    # equip's 42 is OBSERVED (:56064 t=932.526), but no switch on any tape
+    # moved a 564 item (the design lane's census: 15 switches, no 564, no 42).
+    held_max_moved(_send, state, held_health_bonus(state) - _held_hp, f"weapon set {k}")
     print(f"[c{conn_id}] weapon set {old} -> {k}: {', '.join(changed)}; "
           f"{len(out)} messages [WEAPONS-W9]", flush=True)
     return out
@@ -27066,11 +27072,71 @@ def player_full_max_health(state):
 
 
 def player_max_health(state):
-    """Maximum health as the client should currently see it -- morale, and a
-    live Deep Wound's reduction, because that is the number the client holds
-    after our own `0x009F 42` and every wire fraction divides by it."""
-    return (player_full_max_health(state)
+    """Maximum health as the client should currently see it -- morale, a held
+    item's 564 (RANGERPRE-S11) and a live Deep Wound's reduction, because that
+    is the number the client holds after our own `0x009F 42` and every wire
+    fraction divides by it."""
+    return (player_full_max_health(state) + held_health_bonus(state)
             - float((state.get("deep_wound") or {}).get(PLAYER_AGENT_ID, 0)))
+
+
+# ---- RANGERPRE-S11 (MAXHP-2, 2026-09-29): A HELD ITEM'S MAXIMUM HEALTH -------
+#
+# OBSERVED n=1 (20260929T150923 :56064): the pre-Searing shield, item 696,
+# carries 564 arg 15 (combatmath.HEALTH_MODIFIER), and its equip at t=932.489
+# was answered at 932.526 by exactly [0x014B [2, 696, 5, 1], 0x006F [9, 1,
+# 696], 0x009F [42, 9, 135]] -- the player's maximum from the load's 120 to
+# 135, the 42 LAST and nothing else (no fraction, no regen: the client moves
+# its own current health by the delta, agents.PROP_HEALTH_MAX). The sword the
+# same connection equipped two seconds earlier (697, no 564) drew no 42, and
+# so did the corpus's other 9 equips and 15 set switches (the design lane's
+# census; none of the items they moved carried 564). Later loads holding
+# the shield declare 135 (:53753 994.024, :53756 998.208, :59427 1217.429),
+# which the load's 42 does through player_max_health.
+#
+# Kept OUT of player_full_max_health: land_swing scales the enemy's blow from
+# that, and a shield must not grow the blow. Morale scales the base only, the
+# way morale.effective_max treats a rune. --no-held-health is the control:
+# the maximum every run before today had.
+HELD_HEALTH = True               # --no-held-health reverts
+
+
+def held_health_bonus(state=None):
+    """The maximum health the HELD set adds: the 564 word on the lead item and
+    on the off hand -- 0 with the feature off, nothing held (--no-weapon), or
+    no 564 on either (every content item today)."""
+    if not (HELD_HEALTH and EQUIP_WEAPON):
+        return 0
+    total = 0
+    for item in (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND):
+        found = item_word(item, combatmath.HEALTH_MODIFIER)
+        if found is not None:
+            total += int(found[0])
+    return total
+
+
+def held_max_moved(send, state, delta, why):
+    """A hand change moved held_health_bonus by `delta`: the player's 42, and
+    current health by the same delta -- the client's own `health += (new_max -
+    old_max)` (agents.PROP_HEALTH_MAX), so the two books stay one number.
+    Nothing is sent for a zero delta, which is every hand change of an item
+    without 564 (retail's 24 negative controls).
+
+    THE DELTA IS SIGNED AND UNCLAMPED, deep_wound_open's precedent: taking a
+    564 item off below its bonus leaves the books at or under zero, as the
+    client's signed store does. RECONSTRUCTION -- retail's unequip of a 564
+    item is NOT FOUND on any tape. push_morale clamps a shrinking pool at
+    max(1, max) instead; the two paths disagree on purpose until a tape
+    decides the unequip."""
+    if not delta:
+        return False
+    had = "player_health" in state
+    player_pools(state)          # a fresh book seeds at the NEW maximum already
+    if had:
+        state["player_health"] = float(state["player_health"]) + delta
+    declare_player_max(send, state, f"maximum health {int(player_max_health(state))} "
+                                    f"({delta:+d}, {why}) [RANGERPRE-S11]", force=True)
+    return True
 
 
 # ---- WEAPONS-W5 (2026-09-18): A STAFF'S OR A FOCUS'S ENERGY -----------------
@@ -30658,6 +30724,7 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     and the store current, and mirror the hands."""
     items = state["items"]
     before = itemstore.hand_items(items, EQUIPPED_BAG_ID)
+    _held_hp = held_health_bonus(state)         # RANGERPRE-S11: the hands' 564, before
     # Every consumer of the item batch passes here, so the display mode
     # gates the batch's 0x006F ONCE (visible_slot_writes; the fix pass). The
     # count below is what the gate RETURNED, not what was planned (the
@@ -30681,6 +30748,11 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
             if row["bag"] == BACKPACK_BAG_ID:
                 held[row["slot"]] = iid
     _item_hands_mirror(state, conn_id, before)
+    # RANGERPRE-S11: a 564 item entering or leaving the hands moves the maximum,
+    # the batch's LAST message (retail's shield equip, :56064 t=932.526). Gated
+    # on the BONUS changing, never on declare_player_max's tracker, so a hand
+    # change of an item without 564 sends exactly the planned batch.
+    held_max_moved(send, state, held_health_bonus(state) - _held_hp, what)
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
@@ -45006,6 +45078,11 @@ def main():
         WEAPON_ENERGY = False
         print("ENERGY: --no-weapon-energy -- a held staff or focus adds nothing to "
               "the pool [WEAPONS-W5 revert]", flush=True)
+    if a.no_held_health:
+        global HELD_HEALTH
+        HELD_HEALTH = False
+        print("HEALTH: --no-held-health -- a held item's 564 adds nothing to the "
+              "maximum and a hand change sends no 42 [RANGERPRE-S11 revert]", flush=True)
     if a.no_typed_armour:
         global TYPED_ARMOUR
         TYPED_ARMOUR = False
