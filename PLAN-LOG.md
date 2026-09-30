@@ -28,6 +28,28 @@ move back.
 
 ---
 
+### REVIVE-HEAL, the player's re-run -- 2026-09-30 -- **n = 15: every rise is retail's seven messages, 0 complaints, and the client's HUD agrees with the server's book in every frame**
+
+`20260930T174443`: `--enemy --no-enemy-skills --enemy-hit 0.35`, with no weapon, since
+`--enemy-weapon` had replaced the hit fraction on the n = 1 run below. No input past Play,
+owner hands off, questions registered before launch. Main at `1a833961`.
+- **Q1, the wire, held:** 15 deaths and 15 rises in 200 s. All 15 were status, `[43]`,
+  `[8, me, 0]`, `[52]`, `[54]`, `0x00A2 [55, me, 1.0]`, flags 5, in that order (checked by
+  label). No deferred refill and no maximum re-sent. `PASS`, and the store hash is unchanged.
+- **Q2, the complaint, held:** 0 `Test Warrior: Health non-zero on resurrect` in 15. The same
+  exe logged 13 of 13 for the old burst (`20260813T200814`). The `Error:` channel was live
+  (the credentials line).
+- **Q3, the pools, held:** after every rise the server's book went 100 → 55 → 10 → 0, three
+  hits from a full pool. The HUD agreed in all 5 frames that caught the player alive (100/25
+  twice, 55/25 twice, 10/25 once, energy full with regen arrows). The other 15 frames read
+  0/0 while dead. No frame showed a living player on an empty bar.
+- **Q4, the cycle: my number was wrong, the check held.**
+  - **What I got wrong:** I registered 24-30 s, assuming a 14 s grace delays the next death.
+    It does not. `morale.death_is_free` only waives the morale cost of a death inside it.
+  - **What I observed:** death → rise 10.0 s, and rise → death 3.2 s, which is three hits.
+  - **Why that clears the rise:** a rise that failed to refill would die on the first hit,
+    and none did.
+
 ### REVIVE-HEAL, the player's half -- 2026-09-30 -- **the player's rise is retail's one segment (status, `[43]`, `[8, me, 0]`, `[52]`, `[54]`, `0x00A2 [55, me, 1.0]`, flags 5). Landed and run at n = 1: 0 complaints, both pools full 0.1 s after the rise**
 
 **Retail:** 25 player rises on the live corpus.

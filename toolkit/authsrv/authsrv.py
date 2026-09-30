@@ -14598,6 +14598,12 @@ REVIVE_HEAL_GAIN = True   # --no-revive-heal-gain reverts
 #     health 10 -> 0 at the death, then 100 and energy 25 with its regen arrows
 #     0.1 s after the rise, and 89 on the next swings. A point estimate: the
 #     NPC's 0 of 5 is the n that carries it.
+#   * RE-RUN, 20260930T174443 (--enemy-hit 0.35 and NO weapon), n = 15: all 15
+#     rises were the seven messages in retail's order, 0 complaints, and no
+#     deferred refill. After every rise the server's book went 100 -> 55 -> 10
+#     -> 0, three hits from a full pool. The client HUD agreed in every frame
+#     that caught the player alive (100/25 twice, 55/25 twice, 10/25 once,
+#     energy full with regen), and in none was the player alive on an empty bar.
 # --no-player-revive-heal-gain restores the defer.
 PLAYER_REVIVE_HEAL_GAIN = True   # --no-player-revive-heal-gain reverts
 

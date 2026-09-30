@@ -710,3 +710,10 @@ flags 5. That is 24 of 25 live rises, and the 25th is the flags alone.
   rise, from 0/0 while dead.
 - **Why n = 1:** `--enemy-weapon` replaced the hit fraction with the weapon's 1-2 per swing,
   so a death took 200 s. The re-run without it is registered in `PLAN.md` §8.1.
+
+**The player's re-run, 2026-09-30 [OBSERVED, n = 15].** `20260930T174443` (`--enemy-hit 0.35`, no weapon):
+- **The wire:** 15 rises, all retail's seven messages in order.
+- **The complaint:** 0 `Health non-zero on resurrect`.
+- **The pools:** the server's book went 100 → 55 → 10 → 0 after every rise, and the client's HUD agreed in every frame that caught the player alive.
+- **So the player's rise closes like the NPC's:** the in-segment gain lands without the complaint the `[34]` setter drew.
+- **Left:** a party body's rise (`revive_party_body`), which still uses the setter.
