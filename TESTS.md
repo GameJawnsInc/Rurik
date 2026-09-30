@@ -3414,7 +3414,25 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
   `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
   adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
-  `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S5 (QUESTFLOW-H1): quest
+  `toolkit/authsrv/test_questflow.py` (**2026-09-29, RANGERPRE-S8 (QUESTFLOW-H3): the
+  quest-complete visual -- the message right after a hand-in's closing `0x004A` is `0x009F
+  [20, own agent, 7]`, OBSERVED on 22 of 22 live hand-ins; what 7 draws is UNREAD. The
+  predicate `visual_after_unlist` spells 0x009F / 20 / 7 as the tape's numbers, never our
+  constants. §3 OURS (bare): `turn_in_quest` ends `0x004A [1463]`, `0x009F [20,
+  PLAYER_AGENT_ID, 7]`, one such line, under both `--no-reward-in-frame` arms (in pass 1's
+  order it sits ahead of the reward); KNOWN-BAD `--no-quest-complete-visual` sends none, ends
+  on the `0x004A` and reddens the predicate; VACUITY (seven near misses refused, the exact
+  shape accepted); the flag parses and `main()` flips `QUEST_COMPLETE_VISUAL`. §4 THE TAPE
+  20260929T150923 (vault-gated): all 11 connections decode; its nine hand-ins pinned by port,
+  batch t and qid (q80 222 86 54 62 75 79 89 1462) and 9 of 9 satisfying the predicate, own =
+  the batch's `0x009C` agent; 11 `[20, x, 7]` in all, the other two on OTHER players' agents
+  (:59427 265 at 1251.088, 285 at 1278.037) and none on the own agent outside a hand-in; OURS
+  vs TAPE :55934 q86's tail equal, the flag off unequal; sabotaged tapes (the line dropped, or
+  moved ahead of the `0x004A`) red. §5 THE CORPUS (vault-gated, `live_connections(set_aside=)`
+  with `capgaps.audit`): every undeclared connection decodes (127 of 127, 1 set aside), and the
+  predicate holds on all 22 hand-ins (floor 22), 20 with a `0x009C` (floor 20; on the two with
+  none -- 20260817T231139 q361 / q363, which pay nothing -- the shape is checked, not the agent). Floor 9 → 15 from the bare green run (40 vaulted, ~11
+  s).** **2026-09-29, RANGERPRE-S5 (QUESTFLOW-H1): quest
   accept and hand-in shapes, one section per landed part** -- studies/presearing/RANGERPRE.md.
   §1 OURS (bare): `grant_quest_reward` for {250 xp, 25 gold, skill 394} is `0x00EE [0, 250]`,
   `0x0140`, THEN `0x00DC` / `0x00D9` / `0x001C`; `turn_in_quest` keeps the skills inside the

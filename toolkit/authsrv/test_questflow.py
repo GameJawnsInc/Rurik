@@ -18,6 +18,24 @@ WHAT THIS CHECKS:
          for :55934's own row equals that batch op for op on the reduced kinds
          (skill ids and bar slots included, the tape's doubled 0x0052
          collapsed); a sabotaged tape reddens the predicate.
+  * RANGERPRE-S8 (QUESTFLOW-H3), THE QUEST-COMPLETE VISUAL. The message right
+    after a hand-in's closing 0x004A is 0x009F [20, the player's own agent, 7]
+    -- OBSERVED on 22 of 22 hand-ins in the live corpus (2026-09-29). Ours sent
+    nothing there until S8; --no-quest-complete-visual is that, kept as the
+    KNOWN-BAD arm. The predicate spells 0x009F, 20 and 7 as the tape's own
+    numbers, not as our constants, so a wrong constant reddens it too.
+      §3 (bare): turn_in_quest ends 0x004A, 0x009F [20, PLAYER_AGENT_ID, 7]
+         under both --no-reward-in-frame arms; the flag off sends no such line
+         and fails the predicate; the predicate refuses the near misses; the
+         flag parses and main() flips it.
+      §4 (vault-gated on 20260929T150923): its 9 hand-ins, pinned by qid,
+         satisfy the predicate with own = the batch's 0x009C agent; no [20,
+         own, 7] reaches the own agent outside a hand-in; OURS vs TAPE for
+         :55934 q86's tail; sabotaged tapes (the line dropped, or moved ahead
+         of the 0x004A) are red.
+      §5 (vault-gated, the live corpus): at least 22 hand-ins and 20 with a
+         0x009C, the predicate on every one; every connection not declared
+         gapped decodes, and the set-aside is capgaps.KNOWN_GAPPED.
 
 Nothing binds a port, launches a client, or touches vault/state.
 """
@@ -34,10 +52,11 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 9 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks. §2 adds 15 with the four captures present (24) and declares one
-# LEDGER.skip per absent capture. Set from the run, never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=9)
+# Floor 15 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
+# nine checks and §3's six. §2 adds 15 with the four captures present, §4 7 and
+# §5 3 (40 in all), each declaring a LEDGER.skip for what is absent. Set from
+# the run, never above it.
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=15)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -267,9 +286,260 @@ def section_2():
                "the predicate", f"{reduce_batch(sab)}")
 
 
+VIS = authsrv.GAME_SMSG_AGENT_GENERIC_VALUE             # 0x009F
+# The hand-ins of 20260929T150923 (client port, batch t, qid), OBSERVED with
+# livewire.decode_conn: every s2c batch holding both a 0x0052 and a 0x004A.
+TAPE_S8 = "20260929T150923"
+HANDINS_S8 = {("53756", 1190.2370, 75), ("53880", 727.4875, 62),
+              ("55934", 231.0014, 222), ("55934", 293.8090, 86),
+              ("55934", 627.3734, 54), ("59427", 1244.1502, 79),
+              ("59427", 1250.0757, 89), ("59427", 1279.4083, 1462),
+              ("59969", 207.6762, 80)}
+
+
+def visual_after_unlist(seq, own):
+    """The tape's rule, 22 of 22: the message right after the LAST 0x004A is
+    0x009F [20, own, 7]. `seq` is [(op, values)], the values read from the END
+    (the tape's carry a header field in front). The numbers are the tape's --
+    0x009F, 20, 7 -- never our constants, so this can refute them."""
+    ops = [op for op, _v in seq]
+    if UNLIST not in ops:
+        return False
+    k = max(i for i, op in enumerate(ops) if op == UNLIST)
+    if k + 1 >= len(seq):
+        return False
+    op, v = seq[k + 1]
+    return op == 0x009F and len(v) >= 3 and list(v[-3:]) == [20, own, 7]
+
+
+def is_v7(op, v):
+    return op == 0x009F and len(v) >= 3 and v[-3] == 20 and v[-1] == 7
+
+
+def ours_seq(row, visual=True, frame=True):
+    """OUR raw turn_in_quest batch [(op, values)]; flags restored."""
+    saved = (authsrv.QUEST_COMPLETE_VISUAL, authsrv.REWARD_IN_FRAME,
+             list(authsrv.SKILLBAR))
+    authsrv.QUEST_COMPLETE_VISUAL = visual
+    authsrv.REWARD_IN_FRAME = frame
+    authsrv.SKILLBAR[:] = [0] * authsrv.SKILLBAR_SLOTS
+    sent, send = collect()
+    try:
+        authsrv.turn_in_quest(send, fresh_state(quests={1463}), 1463, row, 0)
+    finally:
+        (authsrv.QUEST_COMPLETE_VISUAL, authsrv.REWARD_IN_FRAME) = saved[:2]
+        authsrv.SKILLBAR[:] = saved[2]
+    return sent
+
+
+def handins(merged):
+    """[(t, qid, own, batch)] -- each s2c batch holding a 0x0052 and a 0x004A,
+    batch = [(op, values)] in wire order, own = its 0x009C agent (the 75-XP
+    tick names the player) or None."""
+    by_t = {}
+    for t, d, op, v in merged:
+        if d == "s2c":
+            by_t.setdefault(t, []).append((op, v))
+    out = []
+    for t, batch in sorted(by_t.items()):
+        ops = [op for op, _v in batch]
+        if REMOVE in ops and UNLIST in ops:
+            own = next((v[-2] for op, v in batch if op == 0x009C), None)
+            qid = [v for op, v in batch if op == UNLIST][-1][-1]
+            out.append((t, qid, own, batch))
+    return out
+
+
+def section_3():
+    print("\n3. RANGERPRE-S8 (QUESTFLOW-H3): OURS -- 0x009F [20, own, 7] right "
+          "after the 0x004A")
+    row = {"reward_experience": 250, "reward_gold": 25}
+    own = authsrv.PLAYER_AGENT_ID
+    seq = ours_seq(row)
+    led.ok(seq[-2:] == [(UNLIST, [1463]), (0x009F, [20, own, 7])]
+           and sum(is_v7(op, v) for op, v in seq) == 1,
+           "turn_in_quest ends 0x004A [1463], 0x009F [20, PLAYER_AGENT_ID, 7] "
+           "-- one visual line, the batch's last", f"{seq}")
+    led.ok(visual_after_unlist(seq, own),
+           "and the predicate holds on it", f"{seq[-2:]}")
+    seq_p1 = ours_seq(row, frame=False)
+    kinds_p1 = [op for op, _v in seq_p1]
+    led.ok(visual_after_unlist(seq_p1, own)
+           and kinds_p1.index(UNLIST) < kinds_p1.index(XP),
+           "--no-reward-in-frame (the reward after the 0x004A) keeps the "
+           "visual IMMEDIATELY after the 0x004A, ahead of the reward",
+           f"{[hex(o) for o in kinds_p1]}")
+    # KNOWN-BAD: the pre-S8 batch.
+    bad = ours_seq(row, visual=False)
+    led.ok(not any(is_v7(op, v) for op, v in bad) and bad[-1][0] == UNLIST
+           and not visual_after_unlist(bad, own),
+           "KNOWN-BAD arm (--no-quest-complete-visual): no [20, x, 7] at all, "
+           "the batch ends on the 0x004A as before S8, and the predicate goes "
+           "RED", f"{[hex(o) for o, _v in bad]}")
+    # VACUITY: the predicate refuses each near miss.
+    tail = [(REMOVE, [1]), (UNLIST, [1])]
+    misses = {
+        "no 0x004A": [(REMOVE, [1]), (0x009F, [20, own, 7])],
+        "nothing after it": tail,
+        "another agent": tail + [(0x009F, [20, own + 1, 7])],
+        "another visual": tail + [(0x009F, [20, own, 6])],
+        "another value id": tail + [(0x009F, [21, own, 7])],
+        "the 0x00A0 op": tail + [(0x00A0, [20, own, 7])],
+        "ahead of the 0x004A": [(REMOVE, [1]), (0x009F, [20, own, 7]),
+                                (UNLIST, [1])],
+    }
+    red = {k: visual_after_unlist(s, own) for k, s in misses.items()}
+    led.ok(not any(red.values())
+           and visual_after_unlist(tail + [(0x009F, [20, own, 7])], own),
+           "VACUITY: the predicate refuses every near miss (no 0x004A, nothing "
+           "after it, another agent / visual / value id / op, the line ahead "
+           "of the 0x004A) and accepts the exact shape", f"{red}")
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.no_quest_complete_visual:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--no-quest-complete-visual"]).no_quest_complete_visual
+           and not ap.parse_args([]).no_quest_complete_visual
+           and authsrv.QUEST_COMPLETE_VISUAL is True
+           and "global QUEST_COMPLETE_VISUAL\n" in window
+           and "QUEST_COMPLETE_VISUAL = False\n" in window,
+           "--no-quest-complete-visual parses, the default sends the visual, "
+           "and main() sets QUEST_COMPLETE_VISUAL = False under it",
+           f"window found={at >= 0}")
+
+
+def section_4():
+    print(f"\n4. RANGERPRE-S8 (QUESTFLOW-H3): the TAPE {TAPE_S8} -- its nine "
+          "hand-ins")
+    import livewire
+    capdir = vaultpath.vault_path("captures", "live", TAPE_S8)
+    if not os.path.isdir(capdir):
+        led.skip(f"the tape {TAPE_S8}", f"no {capdir} (bare machine)")
+        return
+    files = livewire.connections(capdir)
+    found, v7, all_ok = [], [], True
+    for gf in files:
+        port = gf.split("_")[1].split("-")[0]
+        _conn, merged, ok = livewire.decode_conn(capdir, gf)
+        all_ok = all_ok and ok
+        for t, qid, own, batch in handins(merged):
+            found.append((port, round(t, 4), qid, own, batch))
+        v7 += [(port, round(t, 4), v[-2]) for t, d, op, v in merged
+               if d == "s2c" and is_v7(op, v)]
+    led.ok(all_ok and len(files) == 11,
+           f"TAPE {TAPE_S8}: all 11 game connections decode to the last byte",
+           f"{len(files)} files, ok={all_ok}")
+    got = {(p, t, q) for p, t, q, _o, _b in found}
+    led.ok(got == HANDINS_S8 and len(found) == 9,
+           "TAPE: exactly the nine hand-ins, pinned by port, batch t and qid "
+           "(q80 222 86 54 62 75 79 89 1462)", f"{sorted(got ^ HANDINS_S8)}")
+    good = [(p, t, q) for p, t, q, own, b in found
+            if own is not None and visual_after_unlist(b, own)]
+    led.ok(len(good) == 9,
+           "TAPE: 9 of 9 -- the message right after the last 0x004A is 0x009F "
+           "[20, own, 7], own being the batch's own 0x009C agent",
+           f"{len(good)} of {len(found)}: "
+           f"{[(p, t, q, o) for p, t, q, o, _b in found if (p, t, q) not in good]}")
+    own_of = {(p, t): o for p, t, _q, o, _b in found}
+    on_own = {(p, t) for p, t, a in v7 if own_of.get((p, t)) == a}
+    strangers = sorted((p, t, a) for p, t, a in v7 if (p, t) not in on_own)
+    led.ok(len(v7) == 11 and on_own == set(own_of)
+           and strangers == [("59427", 1251.088, 265), ("59427", 1278.0374, 285)],
+           "TAPE: 11 [20, x, 7] in all -- the 9 hand-ins' own lines and 2 on "
+           "OTHER players' agents (:59427 265, 285); none reaches the own agent "
+           "outside a hand-in", f"{v7}")
+    # OURS vs TAPE: :55934 q86, the tail from the closing 0x004A (the agent is
+    # each side's own, so it is compared as "own", not as a number).
+    tape_own, tape_b = next(((o, b) for p, t, q, o, b in found
+                             if (p, q) == ("55934", 86)), (None, None))
+    if tape_b is None:
+        led.ok(False, "TAPE: :55934 q86's hand-in batch is on the tape",
+               f"{sorted(got)}")
+        return
+
+    def tail(seq, own):
+        ops = [op for op, _v in seq]
+        k = max(i for i, op in enumerate(ops) if op == UNLIST)
+        return [(op, ["own" if x == own else x for x in v[-3:]])
+                for op, v in seq[k:k + 2]]
+    row = {"reward_experience": 500, "reward_gold": 25,
+           "reward_skills": [394, 446]}
+    t_tape = tail(tape_b, tape_own)
+    t_ours = tail(ours_seq(row), authsrv.PLAYER_AGENT_ID)
+    t_bad = tail(ours_seq(row, visual=False), authsrv.PLAYER_AGENT_ID)
+    led.ok([(op, v[-1:]) for op, v in t_tape[:1]] == [(UNLIST, [86])]
+           and t_ours[1:] == t_tape[1:] == [(0x009F, [20, "own", 7])],
+           "OURS vs TAPE :55934 293.809 q86: after the 0x004A both send 0x009F "
+           "[20, own, 7]", f"ours {t_ours} tape {t_tape}")
+    led.ok(t_bad[1:] != t_tape[1:],
+           "KNOWN-BAD: --no-quest-complete-visual does NOT equal the tape",
+           f"{t_bad}")
+    # SABOTAGE: the line dropped, and the line moved ahead of the 0x004A.
+    vi = next(i for i, (op, v) in enumerate(tape_b) if is_v7(op, v))
+    ui = max(i for i, (op, _v) in enumerate(tape_b) if op == UNLIST)
+    dropped = tape_b[:vi] + tape_b[vi + 1:]
+    moved = list(tape_b)
+    moved.insert(ui, moved.pop(vi))
+    led.ok(not visual_after_unlist(dropped, tape_own)
+           and not visual_after_unlist(moved, tape_own),
+           "KNOWN-BAD: a sabotaged tape -- the line dropped, or moved ahead of "
+           "the 0x004A -- FAILS the predicate")
+
+
+def section_5():
+    print("\n5. RANGERPRE-S8 (QUESTFLOW-H3): the live CORPUS -- every hand-in")
+    import livewire
+    import capgaps
+    root = vaultpath.vault_path("captures", "live")
+    aside = []
+    conns = (list(livewire.live_connections(set_aside=aside))
+             if os.path.isdir(root) else [])
+    if not conns:
+        led.skip("section 5, the live corpus", f"no live captures under {root}")
+        return
+    decoded, n, n_own, bad = 0, 0, 0, []
+    for capdir, gf in conns:
+        _conn, merged, ok = livewire.decode_conn(capdir, gf)
+        decoded += 1 if ok else 0
+        for t, qid, own, batch in handins(merged):
+            n += 1
+            ops = [op for op, _v in batch]
+            k = max(i for i, op in enumerate(ops) if op == UNLIST)
+            nxt = batch[k + 1] if k + 1 < len(batch) else None
+            if own is not None:
+                n_own += 1
+                fine = visual_after_unlist(batch, own)
+            else:       # no 0x009C to name own: the shape, whoever it lands on
+                fine = nxt is not None and is_v7(*nxt)
+            if not fine:
+                bad.append((os.path.basename(capdir), gf, round(t, 4), qid,
+                            own, nxt))
+    led.ok(decoded == len(conns),
+           f"every live connection its manifest does not declare gapped decoded "
+           f"({decoded} of {len(conns)}, {len(aside)} set aside)")
+    gap_ok, gap_detail = capgaps.audit(
+        aside, [d for d, _w in livewire.live_captures()], livewire.refuses)
+    led.ok(gap_ok, "and the connections set aside are EXACTLY the known "
+           "declared gaps, each still refused", gap_detail)
+    led.ok(n >= 22 and n_own >= 20 and not bad,
+           f"CORPUS: 0x009F [20, x, 7] right after the last 0x004A on {n - len(bad)} "
+           f"of {n} hand-ins (floor 22), x = the batch's 0x009C agent on "
+           f"{n_own} (floor 20)", f"{bad}")
+
+
 def main():
     section_1()
     section_2()
+    section_3()
+    section_4()
+    section_5()
     return led.verdict()
 
 

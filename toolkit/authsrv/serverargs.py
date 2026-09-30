@@ -1039,6 +1039,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "hand-ins that grant skills (20260929T150923 :55934 "
                          "293.809 is 0x00EE [0,500], 0x0140 [2,25], then skills "
                          "394 and 446). KNOWN-BAD against the tape; for an A/B.")
+    ap.add_argument("--no-quest-complete-visual", action="store_true",
+                    help="THE REVERT ARM for RANGERPRE-S8's quest-complete "
+                         "visual: a hand-in sends no 0x009F [20, player, 7] "
+                         "after its closing 0x004A, as every run before this "
+                         "step. The default sends it right after the 0x004A "
+                         "(turn_in_quest) -- OBSERVED on 22 of 22 retail "
+                         "hand-ins, e.g. 20260929T150923 :55934 293.809 "
+                         "0x004A then 0x009F [20, 31, 7]; what visual 7 draws "
+                         "is UNREAD. KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

@@ -473,6 +473,12 @@ def turn_in_quest(send, state, qid, row, conn_id):
     hand-in-adjacent order NOT witnessed); --no-reward-in-frame restores that
     for an A/B. What is still not sent, and why, is grant_quest_reward's
     docstring.
+
+    THEN THE QUEST-COMPLETE VISUAL (RANGERPRE-S8, QUESTFLOW-H3): 0x009F [20,
+    own agent, 7] immediately after the 0x004A, on 22 of 22 retail hand-ins
+    (QUEST_COMPLETE_VISUAL_ID; what it draws is UNREAD). It follows the 0x004A
+    under either --no-reward-in-frame arm, so pass 1's order keeps it there too;
+    --no-quest-complete-visual drops it, as every run before S8.
     """
     send(GAME_SMSG_QUEST_REMOVE, [qid],
          f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
@@ -482,6 +488,12 @@ def turn_in_quest(send, state, qid, row, conn_id):
         grant_quest_reward(send, state, qid, row, conn_id)
     send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
          f"QUEST_REMOVE_AND_UNLIST[{qid}]")
+    if QUEST_COMPLETE_VISUAL:
+        send(GAME_SMSG_AGENT_GENERIC_VALUE,
+             [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID,
+              QUEST_COMPLETE_VISUAL_ID],
+             f"quest {qid} complete: visual {QUEST_COMPLETE_VISUAL_ID} on the "
+             f"player (RANGERPRE-S8, OBSERVED 22 of 22; its look UNREAD)")
     if not REWARD_IN_FRAME:
         grant_quest_reward(send, state, qid, row, conn_id)
 
@@ -11638,6 +11650,16 @@ NO_MARKER_POS = (float("inf"), float("inf"))
 
 GAME_SMSG_QUEST_REMOVE = 0x0052
 GAME_SMSG_QUEST_REMOVE_AND_UNLIST = 0x004A
+# THE QUEST-COMPLETE VISUAL (RANGERPRE-S8, QUESTFLOW-H3). The message right after
+# a hand-in's closing 0x004A is 0x009F [GV_EFFECT_ON_TARGET = 20, the player's own
+# agent, 7] -- OBSERVED on 22 of 22 hand-ins in the live corpus, the agent equal to
+# the batch's own 0x009C agent on all 20 that carry one; 9 of 9 in 20260929T150923
+# (:55934 293.809, q86: 0x0052, 0x004A, 0x009F [20, 31, 7]). WHAT 7 DRAWS IS
+# UNREAD. On that tape the other two [20, x, 7] land on OTHER players' agents
+# (:59427 1251.088 on 265, 1278.037 on 285) and none reaches the own agent outside
+# a hand-in, which reads as a visual everyone nearby sees -- UNVERIFIED on our
+# client. A wire constant, the same on every quest, so not a content column.
+QUEST_COMPLETE_VISUAL_ID = 7
 
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
@@ -12985,6 +13007,12 @@ QUEST_SKILLS_AFTER_GOLD = True  # False (--quest-skills-first): a hand-in's
                                # sends them after the gold 0x0140 -- retail's
                                # order on 4 of 4 skill-granting hand-ins
                                # (OBSERVED; 20260929T150923 :55934 293.809).
+QUEST_COMPLETE_VISUAL = True   # False (--no-quest-complete-visual): a hand-in
+                               # sends no 0x009F [20, own, 7] after its 0x004A,
+                               # as every run before RANGERPRE-S8. Default ON:
+                               # turn_in_quest sends it right after the 0x004A
+                               # -- retail's next message on 22 of 22 hand-ins
+                               # (OBSERVED; QUEST_COMPLETE_VISUAL_ID).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -39457,7 +39485,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # reward lines, then 0x004A -- retail's relative
                                 # order on 10 of 10 hand-ins (DESKWORK-D9 fix
                                 # pass; --no-reward-in-frame puts the reward
-                                # after 0x004A as SLICE-B5 and D9 pass 1 did).
+                                # after 0x004A as SLICE-B5 and D9 pass 1 did),
+                                # then 0x009F [20, own, 7] right after the
+                                # 0x004A (RANGERPRE-S8, 22 of 22).
                                 # The completion family (0x004E, 0x006C, 0x0096,
                                 # 0x0097, 0x00FB) is still 0 of the corpus and a
                                 # live hand-in uses none of it; the reward is the
@@ -43955,6 +43985,14 @@ def main():
               "BEFORE the experience 0x00EE, as every run before RANGERPRE-S5. "
               "KNOWN-BAD against the tape: retail sends them after the gold "
               "0x0140 on 4 of 4 skill-granting hand-ins (grant_quest_reward).",
+              flush=True)
+    if a.no_quest_complete_visual:
+        global QUEST_COMPLETE_VISUAL
+        QUEST_COMPLETE_VISUAL = False
+        print("[quests] --no-quest-complete-visual: a hand-in sends no 0x009F "
+              "[20, player, 7] after its 0x004A, as every run before "
+              "RANGERPRE-S8. KNOWN-BAD against the tape: retail sends it right "
+              "after the 0x004A on 22 of 22 hand-ins (turn_in_quest).",
               flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
