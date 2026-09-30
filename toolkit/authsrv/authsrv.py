@@ -29252,15 +29252,19 @@ def provoke_hostile(state, tid, attacker_id, conn_id):
 #   0x002B [161, 1.0, 1], 0x002A [161, <the player's point>, 0, 0, 31]
 # It was passive before (no 0x00A0 [4, 161, *] with the player within ~258 u),
 # swung 0.64 s later (0x0035 [161, 2.0, 1.0], then [4, 161, 31, 0] every
-# 2.0 s) and the client's c2s 0x00C1 [0, 0] at 565.1515 drew no reply. A
-# 'mon1' body's first hit carries none of 65 / 0x009B / 36 / 0x002F (agent 48
-# at 414.3195, agent 215 at 516.9892).
+# 2.0 s) and the client's c2s 0x00C1 [0, 0] at 565.1515 -- with a re-select
+# 0x00C1 [161, 0] at the same instant, 121 ms after the 0x002F -- drew no
+# reply. A 'mon1' body's first hit carries none of 65 / 0x009B / 36 / 0x002F
+# (agent 48 at 414.3195, agent 215 at 516.9892).
 #
 # OURS: the prelude from the declare site, the turn from the next tick's
 # first move or swing pass. What is RECONSTRUCTION: the split itself (retail's
 # server is not visible, only the tick between); a group-mate or a party-hit
-# turning with its whole burst on the next tick (no witness); a body that dies
-# before the turn keeps it pending (0x002F is never sent to a corpse).
+# turning with its whole burst on the next tick (no witness); a body IN REACH
+# at the hit (a melee player) swinging only after its 0x002F -- [.., 0x001E,
+# 0x002F, 0x002E, 0x00A0] (retail's witness is a ranged hit, which chases;
+# test_animaltoken 2j); a body that dies before the turn keeps it pending
+# (0x002F is never sent to a corpse).
 
 def animal_turn_prelude(send, agent_id, agent, why="the turn"):
     """The three messages retail sends ahead of a provoked animal's 42: prop

@@ -2900,15 +2900,20 @@ the word `[16, 161, 31, -0.3125]`, **`0x001E`**, then `0x002F [161, 'anin']`, `0
 [161, 1.0, 1]` and the `0x002A` naming the player — the connection's only `0x002F`. Then
 `0x0035 [161, 2.0, 1.0]` and an attack start every 2.0 s (7 gaps, median 2.0). A `'mon1'`
 body's first hit (agents 48 and 215) carries the 42 and the word and none of 65 / `0x009B`
-/ 36 / `0x002F`. The client's `0x00C1 [0, 0]` at 565.1515 drew no reply.
+/ 36 / `0x002F`. The client's `0x00C1 [0, 0]` at 565.1515 drew no reply. It came with a
+re-select, `0x00C1 [161, 0]`, at the same instant, 121 ms after the `0x002F` (whether the
+turn caused the re-select is UNVERIFIED).
 
 **Shipped** (`authsrv.send_due_tokens`, `animal_turn_prelude`; revert
 `--no-animal-token-flip`). A content row says `allegiance = "animal"`: the FOE CLASS stays
 `'mons'` (every predicate, AI tick and reward reads that) and the wire carries the team
 token — **RECONSTRUCTION**, the split is ours. The prelude rides the player's word from the
 maximum's declaration site, so it sits right before the 42; the turn waits for the next
-simulation tick and goes out ahead of the body's first chase order or swing. Unmodelled and
-named: `'aniv'`; the tutorial's `'ani'`+0x8F bodies, which are AGGRESSIVE (a corpus
+simulation tick and goes out ahead of the body's first chase order or swing. A body IN
+REACH at the hit (a melee player, inside the 92 u `enemy_reach()`) swings only after its
+turn — `[.., 0x001E, 0x002F, 0x002E, 0x00A0]`, `test_animaltoken` 2j — which is
+**RECONSTRUCTION**: retail's one witness is a ranged hit, which chases first. Unmodelled
+and named: `'aniv'`; the tutorial's `'ani'`+0x8F bodies, which are AGGRESSIVE (a corpus
 census at design time, not re-run for this entry: 20+ attack starts under the create
 token, 17 damaged with no `0x002F`), so
 passive-then-turn is OBSERVED for `'anim'` only; definition 1387's create-tick flip to

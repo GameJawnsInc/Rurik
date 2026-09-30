@@ -14,8 +14,9 @@ RETAIL_BURST: 0x009F [65, 161, 0], 0x009B (its name), 0x009F [36, 161, 1], 0x009
 161, 80], 0x00A3 [16, 161, 31, -0.3125], 0x001E, 0x002F [161, 'anin'], 0x002B [161, 1.0,
 1], 0x002A [161, <the player's point>, 0, 0, 31] -- the only 0x002F on the connection.
 Then 0x0035 [161, 2.0, 1.0] and an attack start every 2.0 s; the client's 0x00C1 [0, 0]
-at 565.1515 draws no reply. A 'mon1' body's first hit carries none of 65 / 0x009B / 36 /
-0x002F (agents 48 and 215). Ours could not spawn an 'anim' body at all.
+at 565.1515, and its re-select 0x00C1 [161, 0] at the same instant, draw no reply. A
+'mon1' body's first hit carries none of 65 / 0x009B / 36 / 0x002F (agents 48 and 215).
+Ours could not spawn an 'anim' body at all.
 
   * 0 CONTENT (bare machine): npc.animal_1343 -- definition 1343 as npcdefs compiles
     it -- builds retail's 0x0056 fields, and spawn.animal_probe names it as "animal".
@@ -26,7 +27,9 @@ at 565.1515 draws no reply. A 'mon1' body's first hit carries none of 65 / 0x009
     hostile control in one table, then the real hit_enemy, enemy_move_tick and
     enemy_attack_tick around one simulated 0x001E. The projection of what names the
     body is RETAIL_BURST EXACTLY, values included; a second hit turns nothing; it
-    swings on a 2.0 s interval; the player's armour-ignoring word turns it the same way.
+    swings on a 2.0 s interval; the player's armour-ignoring word turns it the same way;
+    and a body IN REACH at the hit (a melee player) does not swing until it has turned
+    (RECONSTRUCTION: retail's only witness is a ranged hit).
   * 3 CONTROLS: --no-animal-token-flip (the known-bad arm) projects [9F/42, A3/16,
     2B, 2A] and the comparator says so; a passive 'hostile' row gets none of the
     turn; a hostile's hit provokes nothing; an unhit turn (provoke alone) sends its
@@ -66,8 +69,9 @@ import content                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-30 on a machine with NO captures (RURIK_VAULT at an
-# empty directory; section 1 a declared skip): 22. With the vault: 32 (section 1's 10).
-LEDGER = checks.Ledger("charmable animal turn (RANGERPRE-S12)", floor=22)
+# empty directory; section 1 a declared skip): 23. With the vault: 33 (section 1's 10).
+# (22 / 32 until check 2j, the in-reach turn, was added in review.)
+LEDGER = checks.Ledger("charmable animal turn (RANGERPRE-S12)", floor=23)
 check = checks.adopt(LEDGER)
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -76,8 +80,10 @@ assert (ANIM, ANIN) == (0x616E696D, 0x616E696E)
 OP_DEF, OP_CREATE, OP_INT, OP_NAME, OP_WORD = 0x0056, 0x0020, 0x009F, 0x009B, 0x00A3
 OP_TICK, OP_TURN, OP_SPEED, OP_FOLLOW, OP_INTT, OP_ATKSPD = (0x001E, 0x002F, 0x002B,
                                                              0x002A, 0x00A0, 0x0035)
+OP_ROTATE = 0x002E
 assert (authsrv.GAME_SMSG_AGENT_UPDATE_ALLEGIANCE, authsrv.GAME_SMSG_AGENT_SET_NAME,
-        authsrv.GAME_SMSG_WORLD_SIMULATION_TICK) == (OP_TURN, OP_NAME, OP_TICK)
+        authsrv.GAME_SMSG_WORLD_SIMULATION_TICK,
+        authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION) == (OP_TURN, OP_NAME, OP_TICK, OP_ROTATE)
 
 # ---- retail's literals (OBSERVED; section 1 re-derives every one from the bytes) -------
 STAMP = "20260929T150923"
@@ -87,7 +93,8 @@ ANIMAL = 161
 DEFINITION = 1343
 MODEL_WORD = 0x2000053F                        # 536872255 = 0x20000000 | 1343
 DEF_T, TURN_T, SPEED_T = 503.515, 565.0302, 565.6669
-CANCEL_T = 565.1515                            # c2s 0x00C1 [0, 0], right after the turn
+# c2s 0x00C1 [0, 0] and the re-select 0x00C1 [161, 0] at one instant, 121 ms after the turn
+CANCEL_T = 565.1515
 ARROW_BITS = 3198156800                        # -0.3125 = 25 of 80
 MON1_FIRST_HITS = ((48, 414.3195), (215, 516.9892))
 RETAIL_BURST = ["9F/65", "9B", "9F/36", "9F/42", "A3/16", "1E", "2F", "2B", "2A"]
@@ -110,9 +117,10 @@ def token(op, v, aid):
         return f"A3/{f[0]}"
     if op == OP_INTT and len(f) >= 3 and aid in (f[1], f[2]):
         return f"A0/{f[0]}"
-    if op in (OP_NAME, OP_TURN, OP_SPEED, OP_FOLLOW, OP_ATKSPD) and f and f[0] == aid:
+    if (op in (OP_NAME, OP_TURN, OP_SPEED, OP_FOLLOW, OP_ATKSPD, OP_ROTATE)
+            and f and f[0] == aid):
         return {OP_NAME: "9B", OP_TURN: "2F", OP_SPEED: "2B", OP_FOLLOW: "2A",
-                OP_ATKSPD: "35"}[op]
+                OP_ATKSPD: "35", OP_ROTATE: "2E"}[op]
     if f and f[0] == aid:
         return f"{op:04X}"
     return None
@@ -264,19 +272,23 @@ def section_retail():
           "1f. the paired negative: agents 48 (414.3195) and 215 (516.9892), 'mon1', carry "
           "the 42 and the word on their first hit and none of 65 / 0x009B / 36 / 0x002F", bad)
 
-    # 1g. cancel-target on it draws no reply
+    # 1g. cancel-target on it draws no reply. The cancel is not alone: the client
+    # re-selects 161 at the same instant (0x00C1 [0, 0] then [161, 0]), 121 ms after
+    # the 0x002F -- OBSERVED n = 1; whether the turn caused it is UNVERIFIED.
     c2s = [(t, op, v) for t, c, op, v in cmsgstream.timed(STAMP, "c2s") if CONN in c]
     s2c = [(t, op, v) for t, c, op, v in cmsgstream.timed(STAMP, "s2c") if CONN in c]
     cancel = [t for t, op, v in c2s if op == 0x00C1 and v[1:] == [0, 0]
               and abs(t - CANCEL_T) <= 0.001]
+    reselect = [t for t, op, v in c2s if op == 0x00C1 and v[1:] == [ANIMAL, 0]
+                and abs(t - CANCEL_T) <= 0.001]
     replies = [(round(t2 - cancel[0], 3), op2) for t2, op2, _v in s2c
                if cancel and cancel[0] < t2 <= cancel[0] + 0.300 and op2 != OP_TICK]
     pressed = [v[1:] for t, op, v in c2s if op == 0x0027 and v[3] == ANIMAL and t < TURN_T]
-    check(len(cancel) == 1 and replies == [] and pressed,
-          "1g. the client's 0x00C1 [0, 0] at 565.1515 (after the turn) draws NO s2c within "
-          "300 ms but ticks; and before the turn it pressed an attack skill at the 'anim' "
-          "body (0x0027 naming 161) -- so 'anim' is attackable",
-          (cancel, replies, pressed[:2]))
+    check(len(cancel) == 1 and len(reselect) == 1 and replies == [] and pressed,
+          "1g. the client's 0x00C1 [0, 0] at 565.1515 (after the turn), with its re-select "
+          "[161, 0] at the same instant, draws NO s2c within 300 ms but ticks; and before "
+          "the turn it pressed an attack skill at the 'anim' body (0x0027 naming 161) -- so "
+          "'anim' is attackable", (cancel, reselect, replies, pressed[:2]))
 
     # 1h. the tracked row IS the extractor's
     defs, _iv = npcdefs.read([cap])
@@ -481,6 +493,26 @@ def section_ours():
     check(got == ["9F/65", "9B", "9F/36", "9F/42", "A3/55", "1E", "2F", "2B", "2A"],
           "2i. the player's armour-ignoring word provokes it the same way: the prelude "
           "right before the 42 and the [55] word, the turn after the tick", got)
+
+    # 2j. IN REACH at the hit -- a melee player standing next to it. The body stands
+    # 60 u off (inside enemy_reach()'s 92 u), so the hit's own tick would
+    # swing at once but for enemy_attack_tick's pending skip: it must not fight while
+    # still 'anim', and its first swing comes after the 0x002F. The order is
+    # RECONSTRUCTION: retail's only witness (565.0302) is a ranged hit, which chases.
+    st3, sent3, send3 = fresh()
+    a3 = st3["agents"][ANIMAL_ID]
+    a3["pos"] = a3["anchor"] = (60.0, 0.0)
+    sent3.clear()
+    proj, same_tick, log = hit_and_turn(st3, sent3, send3)
+    got, vals = names(proj), dict(proj)
+    check(same_tick == []
+          and got == ["9F/65", "9B", "9F/36", "9F/42", "A3/16", "1E", "2F", "2E", "A0/4"]
+          and vals.get("A0/4") == [4, ANIMAL_ID, PLAYER, 0]
+          and a3.get("team_token") == ANIN and "whole burst" not in log,
+          "2j. IN REACH (60 u, a melee player): the hit's own tick sends nothing naming it "
+          "-- no swing under 'anim' -- and after the tick the 0x002F precedes its facing "
+          "and its first swing: [9F/65, 9B, 9F/36, 9F/42, A3/16, 1E, 2F, 2E, A0/4 [4, 96, "
+          "player, 0]] (RECONSTRUCTION: no in-reach retail witness)", (same_tick, got))
 
 
 # ---------------------------------------------------------------------------------------
