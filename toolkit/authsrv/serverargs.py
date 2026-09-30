@@ -1394,6 +1394,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "set -- instead of retail's one segment: status, [43], "
                          "[8, me, 0], [52], [54], 0x00A2 [55, me, 1.0], flags 5 (24 of "
                          "24). Known-bad arm on the wire.")
+    ap.add_argument("--no-party-revive-heal-gain", action="store_true",
+                    help="REVIVE-HEAL REVERT, the party body's third: a hero's or "
+                         "henchman's rise sends 0x009F [42] + 0x00A3 [34] in the rise's "
+                         "burst instead of retail's 0x00A2 [55, body, 1.0] (every "
+                         "signet raise and the JARIN shrine hero on the live corpus). "
+                         "Known-bad arm on the wire.")
     ap.add_argument("--no-revive-flags", action="store_true",
                     help="RANGERLOOP-F10 REVERT: an NPC's timer revive sends the "
                          "0x00F1 status ALONE, without the 0x0026 [agent, 9] that "

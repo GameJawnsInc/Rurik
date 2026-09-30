@@ -9697,12 +9697,24 @@ def section_hold_plane():
         # 6. the rise: the flags byte 9 closes it and the grace window starts
         sent.clear()
         authsrv.revive_party_body(send, st3, HERO, st3["agents"][HERO], 0)
+        # REVIVE-HEAL: on the shipped arm the rise re-sends NO maximum (the
+        # penalised 85 stands on the row and was declared at the death) and heals
+        # by retail's gain; --no-party-revive-heal-gain re-sends [42, body, 85].
+        if authsrv.PARTY_REVIVE_HEAL_GAIN:
+            _max_kept = (not any(op == PINT and v[0] == agents.PROP_HEALTH_MAX
+                                 for op, v in sent)
+                         and st3["agents"][HERO]["max_health"] == 85
+                         and (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                              [agents.GV_HEALTH_GAIN, HERO, authsrv._f32(1.0)]) in sent)
+        else:
+            _max_kept = (PINT, [agents.PROP_HEALTH_MAX, HERO, 85]) in sent
         LEDGER.ok(sent[0] == (STATUS, [HERO, 0]) and sent[-1] == (FLAGS, [HERO, 9])
-                  and (PINT, [agents.PROP_HEALTH_MAX, HERO, 85]) in sent
+                  and _max_kept
                   and st3["agents"][HERO]["revived_at"] > 0
                   and not st3["agents"][HERO]["dead"],
-                  "a party body's rise: status 0 first, the maximum KEPT at 85, "
-                  "0x0026 [body, 9] last (retail 250 / the hero's 340.21 s)",
+                  "a party body's rise: status 0 first, the maximum KEPT at 85 "
+                  "(REVIVE-HEAL: not re-sent, and the heal is retail's 0x00A2 [55, "
+                  "body, 1.0]), 0x0026 [body, 9] last (retail 250 / the hero's 340.21 s)",
                   f"{[(hex(op), v) for op, v in sent]}")
         # 6b. the raise's energy: the signet's 25 %, a shrine's or the timer's 100 %
         _sv_en = authsrv.ENERGY

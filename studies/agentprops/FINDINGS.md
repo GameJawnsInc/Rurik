@@ -717,3 +717,5 @@ flags 5. That is 24 of 25 live rises, and the 25th is the flags alone.
 - **The pools:** the server's book went 100 → 55 → 10 → 0 after every rise, and the client's HUD agreed in every frame that caught the player alive.
 - **So the player's rise closes like the NPC's:** the in-segment gain lands without the complaint the `[34]` setter drew.
 - **Left:** a party body's rise (`revive_party_body`), which still uses the setter.
+
+**The party body's third, 2026-09-30 [desk; UNMEASURED on the client].** `revive_party_body` now heals with `0x00A2 [55, body, f]` in the rise. Retail has 36 skill raises across 3 captures, each status, the 55 (1.0 on 34, 0.5892 on 2) and flags 9, with 0 carrying a `[42]` or a `[34]`. No harness run has raised a party body by a skill, so the complaint check has never met this path. The rig is a two-hero sandbox, SANDBOX U2 (`PLAN.md` §8.1).

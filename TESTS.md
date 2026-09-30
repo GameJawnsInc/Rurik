@@ -3500,7 +3500,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   read the flags byte on the two refill arms. Proved red: the heal arm disabled in the source
   reddens 9a, 9b and `test_guards.py` §5's control (which now wants 3 messages on the heal
   arm); 9c and 9d stay green.
-  Floor 53 from the bare green run (the tape adds 9: 62 vaulted). No socket, no client.
+  9e-9g, the party body's third (`revive_party_body`): the shipped arm is status, `0x00A2 [55,
+  body, 1.0]`, flags 9, with no `[42]` and no `[34]` (retail's 36 skill raises, 0 of them
+  carrying either); the KNOWN-BAD arm `--no-party-revive-heal-gain` is the old burst; and the
+  switch's wiring. `test_agentlife.py`'s party-rise check (6) now reads "the maximum KEPT"
+  as NOT re-sent on the heal arm. Proved red: the party arm disabled reddens 9e, 9g and that
+  check.
+  Floor 56 from the bare green run (the tape adds 9: 65 vaulted). No socket, no client.
   ~20 s vaulted),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with

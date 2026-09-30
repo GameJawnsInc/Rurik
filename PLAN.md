@@ -2311,10 +2311,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **REVIVE-HEAL, the last third** (PLAN-LOG "REVIVE-HEAL, the player's re-run"; agentprops
-  §1g): a party body's rise (`revive_party_body`, heroes) still sends `[42]` + `[34]`, where
-  retail's hero rises carry `0x00A2 [55]` too. The NPC and player rises are done: 0 of 5 and
-  0 of 15 complaints.
+* **REVIVE-HEAL, the party body's client run** (PLAN-LOG "REVIVE-HEAL, the party body's
+  third"). The heal ships, but no rig raises a party body by a SKILL: the henchman body is
+  created with no bar, and every party row has one hero. The rig is a two-hero sandbox spec
+  (both carrying Resurrection Signet), which is also SANDBOX U2's first client run.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a

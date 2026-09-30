@@ -28,6 +28,40 @@ move back.
 
 ---
 
+### REVIVE-HEAL, the party body's third -- 2026-09-30 -- **a hero's or henchman's rise heals with retail's `0x00A2 [55, body, f]`, with no `[42]` + `[34]` burst. Landed at the desk; the client run needs a rig that does not exist yet**
+
+**Retail:** 36 rises on the live corpus follow a cast at the corpse, `[60, caster, body,
+skill]` ~3 s ahead, across 3 captures, 34 of them Resurrection Signet.
+- **The shape:** each rises as status, `0x00A2 [55, body, f]`, flags 9. f = 1.0 on 34, and
+  the partial 0.5892 on 2.
+- **What never appears:** 0 of 36 carry a `[42]` or a `[34]`.
+- **The shrine hero:** the JARIN hero at the shrine (`20260914T005758` 340.213, re-created as
+  a kind-8 corpse) rises with `[52]`, `[55]`, flags 9.
+- **Ours:** `revive_party_body` sent the status, a hero's energy half, then `[42]` + `[34]`
+  in the same burst. That is the shape that drew the complaint for the player and the
+  Hatcher (agentprops §1f).
+
+**The change:** `PARTY_REVIVE_HEAL_GAIN` (`--no-party-revive-heal-gain` reverts) sends the
+status, a hero's energy half unchanged, `[55, body, health_frac]`, then flags 9.
+- **Tests:** `test_loot` 9e-9g cover the shape, the known-bad arm and the wiring (floor
+  53 → 56 bare, 62 → 65 vaulted). `test_agentlife`'s party-rise check now reads "the maximum
+  KEPT at 85" as not re-sent on the heal arm.
+- **Proved red:** the arm disabled reddens 9e, 9g and that check.
+- **All green:** `test_agentlife` 704 (+1 skip), `test_loot` 65/56, `test_morale` 65,
+  `test_guards` 45, and srclint. Not the full suite.
+
+**Not run on the client, and why.** Our client has never seen a party body raised by a SKILL.
+- **The past party rises:** the three in the harness corpus are shrine re-creates, alive
+  before the rise, so they never met the client's resurrect check.
+- **No rig produces one:** the henchman body is created with an empty bar
+  (`skills: []`, `attacks_back: False`), every party row has one hero, and that Monk is the
+  softest target, so it dies first with nobody left to raise it.
+- **The rig that would:** a two-hero sandbox spec with both heroes carrying Resurrection
+  Signet. That is also SANDBOX U2 ("two heroes in two bodies"), never run on a client, so a
+  crash there would confound the result.
+- **What carries the change until then:** the NPC's 0 of 5 and the player's 0 of 15 are the
+  same client mechanism.
+
 ### REVIVE-HEAL, the player's re-run -- 2026-09-30 -- **n = 15: every rise is retail's seven messages, 0 complaints, and the client's HUD agrees with the server's book in every frame**
 
 `20260930T174443`: `--enemy --no-enemy-skills --enemy-hit 0.35`, with no weapon, since

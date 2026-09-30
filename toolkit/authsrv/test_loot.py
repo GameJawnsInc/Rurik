@@ -65,8 +65,9 @@ from codec import Codec                                        # noqa: E402  (au
 # the capture, both from the green runs of 2026-09-30. Section 8 (RANGERLOOP-F10, the
 # revive's life-state byte, fixture-free) adds 4: 49 bare, 58 with the capture.
 # Section 9 (REVIVE-HEAL, the revive's in-segment heal, fixture-free) adds 4: 53 bare,
-# 62 with the capture.
-LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=53)
+# 62 with the capture. Section 9e-9g (the party body's rise) adds 3: 56 bare, 65 with
+# the capture.
+LEDGER = checks.Ledger("drops and pickups (LOOT)", floor=56)
 check = checks.adopt(LEDGER)
 
 STAMP = "20260929T150923"
@@ -1209,6 +1210,44 @@ def section_revive_heal():
           and "REVIVE_HEAL_GAIN = False" in src[i_flag:i_flag + 120],
           "9d. ships ON, on the capture's flags row, with its revert "
           "--no-revive-heal-gain wired in main()")
+
+    # The party body's third: revive_party_body (a resurrection skill, the shrine).
+    # Retail: 36 skill raises, each status, 0x00A2 [55, body, f], flags 9, 0 of 36
+    # with a [42] or a [34]. A henchman-shaped body (no hero, so no energy half).
+    def party_rise(gain):
+        body = foe_entry(HATCHER_AT)
+        body.update(dead=True, health=0.0, allegiance=agents.ALLEGIANCE_PLAYER)
+        st = fresh(agents={30: body})
+        sent, send = collect()
+        saved = authsrv.PARTY_REVIVE_HEAL_GAIN
+        authsrv.PARTY_REVIVE_HEAL_GAIN = gain
+        try:
+            authsrv.revive_party_body(send, st, 30, body, 0)
+        finally:
+            authsrv.PARTY_REVIVE_HEAL_GAIN = saved
+        return sent, body
+    sent, body = party_rise(True)
+    check(sent == [(OP_STAT, [30, 0]), (OP_FLOAT, [agents.GV_HEALTH_GAIN, 30, one]),
+                   (OP_FLAGS26, [30, authsrv.AGENT_FLAGS_BODY_ALIVE])]
+          and body["dead"] is False and body["health"] == body["max_health"],
+          "9e. a PARTY body's rise, the shipped arm: status [30, 0], the heal 0x00A2 [55, "
+          "30, 1.0], flags [30, 9] -- retail's 36 skill raises -- with no [42] and no [34]",
+          f"{[(hex(o), v) for o, v in sent]}")
+    sent, _b = party_rise(False)
+    check([o for o, _v in sent] == [OP_STAT, OP_MAXINT, OP_BAR, OP_FLAGS26]
+          and OP_FLOAT not in [o for o, _v in sent],
+          "9f. KNOWN-BAD ARM (--no-party-revive-heal-gain): the [42] + [34] burst between "
+          "the status and the flags, no gain -- the party rise this server sent before",
+          f"{[(hex(o), v) for o, v in sent]}")
+    i_pflag = src.find("    if a.no_party_revive_heal_gain:", i_main)
+    i_prb = src.find("\ndef revive_party_body(")
+    check(authsrv.PARTY_REVIVE_HEAL_GAIN is True
+          and authsrv.capture_flags().get("PARTY_REVIVE_HEAL_GAIN") is True
+          and '"--no-party-revive-heal-gain"' in sa and 0 < i_main < i_pflag
+          and "PARTY_REVIVE_HEAL_GAIN = False" in src[i_pflag:i_pflag + 120]
+          and "if PARTY_REVIVE_HEAL_GAIN:" in src[i_prb:i_prb + 3000],
+          "9g. the party switch ships ON, on the capture's flags row, with its revert "
+          "--no-party-revive-heal-gain wired in main() and read by revive_party_body")
 
 
 def main():

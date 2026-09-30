@@ -14606,6 +14606,24 @@ REVIVE_HEAL_GAIN = True   # --no-revive-heal-gain reverts
 #     energy full with regen), and in none was the player alive on an empty bar.
 # --no-player-revive-heal-gain restores the defer.
 PLAYER_REVIVE_HEAL_GAIN = True   # --no-player-revive-heal-gain reverts
+# REVIVE-HEAL, THE PARTY BODY'S THIRD (2026-09-30): a hero's or a henchman's rise
+# (revive_party_body: a resurrection skill, the shrine) heals with the same gain.
+# RETAIL: 36 rises on the live corpus follow a cast at the corpse, `[60, caster,
+# body, skill]` ~3 s ahead, across 3 captures (20260817T231139, 20260928T103123,
+# 20260929T100038), 34 of them Resurrection Signet. Each rises as status,
+# 0x00A2 [55, body, f], flags 9. f = 1.0 on 34, and the partial 0.5892 on 2.
+# 0 of 36 carry a [42] or a [34] in the segment. The hero at the JARIN shrine (20260914T005758
+# 340.213, re-created as a kind-8 corpse) rises with [52, 30, 1.0], [55, 30, 1.0],
+# flags 9. A hero's energy half ([43], [52]) is unchanged here: it runs after the
+# status, and the 55 follows it.
+# OURS until now: status, the hero's energy, then [42] + [34] in the SAME burst.
+# That is the shape that drew `Health non-zero on resurrect` for the player and
+# the Hatcher (agentprops 1f). No harness run has raised a party body by a SKILL
+# (the three party rises on record are shrine re-creates, alive before the rise),
+# so this path is UNMEASURED on our client either way. The NPC's 0 of 5 and the
+# player's 0 of 15 are the same client mechanism.
+# --no-party-revive-heal-gain restores the [42] + [34] burst.
+PARTY_REVIVE_HEAL_GAIN = True   # --no-party-revive-heal-gain reverts
 
 
 # WEAPON DAMAGE moved to combatmath.py (REFACTOR-A12), banner and all; its lazy
@@ -30814,6 +30832,7 @@ def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why="",
     """Stand a party body up: the agent revive's own two operations (status,
     then the refill) with the resurrection's health fraction."""
     frac = _fraction(health_frac, agents.GV_HEALTH, "a resurrection's health")
+    heal = _fraction(health_frac, agents.GV_HEALTH_GAIN, "a resurrection's heal")
     row["dead"] = False
     row["health"] = float(row["max_health"]) * health_frac
     row["last_hit"] = 0.0
@@ -30833,12 +30852,20 @@ def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why="",
              [agents.GV_ENERGY_GAIN, tid,
               _fraction(_egain, agents.GV_ENERGY_GAIN, "a hero's energy at its rise")],
              f"hero agent {tid} energy set to {_pool.current:.0f} of {_pool.maximum:.0f}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, tid, int(row["max_health"])],
-         f"restore max health on party agent {tid}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.GV_HEALTH, tid, tid, frac],
-         f"refill bar on party agent {tid}")
+    if PARTY_REVIVE_HEAL_GAIN:
+        # REVIVE-HEAL, the party body's third: retail's heal, the census on
+        # PARTY_REVIVE_HEAL_GAIN. No [42] and no [34].
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.GV_HEALTH_GAIN, tid, heal],
+             f"the rise's heal on party agent {tid}: property 55, +{health_frac:g} "
+             f"of its maximum [REVIVE-HEAL]")
+    else:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, tid, int(row["max_health"])],
+             f"restore max health on party agent {tid}")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.GV_HEALTH, tid, tid, frac],
+             f"refill bar on party agent {tid}")
     # JARIN: a body's rise closes with 0x0026 [body, 9] (250 in the corpus;
     # the hero's at 340.21 s), and the grace window starts here.
     row["revived_at"] = time.time()
@@ -45852,6 +45879,12 @@ def main():
               "[42] + [34] + the energy half a tick, and leaves the death's hold set, "
               "instead of retail's one segment with 0x00A2 [55, me, 1.0] (24 of 24). "
               "KNOWN-BAD arm on the wire [REVIVE-HEAL revert]", flush=True)
+    if a.no_party_revive_heal_gain:
+        global PARTY_REVIVE_HEAL_GAIN
+        PARTY_REVIVE_HEAL_GAIN = False
+        print("[combat] --no-party-revive-heal-gain: a party body's rise sends "
+              "0x009F [42] + 0x00A3 [34] in its burst, not retail's 0x00A2 [55, body, "
+              "1.0]. KNOWN-BAD arm on the wire [REVIVE-HEAL revert]", flush=True)
     if a.no_revive_flags:
         global REVIVE_SENDS_ALIVE_FLAGS
         REVIVE_SENDS_ALIVE_FLAGS = False
