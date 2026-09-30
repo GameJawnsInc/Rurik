@@ -2311,11 +2311,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **RANGERLOOP-F10, a defect:** `revive_due` omits retail's `0x0026 [agent, 9]`, so a
-  revived NPC stays non-colliding in the client while our mirror counts it again. Every
-  mirror halt against the practice target is ours alone. Fix the wire (a client run), or
-  make the mirror follow the life-state byte (PLAN-LOG "RANGERLOOP-F8's client run").
-  F8's pickups are served on the client, 2 of 2.
+* **RANGERLOOP-F10's leftover** (PLAN-LOG "RANGERLOOP-F10"): retail's NPC revive heals inside
+  its own segment, `0x00A2 [55, agent, f]` (62 of 63), while ours defers a `0x009F` + `0x00A3`
+  refill a tick. That refill has a resurrect-assert history, and this is not yet examined.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a

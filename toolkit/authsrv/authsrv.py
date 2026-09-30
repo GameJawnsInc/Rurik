@@ -34405,7 +34405,22 @@ MODEL_PARKS_ON_AVOID_HALT = True   # --no-model-avoid-halt reverts
 # straight-line clock (2 of 2), and a server that clips no lead on an agent
 # (1z-dj.1: 243 of 291). For a pile inside a COLLIDING NPC's disc, n = 0, so
 # that part is RECONSTRUCTION.
-PICKUP_WALKS_THROUGH_AVOID_HALT = True   # --no-pickup-through-avoid-halt reverts
+#
+# WITHDRAWN, DEFAULT OFF, after RANGERLOOP-F10's run, 20260930T154533. With the
+# revive sending FLAGS 9, the revived Hatcher collides again: agenttap read
+# m_flags back at 0x00020009 after each revive. That n = 0 is now n = 2, and it
+# went against this switch. On both pickup walks, to piles 30 u from the
+# Hatcher, world-0 HALTED ON THE DISC: 71 u and 74 u from its centre, 45 u and
+# 98 u short of the pile. The drawn body stopped with it, and its next report
+# stood 47 u and 100 u short. The mirror's own halt sat 7 u and 0 u from
+# world-0's. With this switch on, the server still SERVED both piles, crediting
+# gold and removing an item the body never reached. With it off, 1z-dj parks
+# the model where the client halted, and the pickup cancels "short of the item"
+# with nothing sent. The item stays where the client can see it and cannot
+# reach it. So the park is right, and the F8 cancel was only ever the revive's
+# missing FLAGS 9. --pickup-through-avoid-halt turns it back on, the known-bad
+# arm: a credit at a distance.
+PICKUP_WALKS_THROUGH_AVOID_HALT = False   # --pickup-through-avoid-halt: the known-bad arm
 
 
 def _mirror_avoid_halt(state, now):
@@ -34433,10 +34448,11 @@ def _model_park_on_avoid_halt(state, rec, now):
     dest and consumes the keyboard leg (so neither the arrival re-grant nor
     the kill can re-arm a copy the client has halted). Idempotent per halt.
 
-    RANGERLOOP-F8: a halt taken while a pickup's leg still owns the model's
-    dest is consumed and NOT parked (PICKUP_WALKS_THROUGH_AVOID_HALT), because
-    the pickup is served on its own leg's clock, as retail's server serves it
-    (the switch's comment says what its run corrected). Keyed on the dest itself,
+    RANGERLOOP-F8, WITHDRAWN, DEFAULT OFF: only under --pickup-through-avoid-halt
+    is a halt taken while a pickup's leg still owns the model's dest consumed and
+    NOT parked (PICKUP_WALKS_THROUGH_AVOID_HALT). That is the known-bad arm: on
+    RANGERLOOP-F10's run the client halted both world copies on the disc, 2 of 2,
+    so the switch credits a pile the body never reached. Keyed on the dest itself,
     so a pickup whose walk was replaced is parked as before. THE THREADS: the
     grant's own setter can halt the copy inside send(), on the recv thread,
     before _approach_send writes the dest. A tick that parks there clears a
@@ -45701,13 +45717,13 @@ def main():
         print("[map] --no-model-avoid-halt: the position model walks a lead "
               "the mirror's pass has halted the client's copy on (1z-dj's "
               "revert; RUN-1zDB leg A's 520 u ghost).", flush=True)
-    if a.no_pickup_through_avoid_halt:
+    if a.pickup_through_avoid_halt:
         global PICKUP_WALKS_THROUGH_AVOID_HALT
-        PICKUP_WALKS_THROUGH_AVOID_HALT = False
-        print("[loot] --no-pickup-through-avoid-halt: a halt of the mirror's "
-              "copy on a pickup walk parks the model and the pickup CANCELS as "
-              "short of the item -- 20260930T133106's 3 of 3, while the client "
-              "reached the pile. KNOWN-BAD arm [RANGERLOOP-F8 revert]", flush=True)
+        PICKUP_WALKS_THROUGH_AVOID_HALT = True
+        print("[loot] --pickup-through-avoid-halt: a halt of the mirror's copy on a "
+              "pickup walk is NOT parked, and the pickup is served at its eta wherever "
+              "the body stopped -- 20260930T154533 credited 2 of 2 piles 47 u and 100 u "
+              "from the body. KNOWN-BAD arm [RANGERLOOP-F8, withdrawn]", flush=True)
     if a.no_revive_flags:
         global REVIVE_SENDS_ALIVE_FLAGS
         REVIVE_SENDS_ALIVE_FLAGS = False

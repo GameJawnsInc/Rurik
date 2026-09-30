@@ -28,6 +28,63 @@ move back.
 
 ---
 
+### RANGERLOOP-F10 -- 2026-09-30 -- **landed and run: the NPC revive sends retail's `0x0026 [agent, 9]`, the client counts the revived body again, and a pile inside a colliding NPC's disc is UNREACHABLE on the client (2 of 2). F8's exemption is WITHDRAWN (default OFF)**
+
+**The fix** (`da606fc3`): `revive_due` sends `0x0026 [agent, 9]` after the `0x00F1`
+status.
+- **Where it sits:** right behind the status on the shipped deferred-refill arm, and last on
+  the immediate arm, as the player's rise and `revive_party_body` close theirs.
+- **Retail:** 63 in-place NPC revives on 16 connections in 6 captures. 62 of 63 carry the
+  status and the flags 9 in one segment, status first (`respawn.py`'s revives, re-read by
+  opcode).
+- **The flag:** `REVIVE_SENDS_ALIVE_FLAGS` ships ON; `--no-revive-flags` is the known-bad arm.
+- **Tests:** `test_loot` §8 (8a-8d). Proved red: both sends disabled reddens 8a, 8b, 8d and
+  `test_guards` §5, whose control now counts 2 / 4 messages.
+
+**The run**, `20260930T154533`: S15's Run A rig, from this branch, with `agenttap --agents 1,10`.
+Agent-piloted, owner hands off, questions registered before launch.
+- **F10-Q1 held: the wire, and no crash.** Each revive went out as `revive agent 10` then
+  `flags 9 on the revived agent 10`, 2 of 2. No assertion, no crash dialog, no retraction,
+  and no resurrect complaint in the client log. `RUN VERDICT: PASS`.
+- **F10-Q2 held: the client's copy.** The Hatcher's `m_flags` went `0x00020009` →
+  `0x00020008` at each kill and back to `0x00020009` at each revive.
+- **F10-Q3 held: the control.** A router `0x0029` to (10154, 8041), 45.6 u from the Hatcher,
+  was halted by world-0 on the disc at 70 u. The mirror halted 6 u from it, and 1z-dj parked
+  the model there. On the previous run, before the fix, world-0 walked through.
+- **F10-Q4 answered, the open one: the client does NOT reach a pile inside a colliding NPC's
+  disc.** On both pickup walks world-0 took the target (`+0x98` = the ground agent) and
+  HALTED on the disc, 71 u and 74 u from the Hatcher's centre, 45 u and 98 u short of the
+  pile. The drawn body stopped with it: the next reports stood 47 u and 100 u short. The
+  mirror's own halt sat 7 u and 0 u from world-0's.
+- **But the server served both.** F8's exemption was still ON: purse 0 → 6 → 12, the items
+  removed, a credit at a distance.
+- **F10-Q5: no residual.** With the client and the mirror agreeing, the post-pickup parks
+  land where world-0 stands.
+
+**So F8's exemption is WITHDRAWN.** `PICKUP_WALKS_THROUGH_AVOID_HALT` now ships OFF, and
+`--pickup-through-avoid-halt` opts into it as the known-bad arm.
+- **What the default does now:** 1z-dj parks the model where the client halted, and the
+  pickup cancels "short of the item" with nothing sent.
+- **Why that is right:** the item stays on the ground, which is where the client can see it
+  and cannot reach it.
+- **What F8 turns out to have been:** the missing FLAGS 9, and nothing else.
+- **`test_loot` §7 rewritten:** 7a/7b are the default's park and cancel, 7c is the known-bad
+  arm's serve at a distance, and 7h locks the default OFF. The flip back ON reddens 7h.
+- **Tests, all green:** `test_loot` 58 vaulted / 49 bare (floor 49), `test_kbdsync` 236,
+  `test_approachroute` 46, `test_agtrack_guard` 91, `test_agentlife` 704 (+1 declared skip),
+  `test_guards` 45, `test_burrow` 31, `test_morale` 63, `test_pools` 154, and the doc lints.
+  Not the full suite.
+
+**The rig's consequence, for whoever drives S15 next:** the practice Hatcher revives 8 s
+after a kill, standing 30 u from its drops. A pile picked up after that revive now cancels,
+faithfully. Pick up inside the 8 s window, or from a drop the revived body does not cover.
+
+**Left open (`PLAN.md` §8.1):**
+- **Retail's revive heals inside its own segment** (`0x00A2 [55, agent, f]`,
+  GV_HEALTH_GAIN, between the status and the flags). Ours defers a `0x009F` + `0x00A3`
+  refill a tick. Not examined.
+- **Whether retail's own client re-tries a pickup** after such a halt. n = 0.
+
 ### RANGERLOOP-F8's client run -- 2026-09-30 -- **the pickups are served on the client (2 of 2), and the run CORRECTS the entry below: the Hatcher was not an obstacle to the client at all. Our revive omits retail's FLAGS 9, so a revived NPC stays non-colliding in the client and our mirror counts it anyway (RANGERLOOP-F10)**
 
 **The run.** `20260930T151413`, launched from `main` at `f60b3511`, on S15's Run A rig. It was

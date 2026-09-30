@@ -856,13 +856,18 @@ def section_tape(codec):
 
 
 # --------------------------------------------------------------------------- 7
-# RANGERLOOP-F8: the pickup beside a standing NPC. The practice Hatcher revives at
-# (10126, 8077) standing 30 u from its own drops. On 20260930T133106 (Run A) the
-# mirror's avoidance pass halted the player's copy at its 80 u disc on 3 of 3 pickups,
-# 1z-dj's park cleared the walk's dest, and each pickup CANCELLED "short of the item"
-# while the client's body reached the pile. The rig is rebuilt here with the REAL guard,
-# the REAL pass and the REAL _npc_obstacles, fed through the send() choke point's own
-# feed, at the runs' own coordinates.
+# RANGERLOOP-F8 and F10: the pickup beside a standing NPC. The practice Hatcher
+# revives at (10126, 8077) standing 30 u from its own drops. On 20260930T133106 (Run A)
+# the mirror's avoidance pass halted the player's copy at its 80 u disc on 3 of 3
+# pickups, 1z-dj's park cleared the walk's dest, and each pickup CANCELLED "short of the
+# item" while the client's body reached the pile. That was the revive's missing FLAGS 9
+# (section 8): the client no longer counted the revived Hatcher. With the revive fixed
+# (20260930T154533), the client HALTS both world copies on the disc, 2 of 2, 45 u and
+# 98 u short of the pile, and the mirror's halt sits 7 u and 0 u from world-0's. So the
+# DEFAULT parks and cancels, which is the client's own picture, and F8's exemption
+# (--pickup-through-avoid-halt, a credit at a distance) is the known-bad arm. The rig is
+# rebuilt here with the REAL guard, the REAL pass and the REAL _npc_obstacles, fed
+# through the send() choke point's own feed, at the runs' own coordinates.
 HATCHER_AT = (10126.0, 8077.0)
 RUN_A = ((10047.0, 8077.0), (10131.0, 8107.0))    # the approach's disc stop -> pile 401
 RUN_A2 = ((10008.0, 8077.0), (10142.0, 8052.0))   # Run A' 400: 136 u out, the line 21.6 u off
@@ -882,7 +887,7 @@ class Rec:
 class Globals:
     """Set authsrv's two avoid-halt switches for a block, and put them back."""
 
-    def __init__(self, through=True, park=True):
+    def __init__(self, through=False, park=True):
         self.want = (through, park)
 
     def __enter__(self):
@@ -942,22 +947,26 @@ def halts(st):
 
 
 def section_beside():
-    print("\n7. the pickup beside a standing NPC (RANGERLOOP-F8): the avoid halt does not "
-          "cancel it")
+    print("\n7. the pickup beside a colliding NPC (RANGERLOOP-F8/F10): the halt parks and "
+          "the pickup cancels, as the client halts")
     walk_msg = lambda pile: (OP_WALK, [PLAYER, pile, 0, 0, 401])   # noqa: E731
 
     rec = Rec()
     with Globals():
         st, sent, send = beside(*RUN_A)
         r, t, pk = walk_out(st, send, rec)
-    check(halts(st) >= 1 and r is True and t >= pk.get("eta", INF)
-          and sent == [walk_msg(RUN_A[1])] + arrival_list(5001, 401, 6)
-          and st.get("purse") == 6 and st.get("pos") == RUN_A[1]
-          and len(rec.acts("avoid-halt-pickup")) >= 1 and not rec.acts("avoid-halt"),
-          "7a. HEADLINE, Run A's pile 401 from the approach's disc stop: the real pass "
-          "halts the copy at the Hatcher's disc (the exposure -- no halt, no test), the "
-          "halt is NOT parked, and at the leg's eta the pickup is served in retail's frame, "
-          "purse 0 -> 6, the body at the pile",
+    parked = rec.acts("avoid-halt")
+    pos = st.get("pos") or (INF, INF)
+    check(halts(st) >= 1 and r is False and sent == [walk_msg(RUN_A[1])]
+          and st.get("purse") is None and st.get("pickup") is None
+          and 401 in st.get("ground_items", {}) and parked
+          and math.hypot(pos[0] - parked[0]["point"][0], pos[1] - parked[0]["point"][1]) < 0.1
+          and not rec.acts("avoid-halt-pickup"),
+          "7a. HEADLINE, the default, Run A's pile 401 from the approach's disc stop: the "
+          "real pass halts the copy at the Hatcher's disc (the exposure -- no halt, no "
+          "test), 1z-dj parks the model there, and the pickup CANCELS with nothing but "
+          "the walk sent, the item left on the ground -- where 20260930T154533's client "
+          "halted both world copies, 2 of 2",
           f"halts {halts(st)} result {r} purse {st.get('purse')} pos {st.get('pos')} "
           f"rows {rec.rows} sent {[(hex(o), v) for o, v in sent]}")
 
@@ -965,35 +974,38 @@ def section_beside():
     with Globals():
         st, sent, send = beside(*RUN_A2)
         r, t, pk = walk_out(st, send, rec)
-    row = (rec.acts("avoid-halt-pickup") or [{}])[0]
+    row = (rec.acts("avoid-halt") or [{}])[0]
     at = row.get("point") or [INF, INF]
     d_hatcher = math.hypot(at[0] - HATCHER_AT[0], at[1] - HATCHER_AT[1])
-    check(halts(st) >= 1 and r is True and st.get("purse") == 6
-          and st.get("pos") == RUN_A2[1] and 60.0 <= d_hatcher <= 80.5
-          and (row.get("short") or 0) > 50.0,
-          "7b. Run A' 400, 136 u out on a line passing 21.6 u from the Hatcher's centre: the "
-          "pass halts the copy on the disc (60-80 u from its centre, over 50 u short of "
-          "the pile) mid-walk, and the pickup is still served",
+    d_pile = math.hypot(at[0] - RUN_A2[1][0], at[1] - RUN_A2[1][1])
+    check(halts(st) >= 1 and r is False and st.get("purse") is None
+          and 60.0 <= d_hatcher <= 80.5 and d_pile > 50.0,
+          "7b. the default, Run A' 400, 136 u out on a line passing 21.6 u from the "
+          "Hatcher's centre: the pass halts the copy mid-walk on the disc (60-80 u from "
+          "its centre, over 50 u short of the pile -- the client's own halts read 71 u "
+          "and 74 u), the model parks there, and the pickup cancels",
           f"halts {halts(st)} result {r} purse {st.get('purse')} row {row} "
-          f"d {d_hatcher:.1f}")
+          f"d {d_hatcher:.1f} short {d_pile:.1f}")
 
     got = []
     for geo in (RUN_A, RUN_A2):
         rec = Rec()
-        with Globals(through=False):
+        with Globals(through=True):
             st, sent, send = beside(*geo)
             r, t, pk = walk_out(st, send, rec)
-        got.append((halts(st), r, st.get("purse"), st.get("pickup"), sent[1:],
-                    len(rec.acts("avoid-halt"))))
-    check(all(h >= 1 and r is False and purse is None and pk is None and rest == []
-              and parks >= 1 for h, r, purse, pk, rest, parks in got),
-          "7c. KNOWN-BAD ARM (--no-pickup-through-avoid-halt), both geometries: 1z-dj parks "
-          "the model at the halt, the walk's dest is gone, and the pickup CANCELS with "
-          "nothing sent -- Run A's 3 of 3, reproduced at the desk",
+        row = (rec.acts("avoid-halt-pickup") or [{}])[0]
+        got.append((halts(st), r, st.get("purse"), sent[1:] == arrival_list(5001, 401, 6),
+                    row.get("short") or 0.0, len(rec.acts("avoid-halt"))))
+    check(all(h >= 1 and r is True and purse == 6 and frame and short > 40.0 and parks == 0
+              for h, r, purse, frame, short, parks in got),
+          "7c. KNOWN-BAD ARM (--pickup-through-avoid-halt, F8's withdrawn exemption), both "
+          "geometries: the halt is not parked and the pickup is SERVED at its eta, retail's "
+          "frame and the purse credited, with the copy halted over 40 u short -- the credit "
+          "at a distance 20260930T154533 showed, bodies 47 u and 100 u from the pile",
           f"{got}")
 
     rec = Rec()
-    with Globals():
+    with Globals(through=True):
         st, sent, send = beside(RUN_A2[0], RUN_A2[1])
         st.pop("ground_items")
         lead = RUN_A2[1]
@@ -1009,27 +1021,28 @@ def section_beside():
     check(halts(st) >= 1 and st.get("dest") is None and parked
           and math.hypot(pos[0] - parked[0]["point"][0], pos[1] - parked[0]["point"][1]) < 0.1
           and not rec.acts("avoid-halt-pickup"),
-          "7d. SCOPE: a plain 0x0029 lead to the same point inside the disc, no pickup on "
-          "record, is still parked by 1z-dj (pos at the halt, dest cleared) -- the "
-          "exemption does not swallow the keyboard class the park was built for",
+          "7d. SCOPE, the opt-in arm on: a plain 0x0029 lead to the same point inside the "
+          "disc, no pickup on record, is still parked by 1z-dj (pos at the halt, dest "
+          "cleared) -- the exemption never swallows the class the park was built for",
           f"halts {halts(st)} dest {st.get('dest')} pos {st.get('pos')} rows {rec.rows}")
 
     rec_in, rec = Rec(), Rec()
-    with Globals():
+    with Globals(through=True):
         st, sent, send = beside(*RUN_A, park_in_send=rec_in)
         r, t, pk = walk_out(st, send, rec)
     check(halts(st) >= 1 and len(rec_in.acts("avoid-halt")) == 1
           and r is True and st.get("purse") == 6,
-          "7e. THE THREADS: the grant's own setter halts the copy inside send() and a tick "
-          "parks it there, before handle_pickup writes the walk's dest -- 1z-dj parks and "
-          "clears a dest that _approach_send then overwrites, and the pickup is served",
+          "7e. THE THREADS, the opt-in arm's mechanics: the grant's own setter halts the "
+          "copy inside send() and a tick parks it there, before handle_pickup writes the "
+          "walk's dest -- 1z-dj parks and clears a dest that _approach_send then "
+          "overwrites, and the arm still serves",
           f"halts {halts(st)} in-send rows {rec_in.rows} result {r} purse {st.get('purse')}")
 
     # Run A's geometry halts at the grant's own setter, so the halt is pending the
     # moment handle_pickup returns; the park then runs on a dest another order wrote
     # (the world tick parks BEFORE pickup_tick, so this is the tick that sees it).
     rec = Rec()
-    with Globals():
+    with Globals(through=True):
         st, sent, send = beside(*RUN_A)
         authsrv.handle_pickup([0x803F, 401, 0], send, st, 0)
         st["dest"] = (9000.0, 8077.0)     # another order took the model's dest
@@ -1037,9 +1050,9 @@ def section_beside():
     check(halts(st) >= 1 and parked_now is True and st.get("dest") is None
           and rec.acts("avoid-halt") and not rec.acts("avoid-halt-pickup")
           and st.get("pickup") is not None,
-          "7f. keyed on the DEST: with a pickup still on record but another order's dest "
-          "in the model, the halt is parked as before (1z-dj) -- the exemption is the "
-          "pickup's WALK, not the pickup's record",
+          "7f. the opt-in arm is keyed on the DEST: with a pickup still on record but "
+          "another order's dest in the model, the halt is parked as before (1z-dj) -- the "
+          "exemption is the pickup's WALK, not the pickup's record",
           f"halts {halts(st)} parked {parked_now} dest {st.get('dest')} rows {rec.rows}")
 
     got = []
@@ -1060,16 +1073,17 @@ def section_beside():
     import serverargs
     sa = open(serverargs.__file__, encoding="utf-8").read()
     i_main = src.find("\ndef main():")
-    i_flag = src.find("    if a.no_pickup_through_avoid_halt:", i_main)
+    i_flag = src.find("    if a.pickup_through_avoid_halt:", i_main)
     i_park = src.find("\ndef _model_park_on_avoid_halt(")
-    check(authsrv.PICKUP_WALKS_THROUGH_AVOID_HALT is True
-          and authsrv.capture_flags().get("PICKUP_WALKS_THROUGH_AVOID_HALT") is True
-          and '"--no-pickup-through-avoid-halt"' in sa
+    check(authsrv.PICKUP_WALKS_THROUGH_AVOID_HALT is False
+          and authsrv.capture_flags().get("PICKUP_WALKS_THROUGH_AVOID_HALT") is False
+          and '"--pickup-through-avoid-halt"' in sa
+          and '"--no-pickup-through-avoid-halt"' not in sa
           and 0 < i_main < i_flag
-          and "PICKUP_WALKS_THROUGH_AVOID_HALT = False" in src[i_flag:i_flag + 160]
-          and "PICKUP_WALKS_THROUGH_AVOID_HALT and pk" in src[i_park:i_park + 2600],
-          "7h. ships ON, on the capture's flags row, with its revert "
-          "--no-pickup-through-avoid-halt wired in main() and read by the park")
+          and "PICKUP_WALKS_THROUGH_AVOID_HALT = True" in src[i_flag:i_flag + 160]
+          and "PICKUP_WALKS_THROUGH_AVOID_HALT and pk" in src[i_park:i_park + 2800],
+          "7h. ships OFF, on the capture's flags row, the known-bad arm opted into by "
+          "--pickup-through-avoid-halt in main() and read by the park")
 
 
 # --------------------------------------------------------------------------- 8

@@ -1374,13 +1374,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "lead -- RUN-1zDB leg A's ghost (drift 520 u, the "
                          "Hatcher marched to the phantom and hit from there). "
                          "Known-bad arm.")
-    ap.add_argument("--no-pickup-through-avoid-halt", action="store_true",
-                    help="RANGERLOOP-F8 REVERT: a halt of the mirror's copy on a "
-                         "PICKUP walk parks the position model like any other "
-                         "(1z-dj), and the pickup cancels as short of the item. "
-                         "On 20260930T133106 that cancelled 3 of 3 pickups beside "
-                         "the revived Hatcher while the client's body reached "
-                         "the pile. Known-bad arm.")
+    ap.add_argument("--pickup-through-avoid-halt", action="store_true",
+                    help="RANGERLOOP-F8's WITHDRAWN exemption, the known-bad arm: a "
+                         "halt of the mirror's copy on a PICKUP walk is not parked, "
+                         "and the pickup is served at its eta wherever the body "
+                         "stopped. On 20260930T154533 that credited 2 of 2 piles "
+                         "whose bodies halted 47 u and 100 u short, at a colliding "
+                         "NPC's disc. DEFAULT OFF: 1z-dj parks and the pickup cancels.")
     ap.add_argument("--no-revive-flags", action="store_true",
                     help="RANGERLOOP-F10 REVERT: an NPC's timer revive sends the "
                          "0x00F1 status ALONE, without the 0x0026 [agent, 9] that "

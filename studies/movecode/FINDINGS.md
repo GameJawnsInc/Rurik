@@ -19797,6 +19797,22 @@ The run, `20260930T151413`, tapped both world copies (`agenttap --agents 1,10`).
 - **The pickup switch stays**, on retail's server clock alone (PLAN-LOG, "RANGERLOOP-F8's
   client run").
 
+### 1z-dj.7 The park is right on pickup walks too: with the revive fixed, the client halts on a colliding NPC's disc (2 of 2), and F8's exemption is withdrawn
+
+With the revive sending retail's FLAGS 9 (RANGERLOOP-F10), the revived Hatcher collides
+again: `m_flags` went back to `0x00020009` after each revive (`20260930T154533`, agenttap).
+- **The pickup walks:** world-0 took each pickup's target and HALTED on the disc, 71 u and
+  74 u from the Hatcher's centre, 45 u and 98 u short of the pile. The drawn body stopped
+  with it: 47 u and 100 u short. The mirror's halt sat 7 u and 0 u from world-0's.
+- **The control:** a plain `0x0029` ending 45.6 u from the Hatcher halted world-0 at 70 u.
+  The mirror halted 6 u from it.
+
+So the "target covered" exit (`0x006005D8`) holds for a `0x002A` whose target agent is an item,
+as it does for a keyboard lead. OBSERVED, n = 2. 1z-dj's park, and the pickup's cancel behind
+it, were faithful all along. `PICKUP_WALKS_THROUGH_AVOID_HALT` now ships OFF, as the known-bad
+arm (`--pickup-through-avoid-halt`): under it the server credited both piles at 47 u and
+100 u from the body. PLAN-LOG, "RANGERLOOP-F10".
+
 ---
 
 ## 1z-dk. THE PARKED COPY'S GRANT REFUSAL, DECODED — **there is no gate. The handler is gateless, the setter writes `m_targetPoint` unconditionally, and the "refusal" is the avoidance pass halting at the setter and invalidating the target blocks — F14's mechanism, confirmed on the specimen and by a census: 72 of 72 parked-with-a-hostile leads never installed, and our mesh agrees with the client's waypoint verdict at 71 of those 72.** Nothing ships; 1z-dj already covers the class; the one disagreement is a mesh boundary and it is named
