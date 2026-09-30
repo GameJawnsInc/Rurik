@@ -30749,9 +30749,15 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
                 held[row["slot"]] = iid
     _item_hands_mirror(state, conn_id, before)
     # RANGERPRE-S11: a 564 item entering or leaving the hands moves the maximum,
-    # the batch's LAST message (retail's shield equip, :56064 t=932.526). Gated
-    # on the BONUS changing, never on declare_player_max's tracker, so a hand
-    # change of an item without 564 sends exactly the planned batch.
+    # the batch's LAST message. OBSERVED in a FIELD only: retail's one 564 equip
+    # (20260929T150923 :56064 t=932.526, 0x0199 is_explorable=1) sent 0x014B,
+    # 0x006F, then the 42. A TOWN equip sends the 42 too -- INFERRED: retail's
+    # four town equips (20260819T132414 :53419, map 242, is_explorable=0, bare
+    # 0x0152 batches with no 0x006F) moved no 564 item, so no tape shows a 564
+    # equip in a town; there visible_slot_writes drops the hand 0x006F, and our
+    # move-then-42 batch is a shape no tape shows. Gated on the BONUS changing,
+    # never on declare_player_max's tracker, so a hand change of an item
+    # without 564 sends exactly the planned batch.
     held_max_moved(send, state, held_health_bonus(state) - _held_hp, what)
     store = state.get("charstore_game")
     if PERSIST and store is not None:

@@ -319,7 +319,9 @@ ENERGY_MODIFIER, ENERGY_REGEN_MODIFIER = 556, 558
 # it, no 564, drew no 42. CORROBORATED: the owner's item_modifiers overlay
 # labels 564 with text id 2386, which the design lane resolved locally
 # (textrec) to the client's health label, and arg 15 is the delta. Its
-# census: 11 of 4,817 corpus 0x0161 carry it (shields, a staff, a sword).
+# census: 11 of 4,817 corpus 0x0161 carry it, by item type {24: 7, 8: 2,
+# 26: 1, 27: 1} -- 7 shields (arg 15 or 30), two type-8 declarations at arg
+# 10 (item 8675, in two captures), a staff (arg 30) and a sword (arg 30).
 HEALTH_MODIFIER = 564
 
 
