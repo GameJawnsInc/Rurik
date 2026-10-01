@@ -3856,7 +3856,7 @@ in that stamp clears the dead bit.
 - **The player's own signet:** `resurrect_target` is reached from a body's landing only.
 - **1816's row.**
 - **The `[20 … 152]` column.**
-- **The client run.**
+- **The client run:** done, 53.6.
 
 ### 53.5 Labels
 
@@ -3864,3 +3864,15 @@ in that stamp clears the dead bit.
 - WIKI: the rule and the boost sources.
 - RECONSTRUCTION: the zone refresh's mechanism (ours), and the stop's E2 for a hero (no hero
   stop is on tape; PENDSKILL's close).
+
+### 53.6 On the client — `20260930T211743`, one raise per hero
+
+The same rig as `20260930T202753`, on `0d963fef`, with the questions registered first.
+- **2 casts of skill 2, 2 raises, one per hero, then none.** That is 0 casts after a
+  spend, through 4 hero deaths, the player's death and a wipe to the shrine (the re-create
+  kept the spent clocks).
+- **Both raises were `[58]`, E7, E3**, then the rise. 0 hero E5s on skill 2.
+- 0 `Pending skill` lines, 0 resurrect complaints, and the client log is otherwise unchanged.
+
+**CONFIRMED on the client:** the single use and the segment. Unscored for want of a frame:
+whether the re-created hero's panel still paints the signet +inf (53.4's E7 item).

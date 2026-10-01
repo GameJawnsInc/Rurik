@@ -28,6 +28,30 @@ move back.
 
 ---
 
+### RESSIG's client run -- 2026-09-30 -- **One raise per hero, then none: the loop is gone. Each raise was retail's `[58]`, E7, E3 with no E5; 0 casts after a spend; the spent signets stayed spent through a party wipe; 0 `Pending skill` lines, 0 resurrect complaints.**
+
+**The run:** `20260930T211743`, tree `0d963fef`. The rig is the two earlier runs' `revheal2`:
+two Monk heroes with Resurrection Signet only, the raider at 3,000 health, no `--persist`.
+The questions were registered before launch, and the owner was hands off. Verdict PASS.
+
+**The questions.**
+- **RES-Q0, PASS.** No assert, no crash dialog, no RETRACTED.
+- **RES-Q1, exactly one raise per hero.** 201 raised 200, then 200 raised 201. There are 2
+  casts of skill 2 in the whole run, 2 SPENT lines and 0 stops. The last run had 66 raises.
+- **RES-Q2: both segments** are `finishes casting 2` ([58]), `SKILL_RECHARGE_INDEFINITE`
+  (E7), `SKILL_ACTIVATED` (E3), then the rise. **0 hero E5s on skill 2.**
+- **RES-Q3: 0 casts of skill 2 after a hero's spend**, across all 4 hero deaths, the
+  player's death and the **wipe**. The shrine re-create kept the spent clocks, as designed.
+- **RES-Q4.** 0 `Pending skill` lines (PENDSKILL's 2 E4s closed by 2 E3s), 0 `Health
+  non-zero on resurrect`. The client log's classes are identical to `20260930T202753`: one
+  credentials line.
+- **RES-Q5 not scored.** No frame shows a hero skill bar (the post-wipe frames show the party
+  at the shrine), so whether the client keeps the painted +inf on the re-created hero is
+  still open.
+
+**Still open:** the boss-death morale boost, E7 after a wipe's re-create (Q5), the
+player's own signet, row 1816, and the `[20 ... 152]` column (SLICE-F53 53.4).
+
 ### RESSIG -- 2026-09-30 -- **Resurrection Signet is single-use, refreshed by a morale boost or a zone change. The owner's rule after the party run's 66-raise loop, the wiki's, and retail's: 44 casters completed a raise on the live corpus and none completed a second on one connection. Shipped behind `--no-resurrection-single-use`. NOT yet confirmed on the client.**
 
 **Why it looped.** The client's table gives skill 2 a recharge of 0. The server used it, so
