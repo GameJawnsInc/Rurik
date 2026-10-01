@@ -2801,7 +2801,8 @@ try:
     # re-balanced the slot. OBSERVED, skilltable.py on each pristine Gw.exe:
     # 38797 0..3 -> (rank 15, rank 0) = (3, 0), this check's original literals;
     # 38888 1..3 -> (3, 1). Any other build has no expectation and FAILS by name.
-    faint_pips = {38797: (3.0, 0.0), 38888: (3.0, 1.0)}
+    # 38974 1..3 -> (3, 1), MEASURED on its own table (the 38974 content regen, 2026-10-01: its table equals 38888's on every player row, 0 of 1,334 changed -- crossbuild 11.6).
+    faint_pips = {38797: (3.0, 0.0), 38888: (3.0, 1.0), 38974: (3.0, 1.0)}
     faint_build = agents.WORLD.get("skills", str(FAINT)).provenance.get("build")
     faint_want = faint_pips.get(faint_build)
     unlit = authsrv.net_pips(st0, PLAYER)
@@ -3034,7 +3035,8 @@ try:
     # bonus slot is keyed on the build that row records. Both tables are OBSERVED,
     # skilltable.py on each pristine Gw.exe: 38797 (10, 70), 38888 (10, 85). A
     # record or a row of any other build FAILS by name.
-    rust_slot_by_build = {38797: (10, 70), 38888: (10, 85)}
+    # 38974 (10, 85), MEASURED on its own table (the 38974 content regen, 2026-10-01: its table equals 38888's on every player row, 0 of 1,334 changed -- crossbuild 11.6).
+    rust_slot_by_build = {38797: (10, 70), 38888: (10, 85), 38974: (10, 85)}
     rust_record_build = row.provenance.get("build")
     rust_record = (row.get("damage0"), row.get("damage15"))
     rust_build = rec.provenance.get("build")
@@ -3081,7 +3083,7 @@ try:
     # middle is the check's own interpolation, 10 + (e15 - 10) x 12 / 15, exact on
     # both builds (no rounding question): 38797 10 + 60 x 0.8 = 58, 38888 10 + 75 x
     # 0.8 = 70 -- and the literals are held to it.
-    rust_cast_by_build = {38797: (10, 58, 70), 38888: (10, 70, 85)}
+    rust_cast_by_build = {38797: (10, 58, 70), 38888: (10, 70, 85), 38974: (10, 70, 85)}
     rust_interp_ok = all(e[0] + (e[2] - e[0]) * 12 / 15 == e[1]
                          and (e[0], e[2]) == rust_slot_by_build[b]
                          for b, e in rust_cast_by_build.items())
@@ -3093,6 +3095,7 @@ try:
           f"{' / '.join(map(str, want)) if want else 'NO EXPECTATION'} (38797: 10 / 58 / 70, "
           f"38888: 10 / 70 / 85 -- the middle interpolated here, exact) -- "
           + ({38888: "38888's client row, CORROBORATED by the wiki's 10..85",
+              38974: "38974's client row (= 38888's), CORROBORATED by the wiki's 10..85",
               38797: "38797's client row, CONTESTED by the wiki's 10..85"}.get(
               rust_record_build, "NO EXPECTATION")), f"{got}")
     check(authsrv.area_hex(RUST) == 156.0,

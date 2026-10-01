@@ -65,7 +65,11 @@ import vaultpath                                             # noqa: E402
 # first draft of this file declared 62 from a guess and reported "ONLY
 # 39 OF A DECLARED FLOOR OF 62", which is the vacuity guard catching
 # its author rather than a lost section.
-LEDGER = checks.Ledger("generic-value switches", floor=39)
+# 39 -> 48 on 2026-10-01, from the green run with six vaulted builds: §3 adds
+# per build and the floor had not followed 38849 / 38888 in. 38974 is the
+# build that went red, and not for a count -- genericvalue.Image.body's
+# first-0xCC rule ended the int dispatcher at an operand byte (see body()).
+LEDGER = checks.Ledger("generic-value switches", floor=48)
 check = checks.adopt(LEDGER)
 
 # EVERY ADDRESS `genericvalue.py` USED TO CARRY, measured by hand on build

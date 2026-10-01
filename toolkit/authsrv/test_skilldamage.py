@@ -54,9 +54,10 @@ check = LEDGER.ok
 
 # vault/content/skill_labels.toml's label-tier row count per build its header declares,
 # MEASURED from each generated file (skilldesc.py --emit-labels): 38797 the table until
-# 2026-09-28, 38888 its regeneration (831's row drops out). Section 14 FAILS on any
-# other build rather than passing a table nobody measured.
-LABEL_ROWS_BY_BUILD = {38797: 56, 38888: 55}
+# 2026-09-28, 38888 its regeneration (831's row drops out); 38974 the regeneration of
+# 2026-10-01, 55 rows MEASURED from its emit and identical by value to 38888's. Section
+# 14 FAILS on any other build rather than passing a table nobody measured.
+LABEL_ROWS_BY_BUILD = {38797: 56, 38888: 55, 38974: 55}
 
 
 def main():

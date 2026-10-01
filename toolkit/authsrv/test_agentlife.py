@@ -8965,8 +8965,9 @@ def section_hold_plane():
         # round(scale0 + (scale15 - scale0) x rank / 15), on that build's row
         # (OBSERVED, skilltable.py on each pristine Gw.exe): 38797 20..56 ->
         # 22.4 -> 22 (this check's original literal); 38888 20..65 -> 23.0 -> 23.
+        # 38974 20..65 -> 23, MEASURED on its own table (the 38974 content regen, 2026-10-01: its table equals 38888's on every player row, 0 of 1,334 changed -- crossbuild 11.6).
         # A row of any other build has no expectation and FAILS naming it.
-        banish_rank1 = {38797: 22, 38888: 23}
+        banish_rank1 = {38797: 22, 38888: 23, 38974: 23}
         banish_build = agents.WORLD.get("skills", "252").provenance.get("build")
         banish_want = banish_rank1.get(banish_build)
         banish_got = authsrv.skill_damage(252, authsrv.agent_skill_rank(st["agents"][10], 252))

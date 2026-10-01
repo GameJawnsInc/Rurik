@@ -74,6 +74,9 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 TEMPLATES_SHA256_BY_BUILD = {
     38797: "d7809b2c4466ea6aa93e7143b44ace7e4748544b1308cd68625626d7f4cb61bd",
     38888: "79cc05468b03e598f5f5d945ed7b635d5dda3eec30209dba51518d10919c81d1",
+    # 38974: the 2026-09-30 snapshot's exe + the Gw.dat beside it, MEASURED 2026-10-01
+    # by the regen's own emit -- the SAME digest as 38888's: the templates did not move.
+    38974: "79cc05468b03e598f5f5d945ed7b635d5dda3eec30209dba51518d10919c81d1",
 }
 
 LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults); 169 since the pair binding (+2: the pinned build's registered templates digest is its own; a MIXED exe/archive pair is the PAIR fault, both vaults)
@@ -1450,9 +1453,13 @@ if records is not None:
             # both directions (38888 labels on the 38797 table; 38797 labels on the 38888
             # table). On the 38797 vault this costs one 38888 pipeline (MEASURED ~7 s); on
             # the 38888 vault the other build's emit is the pinned emit b1, free.
-            pair = (38797, 38888)
-            obuild = next(iter(set(pair) - bulk_builds)) if len(bulk_builds & set(pair)) == 1 \
-                and len(bulk_builds) == 1 else None
+            # THE OTHER BUILD IS THE PIN on any regenerated vault, and the newest regen
+            # on the pin's own (2026-10-01: a third regen build, 38974, made 'the other of
+            # two' ambiguous; on the 38888 vault this was already 38797).
+            pair = tuple(sorted(TEMPLATES_SHA256_BY_BUILD))
+            only = next(iter(bulk_builds)) if len(bulk_builds) == 1 else None
+            obuild = (None if only not in pair else
+                      pair[0] if only != pair[0] else pair[-1])
             if obuild is None:
                 check(False, f"KNOWN-BAD ARM (other build): the bulk skills table's builds "
                              f"{sorted(bulk_builds)} are not exactly one of {pair} -- no other "

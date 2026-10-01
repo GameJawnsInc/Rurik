@@ -1591,6 +1591,48 @@ independent walk got the same fix.
   - **Still to see:** the first 38974 live tape framing to its last byte through this
     path is the real verification.
 
+### 11.6 The content overlay follows 38974 (the owner's ruling, 2026-10-01)
+
+**The ruling:** *"handle the content data"*, following §10's rule that the overlay tracks
+the newest retail build. The PIN stays 38797.
+
+**Regenerated, and diffed BY VALUE** against 38888's files, with the provenance and build
+fields stripped. Every extractor ran with `--exe` on the pristine snapshot
+`vault/client/2026-09-30_8e50edfb8351`, and the labels with its `--dat` as well:
+
+| Table | 38888 → 38974 |
+|---|---|
+| `skills` | 1,334 → 1,334 rows, **0 changed**. The client table grew 19 records, all outside the player corpus. |
+| `skill_labels` | 55 → 55, 0 changed. The templates digest is unchanged, `79cc0546…`. |
+| `attributes`, `attribute_cost`, `composite`, `effects` | 0 changed |
+| `heroes` | 1 changed: row 0, the HERO_UNUSED placeholder, whose three string ids moved 100298 → 100900 |
+| `item_modifiers`, `npcs` | carried over unchanged, for §10.1's reasons |
+
+**So the swap moves build STAMPS and no number the server serves.** The tracked
+`content/overrides/skills_38888.toml` rows still equal the client's table: 38974's
+fourteen are 38888's.
+
+- **The label emitter's order:** it refuses unless the LOADED skills table is the same
+  build, so it ran with `RURIK_VAULT` at the shadow vault holding the new `skills.toml`.
+  RUNBOOK now says so.
+- **The proof:** the whole suite on the shadow vault, 268 files and 15,222 checks:
+  **258 green, 10 red.**
+  - **Three were path artifacts,** as in §10.3: `test_handshake`, `test_cage` and
+    `test_movehook`.
+  - **Six were the build-keyed expectations of §10.3's contract.** Each now carries a
+    38974 key MEASURED on 38974's own table, and each passes on BOTH vaults with
+    identical counts: `test_agentlife` 704, `test_instantannounce` 68, `test_mechanics`
+    384, `test_skilldamage` 135, `test_weapons` 391, `test_skilldesc` 169.
+    `test_skilldesc`'s other-build arm now takes the pin as the other build on any
+    regenerated vault, because a third regen build made "the other of two" ambiguous.
+  - **The tenth was not content:** `test_genericvalue` was red on 38974 itself.
+    `genericvalue.Image.body` ended a function at its first 0xCC byte, and 38974's int
+    dispatcher carries `mov edx, 0x0093D6CC` 47 bytes in, ahead of both switches. It now
+    uses the 16-byte-boundary rule from §11.4, and all six builds derive 47 int / 14 float.
+    The suite caught what the registration's affected-test list missed.
+- **The swap:** done after the merge. The 38888 files are kept under
+  `vault/research/content-38888-2026-10-01/`.
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.

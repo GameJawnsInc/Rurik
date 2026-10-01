@@ -254,18 +254,28 @@ class Image:
         return None if o is None else struct.unpack_from("<I", self.pe.data, o)[0]
 
     def body(self, va):
-        """(start_off, end_off) of the function at `va`, by MSVC's int3 padding.
+        """(start_off, end_off) of the function at `va`, by MSVC's int3 padding
+        ON A 16-BYTE BOUNDARY -- `avevents.Image._is_entry`'s rule.
 
-        The same boundary rule `avevents.py` and `test_worldmap.py` use. It ends
-        at the first `int3`, which is a pad byte between functions and never a
-        real instruction in compiled MSVC output.
+        It ended at the first 0xCC byte until build 38974 (2026-10-01), on the
+        belief that an int3 "is never a real instruction in compiled MSVC
+        output". True of instructions, false of OPERANDS: 38974's int dispatcher
+        carries `mov edx, 0x0093D6CC` 47 bytes in, so the body ended there,
+        ahead of both switches -- "0 movzx/jmp [table] sites, expected 2". Its
+        `lea ecx, [esi+0x7CC]` was there on every older build too, after the
+        switches, so the old rule worked by position, not by rule. Now the body
+        runs to the next function entry (an aligned offset that follows an int3
+        and is not one) and stops before that entry's pad.
         """
         o = self.off(va)
         if o is None:
             raise ValueError(f"0x{va:08x} is not backed by file bytes")
-        d, i = self.pe.data, o
-        while i < len(d) and d[i] != 0xCC:
+        d, i = self.pe.data, o + 1
+        while i < len(d) and not (d[i - 1] == 0xCC and d[i] != 0xCC
+                                  and self.va_of(i) % 16 == 0):
             i += 1
+        while i > o and d[i - 1] == 0xCC:        # back over the pad
+            i -= 1
         return o, i
 
     # -- the derivation ----------------------------------------------------

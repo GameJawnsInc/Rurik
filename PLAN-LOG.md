@@ -28,6 +28,46 @@ move back.
 
 ---
 
+### The content overlay follows build 38974 -- 2026-10-01 -- **the owner's "handle the content data". Regenerated from the 38974 snapshot and diffed by value: not one served number moved (1,334 skill rows, 55 labels, the attribute / composite / effect tables all identical; only the unused hero row 0's string ids). Proved on a shadow vault with the whole suite; six build-keyed tests gained their 38974 key; genericvalue's 38974 red found and fixed on the way.**
+
+**The tables:** `studies/crossbuild/FINDINGS.md` §11.6. `item_modifiers` and `npcs` were
+carried over.
+
+**The shadow-vault suite** (`RURIK_VAULT` at a vault junctioned except `content/`): 268
+files, 15,222 checks, **258 green / 10 red.**
+- **Three were path artifacts:** `test_handshake`, `test_cage` and `test_movehook`.
+- **Six were build-keyed,** now each with a 38974 key measured on its own table, and each
+  green on BOTH vaults:
+
+  | Test | Checks |
+  |---|---|
+  | `test_agentlife` | 704 |
+  | `test_instantannounce` | 68 |
+  | `test_mechanics` | 384 |
+  | `test_skilldamage` | 135 |
+  | `test_weapons` | 391 |
+  | `test_skilldesc` | 169 |
+
+  `test_skilldesc` also carries the 38974 templates digest, the same as 38888's, and its
+  other-build arm now takes the pin.
+- **One was a build defect:** `test_genericvalue` on 38974 itself.
+  - **The cause:** `Image.body` stopped at the first 0xCC, and 38974's int dispatcher
+    holds `mov edx, 0x0093D6CC` ahead of both switches.
+  - **The fix:** the 16-byte-boundary rule, the same as `avevents`.
+  - **The result:** six builds, 47 int / 14 float each; floor 39 -> 48, green 48.
+  - **Why it was missed:** the registration's affected-test list didn't include it; the
+    full suite caught it. `test_codescan` 152, `test_skillcast` 190 and `test_avevents` 47
+    are green beside it.
+
+**The swap,** after the merge:
+- The 38888 files went to `vault/research/content-38888-2026-10-01/`.
+- The staged set went into `vault/content/`.
+- `test_skilldesc` was checked against the real vault afterwards.
+
+**A note for other worktrees:** a tree branched before this commit will see these six
+tests red ("NO EXPECTATION for build 38974") until it merges main. The vault is
+machine-wide, and that is the overlay rule.
+
 ### RESSIG-T: a resurrection pressed at nobody is refused at once -- 2026-10-01 -- **the owner's retail reading: "Invalid Target", immediately, even with a dead ally nearby. Ours cast 3 s and stopped; now #1966 and the release, before anything begins.**
 
 - **Read and shipped** (`studies/slice/FINDINGS.md` §53.9):

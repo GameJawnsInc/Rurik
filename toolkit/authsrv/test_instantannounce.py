@@ -562,7 +562,9 @@ B50 = {
 # the same `player_rank_for_skill` rule (the hero's 346 apply carries the hero's
 # own 12 on either build and is compared to B50 unchanged). A row of any other
 # build has no expectation and the check FAILS naming it.
-B50_FRENZY_APPLY_RANK = {38797: 0, 38888: 9}
+#   38974: attribute 17 again -> rank 9, MEASURED on its own table
+#          (the 38974 content regen, 2026-10-01: its table equals 38888's on every player row, 0 of 1,334 changed -- crossbuild 11.6).
+B50_FRENZY_APPLY_RANK = {38797: 0, 38888: 9, 38974: 9}
 
 
 def _b50_frenzy_tick():

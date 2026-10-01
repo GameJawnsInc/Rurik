@@ -95,8 +95,11 @@ RECORD_BUILD = 38797      # the build RECORD's rows were copied from (section 2b
 # Where RECORD's 38797 copy differs from a loaded row, per the build that row records:
 # MEASURED 2026-09-28, skilltable.parse_record on the pristine 38888 image against the
 # 38797 one -- 229 energy 15 -> 10, 339 scale 5..20 -> 10..25, 858 aoe_range 0.0 -> 2400.0.
+# 38974, MEASURED 2026-10-01 the same way: its rows equal 38888's, so the same three.
 RECORD_DRIFT = {38797: {},
                 38888: {"229": ["energy"], "339": ["scale0", "scale15"],
+                        "858": ["aoe_range"]},
+                38974: {"229": ["energy"], "339": ["scale0", "scale15"],
                         "858": ["aoe_range"]}}
 
 
