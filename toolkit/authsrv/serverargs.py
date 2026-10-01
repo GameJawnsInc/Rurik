@@ -1647,6 +1647,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "pathmap's corridor, no halt and no speed word: "
                          "retail's standing Rogue Bull, 3 of 3 returns "
                          "(studies/monsterai/FINDINGS.md 15).")
+    ap.add_argument("--dead-target-holds", action="store_true",
+                    help="MONSTERAI-W REVERT: a hostile whose last target died "
+                         "stands over the corpse until that target rises, and "
+                         "walks home only then -- every run before 2026-09-30 "
+                         "(the owner: the Bandit held aggro through the 10 s "
+                         "countdown). By default it stands DEAD_BOUT_GIVE_UP_AFTER "
+                         "(1.8 s) with nobody alive in range, then walks home by "
+                         "the leash's return: retail's first order came 0.49-3.00 "
+                         "s after the wipe, 7 of 7 (studies/monsterai/FINDINGS.md "
+                         "20).")
     ap.add_argument("--no-caster-opening", action="store_true",
                     help="DESKWORK-D8 REVERT (step 4): a spell-bar hostile "
                          "with no ranged weapon walks to the melee disc by a "

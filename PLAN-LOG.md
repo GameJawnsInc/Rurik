@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### MONSTERAI-W -- 2026-09-30 -- **a hostile no longer holds its bout on a dead party: with nobody alive in range it stands 1.8 s and walks home, retail's beat (first order 0.49-3.00 s after the wipe, 7 of 7). Behind `--dead-target-holds`; NOT yet run on the client.**
+
+**Found:** by the owner on `20260930T231034` (*"enemies hold aggro on dead party members"*).
+On all three wipes the raider stood ~570 u from its anchor over the corpses for the whole
+countdown. It walked home only at the rise, by EV-2's lost contact.
+
+**The mechanism.**
+- `hostile_target` found nobody alive.
+- `enemy_move_tick` handed the dead pick back to the follow.
+- The follow's dead-target branch halted and returned, every tick.
+
+**Retail** (studies/monsterai §20, MONSTERAI-W1/W2; the census is `test_deadbout` §8):
+- 17 wipes in the live corpus; 14 that the server raised from. The 3 Zaishen matches are set
+  aside: an AI team, and no rise.
+- **7 hostiles fighting away from home** (5 wipes, 4 tapes) each sent a first `0x0029`
+  0.49-3.00 s after the last death (median 1.84), all before the rise. None sent a `0x002A`
+  or a `0x0028`.
+- **In 7 wipes the hostile fought at home**, and it sent nothing.
+- Five of the seven resumed a patrol at walking speed. The one stander-shaped body ran home.
+
+**Shipped** (`DEAD_TARGET_ENDS_BOUT`, `DEAD_BOUT_GIVE_UP_AFTER = 1.8`):
+- In `_npc_follow_tick`, a hostile with an anchor and a dead pick starts a beat.
+- After the beat, if it is more than `LEASH_HOME_RADIUS` out, it gives up through
+  `_leash_give_up` (the leash's 0x0029 legs home). At home it stands.
+- A target raised inside the beat clears the clock.
+- The walk's shape after a wipe is RECONSTRUCTION, with one witness. Patrols are not
+  modelled.
+
+**Tests.** `test_deadbout.py` is new: 13 checks bare, 17 with the vault.
+- `DEAD_TARGET_ENDS_BOUT = False` in the source reddens 6.
+- Green: agentlife (704), animaltoken (33), cancelwalk (124), playerswing (191),
+  shrinewarp (8), ressig (22), morale (65), plus `test_checks` and the four lints.
+
+**Open:** the client run. The question for it: during the countdown, does the Bandit walk
+home a beat after the wipe?
+
 ### SHRINEWARP's client run -- 2026-09-30 -- **no warp: the owner's two presses after a wipe (one a few seconds in, one right after the rise) both walked from the shrine, and the run carries 0 `PRESS ENDS THE WALK` lines. The owner also found a hostile holding its bout on a dead party; that is open.**
 
 **The run:** `20260930T231034`, tree `0e574365`, the `revheal2` rig, the questions registered

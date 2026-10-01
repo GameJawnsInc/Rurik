@@ -3559,6 +3559,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the observer, 23 with another agent -- the rule checked before it judges ours. Proved
   red: `HIT_FINISH_FIRST = False` in the source reddens 7. Floor 9 from the bare green run
   (the vault adds 2: 11). No socket, no client),
+  `toolkit/authsrv/test_deadbout.py` (**2026-09-30, MONSTERAI-W: a hostile's bout ends with
+  its last target -- once nobody it could fight is alive in range it stands a beat and walks
+  home.** The owner's report on `20260930T231034`: the Bandit Raider held aggro through the
+  10 s countdown, ~570 u from its anchor over the corpses, and walked home only at the rise,
+  three wipes of three. The fixture is that raider through the REAL `enemy_move_tick` (the
+  player and both heroes dead, its last pick the player). §1-2 nothing at the wipe, nothing
+  0.3 s short of `DEAD_BOUT_GIVE_UP_AFTER`. §3 past it ONE 0x0029 RETURN leg on the
+  copy->anchor line, no 0x0028 / 0x002B / 0x002A, the give-up printed with the MONSTERAI-W
+  reason, and the walk home ends AT the anchor in under 3 s. §4 a raider that fought at home
+  stands. §5 a live hero in range is re-picked; a target raised inside the beat clears the
+  clock; a live hero beyond AGGRO_RANGE does not hold the raider. §6 the KNOWN-BAD arm
+  `--dead-target-holds`: thirty seconds over the corpses, then EV-2's walk at the rise -- the
+  report, reproduced. §7 the switch. §8 (vault) the retail wipe census re-derived: >= 14
+  raised wipes, >= 7 hostiles away from home, each sending its first 0x0029 within 3.5 s
+  of the wipe, none a 0x002A or a 0x0028; >= 7 at-home wipes with no order. Proved red:
+  `DEAD_TARGET_ENDS_BOUT = False` in the source reddens 6. Floor 13 bare (§8 skips), 17 with
+  the vault. No socket, no client),
   `toolkit/authsrv/test_shrinewarp.py` (**2026-09-30, SHRINEWARP: the wipe's shrine placement
   ends the movement records the corpse left, so the first attack press after it does not
   re-pin the player where it died.** The owner's warp on `20260930T224421`: `PRESS ENDS THE

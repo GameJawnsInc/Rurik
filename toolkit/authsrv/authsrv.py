@@ -18558,6 +18558,44 @@ LEASH_HOME_RADIUS = 100.0  # u: a copy this far from its anchor is ENGAGED (away
 RETURN_LEG_TIMEOUT = 8.0   # s: a leg the copy has not finished by then is
                            # re-issued -- a guard, never fired by the model.
 #
+# ---- MONSTERAI-W (2026-09-30): A BOUT ENDS WITH ITS LAST TARGET ---------------
+#
+# THE OWNER'S SYMPTOM (20260930T231034): "enemies hold aggro on dead party
+# members. while waiting the 10s respawn timer, the Bandit didn't return to his
+# patrol point. as soon as i resurrect, outside his aggro range, he starts
+# walking back". Three wipes, the same each time: the raider stood ~570 u from
+# its anchor over the corpses for the whole countdown and walked home only at
+# the rise, by EV-2's lost-contact rule. Nothing ended a bout whose targets were
+# all dead: hostile_target found nobody, the dead pick went back to the follow,
+# and the follow's `_tdead` branch halted and returned -- every tick, forever.
+#
+# RETAIL (studies/monsterai/FINDINGS.md sec.20; test_deadbout.py sec.6 re-derives
+# it from the live corpus): 14 wipes the server raised from, the instant the
+# observer and every party body were dead. Every hostile that was fighting AWAY
+# from home sent its first order 0.49-3.00 s after the last death (median 1.84
+# s, 7 hostiles, 5 wipes, 4 tapes), every one before the rise (10.0-12.6 s), and
+# none with a 0x0028. Every hostile that fought AT its create point (0-50 u;
+# 7 wipes) sent nothing at all: home already, it stood. So the bout ends with
+# its last target, after a beat. WHERE it walks: five of the seven rode a 0x002B
+# at walking speed (0.333 / 0.347) -- patrollers and wanderers resuming their
+# routes, the leash note's "PATROLLER's resume" -- and the one stander-shaped
+# body (agent 38, 20260817T183756) ran home with no speed word, ending 43 u from
+# its create 6.3 s after the wipe. This server has no patrols, so the walk is
+# the leash's own return (_leash_give_up, then 0x0029 legs to the anchor):
+# RECONSTRUCTION for a wipe, with agent 38 its one witness.
+#
+# THE RULE: a hostile with an anchor whose pick is dead and which has nobody
+# alive in range (hostile_target None -- the wipe, OBSERVED; a live party body
+# beyond AGGRO_RANGE, RECONSTRUCTION) stands for DEAD_BOUT_GIVE_UP_AFTER, then
+# gives up and walks home if it is more than LEASH_HOME_RADIUS from its anchor.
+# At home it stays the stander it was. A target alive again inside the beat
+# (a raise in place) clears the clock and the bout goes on.
+#
+# --dead-target-holds: the pre-fix arm -- the hostile stands over the corpse
+# until its target rises, and walks home then (EV-2's rule).
+DEAD_TARGET_ENDS_BOUT = True   # False (--dead-target-holds): it holds on a corpse.
+DEAD_BOUT_GIVE_UP_AFTER = 1.8  # s. OBSERVED median 1.84 (0.49-3.00, n = 7).
+#
 # ---- DESKWORK-D8 step 4 (2026-09-24): THE CASTER OPENING ---------------------
 #
 # THE OWNER'S SYMPTOM: "a monk charges into melee". Every hostile took the
@@ -36181,6 +36219,30 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                                           py - fol["solve_from"][1]))
     _leash = AGGRO_RANGE if leash is None else leash
     _anchor = _leash_anchor(agent) if leash is None else None
+    if not _tdead:
+        agent["tdead_since"] = None
+    elif _anchor is not None and DEAD_TARGET_ENDS_BOUT:
+        # MONSTERAI-W: the pick is dead and enemy_move_tick found nobody alive in
+        # range (else a live pick would be here). Retail stands a beat (first
+        # order 0.49-3.00 s after the wipe, 7 of 7) and then goes home; at home
+        # it stands (7 of 7 wipes). A halt for a follow in flight, as before.
+        if fol is not None:
+            _halt("the target is dead")
+        agent["moved_at"] = now
+        since = agent.get("tdead_since")
+        if since is None:
+            agent["tdead_since"] = since = now
+        anx, any_ = _anchor
+        if (now - since >= DEAD_BOUT_GIVE_UP_AFTER
+                and math.hypot(ax - anx, ay - any_) > LEASH_HOME_RADIUS):
+            agent["tdead_since"] = None
+            _leash_give_up(send, state, conn_id, agent_id, agent, now, pm, rec,
+                           math.hypot(px - anx, py - any_),
+                           float(agent.get("leash") or LEASH_DISTANCE),
+                           now - since, target_id,
+                           reason=f"it is dead and nobody alive is in range "
+                                  f"after {now - since:.1f} s [MONSTERAI-W]")
+        return
     if _anchor is not None and not _tdead:
         # DESKWORK-D8 step 3: THE GIVE-UP READS THE ANCHOR, NOT THE COPY. A
         # hostile standing at home that has not noticed its target keeps
@@ -46631,6 +46693,13 @@ def main():
               f"stands once the target passes {AGGRO_RANGE:.0f} u from IT and "
               "never walks home -- every run before DESKWORK-D8 (2026-09-24); "
               "retail's stander walks 0x0029 legs back to its create position.",
+              flush=True)
+    if a.dead_target_holds:
+        global DEAD_TARGET_ENDS_BOUT
+        DEAD_TARGET_ENDS_BOUT = False
+        print("[enemy] --dead-target-holds: a hostile whose last target died stands "
+              "over the corpse until it rises -- every run before MONSTERAI-W "
+              "(2026-09-30); retail's walks off 0.49-3.00 s after the wipe.",
               flush=True)
     if a.no_caster_opening:
         global CASTER_OPENING

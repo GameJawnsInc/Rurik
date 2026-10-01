@@ -2922,6 +2922,78 @@ burst on the next tick — no witness); what prop 65 = 0 does (UPSTREAM name `Pv
 Needs one loopback run: the colour of `'anim'` and `'anin'` on our client, whether our
 client orders an attack on an `'anim'` body, and the first `0x009B` our server has sent.
 
+## 20. A bout ends with its last target — MONSTERAI-W (2026-09-30)
+
+**Identifiers.** `MONSTERAI-W<n>` — this section's facts. The word is this document's
+(the arc name, per [studies/idents/CONVENTION.md](../idents/CONVENTION.md)). **Instrument:**
+`toolkit/authsrv/test_deadbout.py` §8, which re-derives every count below from the vault's
+live captures and declares a skip without them.
+
+**The owner's report** (`20260930T231034`, the `revheal2` sandbox): *"enemies hold aggro on
+dead party members. while waiting the 10s respawn timer, the Bandit didn't return to his
+patrol point. as soon as i resurrect, outside his aggro range, he starts walking back to the
+patrol point"*. The log has it three wipes of three. The raider stood ~570 u from its
+anchor (1301,3850) over the corpses for the whole countdown. It walked home only at the
+rise: `GIVES UP: the player 2326 u from its anchor -- its target left the area` (EV-2's
+lost-contact rule, §15). The mechanism:
+- `hostile_target` found nobody alive.
+- `enemy_move_tick` handed the dead pick (`target_was`) back to the follow.
+- `_npc_follow_tick`'s dead-target branch halted and returned, every tick.
+- No rule ended a bout whose targets were all dead.
+
+### MONSTERAI-W1 — retail: the first order comes a beat after the wipe
+
+The census covers every live connection. A wipe is the instant the observer and every
+party body carry the dead bit (`0x00F1`). The window runs from there to the observer's rise.
+A hostile is in the bout if it sent an attack start (`0x00A0 [4|50|60]`) at a party member
+in the 20 s before.
+- **17 wipes in the corpus; 14 that the server raised from.** The other three are Zaishen
+  Challenge matches (§18): the opposing party is an AI team, and the connection ends with no
+  rise. They are set aside as a different class.
+- **Away from home: 7 hostiles in 5 wipes on 4 tapes.** Each was more than 100 u from its
+  create point at the wipe (301–3,490 u). Every one sent its first `0x0029` **0.49–3.00 s
+  after the last death** (1.50, 1.84 / 1.64 / 2.51, 3.00 / 0.49 / 2.52; median 1.84). Every
+  one did so before the rise, which came at 10.0–12.6 s. None sent a `0x002A` (no chase of
+  a corpse) and none a `0x0028`. OBSERVED, n = 7.
+- **At home: 7 wipes on 2 tapes** (`20260917T090355` ×3, `20260917T224104` ×4). The hostile
+  fought within 50 u of its create point and sent **no order** through the countdown. It
+  stood. OBSERVED, n = 7.
+
+### MONSTERAI-W2 — where it walks: two shapes, and ours is the stander's
+
+- **Five of the seven rode a `0x002B` at walking speed** (0.333 / 0.347, the first order's
+  own stamp). Their legs wander or patrol. Agent 80 on `20260914T180058` went back to
+  (−2369,−12154) after both of its wipes and walked on from there. These are patrollers
+  resuming their route, the "PATROLLER's resume" of the leash notes (§15). This server has
+  no patrol to resume.
+- **One stander-shaped body, agent 38 on `20260817T183756`,** sent no speed word. It ran
+  home: 43 u from its create 6.30 s after the wipe. Agent 37 on the same tape sent no speed
+  word either, and its two legs left its create point. It is not read here.
+
+### MONSTERAI-W3 — what shipped
+
+`DEAD_TARGET_ENDS_BOUT`, with `--dead-target-holds` as the revert. The rule applies to a
+hostile with an anchor whose pick is dead and that has nobody alive in range:
+- It stands for `DEAD_BOUT_GIVE_UP_AFTER` = 1.8 s, W1's median.
+- Then, if it is more than `LEASH_HOME_RADIUS` from its anchor, it gives up and walks home
+  by the leash's own return (`_leash_give_up`, then `0x0029` legs to the anchor, with no halt
+  and no speed word).
+- At home it stays the stander it was.
+- A target raised inside the beat clears the clock.
+- The halt for a follow in flight at the death is unchanged.
+
+Labels:
+- The beat and the at-home stand: OBSERVED (W1).
+- The walk's shape after a wipe: RECONSTRUCTION. Its one witness is agent 38; the shape is
+  the leash's, OBSERVED 3 of 3 there.
+- A live party body beyond `AGGRO_RANGE` no longer holds the hostile over a corpse:
+  RECONSTRUCTION. The corpus has wipes only.
+- What a returning hostile does when somebody walks into it: as the leash's, it picks nobody
+  until home (UNVERIFIED there too).
+
+Not modelled: the patrollers' walking-speed resume, and retail's removal of the hostiles at
+the shrine batch (§43.2 of the slice findings; a visibility effect). Open: the client run.
+
 ---
 
 *Written 2026-08-11 from a five-angle fan-out with independent hostile review of every angle, a capture-campaign design and a completeness critic, then a verification pass by the orchestrator over every code-driving claim (§10). Nothing in this document was produced by launching a client or by pointing anything at ArenaNet. Every corpus figure quoted here was reproduced by at least two parties except where n and provenance are stated otherwise, and every claim that did not survive review is in §6 rather than deleted.*
