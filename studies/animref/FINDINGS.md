@@ -4550,6 +4550,92 @@ controlled-agent (AgTrack) mechanism and whether an NPC has one is UNREAD.
 * agenttap has every column but the one this question needed. The plane word sits four
   bytes past the y it already reads.
 
+## 43. ANIMREF-RE 43 — "my attacks delay, then double-hit": the client pairs a damage number with whoever last sent `[1]`, and our player's hit sends its `[1]` AFTER the damage (2026-09-30)
+
+**The report.** The owner, on `20260930T202753` during the hands-off auto-attack: *"sometimes
+my attacks would delay then double-hit ~a second later."* The player is level 3 with
+`starter_sword` (1.33 s, declared to the client as base 1.33, modifier 1). The target is
+the sandbox raider, and two Monk heroes are shooting it.
+
+### 43.1 Ruled out, each with a check that could have come out positive
+
+- **The server's swing clock.** In the hands-off stretch every start is 1.330 s after the
+  last (172 gaps, 1.326–1.334 s) and every hit 0.565 s after its start. 234 starts, 248
+  hits, no misses. OBSERVED on the wire tape.
+- **Delivery (Nagle / delayed ACK).** Every s2c message is its own `sendall` and no socket
+  sets `TCP_NODELAY`. We replayed 90 s of the run's exact traffic over real loopback on
+  this machine: 3,110 s2c at their recorded times and sizes, plus the client's 176 c2s at
+  theirs, which carry the ACKs. Every message arrived within **1.9 ms** of its send, Nagle
+  on or off (`nagle_replay.py`, scratch). The receiver is not Gw.exe, but ACKs are the
+  OS's. Ruled out on loopback.
+- **An animation-speed mismatch.** The client is told 1.33 s for the sword, matching the
+  server.
+- **A mid-fight re-path.** All four of the run's approach re-paths are in the opening walk.
+
+### 43.2 The difference — OBSERVED, the corpus against ours
+
+Every hit by the observer on retail is `0x009F [1, me, 0]` (melee attack finished), then
+the `0x00CF` adrenaline, then the damage `0x00A3 [16|17, target, me, f]`, in one stamp:
+**`[1]` BEFORE the damage, 1,376 of 1,376**, and 450 of 450 for other attackers.
+
+Our player's hit path (`hit_enemy`) sends the adrenaline, the damage, and **then** `[1]`,
+173 of 173. Its comment: *"And close the swing. Harmless if the client ignores it."* Two
+neighbours already send `[1]` first: the player's miss and block paths, and the NPC swing.
+
+### 43.3 Why the order is not harmless — OBSERVED (binary, build 38797)
+
+Our AgentView event map (§15 and RE-PLAN §2) already had the half that sets the latch:
+- **Property 1** → `0x007F6BC0`. It appends "finished" (state 0) to the attacker's
+  animation queue and sets a global latch: `[0x010874AC]` = 0, `[0x010874B0]` = the
+  attacker. Properties 46 and 49 do the same with states 0x11 and 0x12.
+- **Property 4** (attack started) → `0x007F6C10`. It sets `[0x010874B0]` = 0 for ANY
+  agent's start.
+
+**The new half is the reader.** Damage (16/17) → `0x007DFB60` → `0x007F6E70` allocates a
+kind-2 effect on the TARGET's view through `0x007F5340`. That allocator then reads
+`[0x010874B0]` (`0x007F53C5`). If an agent is latched, it walks that agent's animation
+queue (`[view+0xC4]`) for the pending node whose state equals `[0x010874AC]`, and
+**splices the damage event into that node's list** (`node+0x24` / `+0x28`, with
+`effect+8` = the node). So the number is drawn when the LATCHED agent's animation reaches
+its hit. With nobody latched, or no such node pending, the event stays unattached.
+
+**Retail's order makes the latch the attacker itself:** `[1]` first, then the damage.
+**Ours makes it whoever finished last.** The raider's `[1]` can still be latched when our
+hit arrives, and our late `[1]` then latches the player for the next agent's damage.
+
+### 43.4 Measured — the latch replayed over both streams
+
+`latch_sim.py` (scratch) applies 43.3's rules (set on 1/46/49, clear on 4/50, read at
+16/17) and records who is latched at each damage:
+
+| the observer's damage | retail (1,739) | ours, `20260930T202753` (248) |
+|---|---|---|
+| latched = itself | **1,519 (87 %)** | **19 (8 %)** |
+| latched = another agent | 23 (1.3 %) | **74 (30 %)** |
+| latched = nobody | 197 (11 %) | 155 (62 %) |
+
+There are also 72 damage words by OTHER agents latched to our player (the heroes' shots
+landing on the raider). The replay cannot know whether the latched node was still pending;
+that depends on the client's animation pace.
+
+### 43.5 The reading, and its label
+
+**RECONSTRUCTION for the visual, OBSERVED for every link before it.** When the player's
+number is paired with the raider's pending swing (30 %), it is drawn when the raider's
+animation lands, up to most of a second late: **the delay**. When a hero's number is
+paired with the player's swing, it is drawn at the player's impact beside the player's own
+number: **the double**. Both depend on a pending node, so both are intermittent:
+**"sometimes"**. Both need another attacker in the fight, so a lone duel would not show
+it, which no run has tested.
+
+### 43.6 The fix, not shipped
+
+The fix is retail's order on the player's hit path: `[1]` ahead of the adrenaline and the
+damage, as the miss and block paths and the NPC swing already do. It needs a revert arm
+and a test that the latch replay pairs the observer with itself. The confirmation is the
+owner's eye on the same rig: hands-off auto-attack beside two heroes. The latch replay over
+the run's tape is the instrument that can go red without a client.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
