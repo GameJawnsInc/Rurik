@@ -748,6 +748,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
                          "adrenaline and skill family like the player's (107 / "
                          "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--no-resurrection-single-use", action="store_true",
+                    help="THE REVERT ARM for RESSIG: a skill whose row says "
+                         "recharge_on = morale_boost (Resurrection Signet) takes the "
+                         "client table's recharge 0 again and is ready every fight. "
+                         "Retail: 44 casters completed a raise and none completed a "
+                         "second on one connection; the signet recharges on a morale "
+                         "boost or a zone change (GWW).")
     ap.add_argument("--no-hero-cast-e4", action="store_true",
                     help="THE REVERT ARM for PENDSKILL: no 0x00E4 [hero, skill, 0] "
                          "at a hero's cast start, and no 0x00E2 closing a hero's "

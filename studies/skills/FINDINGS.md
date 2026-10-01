@@ -3453,6 +3453,14 @@ difference.
   arithmetic. The INPUT gate is untraced.
 - **What re-enables it.** WIKI says a morale boost; which opcode carries that is
   unknown, and the observed connection never re-armed skill 2.
+- **2026-09-30 (RESSIG, studies/slice SLICE-F53): the wire witnesses are THREE now, all
+  skill 2** -- the observer on `20260817T231139 :54071` (this section's one) and on
+  `20260929T100038 :57580`, and a HERO on `20260914T005758 :56011` -- each `[58]`, a
+  `[20 ... 152]` visual, E7, E3 in one stamp at a completed raise, with no E5. The 5.5 s
+  wrinkle above is that first one alone; the other two land 3.0 s after the E4. The server
+  now sends it for a hero's completed signet (`GAME_SMSG_SKILL_RECHARGE_INDEFINITE`). The
+  NAME still stays out of `schema/overrides.json`: three wire rows of one skill are one
+  context, which is not the second independent witness `studies/smsgnames` asks for.
 - **Opcode 232 has ZERO occurrences too** — a second fully-implemented,
   never-observed handler in this same family, alongside 209 and energy property
   33. Three now, which starts to look like a pattern rather than three accidents.

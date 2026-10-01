@@ -3787,3 +3787,80 @@ The same rig as `20260930T185003`, on `f56a13d9`, with the questions registered 
 
 The label moves to **CONFIRMED on the client** for the open and the E3 close. The two drop
 closes keep their desk labels.
+
+## SLICE-F53 — **RESSIG: Resurrection Signet is single-use. Retail never lets one caster complete two raises on one connection (44 casters, 0 repeats); a completed raise is `[58]`, E7, E3 with no E5; a cast whose corpse already stands is stopped with `[59]` and spends nothing (2026-09-30)**
+
+### 53.1 The question, and whose rule it is
+
+On the party run `20260930T202753` two heroes carrying only Resurrection Signet raised
+each other 66 times. The owner: *"res sig is normally single-use, refreshed by morale
+boost."*
+
+**WIKI.** GWW "Resurrection Signet": *"This signet only recharges when you gain a morale
+boost"*, with an anomaly note that it recharges, like every skill, on zoning. GWW "Morale
+Boost" lists the PvE sources that recharge skills: a boss's death (2%), a god's blessing, a
+mission event, the Seal of the Dragon Empire, a Powerstone of Courage. It lists the candy
+and elixir boosts as NOT recharging skills, and names Sunspear Rebirth Signet (1816) and
+the Celestial skills under the same rule.
+
+**The client's table** gives skill 2 a recharge of 0. So the rule lives nowhere the client
+holds; it is the server's.
+
+### 53.2 The corpus — OBSERVED
+
+A cast is a `0x00A0 [60, caster, target, 2]` start, ended by the caster's next `[58]`
+(finished) or `[59]` (stopped). A completion counts as a raise when the target's `0x00F1`
+in that stamp clears the dead bit.
+
+| caster | completed raises | stopped starts |
+|---|---|---|
+| the observer | 2 | 1 |
+| a party body | 18 | 19 |
+| anyone else | 24 | 23 |
+
+- **Per caster per connection, at most one completed raise:** 44 of 44.
+- **The stops have two shapes.**
+  - **A corpse another caster raised first.** Starts on one corpse are routinely
+    simultaneous (13 and 14 → 12 at 621.86; 4, 5 and 6 → 3 at 612.64). The first to land
+    raises it and the others stop at the same stamp, each at its OWN landing: agent 10's
+    cast ran its full 3.0 s on a corpse raised 0.5 s earlier.
+  - **An interrupt mid-cast** (1.2–2.7 s in).
+- **A stopped cast does not spend the signet:** the stopped casters raise later.
+- **A completed raise's stamp, 3 of 3** (the observer on `20260817T231139 :54071` and
+  `20260929T100038 :57580`, the hero on `20260914T005758 :56011`): `[58, caster, 0]`,
+  `0x00A0 [20, target, caster, 152]`, `0x00E7 [caster, 2, 0]`, `0x00E3 [caster, 2, 0]`,
+  (the observer's `[8, caster, 0]`), then the rise. **No E5.**
+- **The observer's interrupted cast** drew E2 + `E5 [7, 2, 0, 20]`. That is an interrupt's
+  disable, not this rule.
+- **No refresh to read.** 0 `0x009C` above 100 on any of 128 connections. 5 agents wore a
+  glow (`[29, agent, 5]`) and none of them died. **The boost's wire is unobserved.**
+
+### 53.3 Shipped — `RESURRECTION_SINGLE_USE`, `--no-resurrection-single-use` reverts
+
+- `[skill_effect.2] recharge_on = "morale_boost"` is read by `skill_recharges_on_boost`.
+- **`land_skill`, a completed raise:** `[58]`, then for a hero E7 + E3 (no E5). The slot is
+  spent (`skill_ready` +inf, `boost_spent`), and every body kind is covered.
+- **`land_skill`, a target already standing:** `[59]`, the hero's E2 (closing PENDSKILL's
+  record), no raise, nothing spent.
+- **The refresh by zone** is structural: `hero_body_create` builds the clock fresh, and
+  the wipe's shrine re-create keeps it.
+- **Not sent:** the `[20 … 152]` visual. Skill 2's row carries no impact visual
+  (`skill_impact_visual(2)` is None), so 152 comes from a column we do not read.
+
+### 53.4 Open
+
+- **The boss-death boost.** It is +2% morale and recharges every skill. RECONSTRUCTION, or
+  a boss-kill capture.
+- **E7 after a wipe's re-create:** whether the client's new hero agent keeps the painted
+  +inf.
+- **The player's own signet:** `resurrect_target` is reached from a body's landing only.
+- **1816's row.**
+- **The `[20 … 152]` column.**
+- **The client run.**
+
+### 53.5 Labels
+
+- OBSERVED: 53.2.
+- WIKI: the rule and the boost sources.
+- RECONSTRUCTION: the zone refresh's mechanism (ours), and the stop's E2 for a hero (no hero
+  stop is on tape; PENDSKILL's close).

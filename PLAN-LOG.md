@@ -28,6 +28,72 @@ move back.
 
 ---
 
+### RESSIG -- 2026-09-30 -- **Resurrection Signet is single-use, refreshed by a morale boost or a zone change. The owner's rule after the party run's 66-raise loop, the wiki's, and retail's: 44 casters completed a raise on the live corpus and none completed a second on one connection. Shipped behind `--no-resurrection-single-use`. NOT yet confirmed on the client.**
+
+**Why it looped.** The client's table gives skill 2 a recharge of 0. The server used it, so
+the signet was ready every fight. `[skill_effect.2]`'s own provenance said so: *"'Only
+recharges when you gain a morale boost' is not modelled either."* On `20260930T202753` two
+Monk heroes with nothing else on their bars raised each other 66 times, and the owner
+reported it: *"res sig is normally single-use, refreshed by morale boost."*
+
+**The rule.** WIKI: GWW "Resurrection Signet" (*"This signet only recharges when you gain a
+morale boost"*, plus the anomaly that every skill recharges on zoning) and GWW "Morale
+Boost".
+- **Skill-recharging boosts in PvE:** a boss's death (2%), a god's blessing, mission events,
+  the Seal of the Dragon Empire, a Powerstone of Courage. The candy-type boosts do not
+  recharge skills.
+- **Sunspear Rebirth Signet (1816)** follows the same rule. It has no row here, and its
+  resurrection is not modelled.
+
+**Retail, OBSERVED** (the live corpus; scratch censuses `ressig_census.py`,
+`ressig_complete.py`, `boss_census.py`):
+- **Starts and completions:** 87 starts of skill 2 (`0x00A0 [60, caster, target, 2]`),
+  every one ending in `[58]` or `[59]`. 44 completed a raise, one per caster (2 observers,
+  18 party bodies, 24 others), **0 casters completed a second on one connection**, and 43
+  starts were stopped with `[59]`.
+- **Why so many stops:** several casters routinely start on one corpse at once (13/14 → 12;
+  4/5/6 → 3). The first to land raises it, and the rest are stopped at their OWN landing
+  (agent 10's cast ran its full 3.0 s on a corpse raised 0.5 s before). The same casters
+  later complete a raise, so a stop does not spend the signet.
+- **A completed raise:** `[58, caster, 0]`, `0x00A0 [20, target, caster, 152]`,
+  **`0x00E7 [caster, 2, 0]`, `0x00E3`**, then the rise. 3 of 3 (the observer twice, a hero
+  once), **no E5**. `0x00E7` is studies/skills 26.12's INDEFINITE recharge (the slot's
+  recharge = `0xFFFFFFFF`, painted +inf). Its witnesses were n=1 then; they are 3 now,
+  all this skill.
+- **No boost is on tape.** No `0x009C` above 100 on any connection, and 0 of the 5 glowing
+  (boss) agents died, so the refresh's wire is unobserved.
+
+**Shipped** (`RESURRECTION_SINGLE_USE`, `--no-resurrection-single-use` reverts).
+- **The flag:** `[skill_effect.2] recharge_on = "morale_boost"`, read by
+  `skill_recharges_on_boost`.
+- **A completed raise** in `land_skill` sends `[58]`, then for a hero E7 + E3 (retail's
+  order, no E5). It spends the slot (`skill_ready` = +inf, `boost_spent`).
+- **A landing whose target already stands** sends `[59]` (and the hero's E2, closing
+  PENDSKILL's record), raises nobody and spends nothing.
+- **Bodies of every kind** are covered: heroes, henchmen and hostiles. The E-family is the
+  hero's only.
+- **A zone change refreshes it.** `hero_body_create` builds the bar's clock fresh. The
+  shrine re-create after a wipe keeps it (no zone, no boost).
+- **NOT sent:** the `[20 … 152]` visual. No table column we read carries 152.
+
+**Tests.** `test_ressig.py` is new: 20 checks bare, 22 with the vault.
+- It drives real hero casts through `ally_cast_tick`: the raise segment, single use, two
+  casters (raise + stop), a henchman, and the known-bad arm's loop.
+- §7 checks the rule against retail (44 casters, 0 repeats; E7 then E3, 3 of 3).
+- `RESURRECTION_SINGLE_USE = False` in the source reddens 11.
+- A draft of §2 passed for the wrong reason: the start's 3 s anchor alone kept the slot
+  busy. `_elapse` now moves every finite slot clock first.
+- `test_pendskill.py` §1's Resurrection Signet landing now expects E7 then E3.
+
+**Left open** (`PLAN.md` §8.1):
+- **The client run:** `revheal2` again, predicting one raise per hero and then none.
+- **The boss-death morale boost:** +2%, recharging every skill, the signet included. Its
+  wire is unobserved.
+- **E7 after a wipe's re-create:** the client's new hero agent may draw the spent signet
+  as ready.
+- **The player's own signet:** the server has no player resurrection at all (`resurrect_target`
+  is reached from a body's landing only).
+
 ### PENDSKILL's client run -- 2026-09-30 -- **0 `Pending skill` lines against 69: 67 hero E4s, each opening its cast, 66 closed by their E3 and one in flight at the end. And the owner saw two things worth chasing: Resurrection Signet is reusable without limit (it is single-use, refreshed by a morale boost), and the player's attacks seemed to "delay then double-hit".**
 
 **The run:** `20260930T202753`, tree `f56a13d9`. The rig is `20260930T185003`'s: `revheal2`,

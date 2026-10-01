@@ -608,6 +608,10 @@ has been captured (46.3 stands); the numbers are the client's own row. studies/s
 [skill_effect.2]
 scale_means = "Resurrect"
 resurrect_energy = 0.25
+# RESSIG (2026-09-30): single-use, refreshed by a morale boost or a zone change --
+# the field the server reads (skill_recharges_on_boost); the evidence is in the
+# provenance's last paragraph.
+recharge_on = "morale_boost"
 [skill_effect.2.provenance]
 source = "wiki"
 page = 'GWW, "Resurrection Signet" (the standing description; page not re-read on 2026-09-13)'
@@ -622,7 +626,16 @@ and, since JARIN-S (2026-09-14), `resurrect_energy` = 0.25 -- OBSERVED on
 0.2632] = 5 of a 19 maximum, then prop 54 = 5, where every shrine or timer
 rise in the corpus carries 1.0. "Only recharges
 when you gain a morale boost" is not modelled either -- the client table's
-recharge (0) is what the server uses, so the signet is ready every fight."""
+recharge (0) is what the server uses, so the signet is ready every fight.
+RESSIG (2026-09-30) models it: `recharge_on = "morale_boost"`. WIKI (GWW
+"Resurrection Signet", read 2026-09-30, and "Morale Boost": a skill-recharging boost
+is a boss's death, a god's blessing, a mission event, the Seal of the Dragon Empire,
+a Powerstone of Courage; every skill also recharges on zoning). OBSERVED, the live
+corpus: 44 casters completed a raise and 0 a second on one connection; every repeat
+start was stopped by [59] when another caster's raise landed first, and a stopped
+cast did not spend it. A completed raise: [58], [20 visual], E7 [caster, 2, 0], E3,
+the rise -- 3 of 3, no E5. The morale boost that would refresh it is not modelled
+(no boss death on tape)."""
 
 [skill_effect.281]
 scale_means = "Heal"

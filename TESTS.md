@@ -3527,6 +3527,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   on one handler and E4 on another, the log string and its push, the add's call. Proved
   red: `HERO_CAST_OPENS_E4 = False` in the source reddens 11. Floor 19 from the bare green
   run (the vault adds 7: 26). No socket, no client. ~17 s vaulted),
+  `toolkit/authsrv/test_ressig.py` (**2026-09-30, RESSIG: Resurrection Signet is single-use,
+  refreshed by a morale boost or a zone change.** The table's recharge 0 let two heroes raise
+  each other 66 times on `20260930T202753`; `[skill_effect.2]` now says `recharge_on =
+  "morale_boost"`. §1 a hero's completed raise through `ally_cast_tick`: `[58]`, E7
+  `[hero, 2, 0]`, E3, then the corpse's status, no E5, the slot spent (+inf). §2 single use:
+  the corpse killed again, ten seconds elapsed on every slot clock (`_elapse` -- without it
+  the start's 3 s anchor makes "no second cast" pass for the wrong reason, which the first
+  draft did), forty ticks, no second cast. §3 two heroes on one corpse: one raises (E7, E3),
+  the other is STOPPED at its landing (`[59]`, E2), not spent, and raises the next death;
+  the PENDSKILL ledger closes. §4 a henchman: spent, no E-family. §5 the KNOWN-BAD arm
+  `--no-resurrection-single-use`: E5 + E3 ahead of the `[58]` and the same hero raises
+  again. §6 the row (only skill 2 carries the field), the switch, and the zone/wipe paths
+  (source: `hero_body_create` builds the clock fresh, `wipe_to_shrine` keeps it). §7
+  (vault) RETAIL: 44 casters, none with a second completed raise on one connection, 43
+  stopped starts; the 3 completed raises carrying the family are E7 then E3, no E5.
+  Proved red: `RESURRECTION_SINGLE_USE = False` in the source reddens 11. Floor 20 from the
+  bare green run (the vault adds 2: 22). No socket, no client),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
   0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`

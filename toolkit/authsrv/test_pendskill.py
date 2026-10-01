@@ -159,9 +159,12 @@ def section_spell():
           "and the E4 is ahead of the cast's [60] announce", f"{start}")
     land = _land(st, wire)
     ops = [op for op, v in land if v[:1] == [HERO]]
-    check(ops[:2] == [E5, E3],
-          "the landing sends E5 then E3 on the hero (JARIN's completion, unchanged)",
-          f"{land[:4]}")
+    # RESSIG (2026-09-30): a completed Resurrection Signet closes with E7 (the
+    # indefinite recharge) then E3, retail's 3 of 3 -- every other spell keeps
+    # JARIN's E5 then E3. Either way the E3 is what closes the E4's record.
+    check(ops[:2] == ([0x00E7, E3] if authsrv.RESURRECTION_SINGLE_USE else [E5, E3]),
+          "the landing sends E7 then E3 on the hero (RESSIG; E5 then E3 under "
+          "--no-resurrection-single-use)", f"{land[:4]}")
     misses, held = client_ledger(start + land)
     check(misses == [] and not held,
           "the client's ledger over start + landing: 0 misses, 0 records left open",

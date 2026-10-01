@@ -6561,6 +6561,29 @@ HERO_WIRE_POOLS = True         # False (--hero-silent-pools): the pre-JARIN sile
 # own agent, so nothing a server sends can open that record. --no-hero-cast-e4 is
 # the pre-fix arm: no E4 and none of the closes below.
 HERO_CAST_OPENS_E4 = True      # False (--no-hero-cast-e4): no E4, every hero E3 misses.
+# RESSIG (2026-09-30): RESURRECTION SIGNET IS SINGLE-USE, refreshed by a morale boost --
+# the owner, after 20260930T202753's two heroes raised each other 66 times, and WIKI
+# (GWW "Resurrection Signet": "This signet only recharges when you gain a morale
+# boost"; "Morale Boost": a skill-recharging boost is a boss's death, a god's
+# blessing, a mission event, two consumables; all skills also recharge "when
+# zoning"). The client's table says recharge 0, which is what this server used, so the
+# signet was ready every fight. RETAIL agrees with the rule, OBSERVED over the live
+# corpus: 44 casters completed a raise and 0 completed a second on one connection
+# (2 observers, 18 party bodies, 24 others); every repeat START was a cast stopped by
+# [59] -- the corpse already raised by another caster, at the stopped cast's own
+# landing -- and a stopped cast does not spend the signet (the same casters raise
+# later). A completed raise is [58], (a [20] visual), E7 [caster, 2, 0], E3, then the
+# rise, with NO E5: 3 of 3 E7s on tape, the observer twice and a hero once; 0x00E7 is
+# the client's INDEFINITE recharge (studies/skills 26.12: recharge = 0xFFFFFFFF, the
+# slot painted +inf). So, on a body whose row carries `recharge_on = "morale_boost"`:
+# a completed raise sends E7 + E3 (a hero) and spends the slot until the row is
+# re-created -- a zone change does that (hero_body_create builds the bar fresh); the
+# shrine re-create after a wipe keeps it (no zone, no boost). A landing whose target
+# already stands is [59] (+ the hero's E2), raises nobody and spends nothing. NOT
+# HERE: the morale boost itself -- no boss death is on any tape (0 of 5 glowing
+# agents died on 128 connections), so its wire would be invented; it is open in
+# PLAN.md 8.1. --no-resurrection-single-use is the pre-fix arm.
+RESURRECTION_SINGLE_USE = True  # False (--no-resurrection-single-use): ready every fight.
 # WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
 # on plane 19), the hero's body deleted and re-created, both raised at full
 # health with the maxima kept, no 0x01D8 (340.21 s; three earlier tapes the
@@ -12381,6 +12404,11 @@ GAME_SMSG_SKILL_ACTIVATED = 0x00E3
 GAME_SMSG_SKILL_ACTIVATED_BROADCAST = 0x00E4
 GAME_SMSG_SKILL_RECHARGE = 0x00E5
 GAME_SMSG_SKILL_RECHARGED = 0x00E6
+# 0x00E7: the INDEFINITE recharge (studies/skills 26.12's proposed name, INFERRED from
+# its worker: the slot's recharge = 0xFFFFFFFF, painted +inf). Its wire witnesses are
+# all Resurrection Signet: 3 of 3 completed raises, the observer twice and a hero once,
+# E7 then E3 behind the [58] (RESSIG). The server's first sender.
+GAME_SMSG_SKILL_RECHARGE_INDEFINITE = 0x00E7
 
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
@@ -30922,6 +30950,25 @@ def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why="",
           f"up{why}", flush=True)
 
 
+def skill_recharges_on_boost(skill_id):
+    """RESSIG: the skill's `skill_effect` row says it recharges only on a morale
+    boost (`recharge_on = "morale_boost"`: Resurrection Signet; Sunspear Rebirth
+    Signet 1816 too by WIKI, but it has no row and no resurrection here)."""
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return row.get("recharge_on") == "morale_boost"
+
+
+def resurrection_target_dead(state, tid):
+    """Is the resurrection's target still a corpse at the landing?"""
+    if tid is None or tid == PLAYER_AGENT_ID:
+        return bool(state.get("player_dead"))
+    row = state.get("agents", {}).get(tid)
+    return bool(row is not None and row.get("dead"))
+
+
 def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
     """SLICE-H3: a resurrection skill lands -- the player through the revive
     path, a party body through revive_party_body. Retail: Resurrection Signet
@@ -36735,7 +36782,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # casts on 20260914T005758: E4, the debit, E5, [48], [21], 0x00A5, 0x0042,
     # 0x0042, E3), where a spell's E3 rides beside its E5 (hero_skill_messages).
     _inst = INSTANT_ANNOUNCE and bool(skill_id) and _is_instant_skill(skill_id)
-    if slot is not None and slot < len(skills):
+    # RESSIG: a morale-boost resurrection writes its own completion below -- E7 + E3
+    # behind the [58] on a raise, the stop's E2 on a standing target -- and no E5.
+    _boost = (RESURRECTION_SINGLE_USE and bool(skill_id)
+              and skill_resurrects(skill_id) and skill_recharges_on_boost(skill_id))
+    if slot is not None and slot < len(skills) and _boost:
+        agent.pop("cast_recharge", None)
+    elif slot is not None and slot < len(skills):
         # JARIN: a hero's completion rides the skill family (0x00E5, 0x00E3).
         hero_skill_messages(send, state, agent_id, agent, skill_id,
                             agent.pop("cast_recharge",          # WEAPONS-W5b
@@ -36745,9 +36798,42 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # (retail: [60] -> 3.0 s -> [id, 0], F28). Nothing else of a cast applies.
     if skill_resurrects(skill_id):
         agent["casting"] = None
+        _ready = agent.get("skill_ready")
+        if _boost and not resurrection_target_dead(state, agent.get("cast_target")):
+            # RESSIG: the corpse already stands (another caster's raise landed
+            # first) -- retail stops this cast with [59] at its own landing, raises
+            # nobody and spends nothing (the same casters raise later: 0 of 44
+            # completed twice, 23 + 19 + 1 such stops). A hero's open record
+            # closes with its E2 (PENDSKILL).
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_SKILL_STOPPED, agent_id, 0],
+                 f"skill_stopped: agent {agent_id}'s skill {skill_id} -- its target "
+                 f"already stands [RESSIG]")
+            hero_cast_drop(send, agent_id, agent, skill_id, "its target already stands")
+            if _ready is not None and slot is not None and slot < len(_ready):
+                _ready[slot] = time.time()
+            print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} is STOPPED: its "
+                  f"target already stands; the signet is not spent [RESSIG]", flush=True)
+            return
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_SKILL_FINISHED, agent_id, 0],
              f"agent {agent_id} finishes casting {skill_id}")
+        if _boost:
+            # RESSIG: retail's completed raise, 3 of 3 -- [58], E7 [caster, skill,
+            # 0], E3, then the rise (the [20, target, caster, 152] visual between
+            # [58] and E7 is not sent: no table column we read carries 152). The
+            # slot is spent until the row is re-created (a zone change).
+            if HERO_WIRE_POOLS and hero_body_id(agent) is not None:
+                send(GAME_SMSG_SKILL_RECHARGE_INDEFINITE, [agent_id, int(skill_id), 0],
+                     f"SKILL_RECHARGE_INDEFINITE(hero agent {agent_id}, skill {skill_id}): "
+                     f"spent until a morale boost [RESSIG]")
+                hero_skill_e3(send, agent_id, agent, skill_id)
+            if _ready is not None and slot is not None and slot < len(_ready):
+                _ready[slot] = math.inf
+            agent.setdefault("boost_spent", set()).add(int(skill_id))
+            print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} is SPENT: it "
+                  f"recharges only on a morale boost or a zone change [RESSIG]",
+                  flush=True)
         resurrect_target(send, state, agent.get("cast_target"), conn_id,
                          agent_id, skill_id)
         if _inst and slot is not None and slot < len(skills):
@@ -45904,6 +45990,12 @@ def main():
         print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
               "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
               flush=True)
+    if a.no_resurrection_single_use:
+        global RESURRECTION_SINGLE_USE
+        RESURRECTION_SINGLE_USE = False
+        print("[map] --no-resurrection-single-use: Resurrection Signet takes the "
+              "table's recharge 0 and is ready every fight -- 0 of 44 retail casters "
+              "raised twice on one connection [RESSIG revert]", flush=True)
     if a.no_hero_cast_e4:
         global HERO_CAST_OPENS_E4
         HERO_CAST_OPENS_E4 = False
