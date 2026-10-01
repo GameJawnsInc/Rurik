@@ -4636,6 +4636,17 @@ and a test that the latch replay pairs the observer with itself. The confirmatio
 owner's eye on the same rig: hands-off auto-attack beside two heroes. The latch replay over
 the run's tape is the instrument that can go red without a client.
 
+### 43.7 On the client — `20260930T223031` and `20260930T224421`
+
+- **On both tapes, the wire holds:** `[1]` came first on 39 of 39 player hits, and the
+  latch replay names the player at 39 of 39 (8 % before the fix, 30 % on another agent).
+- **The cadence is untouched** (1.330 s).
+- **The exposure is short:** 18 and 21 hits against the registered floor of 50. The rig's
+  fight is about 25 s since RESSIG.
+- **The owner, watching the second:** *"attacks seems normal, but don't have the same
+  sample size as last time."* There were no doubles over about 25 s. CONSISTENT; a longer
+  window (more health, or real heals) would make it a CONFIRMATION.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

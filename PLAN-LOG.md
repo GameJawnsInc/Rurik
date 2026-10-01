@@ -28,6 +28,33 @@ move back.
 
 ---
 
+### ANIMREF-RE 43's client runs -- 2026-09-30 -- **On the wire the fix holds: 39 of 39 player hits sent `[1]` first, and the client's latch, replayed over both tapes, pairs 39 of 39 with the player's own swing (8 % before, 30 % on another agent). Short exposure (under the registered floor of 50 per run); the owner, watching the second: "attacks seems normal, but don't have the same sample size as last time".**
+
+**The runs:** `20260930T223031` and `20260930T224421`, tree `cefc9105`, the `revheal2` rig.
+The questions were registered before launch (`LATCH-run-registered.txt`).
+- **The first** PASSED with the owner not watching.
+- **The second** RETRACTED. The client exited with code 0 and no error dialog 62 s into the
+  hold, after the attack window and the wipe. That is a clean close, not a crash: no
+  assert, and the client log carries only its usual credentials line.
+
+**The questions.**
+- **LAT-Q1:** `[1]` ahead of the word on 18 of 18 and 21 of 21 player hits.
+- **LAT-Q2:** the latch (studies/animref 43.3's rule) names the player at 18 of 18 and
+  21 of 21 of its words, 0 on another agent.
+- **The exposure is short** against the registered floor of 50: with RESSIG the heroes stay
+  down after one raise each, the raider kills the player after about 25 s of swinging, and
+  nobody fights after the wipe.
+- **LAT-Q4:** the swing cadence is unchanged (1.330 s); 0 `Pending skill`, 0 resurrect
+  complaints, one raise per hero.
+- **LAT-Q3, the owner's eye:** not watched on the first run. On the second: *"attacks
+  seems normal, but don't have the same sample size as last time."* So no delay or double was
+  seen over about 25 s of auto-attack. That is consistent with the fix, but it is not the
+  minutes of the original report.
+
+**For a longer window**, the owner's suggestion: more health across the board, or real
+heals, so the check lasts long enough to matter. The owner moved on to a warp found
+during the same run, so the longer window is open in `PLAN.md` §8.1.
+
 ### ANIMREF-RE 43, the fix -- 2026-09-30 -- **the player's hit now closes its swing with `[1]` BEFORE its gain and damage word, retail's order (1,376 of 1,376), so the client draws the number on the player's own swing. Behind `--hit-finish-last`. NOT yet confirmed by the owner's eye.**
 
 **The defect.** `studies/animref/FINDINGS.md` §43, committed as `38867ad3` the same day. The

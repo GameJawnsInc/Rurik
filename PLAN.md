@@ -2313,8 +2313,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
 * **RESSIG's open ends** (SLICE-F53 53.4): a boss death's skill-recharging morale boost
   (none on tape); E7 after a wipe's re-create.
-* **ANIMREF-RE 43's client run:** the owner's eye on the double-hit (auto-attack beside two
-  heroes); the hit's `[1]` now leads its word.
+* **ANIMREF-RE 43, a longer window:** 39 of 39 hits latched right and "attacks seem normal"
+  on ~25 s; minutes beside two heroes need more health or heals.
 * **A hero's E5 on a zero-recharge skill** (SLICE-F52 52.5): retail sends none (13 of 13); we
   send `E5 [hero, skill, 0, 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
