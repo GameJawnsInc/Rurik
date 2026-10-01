@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### RESSIG-T's client run, RESSIG-T2 and MOVECODE-1z-dq -- 2026-10-01 -- **`20261001T160705`, the owner driving: the boost's repaint CONFIRMED ("gets refreshed visually now"), six no-target presses refused #1966 on the wire; and two bugs the owner found. A living hero could be targeted (now #1966 at the press), and a warp after a keyboard-lead walk ended in clicks (the click leg started at the pre-lead report; now at the lead kill's own point).**
+
+**The run:** registered before launch (`RESSIGT-run-registered.txt`), tree `3a827b72`, the
+`revheal2` rig.
+- **ST-Q2 (T):** 6 of 6 target-0 presses were refused #1966 at once.
+- **ST-Q2 (R):** E5 `[1, 2, 0]` went ahead of the boss's three E6s.
+- **ST-Q4:** 0 `Pending skill`.
+- **ST-Q3 (b):** CONFIRMED. (a), the on-screen sentence, is not yet answered.
+
+**RESSIG-T2** (`studies/slice/FINDINGS.md` §53.10):
+- **The fix:** `RESURRECT_TARGET_GATE` now asks for a DEAD party body, so a living ally, a
+  foe or the player's own agent is refused at the press.
+- **Tests:** `test_signetboost` 25 -> 29, bare too; the old condition reddens 3.
+
+**MOVECODE-1z-dq** (`studies/movecode/FINDINGS.md` §1z-dq):
+- **The cause:** the warp's 0x002C re-pinned the body at a click leg armed from a report
+  5.5 s and ~1,100 u stale.
+- **The fix:** `_kbd_lead_kill` records the point it grants, and the click arm and the
+  interact walk start their leg there.
+- **Tests:** `test_kbdsync` 236 -> 240; the fix off in the source reddens §27b.
+
+**Green around both fixes:**
+
+| Test | Checks | Test | Checks |
+|---|---|---|---|
+| test_playerswing | 191 | test_position_trust | 251 |
+| test_router | 126 | test_cancelwalk | 124 |
+| test_shrinewarp | 8 | test_d1lead | 118 |
+| test_agentlife | 704 | test_castcancel | 44 |
+| test_ressig | 22 | test_castcycle | 63 |
+| test_castgate | 81 | test_loot | 65 |
+| test_pendskill | 26 | test_mechanics | 384 |
+| test_dispatch | 54 | test_guards | 45 |
+| test_approachroute | 46 | test_interact | 29 |
+| test_srclint | 26 | | |
+
 ### The content overlay follows build 38974 -- 2026-10-01 -- **the owner's "handle the content data". Regenerated from the 38974 snapshot and diffed by value: not one served number moved (1,334 skill rows, 55 labels, the attribute / composite / effect tables all identical; only the unused hero row 0's string ids). Proved on a shadow vault with the whole suite; six build-keyed tests gained their 38974 key; genericvalue's 38974 red found and fixed on the way.**
 
 **The tables:** `studies/crossbuild/FINDINGS.md` §11.6. `item_modifiers` and `npcs` were

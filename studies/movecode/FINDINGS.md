@@ -20403,3 +20403,44 @@ There were three wipes, with an owner press after the first two: one a few secon
 right after the rise. Both approaches start from the shrine (2326 u and 2062 u out, against
 the warp's 540 u). The run carries 0 `PRESS ENDS THE WALK` lines. The owner: *"that
 worked."* 1z-dp.4's mid-leg in-place case stays open.
+
+## 1z-dq. A click that ended a keyboard lead started its leg at the report the lead had left behind, so the next attack press re-pinned the player ~1,100 u back (2026-10-01)
+
+### 1z-dq.1 The report and the log — OBSERVED
+
+**The owner, `20261001T160705`:** *"i had a warp after killing the boss and issuing an
+attack command on the other bandit far away"*.
+
+**The tape:**
+- **Before the clicks:** the keyboard walk south ran as granted leads (`KBD LEAD`,
+  `RE-GRANT 1`, `RE-GRANT 2`), which the client walks without reporting.
+- **116.28 s:** a click, `MOVE_TO_COORD (1245,4702)`. It killed the lead with a zero-lead
+  grant at the modelled body, (1409,8511). Then came the router leg.
+- **116.74 s and 117.65 s:** two more clicks.
+- **117.85 s:** `ATTACK 110` -> `PRESS ENDS THE WALK: 0x002C at the modelled body
+  (1500,9199)`. That is ~1,100 u north of the body, and behind the kill point itself.
+- **The approach:** it then started from there, `5352 u out`, with `report_age 5.5`.
+
+### 1z-dq.2 The mechanism — the code, read
+
+- **The arming:** the 0x003E arm called `_kbd_lead_kill` and then
+  `_click_leg_arm(silent=_cl_prev is not None)`. The keyboard regime had set no click
+  latch, so the leg started at `_click_leg_start`'s "report": the client's last report,
+  from before the lead.
+- **The chain:** the two later clicks chained from that leg's model, which was silent, and
+  so did the press's re-pin.
+- **The cause:** the kill had computed the right point and sent it, but it told the leg
+  nothing.
+
+### 1z-dq.3 Shipped
+
+- **The fix:** `_kbd_lead_kill` records the point it grants (`state["kbd_kill_point"]`), and
+  the click arm and the interact walk hand it to `_click_leg_arm(start=...)` when they
+  killed a lead.
+- **Tests:** `test_kbdsync` §27 replays the shape: a 5,200 u lead walked silently for 10 s,
+  a click, then a press 1 s later.
+  - **With the fix:** the press models the body 288 u down the new leg.
+  - **The known-bad arm (no start):** it models the body more than 2,000 u away.
+  - **With the fix off in the source,** §27b goes red.
+- **RECONSTRUCTION in one respect:** the lead's model is itself a straight-line lerp at the
+  family speed, so a bent lead still carries its own error into the leg.

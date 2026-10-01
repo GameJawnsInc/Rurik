@@ -1121,12 +1121,14 @@ def interact_route(send, state, conn_id, agent_id, spot):
     # keyboard walk, an approach, a heading hold and an in-flight lead.
     state["walking"], state["heading"] = False, None
     _approach_abandon(state)
-    _kbd_lead_kill(send, state, conn_id, None, "interact")
+    state.pop("kbd_kill_point", None)
+    _ik = _kbd_lead_kill(send, state, conn_id, None, "interact")
     state["heading_hold"] = None
     prev = state.get("click_moving_at")
     state["click_moving_at"] = now
     state["interact_walk"] = now
-    _click_leg_arm(state, dest, now, silent=prev is not None)
+    _click_leg_arm(state, dest, now, silent=prev is not None,
+                   start=state.pop("kbd_kill_point", None) if _ik else None)
     routed = router_answer_click(send, state, conn_id, None, dest, dest_plane,
                                  cur_plane, dest_plane, cur_plane)
     if routed:
@@ -6640,6 +6642,14 @@ BOOST_REPAINT = True            # False (--boost-e6-only): the E6 alone; the ico
 # (chatdefs.REFUSE_INVALID_TARGET) and the release, before the first send. The
 # SENTENCE is OBSERVED on screen; its wire form is #1934's (the attack-target gate),
 # RECONSTRUCTION. Until today the press ran its 3 s and stopped ([59], E2).
+# RESSIG-T2, the same day, the owner on our client (20261001T160705): "i can target
+# live heroes with res sig. if they die during my casting, it can complete. if they
+# are alive when casting finishes, it stops" -- a bug, so the gate's condition is a
+# DEAD PARTY BODY, not merely a nonzero target: a living hero, the player, a foe or
+# a stranger at the press gets the same #1966 and begins nothing. The sentence for
+# a LIVING target is RECONSTRUCTION (the owner's retail reading was the no-target
+# press). A corpse raised by someone else DURING the cast still stops at the end
+# ([59], E2) -- the bodies' 42 stops on tape are that case, OBSERVED.
 RESURRECT_TARGET_GATE = True    # False (--no-resurrect-target-gate): cast, then stop.
 # WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
 # on plane 19), the hero's body deleted and re-created, both raised at full
@@ -9769,6 +9779,12 @@ def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
          f"({x:.0f},{y:.0f}) plane {plane}, {remaining:.0f} u of the lead "
          f"unwalked [MOVECODE-1z-y]")
     state["zl_last_grant_plane"] = plane
+    # MOVECODE-1z-dq (2026-10-01): the point the copy was just re-aimed to is the best
+    # place the server has for the body -- the client walks a granted lead
+    # SILENTLY, so its last report is as old as the lead (5.5 s and ~1,100 u on
+    # 20261001T160705). A click that killed the lead starts its leg HERE
+    # (`_click_leg_arm`'s `start`), not at that report.
+    state["kbd_kill_point"] = (float(x), float(y))
     if rec is not None:
         rec.event("kbd_leg", act="kill", why=why, matured=False,
                   point=[float(x), float(y)], remaining=round(remaining, 1),
@@ -20368,7 +20384,7 @@ from leadgeom import (  # noqa: F401,E402
 )
 
 
-def _click_leg_arm(state, dest, now, silent):
+def _click_leg_arm(state, dest, now, silent, start=None):
     """Record the leg a click starts: start, end, and the instant it arrives.
 
     Straight line, at the base speed this server declared (0x0027,
@@ -20386,8 +20402,15 @@ def _click_leg_arm(state, dest, now, silent):
     (~0.29 s, ~86 u) behind the body, which holds the swing that long past
     the real arrival. `t0` is the latch stamp itself, so a reader can tell
     the leg of THIS click from a leftover by identity rather than by age.
+
+    `start`, when given, is where the leg begins and overrides the model --
+    MOVECODE-1z-dq: the point `_kbd_lead_kill` just granted when this click ended a
+    keyboard lead. Without it the first click after a lead started from the
+    pre-lead REPORT, and every later click and the press-ends-the-walk 0x002C
+    inherited that offset: 20261001T160705, the body re-pinned ~1,100 u behind
+    itself -- the owner's warp.
     """
-    p0 = _click_leg_start(state, now, silent)
+    p0 = start if start is not None else _click_leg_start(state, now, silent)
     if p0 is None:
         state["click_leg"] = None
         return None
@@ -24832,13 +24855,22 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         refuse_press(send, int(skill_id), int(copy), conn_id)
         _press_refused(state, rec, conn_id, "spent", terminal=True)
         return
-    if RESURRECT_TARGET_GATE and not target and skill_resurrects(skill_id):
-        # RESSIG-T: a resurrection names its corpse or begins nothing (the banner
-        # at RESURRECT_TARGET_GATE) -- retail's "Invalid Target", at once.
+    _res_body = party_body(state, target)
+    if (RESURRECT_TARGET_GATE and skill_resurrects(skill_id)
+            and not (_res_body is not None and _res_body.get("dead"))):
+        # RESSIG-T / T2: a resurrection names a DEAD party body or begins nothing
+        # (the banner at RESURRECT_TARGET_GATE) -- retail's "Invalid Target", at once.
+        _why = ("target 0" if not target else
+                f"agent {int(target)}, which is "
+                + ("a LIVING party body" if _res_body is not None
+                   else "not a party body"))
         print(f"[c{conn_id}] REFUSED skill {int(skill_id)}: a resurrection pressed "
-              f"with target 0 -- retail's #1966, at once [RESSIG-T]", flush=True)
-        _press_row(rec, fired=False, reason="resurrect-target-0", target=0,
-                   age=0.0, skill=skill_id)
+              f"at {_why} -- retail's #1966, at once [RESSIG-T]", flush=True)
+        _press_row(rec, fired=False,
+                   reason=("resurrect-target-0" if not target
+                           else "resurrect-target-alive" if _res_body is not None
+                           else "resurrect-target-not-party"),
+                   target=int(target or 0), age=0.0, skill=skill_id)
         refuse_press(send, int(skill_id), int(copy), conn_id,
                      chatdefs.REFUSE_INVALID_TARGET)
         return
@@ -43982,7 +44014,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the copy's leg too, but a kbd-dropped or refused
                         # click sends nothing and the lead would mature),
                         # and supersedes any held heading.
-                        _kbd_lead_kill(send, state, conn_id, rec, "click")
+                        state.pop("kbd_kill_point", None)
+                        _ck = _kbd_lead_kill(send, state, conn_id, rec, "click")
                         state["heading_hold"] = None
                         _cl_prev = state.get("click_moving_at")
                         state["click_moving_at"] = time.time()
@@ -43993,8 +44026,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the client has not spoken since the previous click,
                         # which decides whether this leg starts from that
                         # leg's model or from the last report.
+                        # MOVECODE-1z-dq: a click that ended a keyboard lead starts
+                        # its leg where the kill re-aimed the copy.
                         _click_leg_arm(state, dest, state["click_moving_at"],
-                                       silent=_cl_prev is not None)
+                                       silent=_cl_prev is not None,
+                                       start=(state.pop("kbd_kill_point", None)
+                                              if _ck else None))
                         # A click ALSO stands the watchdog down -- via the
                         # click-in-flight clause reading the latch above, NOT
                         # by consuming the leg. READ, not popped (the review's

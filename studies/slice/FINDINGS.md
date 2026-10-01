@@ -3958,6 +3958,28 @@ no target selected, even if a dead ally is nearby (refuses immediately)"*.
 - **Tested:** `test_signetboost` §8.
 - **Not yet on our client:** whether a 38797 client draws #1966 the way retail did.
 
+### 53.10 On the client — `20261001T160705`; and RESSIG-T2
+
+**The wire:**
+- Six target-0 presses, each `REFUSED ... #1966, at once`.
+- The boss's boost sent `E5 [1, 2, 0]` ahead of the three E6s.
+- 0 `Pending skill`, and no assert. The owner closed the client.
+- **Not yet answered:** whether "Invalid target." drew on screen for those six presses.
+
+**The owner:**
+- **The repaint:** *"gets refreshed visually now"*. BOOST_REPAINT is CONFIRMED.
+- **Bug 1, RESSIG-T2:** *"i can target live heroes with res sig. if they die during my
+  casting, it can complete. if they are alive when casting finishes, it stops at the end of
+  casting"*.
+  - **The fix:** the gate's condition is now a DEAD PARTY BODY. A living hero, a foe or the
+    player's own agent gets #1966 at the press. The sentence for a living target is
+    RECONSTRUCTION.
+  - **Unchanged:** a corpse raised by someone else mid-cast still stops at the end, the
+    bodies' 42 OBSERVED stops.
+  - **Tests:** `test_signetboost` §9.
+- **Bug 2, the warp after the boss:** a movement defect. It is MOVECODE-1z-dq in
+  `studies/movecode/FINDINGS.md`.
+
 ## SLICE-F54 — **HEROENERGY: a hero's energy is its own and its panel is told it. Retail sends `[62, hero, -cost/max]` right behind a hero's E4 (Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2). Ours said nothing, and sent the player's rate over a hostile pool (2026-10-01)**
 
 **The owner,** watching the healer rig's hero panels (`20261001T100733`): *"heroes don't

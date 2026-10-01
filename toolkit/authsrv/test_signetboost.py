@@ -28,6 +28,9 @@ RECONSTRUCTION, the shapes a morale change already has.
      #1966 and the release -- retail's 'Invalid Target', the owner's reading
      2026-10-01 -- nothing begins and no corpse is auto-picked; the KNOWN-BAD arm
      (--no-resurrect-target-gate) casts its 3 s.
+  9  RESSIG-T2: a press at a LIVING hero, a foe or the player's own agent is refused the
+     same way -- the owner's 20261001T160705 report ("i can target live heroes with res
+     sig") -- so a death mid-cast raises nobody; the known-bad arm casts.
 """
 import math
 import os
@@ -50,8 +53,9 @@ import authsrv                                                 # noqa: E402
 # cost are pinned in main(), its [skill_effect.2] row is the repo's). PLAYER_RESURRECTION,
 # BOSS_MORALE_BOOST and BOOST_REPAINT False in the source redden 15; BOOST_REPAINT alone 2.
 # 20 -> 25 for section 8 (RESSIG-T), bare and vault alike; RESURRECT_TARGET_GATE
-# False in the source reddens 3.
-LEDGER = checks.Ledger("signet and boost", floor=25)
+# False in the source reddens 3. 25 -> 29 for section 9 (RESSIG-T2), bare and vault;
+# the gate's old target-0-only condition reddens 3.
+LEDGER = checks.Ledger("signet and boost", floor=29)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -335,6 +339,40 @@ def section_no_target():
           "the gate ships ON; --no-resurrect-target-gate reverts", "")
 
 
+def section_live_target():
+    print("== 9. RESSIG-T2: a press at a LIVING ally (or anyone not a dead ally) is refused ==")
+    import chatdefs                                            # noqa: PLC0415
+    core = (authsrv.GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.refusal_body(1966)])
+    st, w = _world(agents={HERO: _hero(dead=False)}), Wire()
+    _press(st, w, target=HERO)
+    sent = w.take()
+    check(core in sent and (E2, [P, RES, 0]) in sent
+          and not [1 for op, v in sent if op == 0x00E4] and not st.get("pending_casts"),
+          "a living hero: #1966 and the release at once, no E4, nothing begins -- the "
+          "owner's 20261001T160705 press cast at one and could complete if it died",
+          f"{sent}")
+    st["agents"][HERO]["dead"] = True               # it dies a moment later
+    _land(st, w)
+    check(not st.get("boost_spent") and st["agents"][HERO]["dead"],
+          "so its death a moment later raises nobody: no cast was ever running", "")
+    st, w = _world(agents={HERO: _hero(), BOSS: _foe(False)}), Wire()
+    _press(st, w, target=BOSS)
+    _press(st, w, target=P)
+    sent = w.take()
+    check(sent.count(core) == 2 and not st.get("pending_casts"),
+          "a foe and the player's own agent: the same refusal, twice", f"{sent}")
+    saved = authsrv.RESURRECT_TARGET_GATE
+    authsrv.RESURRECT_TARGET_GATE = False
+    try:
+        st, w = _world(agents={HERO: _hero(dead=False)}), Wire()
+        _press(st, w, target=HERO)
+        check(st.get("pending_casts") and core not in w.take(),
+              "KNOWN-BAD (--no-resurrect-target-gate): the press at the living hero "
+              "casts -- the owner's report", "")
+    finally:
+        authsrv.RESURRECT_TARGET_GATE = saved
+
+
 def main():
     saved = (authsrv.skill_timing, authsrv.skill_cost)
     # Skill 2's own row, pinned so a bare machine runs the same cycle: 3.0 s, no
@@ -351,6 +389,7 @@ def main():
         section_no_boost()
         section_wiring()
         section_no_target()
+        section_live_target()
     finally:
         authsrv.skill_timing, authsrv.skill_cost = saved
     return LEDGER.verdict()

@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=236)   # 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=240)   # MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2470,6 +2470,47 @@ def main():
           "26d. KNOWN-BAD ARM (--kbd-grant-floor 0.5): the same report is refused "
           "and held, exactly the arm that shipped 2026-08-20 -> 2026-09-09",
           f"sent {w26d.of(MOVE)}")
+
+    # 27. MOVECODE-1z-dq (2026-10-01, the owner's warp on 20261001T160705): the client
+    # walks a granted keyboard lead SILENTLY, so its last report is as old as the
+    # lead. A click that killed the lead started its leg at that report, ~1,100 u
+    # behind the body, and the press's 0x002C ("PRESS ENDS THE WALK") re-pinned the
+    # body there. The leg now starts at the point the kill just granted.
+    print("\n27. MOVECODE-1z-dq: a click that ends a lead starts its leg at the kill's point")
+    import time as _t27
+    t27 = _t27.time()
+    lead27 = authsrv.a2_leg_note((0.0, 0.0), (5200.0, 0.0), 0, 1, t27 - 10.0)
+    st27 = {"pos": (0.0, 0.0), "plane": 0, "client_pos": (0.0, 0.0),
+            "kbd_leg": lead27, "declared_speed_base": 288.0}
+    killed27 = authsrv._kbd_lead_kill(Sent(st27), st27, 0, FakeRec(), "click", now=t27)
+    kp27 = st27.get("kbd_kill_point")
+    check(killed27 is True and kp27 is not None and abs(kp27[0] - 2880.0) < 0.5
+          and abs(kp27[1]) < 0.5,
+          "27a. 10 s into a silent 5,200 u lead the kill grants (and records) the "
+          "modelled body, 2,880 u along -- while the last report still says (0, 0)",
+          f"{kp27}")
+    leg27 = authsrv._click_leg_arm(st27, (2880.0, -2000.0), t27, silent=False,
+                                   start=st27.pop("kbd_kill_point"))
+    model27 = authsrv._click_leg_start(st27, t27 + 1.0, silent=True)
+    check(leg27["p0"] == (2880.0, 0.0) and abs(model27[0] - 2880.0) < 0.5
+          and abs(model27[1] + 288.0) < 0.5,
+          "27b. the click's leg starts THERE, so a press 1.0 s later models the body "
+          "288 u down the new leg -- the 0x002C it re-pins to is where the body is",
+          f"p0 {leg27['p0']}, model {model27}")
+    st27b = {"pos": (0.0, 0.0), "plane": 0, "client_pos": (0.0, 0.0),
+             "declared_speed_base": 288.0}
+    leg27b = authsrv._click_leg_arm(st27b, (2880.0, -2000.0), t27, silent=False)
+    model27b = authsrv._click_leg_start(st27b, t27 + 1.0, silent=True)
+    check(leg27b["p0"] == (0.0, 0.0)
+          and math.hypot(model27b[0] - model27[0], model27b[1] - model27[1]) > 2000.0,
+          "27c. KNOWN-BAD ARM (no start): the leg starts at the stale report and the "
+          "press models the body >2,000 u from where it is -- the warp",
+          f"model {model27b}")
+    check(SRC.count('start=(state.pop("kbd_kill_point", None)') == 1
+          and 'start=state.pop("kbd_kill_point", None) if _ik else None' in SRC
+          and SRC.count('state["kbd_kill_point"] = (float(x), float(y))') == 1,
+          "27d. the click arm and the interact walk both hand the kill's point to "
+          "their leg, and only the kill writes it")
 
     return LEDGER.verdict()
 
