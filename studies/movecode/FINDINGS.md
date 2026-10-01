@@ -20468,3 +20468,9 @@ there.
   recreated last run though"*. That agrees with the wire, with the same caveat.
 - **Open:** a press while the first post-kill leg is still walking, and the owner's eye on
   it.
+
+- **Scripting it needs REAL input.** The harness's `attack:N` mailbox calls
+  `begin_attack` directly. It skips the 0x0026 arm's `_kbd_lead_kill("press")` and
+  `_press_supersedes`, so it cannot reproduce PRESS ENDS THE WALK. A scripted check
+  holds a movement key, clicks the ground at a window fraction, then presses `c`
+  (target the nearest foe) and Space (attack), all as real keys.
