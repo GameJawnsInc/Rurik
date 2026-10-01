@@ -2994,6 +2994,14 @@ Labels:
 Not modelled: the patrollers' walking-speed resume, and retail's removal of the hostiles at
 the shrine batch (§43.2 of the slice findings; a visibility effect). Open: the client run.
 
+### MONSTERAI-W4 — the client run (2026-10-01)
+
+`20261001T004236`, tree `e1c2e0c7`, hands off, three wipes. On each, the raider stood
+548–554 u from its anchor at the last death and gave up 1.86 s after it. It walked two
+RETURN legs and stood on its anchor at +3.85–3.90 s, 6.7 s before the rise (+10.63 s).
+No give-up came at the rise. OBSERVED on our wire, n = 3. The owner's eye on the client is
+open (PLAN-LOG "MONSTERAI-W's client run").
+
 ---
 
 *Written 2026-08-11 from a five-angle fan-out with independent hostile review of every angle, a capture-campaign design and a completeness critic, then a verification pass by the orchestrator over every code-driving claim (§10). Nothing in this document was produced by launching a client or by pointing anything at ArenaNet. Every corpus figure quoted here was reproduced by at least two parties except where n and provenance are stated otherwise, and every claim that did not survive review is in §6 rather than deleted.*

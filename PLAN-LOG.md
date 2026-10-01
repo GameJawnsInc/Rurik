@@ -28,6 +28,33 @@ move back.
 
 ---
 
+### MONSTERAI-W's client run -- 2026-10-01 -- **on the wire, 3 of 3 wipes: the Bandit gave up 1.86 s after the last death, walked its two legs home and stood on its anchor 3.9 s after the death, 6.7 s before the rise. 0 give-ups at the rise. The owner's eye is still open.**
+
+**The run:** `20261001T004236`, tree `e1c2e0c7`, the `revheal2` rig. The questions were
+registered before launch (`DEADBOUT-run-registered.txt`). Hands off; the action script
+attacked the raider three times. Verdict PASS, held to the end.
+
+**A correction to the registration.** `session.py`'s action times are DELAYS after the
+previous action (`time.sleep(delay)` per spec), not times from the start. So `30 / 100 /
+185` fired at about 30, 130 and 315 s, not 30, 100 and 185. Every attack still came after
+the previous rise.
+
+**The questions.**
+- **DB-Q0:** loads, no assert; PASS. The client log holds only its usual classes.
+- **DB-Q1, exposed:** three `THE PARTY WIPED`. The raider stood 548-554 u from its anchor
+  at each last death (the player's, 5.3-7.0 s after the second hero's).
+- **DB-Q2:** each wipe has one `GIVES UP ... [MONSTERAI-W]` at +1.86 s.
+  - Two RETURN legs follow, at +1.86 and +3.59 s, and `is HOME` comes at +3.85 / +3.90 s.
+  - The countdown stops at +10.63 s.
+  - No `its target left the area` give-up in the run.
+  - The raider sends no order and no swing between the last death and its give-up.
+  - Retail's first order came 0.49-3.00 s after the death.
+- **DB-Q4:** each post-rise attack approached from the shrine (`2326 u out`), with 0 `PRESS
+  ENDS THE WALK` lines, 0 `Pending skill` and 0 resurrect complaints. Each hero raised once
+  in the first fight and stayed down after that (RESSIG).
+- **DB-Q3, the owner's eye:** asked after the run: *"During the 10 s countdown, did the
+  Bandit start walking back to its spot within a couple of seconds of the wipe?"* Open.
+
 ### MONSTERAI-W -- 2026-09-30 -- **a hostile no longer holds its bout on a dead party: with nobody alive in range it stands 1.8 s and walks home, retail's beat (first order 0.49-3.00 s after the wipe, 7 of 7). Behind `--dead-target-holds`; NOT yet run on the client.**
 
 **Found:** by the owner on `20260930T231034` (*"enemies hold aggro on dead party members"*).
