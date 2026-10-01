@@ -3967,8 +3967,11 @@ no target selected, even if a dead ally is nearby (refuses immediately)"*.
 - **On screen, CONFIRMED:** the owner: *"yes, it sent Invalid target, but only when
   usable. when greyed out it shows no response"*. The greyed case is the CLIENT's: 0
   `REFUSED skill 2: spent` in the log, so no press of a spent signet reached the server.
-  The E7's +inf paint gates the press locally, in ArenaNet's own client code. The owner
-  is checking stock.
+  The E7's +inf paint gates the press locally, in ArenaNet's own client code. **Stock
+  agrees**, the owner: *"refused client-side on stock"*.
+- **Run `20261001T183528`, registered as RESSIGT2-run-registered:** RESSIG-T2 was NOT
+  exposed. The session carries 0 `USE_SKILL` on all five connections, so the
+  living-hero press never happened.
 
 **The owner:**
 - **The repaint:** *"gets refreshed visually now"*. BOOST_REPAINT is CONFIRMED.

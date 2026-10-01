@@ -28,6 +28,16 @@ move back.
 
 ---
 
+### RESSIG-T2 / MOVECODE-1z-dq's client run, and the greyed press on stock -- 2026-10-01 -- **`20261001T183528`: neither fix's precondition recurred (0 Res Sig presses; no attack press mid-way through a post-kill leg). The wire shows no warp: each of four re-pins is within walking range of the next report. The owner: a greyed signet is "refused client-side on stock", so ours matches.**
+
+- **The session:** the owner walked the corridor's portal into map 148 and back, five
+  connections.
+- **The four re-pins:** each next report is within its 288 u/s budget (242/256, 402/423,
+  943/965, 1,121/1,135 u). They land on the last click's destination, so every leg had
+  already arrived. The scorer, validated on the warp run, read 695 u against 451 u there.
+- **Records:** `studies/slice/FINDINGS.md` §53.10, `studies/movecode/FINDINGS.md`
+  §1z-dq.4.
+
 ### RESSIG-T's #1966 on screen, CONFIRMED -- 2026-10-01 -- **the owner on `20261001T160705`: "yes, it sent Invalid target, but only when usable. when greyed out it shows no response". That answers ST-Q3 (a) of the entry below.**
 
 - **The greyed case is the client's own:** the log carries 0 `REFUSED skill 2: spent`,

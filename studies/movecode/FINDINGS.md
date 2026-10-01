@@ -20444,3 +20444,25 @@ attack command on the other bandit far away"*.
   - **With the fix off in the source,** §27b goes red.
 - **RECONSTRUCTION in one respect:** the lead's model is itself a straight-line lerp at the
   family speed, so a bent lead still carries its own error into the leg.
+
+### 1z-dq.4 On the client — `20261001T183528`, the exact shape NOT re-exposed
+
+The owner walked the corridor's portal into map 148 and back, four transfers, and drove
+there.
+- **c5's lead kill:** at 27.88 s a lead was killed on a click at (2107,6483). Clicks and
+  attack presses followed, but every press came AFTER its leg had arrived. The three re-pins
+  sit exactly on the last click's destination, so the press-mid-first-leg shape never
+  recurred.
+- **No warp on the wire:** each next client report is within the walking budget of its
+  re-pin point, at 288 u/s from the press:
+
+  | Re-pin | Distance to next report | Budget |
+  |---|---|---|
+  | c3 | 242 u | 256 u |
+  | c5, first | 402 u | 423 u |
+  | c5, second | 943 u | 965 u |
+  | c5, third | 1,121 u | 1,135 u |
+
+  That rules a warp out, but only on presses that never had the defect's precondition.
+- **Open:** a press while the first post-kill leg is still walking, and the owner's eye on
+  it.
