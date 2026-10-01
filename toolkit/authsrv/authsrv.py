@@ -9760,8 +9760,19 @@ def heading_hold_tick(send, state, conn_id, rec=None, now=None):
 # 0-0.25 / -0.5 / -0.75 / -1.0 / -1.25 s, against the bare report's 44 / 90 / 135 /
 # 272 / 287 u. Capped at the ages measured; None past them, and with no moving
 # report (a stop clears the heading), so callers fall back to what they did.
+# ROUND 2, the owner the same evening (20261001T192303): "still warping. really
+# bad if i use Q or E to strafe then attack". Not the heading -- every movement
+# type travels along it (cos +1.00, mt 1-7) at its FAMILY_RATE speed (188-190 u/s
+# for 4-6) -- but the AGE: under a lead chain the client is silent for 1.3-1.7 s,
+# past the 1.25 s cap, so the guard fell back to the bare report (374-498 u). Over
+# all thirteen of the day's tapes the estimate errs p50 4 u / p90 <= 58 u to 2 s
+# (1.5-2 s: n = 41, p90 5 u) and p50 396 u at 2-3 s: the cap is 2.0. Past it the
+# press's OWN lead kill answers (_kbd_kill_fresh): its point matched this estimate
+# within 0-80 u at 20 of 22 kills that day, ages up to 3.95 s, the one exception
+# the raced chain at 0.99 s, which this estimate covers.
 KBD_BODY_ESTIMATE = True        # False (--no-kbd-body-estimate): the bare report / the lead model.
-KBD_BODY_ESTIMATE_MAX_AGE = 1.25
+KBD_BODY_ESTIMATE_MAX_AGE = 2.0
+KBD_KILL_FRESH = 0.5            # s: a press's lead kill is the body for its own approach
 
 
 def _kbd_body_estimate(state, now):
@@ -9784,6 +9795,18 @@ def _kbd_body_estimate(state, now):
              * FAMILY_RATE.get(mt, 1.0))
     d = speed * age
     return (float(cp[0]) + hx / m * d, float(cp[1]) + hy / m * d)
+
+
+def _kbd_kill_fresh(state, now):
+    """(x, y) a lead kill granted within KBD_KILL_FRESH s with no report since, or None."""
+    if not KBD_BODY_ESTIMATE:
+        return None
+    kp, at = state.get("kbd_kill_point"), state.get("kbd_kill_at")
+    if kp is None or at is None or not 0.0 <= now - at <= KBD_KILL_FRESH:
+        return None
+    if (state.get("client_pos_at") or 0.0) > at:
+        return None                     # the client has spoken since
+    return (float(kp[0]), float(kp[1]))
 
 
 def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
@@ -9828,6 +9851,7 @@ def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
     # 20261001T160705). A click that killed the lead starts its leg HERE
     # (`_click_leg_arm`'s `start`), not at that report.
     state["kbd_kill_point"] = (float(x), float(y))
+    state["kbd_kill_at"] = now
     if rec is not None:
         rec.event("kbd_leg", act="kill", why=why, matured=False,
                   point=[float(x), float(y)], remaining=round(remaining, 1),
@@ -20791,6 +20815,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
         # re-pin contradicts the report and forgets it, as a "leg" point does.
         if src == "report":
             _est = _kbd_body_estimate(state, now)
+            if _est is None:
+                _est = _kbd_kill_fresh(state, now)
             if _est is not None:
                 model, src = _est, "estimate"
         sync = _sync_position(state, now) or state.get("pos")

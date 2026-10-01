@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=195)   # MOVECODE-1z-dr +4 (9k, the keyboard snap guard); SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=198)   # MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1267,6 +1267,29 @@ def section_reach_and_approach():
         check(len(rp) == 1 and rp[0][1] == [0.0, 0.0],
               "a report older than KBD_BODY_ESTIMATE_MAX_AGE is not advanced: the "
               "old behaviour, said by its own branch", f"repins {rp}")
+        # ROUND 2 (20261001T192303, "still warping ... Q or E to strafe then
+        # attack"): the client is silent 1.3-1.7 s under a lead chain, and strafes
+        # walk at their family rate.
+        st = kbd_state((0.0, 1.7 * 288.0), age=1.7)
+        authsrv.attack_tick(send, st, 0)
+        check(repins(sent) == [],
+              "ROUND 2: a report 1.7 s old (the strafe session's ages) is still "
+              "advanced -- the cap is the measured 2.0 s -- so no re-pin",
+              f"repins {repins(sent)}")
+        st = kbd_state((0.0, 1.5 * 0.66 * 288.0), age=1.5)
+        st["client_heading"] = (0.0, 766.0, 4, st["client_pos_at"])   # a strafe
+        authsrv.attack_tick(send, st, 0)
+        check(repins(sent) == [],
+              "ROUND 2: a strafe (movementType 4) is advanced at its family rate, "
+              "0.66 x 288 u/s -- 285 u in 1.5 s -- so no re-pin",
+              f"repins {repins(sent)}")
+        st = kbd_state((0.0, 700.0), age=3.0)
+        st["kbd_kill_point"], st["kbd_kill_at"] = (0.0, 700.0), _t.time()
+        authsrv.attack_tick(send, st, 0)
+        check(repins(sent) == [],
+              "ROUND 2: past the cap, the press's OWN fresh lead kill is the body "
+              "(it matched the estimate within 80 u at 20 of 22 kills that day): "
+              "the copy it just re-aimed agrees, so no re-pin", f"repins {repins(sent)}")
         _sv_kbe = authsrv.KBD_BODY_ESTIMATE
         authsrv.KBD_BODY_ESTIMATE = False
         try:

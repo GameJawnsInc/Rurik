@@ -20531,3 +20531,44 @@ re-grants in 0.63 s.
   `test_keepalive` among them.
 - **RECONSTRUCTION:** a straight line, so a wall-slide inside the 1.25 s still carries its
   own error. The measured p90 at 0.5–0.75 s was 152 u.
+
+### 1z-dr.4 Round 2 — `20261001T192303`: the cap was too short; the press's own kill past it
+
+**The owner:** *"still warping. really bad if i use Q or E to strafe then attack. harder to
+trigger off just W holds"*.
+
+- **Not the heading:** every movement type travels along its 0x003D heading (cos +1.00,
+  mt 1 to 7), at its FAMILY_RATE speed (188 to 190 u/s for 4 to 6).
+- **The AGE:**
+  - Under a lead chain the client was silent for 1.33 to 1.73 s at the warping presses.
+    That is past round 1's 1.25 s cap.
+  - So the snap guard fell back to the bare report: four re-pins, 374 to 498 u back.
+- **MEASURED over all thirteen of the day's tapes:**
+
+  | Report age | Estimate error, p50 / p90 |
+  |---|---|
+  | to 2 s | 4 u / <= 58 u |
+  | 1.5–2 s (n = 41) | 4 u / 5 u |
+  | 2–3 s | 396 u (p50) |
+
+  The cap is now 2.0 s.
+- **Past the cap,** the press's own fresh lead kill answers (`_kbd_kill_fresh`, 0.5 s, no
+  report since). Its point matched the estimate within 0–80 u at 20 of 22 kills that day,
+  at ages up to 3.95 s. The one exception was the raced chain at 0.99 s, which the estimate
+  covers.
+
+**Replayed** over all fifteen keyboard-walk presses that day, with the copy at the kill
+point: the old code re-pinned 9, from 115 to 499 u back, and round 2 re-pins 0. That is
+partly by construction, because the kill and the guard share the estimate. **The client
+run is the verification.**
+
+**Tests:** `test_playerswing` 9k grows by 3, 195 -> 198:
+- a 1.7 s report;
+- a strafe advanced at 0.66 x 288 u/s;
+- past the cap, the fresh kill point.
+
+With round 2 undone in the source, all three go red.
+
+**Note:** three of that file's SLICE-F50 deadline checks go red only under heavy parallel
+load (38 processes). Alone they are green; they are wall-clock checks this change does not
+touch.

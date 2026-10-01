@@ -28,6 +28,14 @@ move back.
 
 ---
 
+### MOVECODE-1z-dr round 2 -- 2026-10-01 -- **`20261001T192303`: "still warping. really bad if i use Q or E to strafe then attack". The estimate's 1.25 s cap was shorter than the client's silence under a lead chain (1.33-1.73 s at the warping presses), so the guard fell back to the bare report. Cap raised to the measured 2.0 s (p90 <= 58 u over the day's thirteen tapes), with the press's own lead kill past it. Replayed: 9 of 15 old backward re-pins become 0.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-dr.4.
+- **Tests:** `test_playerswing` 198, with round 2 undone reddening 3. 37 of 38
+  movement-touching tests green under parallel load, and the 38th (`test_playerswing`)
+  green alone. Its three red checks under load are SLICE-F50's wall-clock deadline
+  checks.
+
 ### The scripted run, the owner's hand checks, and MOVECODE-1z-dr -- 2026-10-01 -- **`20261001T185315`: RESSIG-T2 CONFIRMED ("invalid target" for a living hero); 1z-dq holds ("no warp when clicking first"); and a new warp the owner found, a short BACKWARDS one when attacking during a keyboard walk -- the approach snap guard re-pinned at a report up to 1 s and 286 u stale. It now re-pins at that report advanced along its heading, measured first.**
 
 **The scripted half:** the harness's walk plan of real input did not expose 1z-dq.
