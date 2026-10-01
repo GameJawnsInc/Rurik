@@ -4628,7 +4628,7 @@ number: **the double**. Both depend on a pending node, so both are intermittent:
 **"sometimes"**. Both need another attacker in the fight, so a lone duel would not show
 it, which no run has tested.
 
-### 43.6 The fix, not shipped
+### 43.6 The fix — SHIPPED 2026-09-30 as `HIT_FINISH_FIRST` (`--hit-finish-last` reverts), awaiting the owner's eye
 
 The fix is retail's order on the player's hit path: `[1]` ahead of the adrenaline and the
 damage, as the miss and block paths and the NPC swing already do. It needs a revert arm

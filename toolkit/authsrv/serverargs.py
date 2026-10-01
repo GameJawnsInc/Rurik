@@ -748,6 +748,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
                          "adrenaline and skill family like the player's (107 / "
                          "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--hit-finish-last", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 43: the player's hit sends "
+                         "melee_attack_finished [1] AFTER its damage word, as before. "
+                         "Retail sends it first (1,376 of 1,376); the client attaches a "
+                         "damage number to the agent the last [1] latched, so a late "
+                         "[1] draws the player's hits on another agent's swing.")
     ap.add_argument("--no-resurrection-single-use", action="store_true",
                     help="THE REVERT ARM for RESSIG: a skill whose row says "
                          "recharge_on = morale_boost (Resurrection Signet) takes the "

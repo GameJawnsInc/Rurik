@@ -113,17 +113,24 @@ def section_two_phases():
     _rewind(state, expect + 0.01)
     authsrv.attack_tick(send, state, 0)
     ops = [op for op, _, _ in sent]
-    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-                  authsrv.AGENT_ADRENALINE_GAIN,
-                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
-          "the landing is gain, damage, FINISHED -- and no second STARTED "
+    # ANIMREF-RE 43 (2026-09-30): the landing is FINISHED, gain, damage --
+    # retail's [1] first, 1,376 of 1,376; "gain, damage, FINISHED" was our order
+    # and drew the player's numbers on whichever agent the client had latched
+    # (test_damagelatch). --hit-finish-last keeps the old order, checked below.
+    _int_t = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    _int = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+    _gain = authsrv.AGENT_ADRENALINE_GAIN
+    _word = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+    check(ops == ([_int_t, _int, _gain, _word] if authsrv.HIT_FINISH_FIRST
+                  else [_int_t, _gain, _word, _int]),
+          "the landing is FINISHED, gain, damage (ANIMREF-RE 43; gain, damage, "
+          "FINISHED under --hit-finish-last) -- and no second STARTED "
           "and NO property 8 in either direction. This check has moved "
-          "twice in a day and the trail is the record: it once ended 'a "
+          "three times and the trail is the record: it once ended 'a "
           "landing releases nothing (the chain still holds)', which was the "
           "ANIMREF-RE 33 defect written as an assertion; 33 F1 then added a "
-          "release here; 35 removed the hold that release existed for. "
-          "Section 6 owns the three arms",
+          "release here; 35 removed the hold that release existed for; 43 "
+          "moved the FINISHED ahead of the word. Section 6 owns the three arms",
           f"ops={[hex(o) for o in ops]}")
     check(state["player_swing"] is None
           and state["agents"][10]["health"] < 100.0,

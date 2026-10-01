@@ -18706,6 +18706,20 @@ ATTACK_E5_WINDUP = True       # False (--legacy-attack-e5): E5 at the press
 # press->move episodes, n=53 accepted attack-skill presses).
 ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 
+# ANIMREF-RE 43 (2026-09-30): THE PLAYER'S HIT CLOSES ITS SWING FIRST. Retail's batch at
+# the windup is [1, me, 0], then 0x00CF, then the word -- [1] BEFORE the damage on 1,376
+# of 1,376 observer hits (450 of 450 for other attackers; this file's own gain comment
+# measured the modal [159/prop1, 207, 163/prop16] in August, and WEAPONS-W3's scythe
+# batch opens with [1] too). hit_enemy sent it LAST, "harmless if the client ignores
+# it" -- and the client does not: property 1 latches the attacker at [0x010874B0]
+# (0x007F6BC0; any property 4 clears it, 0x007F6C10), and a damage word's effect
+# allocator (0x007F5340, read at 0x007F53C5) splices the number into the LATCHED
+# agent's pending animation node, so it is drawn when THAT agent's animation lands.
+# With the [1] last, the player's number latched to itself on 19 of 248 hits (retail
+# 87 %) and to ANOTHER agent -- the raider -- on 74 (retail 1.3 %): the owner's "my
+# attacks delay, then double-hit" (studies/animref 43). --hit-finish-last reverts.
+HIT_FINISH_FIRST = True       # False (--hit-finish-last): [1] after the word, the old order
+
 # ANIMREF-R7, the two chain laws around the batch (FINDINGS 14, both measured
 # on the live corpus):
 # LAW A -- movement does not close the chain: 87 of 100 player moves within
@@ -22177,6 +22191,18 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     on_attack_triggers(send, state, PLAYER_AGENT_ID, conn_id)
     agent["health"] = max(0.0, agent["health"] - dealt)
     provoke_hostile(state, target_id, PLAYER_AGENT_ID, conn_id)   # MONSTERAI-J
+    # ANIMREF-RE 43: THE SWING CLOSES BEFORE ITS FIRST WORD -- [1, me, 0], then
+    # per hit the gain, the first-hit maximum and the word (retail 1,376 of 1,376;
+    # the scythe's batch the same, extras first). The client draws a damage number
+    # on the animation of whoever the last [1] latched, so a word ahead of its own
+    # [1] is drawn on someone else's swing. A hex that punishes the attack
+    # (on_attack_triggers, above) stays ahead of it: no tape orders the two.
+    _closed = False
+    if HIT_FINISH_FIRST and swing and not skill_strike and not projectile:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
+             "melee_attack_finished")
+        _closed = True
     # WEAPONS-W3: A SCYTHE'S EXTRA TARGETS, each its own hit and each BEFORE the
     # target's gain and word -- retail's batch order, 29 of 29 (see the constants).
     if swing and exact is None and not projectile and scythe_held():
@@ -22252,11 +22278,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         # WEAPONS-W7: and the same damage on every ADJACENT foe.
         preparation_splash(send, state, prep_skill, _prep_raw, target_id,
                            conn_id, rank, prep_visual)
-    # And close the swing. Harmless if the client ignores it; without it the
-    # attack has a beginning and no end. Skipped for a spell, which never
-    # began one -- and for a skill strike, whose close is the property 46
-    # its caller already sent (the corpus batch carries no prop 1, 40/40).
-    if swing and not skill_strike and not projectile:     # WEAPONS-W2a
+    # And close the swing -- HERE only under --hit-finish-last (ANIMREF-RE 43):
+    # this used to say "harmless if the client ignores it", and the client does
+    # not ignore it; the close now rides ahead of the word, above. Skipped for a
+    # spell, which never began one -- and for a skill strike, whose close is the
+    # property 46 its caller already sent (the corpus batch carries no prop 1, 40/40).
+    if swing and not skill_strike and not projectile and not _closed:  # WEAPONS-W2a
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
              "melee_attack_finished")
@@ -45989,6 +46016,13 @@ def main():
         HERO_WIRE_POOLS = False
         print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
               "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
+              flush=True)
+    if a.hit_finish_last:
+        global HIT_FINISH_FIRST
+        HIT_FINISH_FIRST = False
+        print("[combat] --hit-finish-last: the player's hit sends [1] AFTER its damage "
+              "word -- the client then draws the number on whichever agent the last "
+              "[1] latched (retail sends [1] first, 1,376 of 1,376) [ANIMREF-RE 43 revert]",
               flush=True)
     if a.no_resurrection_single_use:
         global RESURRECTION_SINGLE_USE

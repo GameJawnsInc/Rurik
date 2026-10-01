@@ -28,6 +28,43 @@ move back.
 
 ---
 
+### ANIMREF-RE 43, the fix -- 2026-09-30 -- **the player's hit now closes its swing with `[1]` BEFORE its gain and damage word, retail's order (1,376 of 1,376), so the client draws the number on the player's own swing. Behind `--hit-finish-last`. NOT yet confirmed by the owner's eye.**
+
+**The defect.** `studies/animref/FINDINGS.md` §43, committed as `38867ad3` the same day. The
+client latches the agent of the last `0x009F [1|46|49]`, and any `[4|50]` clears the latch.
+A damage word is then drawn on the LATCHED agent's pending animation node. `hit_enemy`
+sent the player's `[1]` after the word, so the player's numbers were latched to
+themselves 8 % of the time (retail 87 %) and to another agent 30 % (retail 1.3 %). That is
+the lead for the owner's "my attacks delay, then double-hit".
+
+**Shipped** (`HIT_FINISH_FIRST`).
+- `hit_enemy` sends `[1, me, 0]` ahead of the scythe extras, the `0x00CF` gain, the
+  first-hit maximum and the word: WEAPONS-W3's documented scythe batch, and the modal
+  batch the gain comment measured in August.
+- The trailing `[1]` remains only under `--hit-finish-last`.
+- Unchanged: the miss and block paths already sent `[1]` first, an attack skill closes with
+  `[46]` first (ANIMREF-R6), and a shot sends no `[1]` (WEAPONS-W2a).
+- A hex that punishes the attack (`on_attack_triggers`) stays ahead of the `[1]`. No tape
+  orders the two.
+
+**Tests.** `test_damagelatch.py` is new: 9 checks bare, 11 with the vault.
+- It drives the real `hit_enemy`: a sword's batch is `[1]`, gain, word, and a scythe's
+  `[1]` comes ahead of both words.
+- `client_latch` (the client's rule) pairs the player's word with the player after the
+  raider's landed swing; the known-bad arm pairs it with the RAIDER.
+- Retail: `[1]` first on 1,376 of 1,376, and the latch pairs 87 % of observer words with
+  the observer.
+- `HIT_FINISH_FIRST = False` in the source reddens 7.
+- `test_playerswing.py`'s landing check moves to FINISHED, gain, damage.
+- Green: adrenwire, agentlife, animaltoken, animgrammar, approachroute, burrow,
+  castcancel, castcycle, condwords, daggers, guards, interrupt, interruptshots,
+  killwindow, labelconsumers, loot, mechanics, playerswing (191), pools, skilldamage,
+  skillword, weapons, killxp, plus `test_checks` and the four lints.
+
+**Open:** the confirmation. Hands-off auto-attack beside two heroes on the `revheal2` rig,
+with the owner watching for the delay and double-hit. The latch replay over that run's
+tape should pair every plain hit with the player.
+
 ### RESSIG's client run -- 2026-09-30 -- **One raise per hero, then none: the loop is gone. Each raise was retail's `[58]`, E7, E3 with no E5; 0 casts after a spend; the spent signets stayed spent through a party wipe; 0 `Pending skill` lines, 0 resurrect complaints.**
 
 **The run:** `20260930T211743`, tree `0d963fef`. The rig is the two earlier runs' `revheal2`:

@@ -3544,6 +3544,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   stopped starts; the 3 completed raises carrying the family are E7 then E3, no E5.
   Proved red: `RESURRECTION_SINGLE_USE = False` in the source reddens 11. Floor 20 from the
   bare green run (the vault adds 2: 22). No socket, no client),
+  `toolkit/authsrv/test_damagelatch.py` (**2026-09-30, ANIMREF-RE 43: the player's hit sends
+  `[1]` BEFORE its damage word, so the client draws the number on the player's own swing.**
+  The client latches the agent of the last `0x009F [1|46|49]` (`0x007F6BC0`), clears it on
+  any `[4|50]` (`0x007F6C10`), and a damage word's allocator (`0x007F5340`) splices the
+  number into the LATCHED agent's pending animation node; `client_latch` replays that rule.
+  §1 an armed sword hit through the real `hit_enemy`: `[1, me, 0]` first, then `0x00CF`
+  (when the bar earns one -- bare machines carry no adrenal skill), then the word. §2 after
+  the raider's landed swing the player's word latches to the PLAYER, with or without a start
+  between. §3 a scythe's batch: `[1]` ahead of both words, both latched to the player. §4
+  the KNOWN-BAD arm `--hit-finish-last`: `[1]` trails the word and the latch names the
+  RAIDER -- the owner's "delay, then double-hit". §5 the switch. §6 (vault) RETAIL: `[1]`
+  first on 1,376 of 1,376 observer hits, and the latch pairs 1,519 of 1,739 (87 %) with
+  the observer, 23 with another agent -- the rule checked before it judges ours. Proved
+  red: `HIT_FINISH_FIRST = False` in the source reddens 7. Floor 9 from the bare green run
+  (the vault adds 2: 11). No socket, no client),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
   0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`
