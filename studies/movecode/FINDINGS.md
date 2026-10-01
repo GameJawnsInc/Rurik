@@ -20474,3 +20474,60 @@ there.
   `_press_supersedes`, so it cannot reproduce PRESS ENDS THE WALK. A scripted check
   holds a movement key, clicks the ground at a window fraction, then presses `c`
   (target the nearest foe) and Space (attack), all as real keys.
+
+## 1z-dr. A press during a KEYBOARD walk re-pinned the body at the bare last report, up to 286 u behind it; and once the lead kill granted a point 1,898 u ahead (2026-10-01)
+
+### 1z-dr.1 The report and the tape — OBSERVED
+
+**The owner, `20261001T185315`:** *"short backwards warp when pressing W and attacking
+without clicking. no warp when clicking first before attacking"*. The click case is 1z-dq,
+holding.
+
+**The two keyboard presses:**
+
+| Press | Report age | Lead kill granted | APPROACH RE-PIN at | Re-pin vs the projected body |
+|---|---|---|---|---|
+| 128.40 | 0.99 s | (1483,2961) | the bare report (1276,787) | 286 u behind it |
+| 135.20 | 0.62 s | the right point | the bare report (1360,2048) | 178 u behind it |
+
+At 128.40 the 1z-di re-grant chain had moved the lead's origin with the COPY: four 520 u
+re-grants in 0.63 s.
+
+### 1z-dr.2 The mechanism, and the estimate MEASURED before use
+
+- **What the client does:** it walks a granted lead SILENTLY.
+- **The snap guard:** with no click latch, its `_click_leg_start` answered "report", the body
+  as it was up to a second ago.
+- **The lead kill:** its lerp follows a lead whose origin the re-grant chain had advanced at
+  the copy's arrival, not the body's.
+- **The estimate:** the last accepted 0x003D advanced along its own heading at its family's
+  speed. MEASURED on that tape by predicting each report from the one before:
+
+  | Report age | Estimate error, p50 | Bare report error, p50 |
+  |---|---|---|
+  | 0–0.25 s | 1.5 u | 44 u |
+  | 0.25–0.5 s | 17 u | 90 u |
+  | 0.5–0.75 s | 14 u | 135 u |
+  | 0.75–1.0 s | 3 u | 272 u |
+  | 1.0–1.25 s | 49 u | 287 u |
+
+- **At the kills:** at six of the seven lead kills on that tape, the estimate and the kill
+  point agree to 0 u. Only 128.40's runaway chain differs.
+
+### 1z-dr.3 Shipped — `KBD_BODY_ESTIMATE`, `--no-kbd-body-estimate` reverts
+
+- **The function:** `_kbd_body_estimate` is capped at the measured 1.25 s, and None with no
+  moving report. A 0x0047 clears the heading.
+- **The lead kill:** grants it, so the click leg of 1z-dq starts there too.
+- **The approach snap guard:** uses it in place of the bare report, and forgets the report
+  after a re-pin, as for a leg point.
+- **Tests:**
+  - `test_playerswing` 9k, 191 -> 195: the copy at the body means no re-pin, a copy ahead
+    re-pins at the estimate, and the known-bad arm re-pins 288 u behind.
+  - `test_kbdsync` 28, 240 -> 243.
+  - **The red proof:** the fix off in the source reddens 3.
+- **Green alongside:** the 38 tests that touch the keyboard lead, the snap guard or the
+  client position, `test_agtrack_guard`, `test_position_trust`, `test_d1lead` and
+  `test_keepalive` among them.
+- **RECONSTRUCTION:** a straight line, so a wall-slide inside the 1.25 s still carries its
+  own error. The measured p90 at 0.5–0.75 s was 152 u.

@@ -9748,6 +9748,44 @@ def heading_hold_tick(send, state, conn_id, rec=None, now=None):
     return True
 
 
+# MOVECODE-1z-dr (2026-10-01): WHERE THE BODY IS while the client walks a granted
+# keyboard lead SILENTLY -- the last accepted 0x003D report advanced along ITS OWN
+# heading at its family's speed, for the report's age. The owner, 20261001T185315:
+# "short backwards warp when pressing W and attacking without clicking". The press's
+# approach snap guard re-pinned the body at the bare last report (178 u and 286 u
+# behind it, reports 0.62 s and 0.99 s old), and once (128.40) the lead kill had
+# granted a point 1,898 u AHEAD, where the 1z-di re-grant chain had run the copy
+# (four 520 u re-grants in 0.63 s). MEASURED on that tape, each 0x003D predicting
+# the next: this estimate's error p50 1.5 / 17 / 14 / 3 / 49 u over report ages
+# 0-0.25 / -0.5 / -0.75 / -1.0 / -1.25 s, against the bare report's 44 / 90 / 135 /
+# 272 / 287 u. Capped at the ages measured; None past them, and with no moving
+# report (a stop clears the heading), so callers fall back to what they did.
+KBD_BODY_ESTIMATE = True        # False (--no-kbd-body-estimate): the bare report / the lead model.
+KBD_BODY_ESTIMATE_MAX_AGE = 1.25
+
+
+def _kbd_body_estimate(state, now):
+    """(x, y) -- the body on the last 0x003D report advanced along its heading, or None."""
+    if not KBD_BODY_ESTIMATE:
+        return None
+    h, cp, at = state.get("client_heading"), state.get("client_pos"), state.get("client_pos_at")
+    if h is None or cp is None or at is None:
+        return None
+    hx, hy, mt, t_h = h
+    if abs(t_h - at) > 0.05:
+        return None                     # the heading belongs to another report
+    age = now - at
+    if age < 0.0 or age > KBD_BODY_ESTIMATE_MAX_AGE:
+        return None
+    m = math.hypot(hx, hy)
+    if m < 1.0:
+        return (float(cp[0]), float(cp[1]))
+    speed = (float(state.get("declared_speed_base") or DEFAULT_RUN_SPEED)
+             * FAMILY_RATE.get(mt, 1.0))
+    d = speed * age
+    return (float(cp[0]) + hx / m * d, float(cp[1]) + hy / m * d)
+
+
 def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
     """(1z-y a2) A press or a click ENDS an in-flight keyboard lead: a
     zero-lead grant at the modelled body re-aims the sync copy to where the
@@ -9772,6 +9810,11 @@ def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
                       age=round(age, 3), dest=list(leg["dest"]))
         return False
     x, y, plane = a2_leg_position(leg, now)
+    # MOVECODE-1z-dr: the BODY, not the lead's own lerp -- the 1z-di re-grant
+    # chain moves the lead's origin with the COPY, which can run far ahead.
+    _est = _kbd_body_estimate(state, now)
+    if _est is not None:
+        x, y = _est
     remaining = math.hypot(leg["dest"][0] - x, leg["dest"][1] - y)
     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
          [PLAYER_AGENT_ID, [float(x), float(y)], plane, plane],
@@ -20743,6 +20786,13 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
         # answer -- the forget would make it "pos" and `state["pos"] =` would
         # make that "pos" the re-pin. It decides the forget, not the send.
         src = _click_leg_source(state, silent)
+        # MOVECODE-1z-dr: in the keyboard regime the bare report is the body
+        # as it was up to a second ago; the estimate advances it. Ours, so the
+        # re-pin contradicts the report and forgets it, as a "leg" point does.
+        if src == "report":
+            _est = _kbd_body_estimate(state, now)
+            if _est is not None:
+                model, src = _est, "estimate"
         sync = _sync_position(state, now) or state.get("pos")
         if model is not None and sync is not None:
             sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
@@ -20782,10 +20832,11 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                 # `_click_leg_start`'s fallback is what carries the answer, and
                 # `state["pos"]` IS that fallback. The reader below takes the
                 # re-pinned point out of it one line later.
-                if src == "leg":
+                if src in ("leg", "estimate"):
                     _forget_client_position(
                         state, "the approach re-pinned at the modelled "
-                        "click-leg end")
+                        + ("click-leg end" if src == "leg"
+                           else "keyboard body (1z-dr)"))
     # 1z-dm: the whole approach geometry runs in the client's frame -- the
     # origin, the distance and the stop point -- so the leg ends where the
     # client's own resolver will stop the body. `state["dest"]` is still the
@@ -42778,6 +42829,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # MOVECODE-1z-cr: mt DECLARED, never inferred downstream.
                         a2_pos_taken = _take_client_position(
                             state, reported, plane, rec, "0x003D", mt=moving)
+                        # MOVECODE-1z-dr: the accepted report's HEADING, stamped
+                        # with the report's own instant, for _kbd_body_estimate.
+                        if a2_pos_taken:
+                            state["client_heading"] = (
+                                float(values[3][0]), float(values[3][1]),
+                                int(moving), state.get("client_pos_at"))
                         # F-A's EAGER VOID (sec.0.14, the through-floor fix's
                         # core): a newer ACCEPTED report voids any held click
                         # -- the player's hands, speaking now, outrank the
@@ -44650,6 +44707,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               # client is telling us it has finished,
                                               # not how it was moving (1z-cr).
                                               mt=None)
+                        state["client_heading"] = None   # 1z-dr: it stopped
                         # THE OTHER CALL SITE, same policy, same function. A
                         # stop is the cheapest resync there is: the client is
                         # standing still at the point it just reported, so the
@@ -46460,6 +46518,12 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.no_kbd_body_estimate:
+        global KBD_BODY_ESTIMATE
+        KBD_BODY_ESTIMATE = False
+        print("[map] --no-kbd-body-estimate: a keyboard-walk press re-pins at the "
+              "bare last report -- every run before MOVECODE-1z-dr (2026-10-01).",
+              flush=True)
     if a.no_resurrect_target_gate:
         global RESURRECT_TARGET_GATE
         RESURRECT_TARGET_GATE = False

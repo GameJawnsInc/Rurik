@@ -754,6 +754,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before 2026-10-01. By default it raises the corpse in retail's "
                          "order ([58], E7, E3, [8 -> 0], the rise), is spent until a morale "
                          "boost, and stops ([59]) on a corpse already standing.")
+    ap.add_argument("--no-kbd-body-estimate", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-dr: a press during a keyboard "
+                         "walk re-pins (approach snap guard) and kills the lead at the "
+                         "bare last report / the lead's own model, every run before "
+                         "2026-10-01. By default both use the last 0x003D report "
+                         "advanced along its heading at its family speed (<= 1.25 s).")
     ap.add_argument("--no-resurrect-target-gate", action="store_true",
                     help="THE REVERT ARM for RESSIG-T: a resurrection skill pressed "
                          "with target 0 casts its 3 s and stops ([59], E2), every run "

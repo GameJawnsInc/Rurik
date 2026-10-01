@@ -3972,6 +3972,8 @@ no target selected, even if a dead ally is nearby (refuses immediately)"*.
 - **Run `20261001T183528`, registered as RESSIGT2-run-registered:** RESSIG-T2 was NOT
   exposed. The session carries 0 `USE_SKILL` on all five connections, so the
   living-hero press never happened.
+- **RESSIG-T2 CONFIRMED, `20261001T185315`:** with a living hero targeted the owner
+  pressed Res Sig and got *"invalid target"*.
 
 **The owner:**
 - **The repaint:** *"gets refreshed visually now"*. BOOST_REPAINT is CONFIRMED.

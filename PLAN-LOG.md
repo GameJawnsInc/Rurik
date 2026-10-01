@@ -28,6 +28,27 @@ move back.
 
 ---
 
+### The scripted run, the owner's hand checks, and MOVECODE-1z-dr -- 2026-10-01 -- **`20261001T185315`: RESSIG-T2 CONFIRMED ("invalid target" for a living hero); 1z-dq holds ("no warp when clicking first"); and a new warp the owner found, a short BACKWARDS one when attacking during a keyboard walk -- the approach snap guard re-pinned at a report up to 1 s and 286 u stale. It now re-pins at that report advanced along its heading, measured first.**
+
+**The scripted half:** the harness's walk plan of real input did not expose 1z-dq.
+- **The W walk:** it hit a wall, and the W release cleared the lead before the click.
+- **The press:** it came 6 s after a 108 u leg.
+- **Why it couldn't:** the harness runs steps one at a time, so it cannot click while a
+  key is held.
+
+**The owner's hand checks** in the same session:
+- **RESSIG-T2:** CONFIRMED on screen.
+- **The click case:** clean.
+- **W and attack, no click:** a short backwards warp. That is MOVECODE-1z-dr
+  (`studies/movecode/FINDINGS.md` §1z-dr).
+
+**The fix:** `_kbd_body_estimate` advances the report along its own heading. It is
+used by the lead kill and the approach snap guard; `--no-kbd-body-estimate` reverts.
+- **Measured before use:** its median error is 2 to 49 u, against the bare report's
+  44 to 287 u.
+- **Tests:** `test_playerswing` 195, `test_kbdsync` 243. The fix off reddens 3.
+- **Green alongside:** 38 of 38 movement-touching tests.
+
 ### RESSIG-T2 / MOVECODE-1z-dq's client run, and the greyed press on stock -- 2026-10-01 -- **`20261001T183528`: neither fix's precondition recurred (0 Res Sig presses; no attack press mid-way through a post-kill leg). The wire shows no warp: each of four re-pins is within walking range of the next report. The owner: a greyed signet is "refused client-side on stock", so ours matches.**
 
 - **The session:** the owner walked the corridor's portal into map 148 and back, five

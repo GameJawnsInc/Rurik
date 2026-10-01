@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=240)   # MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=243)   # MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -497,8 +497,13 @@ def main():
     w3, rec = Sent(st), FakeRec()
     killed = authsrv._kbd_lead_kill(w3, st, 0, rec, "press", now=leg["t0"] + 1.0)
     mv = w3.of(MOVE)
+    # Within 0.5 u, not exact, since MOVECODE-1z-dr (2026-10-01): the kill now
+    # answers from the REPORT advanced along its heading, and this fixture's report
+    # and lead are stamped microseconds apart -- both models put the body at
+    # 1288.5, which is the agreement this check is about.
     check(killed is True and len(mv) == 1
-          and mv[0][1] == [1, [1288.5, 2000.25], 7, 7]
+          and mv[0][1][0] == 1 and mv[0][1][2:] == [7, 7]
+          and abs(mv[0][1][1][0] - 1288.5) < 0.5 and abs(mv[0][1][1][1] - 2000.25) < 0.5
           and "KBD LEAD KILLED on press" in mv[0][2],
           "1.0 s into a 520 u lead at 288 u/s the kill grants the modelled "
           "body, 288 u along the heading, on its own plane both words",
@@ -2511,6 +2516,36 @@ def main():
           and SRC.count('state["kbd_kill_point"] = (float(x), float(y))') == 1,
           "27d. the click arm and the interact walk both hand the kill's point to "
           "their leg, and only the kill writes it")
+
+    # 28. MOVECODE-1z-dr: the kill grants the BODY. 128.40 on 20261001T185315: the
+    # 1z-di re-grant chain had moved the lead's origin with the COPY (four 520 u
+    # re-grants in 0.63 s), so the lead's own lerp was 1,898 u ahead of a body the
+    # last report (0.99 s old, heading north) put at ~286 u past itself.
+    print("\n28. 1z-dr: the lead kill grants the estimated body, not a raced lead")
+    t28 = _t27.time()
+    raced = authsrv.a2_leg_note((0.0, 1380.0), (0.0, 1900.0), 0, 1, t28 - 0.36)
+    st28 = {"pos": (0.0, 1480.0), "plane": 0, "kbd_leg": raced,
+            "client_pos": (0.0, 0.0), "client_pos_at": t28 - 1.0,
+            "client_heading": (0.0, 766.0, 1, t28 - 1.0),
+            "declared_speed_base": 288.0}
+    authsrv._kbd_lead_kill(Sent(st28), st28, 0, FakeRec(), "press", now=t28)
+    kp28 = st28.get("kbd_kill_point")
+    check(kp28 is not None and abs(kp28[0]) < 0.5 and abs(kp28[1] - 288.0) < 0.5,
+          "28a. with a moving report on record the kill grants the report advanced "
+          "1.0 s x 288 u/s along its heading -- (0, 288) -- not the raced lead's "
+          "(0, ~1484)", f"{kp28}")
+    st28b = dict(st28, kbd_leg=authsrv.a2_leg_note((0.0, 1380.0), (0.0, 1900.0), 0, 1,
+                                                    t28 - 0.36))
+    st28b["client_heading"] = None                      # a 0x0047 stopped it
+    authsrv._kbd_lead_kill(Sent(st28b), st28b, 0, FakeRec(), "press", now=t28)
+    check(st28b.get("kbd_kill_point") is not None
+          and abs(st28b["kbd_kill_point"][1] - 1483.7) < 1.0,
+          "28b. with no moving report (a stop cleared the heading) the lead's own "
+          "model answers, as before", f"{st28b.get('kbd_kill_point')}")
+    check(SRC.count('state["client_heading"] = (') == 1
+          and SRC.count('state["client_heading"] = None') == 1,
+          "28c. the heading is written by the accepted 0x003D and cleared by the "
+          "0x0047, and nowhere else")
 
     return LEDGER.verdict()
 

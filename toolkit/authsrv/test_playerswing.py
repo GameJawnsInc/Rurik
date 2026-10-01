@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=191)   # SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=195)   # MOVECODE-1z-dr +4 (9k, the keyboard snap guard); SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1236,6 +1236,49 @@ def section_reach_and_approach():
               "a copy within the 100 u reprieve of the modelled body gets no "
               "re-pin -- the client's own test would pass",
               f"repins {repins(sent)}")
+
+        # 9k. MOVECODE-1z-dr, the KEYBOARD regime (the owner's "short backwards
+        # warp when pressing W and attacking", 20261001T185315): no click latch,
+        # so the snap guard's model was the bare last report -- the body as it was
+        # up to a second ago. It is now that report advanced along its heading.
+        def kbd_state(copy_xy, age=1.0):
+            st = fresh((0.0, 3000.0), player_xy=copy_xy)
+            st["client_pos"] = (0.0, 0.0)
+            st["client_pos_at"] = _t.time() - age
+            st["client_heading"] = (0.0, 766.0, 1, st["client_pos_at"])
+            return st
+        st = kbd_state((0.0, 288.0))           # the copy where the body is (135.21's shape)
+        authsrv.attack_tick(send, st, 0)
+        check(repins(sent) == [] and len(follows(sent)) == 1,
+              "KEYBOARD, the copy at the body: the report 1.0 s old advanced 288 u "
+              "along its heading IS the copy, so no re-pin -- where the bare report "
+              "re-pinned 288 u behind (the short backwards warp)",
+              f"repins {repins(sent)}")
+        st = kbd_state((0.0, 1900.0))          # the copy run ahead (128.40's shape)
+        authsrv.attack_tick(send, st, 0)
+        rp = repins(sent)
+        check(len(rp) == 1 and abs(rp[0][1][0]) < 0.5 and abs(rp[0][1][1] - 288.0) < 2.0,
+              "KEYBOARD, the copy 1,612 u ahead: the re-pin lands on the ESTIMATED "
+              "body (0, 288), not on the 1 s old report (0, 0)",
+              f"repins {rp}")
+        st = kbd_state((0.0, 288.0), age=3.0)  # past the measured ages: no estimate
+        authsrv.attack_tick(send, st, 0)
+        rp = repins(sent)
+        check(len(rp) == 1 and rp[0][1] == [0.0, 0.0],
+              "a report older than KBD_BODY_ESTIMATE_MAX_AGE is not advanced: the "
+              "old behaviour, said by its own branch", f"repins {rp}")
+        _sv_kbe = authsrv.KBD_BODY_ESTIMATE
+        authsrv.KBD_BODY_ESTIMATE = False
+        try:
+            st = kbd_state((0.0, 288.0))
+            authsrv.attack_tick(send, st, 0)
+            rp = repins(sent)
+            check(len(rp) == 1 and rp[0][1] == [0.0, 0.0],
+                  "KNOWN-BAD (--no-kbd-body-estimate): the same press re-pins at the "
+                  "bare report, 288 u behind the body -- the owner's warp",
+                  f"repins {rp}")
+        finally:
+            authsrv.KBD_BODY_ESTIMATE = _sv_kbe
 
         # 9j. the copy already inside the stop radius but outside reach cannot
         # happen (80 < 144); inside reach nothing is sent even with a stale
