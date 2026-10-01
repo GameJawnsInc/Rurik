@@ -28,6 +28,48 @@ move back.
 
 ---
 
+### PENDSKILL's client run -- 2026-09-30 -- **0 `Pending skill` lines against 69: 67 hero E4s, each opening its cast, 66 closed by their E3 and one in flight at the end. And the owner saw two things worth chasing: Resurrection Signet is reusable without limit (it is single-use, refreshed by a morale boost), and the player's attacks seemed to "delay then double-hit".**
+
+**The run:** `20260930T202753`, tree `f56a13d9`. The rig is `20260930T185003`'s: `revheal2`,
+two Monk heroes carrying only Resurrection Signet, the raider at 3,000 health, no `--persist`.
+The questions were registered before launch. The owner took the keyboard around 236 s,
+used skills, and closed the client 9 s before the 300 s hold ended. Verdict PASS.
+
+**The questions.**
+- **PEND-Q0, PASS.** Both bodies were created; no assert, no crash dialog, no RETRACTED.
+- **PEND-Q1:** 66 skill raises, 66 hero E3s.
+- **PEND-Q2:**
+  - `SKILL_ACTIVATED_BROADCAST(hero agent N, skill 2)` opens all 67 hero cast starts. It is
+    the first message naming the hero, ahead of its `[60]`, with a face word once between.
+  - E4 67 = E3 66 + the last cast. That one began 47 lines before the connection reset and
+    never reached its 3 s landing.
+  - No E2: no hero was killed or knocked down mid-cast, so the death and knock-down closes
+    were not exercised (zero exposure, as registered).
+- **PEND-Q3: 0 `Pending skill` lines** (69 on the last run, the only class that moved).
+  The client log's classes are otherwise identical: one credentials line in both runs.
+- **PEND-Q4, unchanged.** 0 `Health non-zero on resurrect`. All 66 raises were status, `[43]`,
+  `[52]`, `[55]`, flags 9. The first hit after every raise came off the full 140.
+- **PEND-Q5 not scored.** No hold frame was read for the panel.
+
+**The owner's two observations.**
+- **"The heroes were caught in a loop of resurrecting each other."** The rig makes the loop
+  (an unkillable raider, two signets and nothing else). But the owner's rule is that
+  **Resurrection Signet is single-use, refreshed by a morale boost**, and ours has recharge
+  0.0 and no other gate, so it raised 66 times. That is a defect; it is open in `PLAN.md`
+  §8.1.
+- **"Sometimes my attacks would delay then double-hit, ~a second later."** The server's
+  record does not show it.
+  - 234 swing starts and 248 hits: every start hit, and there are no misses on the wire.
+  - Until the owner's first skill at 236.5 s, every start is 1.330 s after the last and every
+    hit 0.565 s after its start.
+  - After that, every irregular gap is an attack skill (382, 384, 322, 385) replacing the swing
+    in flight (`swing_verdict cancel:skill press`), Frenzy's 0.67 speeding the rest up to
+    0.89 s.
+  - No mid-fight approach re-path; ping 6 ms; the client's perf reports at 16-20 ms a frame.
+  - What the tape cannot show is delivery. Every message is its own `sendall` and no socket
+    sets `TCP_NODELAY`, so Nagle can hold small writes and deliver them together. That is
+    UNVERIFIED and is the leading candidate; open in §8.1.
+
 ### PENDSKILL -- 2026-09-30 -- **the "Pending skill N copy 0 not found" line is a hero's missing 0x00E4: retail opens every hero cast with it (50 of 50), JARIN never sent it, and every hero E3 since 2026-09-14 dropped a record the client never held (495 of 495). Shipped behind `--no-hero-cast-e4`, with the death and knock-down closes, and tested against the client's own ledger rule. It is NOT yet confirmed on the client.**
 
 **Where the line comes from.** OBSERVED from the slice client's bytes (build 38797; study

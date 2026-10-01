@@ -2311,8 +2311,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **PENDSKILL's client run** ([SLICE-F52](studies/slice/FINDINGS.md)): the `revheal2` rig
-  again, predicting 0 `Pending skill` lines against 69 (an injected player press still logs one).
+* **Resurrection Signet is single-use, refreshed by a morale boost** (the owner); ours re-casts
+  forever (66 raises, PLAN-LOG "PENDSKILL's client run").
+* **"Attacks delay, then double-hit"** (the owner, same run): our swings are regular; lead: no
+  `TCP_NODELAY`.
 * **A hero's E5 on a zero-recharge skill** (SLICE-F52 52.5): retail sends none (13 of 13); we
   send `E5 [hero, skill, 0, 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts

@@ -3773,5 +3773,17 @@ in `PLAN.md` §8.1.
   (52.2).
 - OBSERVED, 1 of 1: the death's close.
 - RECONSTRUCTION: the knock-down's close and the instant's E4 timing.
-- **Not confirmed on the client yet:** the run is the `revheal2` rig, predicting 0 lines
-  against 69.
+- **Confirmed on the client:** the open and the E3 close, in 52.7.
+
+### 52.7 On the client — `20260930T202753`, 0 lines against 69
+
+The same rig as `20260930T185003`, on `f56a13d9`, with the questions registered first.
+- **67 hero E4s**, each opening its cast start (ahead of the `[60]`; a face word once
+  between).
+- **66 E3s**, plus one cast in flight when the client closed.
+- **0 `Pending skill` lines** (69 before). The client log's other classes are unchanged.
+- The heal's segment and the full-health first hits are unchanged.
+- **The death and knock-down closes were not exercised:** no hero fell or went down mid-cast.
+
+The label moves to **CONFIRMED on the client** for the open and the E3 close. The two drop
+closes keep their desk labels.
