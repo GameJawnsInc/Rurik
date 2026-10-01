@@ -417,9 +417,11 @@ Which live build to use is a question about the ACCOUNT's client, not about the 
 2026-09-01; the driver refused the 38849 build against a service serving 38888, which is
 the refusal working as designed), and as of 2026-10-01
 **`run-live/2026-09-30_8e50edfb8351` is build 38974 and is the one to use** (ArenaNet
-updated `C:\gw` that morning). **Decode a 38974 tape through `livewire`**, or through a
-`Codec(client_build=38974)`: that build renumbered every GAME_SMSG from 0x0194 up, and a
-plain `Codec()` mislabels 55 of the moved messages with no framing error
+updated `C:\gw` that morning). That build renumbered every GAME_SMSG from 0x0194 up, and
+a plain `Codec()` mislabels 55 of the moved messages with no framing error, so **decode a
+tape through `tape.load_tape` / `tape.decode_all`, `livewire` or `cmsgstream`**. All three
+read the connection's own build and decode in its numbering, whatever codec the caller
+holds. Bytes copied out into a plain `list` or `bytes` lose that
 (`studies/crossbuild/FINDINGS.md` §11)
 (`buildid.py --exe <path>`, which since 2026-08-17 reads the binary you hand it rather
 than the pin). **`run-live/2026-08-13_64fae3b1369b` no longer holds what its name says:**

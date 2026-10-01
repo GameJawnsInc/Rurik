@@ -292,8 +292,11 @@ def main():
           and chatdefs.refusal_evidence(1988) == "OBSERVED"
           and chatdefs.refusal_evidence(1985) == "OBSERVED"
           and chatdefs.refusal_evidence(1957) == "OBSERVED"
-          and chatdefs.REFUSAL_OBSERVED == {1934, 1957, 1960, 1961, 1985, 1988},
-          "exactly six ids are OBSERVED (1960 39 of 39, 1961 on screen and 17x on the wire, "
+          and chatdefs.refusal_evidence(1966) == "OBSERVED"
+          and chatdefs.REFUSAL_OBSERVED == {1934, 1957, 1960, 1961, 1966, 1985, 1988},
+          "exactly seven ids are OBSERVED (1960 39 of 39, 1961 on screen and 17x on the wire, "
+          "1966 on screen -- retail's 'Invalid Target' for a resurrection pressed at nobody, "
+          "the owner 2026-10-01, RESSIG-T; "
           "1934 1 of 1, 1988 1 of 1 -- the recharge refusal, fix pass 2026-09-23; 1985 1 of 1 "
           "-- the weapon mismatch, 20260929T150923 :53756 t=1056.002, RANGERPRE-S2; 1957 1 of "
           "1 -- a non-fleshy target's Bleeding, the same connection t=1057.415, RANGERPRE-S14)")

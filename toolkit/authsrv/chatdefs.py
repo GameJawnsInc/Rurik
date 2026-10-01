@@ -158,7 +158,7 @@ REFUSAL_REASONS = {
     1963: "target_obstructed",
     1964: "skill_recharging",                # never on any wire held (skills 38.5)
     1965: "already_have_pet",
-    1966: "invalid_target",
+    1966: "invalid_target",                  # OBSERVED on screen, retail (RESSIG-T, below)
     1967: "no_pet",
     1968: "pet_out_of_range",
     1969: "casting_prevented_shroud_of_silence",
@@ -195,7 +195,9 @@ REFUSAL_REASONS = {
 # [9, 40, 0] -- the sentence AFTER the ack and BEFORE the release, an order no
 # 1960 refusal uses. 1964 carries the same sentence in the archive and has never
 # been on any wire we hold (skills 38.5); the id retail sends is 1988.
-REFUSAL_OBSERVED = {1934, 1957, 1960, 1961, 1985, 1988}   # every other id is RECONSTRUCTION
+# 1966 joined 2026-10-01 on the owner's ON-SCREEN reading in retail (RESSIG-T, at
+# REFUSE_INVALID_TARGET below) -- the same kind of witness 1961's first one was.
+REFUSAL_OBSERVED = {1934, 1957, 1960, 1961, 1966, 1985, 1988}   # every other id is RECONSTRUCTION
 REFUSAL_TEMPLATED = {1942, 1943}            # take arguments; never sent bare
 REFUSAL_BLOCK = (1934, 1993)                # inclusive; the plain span
 REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001))
@@ -245,8 +247,16 @@ REFUSE_INVALID_ATTACK_TARGET = 1934
 # 1986 is RECONSTRUCTION from the sentence's own condition, never on any wire
 # we hold: a foe SPELL at a party body, sent only under --refusal-reasons.
 REFUSE_INVALID_SPELL_TARGET = 1986
+# 1966 is the id whose sentence the owner READ ON SCREEN in retail, 2026-10-01
+# (RESSIG-T): Resurrection Signet pressed with nothing selected -- "even if a
+# dead ally is nearby" -- "refuses immediately" with that sentence (the archive's
+# 1966, resolved by textrec; 1934 and 1986 are the attack and spell variants).
+# OBSERVED on screen, n = 1; the wire FORM (the chat pair, then the release) is
+# RECONSTRUCTION from 1934's, the one target-0 refusal held on tape.
+REFUSE_INVALID_TARGET = 1966
 assert REFUSAL_REASONS[REFUSE_INVALID_ATTACK_TARGET] == "invalid_attack_target"
 assert REFUSAL_REASONS[REFUSE_INVALID_SPELL_TARGET] == "invalid_spell_target"
+assert REFUSAL_REASONS[REFUSE_INVALID_TARGET] == "invalid_target"
 assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ADRENALINE] == "not_enough_adrenaline"
 assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ENERGY] == "not_enough_energy"
 assert len(REFUSAL_REASONS) == REFUSAL_BLOCK[1] - REFUSAL_BLOCK[0] + 1

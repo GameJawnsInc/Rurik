@@ -144,6 +144,10 @@ def build_events(capdir, conn_file, direction):
         off += len(payload)
     if off != len(plain):
         return conn, None, ("coverage-mismatch", off, len(plain))
+    # tape.Events, carrying the connection's own build, so any decode_all a caller
+    # runs over these reads that build's numbering (codec.GAME_SMSG_RENUMBER).
+    events = tape.Events(events)
+    events.build = conn_build(capdir, conn_file)
     return conn, events, None
 
 

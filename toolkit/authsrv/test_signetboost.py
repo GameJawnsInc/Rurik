@@ -24,6 +24,10 @@ RECONSTRUCTION, the shapes a morale change already has.
      countered (+2 on the kill's own tick) and the cap holds (110).
   6  a NON-boss kill boosts nothing; the KNOWN-BAD arm (--no-boss-boost) boosts nothing.
   7  the wiring: the spawn marks a glow row as a boss; both switches.
+  8  RESSIG-T: a press at NOBODY (target 0) with a corpse in reach is refused at once,
+     #1966 and the release -- retail's 'Invalid Target', the owner's reading
+     2026-10-01 -- nothing begins and no corpse is auto-picked; the KNOWN-BAD arm
+     (--no-resurrect-target-gate) casts its 3 s.
 """
 import math
 import os
@@ -45,7 +49,9 @@ import authsrv                                                 # noqa: E402
 # directory): 20, and 20 with the vault -- nothing here reads it (skill 2's timing and
 # cost are pinned in main(), its [skill_effect.2] row is the repo's). PLAYER_RESURRECTION,
 # BOSS_MORALE_BOOST and BOOST_REPAINT False in the source redden 15; BOOST_REPAINT alone 2.
-LEDGER = checks.Ledger("signet and boost", floor=20)
+# 20 -> 25 for section 8 (RESSIG-T), bare and vault alike; RESURRECT_TARGET_GATE
+# False in the source reddens 3.
+LEDGER = checks.Ledger("signet and boost", floor=25)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -289,6 +295,46 @@ def section_wiring():
           "both ship ON at 2%; --no-player-resurrection and --no-boss-boost revert", "")
 
 
+def section_no_target():
+    print("== 8. a press at NOBODY is refused at once: retail's 'Invalid Target' ==")
+    import chatdefs                                            # noqa: PLC0415
+    st, w = _world(), Wire()                      # a dead hero lies 100 u away
+    _press(st, w, target=0)
+    sent = w.take()
+    core = (authsrv.GAME_SMSG_CHAT_MESSAGE_CORE, [chatdefs.refusal_body(1966)])
+    i_core = sent.index(core) if core in sent else None
+    i_e2 = sent.index((E2, [P, RES, 0])) if (E2, [P, RES, 0]) in sent else None
+    check(chatdefs.REFUSE_INVALID_TARGET == 1966
+          and None not in (i_core, i_e2) and i_core < i_e2
+          and sent[i_core + 1][0] == authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER,
+          "target 0: #1966 on the warning panel, then the release -- before anything "
+          "else, with a corpse in reach (the owner, retail, 2026-10-01)", f"{sent}")
+    check(not [1 for op, v in sent if op == 0x00E4] and not st.get("pending_casts")
+          and not st.get("boost_spent") and st["agents"][HERO]["dead"],
+          "nothing begins: no E4, no cast entry, nothing spent, the corpse NOT auto-picked",
+          f"pending {st.get('pending_casts')}, spent {st.get('boost_spent')}")
+    _press(st, w)                                 # the same signet, aimed this time
+    check([1 for op, v in w.take() if op == 0x00E4] and st.get("pending_casts"),
+          "and the same signet pressed AT the corpse still casts", "")
+    saved = authsrv.RESURRECT_TARGET_GATE
+    authsrv.RESURRECT_TARGET_GATE = False
+    try:
+        st, w = _world(), Wire()
+        _press(st, w, target=0)
+        sent = w.take()
+        check([1 for op, v in sent if op == 0x00E4] and st.get("pending_casts")
+              and core not in sent,
+              "KNOWN-BAD (--no-resurrect-target-gate): the press at nobody casts its 3 s "
+              "-- every run before RESSIG-T", f"{sent[:4]}")
+    finally:
+        authsrv.RESURRECT_TARGET_GATE = saved
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    args = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+    check(authsrv.RESURRECT_TARGET_GATE is True and '"--no-resurrect-target-gate"' in args
+          and "if a.no_resurrect_target_gate:" in src,
+          "the gate ships ON; --no-resurrect-target-gate reverts", "")
+
+
 def main():
     saved = (authsrv.skill_timing, authsrv.skill_cost)
     # Skill 2's own row, pinned so a bare machine runs the same cycle: 3.0 s, no
@@ -304,6 +350,7 @@ def main():
         section_boost()
         section_no_boost()
         section_wiring()
+        section_no_target()
     finally:
         authsrv.skill_timing, authsrv.skill_cost = saved
     return LEDGER.verdict()

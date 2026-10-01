@@ -136,6 +136,22 @@ def _channels(cap_dir):
     return out
 
 
+def _conn_build(cap_dir, conn):
+    """The client build one connection's own file records, or None if it cannot say.
+
+    Per connection since 2026-10-01: build 38974 renumbered every GAME_SMSG from
+    0x0194 up (codec.GAME_SMSG_RENUMBER), so this reader's s2c decode follows the
+    build the connection names -- origin.build_of, the livesession record checked
+    against the client's own VERSION frame. The c2s tables did not move, and a
+    connection that names no build reads in the schema's numbering, as before."""
+    import origin                                            # noqa: PLC0415
+    want = conn.replace(":", "_").replace("->", "-to-")
+    for fn in sorted(os.listdir(cap_dir)):
+        if fn.endswith(".jsonl") and want in fn and fn.startswith(("game-", "auth-")):
+            return origin.build_of(os.path.join(cap_dir, fn))[0]
+    return None
+
+
 def _key_for(cap_dir, conn):
     for fn in os.listdir(cap_dir):
         if not fn.endswith(".jsonl"):
@@ -333,7 +349,8 @@ def timed(stamp, want_dir="c2s", channel="game", catalog=None, set_aside=None):
         # `decode_stream_at`, never a decode_one loop of our own: codec.py calls
         # it "the one framing loop", and a second one here would be a second
         # chance to disagree about where a message ends.
-        msgs, consumed, err = codec().decode_stream_at(ch_name, plain, mask)
+        msgs, consumed, err = codec().for_build(
+            _conn_build(capture_dir(stamp), conn)).decode_stream_at(ch_name, plain, mask)
         if err is not None or consumed != len(plain):
             raise StreamRefused(
                 f"{stamp} {conn} {want_dir}: {ch_name} framed {consumed} of "
@@ -388,7 +405,8 @@ def frame_report(stamp, want_dir="c2s", channel="game", catalog=None, set_aside=
     rows = []
     for conn, plain, _hs, _marks in _streams(
             capture_dir(stamp), want_dir, channel, set_aside):
-        msgs, consumed, err = codec().decode_stream_at(ch_name, plain, mask)
+        msgs, consumed, err = codec().for_build(
+            _conn_build(capture_dir(stamp), conn)).decode_stream_at(ch_name, plain, mask)
         rows.append({
             "conn": conn,
             "catalog": ch_name,

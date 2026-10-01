@@ -42,14 +42,18 @@ import vaultpath  # noqa: E402
 # printed. Sections 1, 2 and 6 build their own captures and need no vault; 6 is
 # deliberately on that side, because a segmentation defect is not a property of any
 # particular capture and should be refutable on a bare machine.
-LEDGER = checks.Ledger("tape", floor=30)
+# 41 from the green run of 2026-10-01: section 10 (a tape decodes in its own build's
+# numbering, build 38974) adds 11, all on captures it builds itself.
+LEDGER = checks.Ledger("tape", floor=41)
 
 LIVE_CAPTURE = "20260807T143055"
 
 
 def write_capture(root, *, who=origin.LIVE, s2c_pieces=(), handshake=b"\x01\x16" + b"S" * 20,
-                  short_by=0):
-    """A minimal capture directory: wire.jsonl plus one decrypted game channel."""
+                  short_by=0, build=None):
+    """A minimal capture directory: wire.jsonl plus one decrypted game channel.
+    `build` stamps the channel the way livesession.py does (origin + version)."""
+    stamp = {} if build is None else {"build": build}
     os.makedirs(root, exist_ok=True)
     conn = "10.0.0.9:5000->3.65.1.1:80"
     left, right = conn.split("->")
@@ -70,9 +74,9 @@ def write_capture(root, *, who=origin.LIVE, s2c_pieces=(), handshake=b"\x01\x16"
     if short_by:
         plain = plain[:-short_by]
     with open(os.path.join(root, "game-x.jsonl"), "w", encoding="utf-8") as fh:
-        fh.write(json.dumps(origin.record("test_tape.py", who)) + "\n")
+        fh.write(json.dumps(origin.record("test_tape.py", who, **stamp)) + "\n")
         fh.write(json.dumps({"kind": "version", "channel": "game",
-                             "connection": conn}) + "\n")
+                             "connection": conn, **stamp}) + "\n")
         fh.write(json.dumps({"kind": "frame", "direction": "s2c",
                              "plain": plain.hex()}) + "\n")
     return conn
@@ -307,7 +311,80 @@ def main():
 
     section_decode_all()
     section_repacketized_retransmit()
+    section_build_numbering()
     return LEDGER.verdict()
+
+
+def section_build_numbering():
+    """10. A tape decodes in ITS build's numbering, whatever codec the caller holds.
+
+    Build 38974 renumbered every GAME_SMSG from 0x0194 up (codec.GAME_SMSG_RENUMBER),
+    and most decoders here hand `decode_all` a plain `Codec()` of their own. The tape
+    carries its build (tape.Events), so the right numbering reaches them all. Built
+    from its own captures, so it is refutable on a bare machine. 2026-10-01.
+    """
+    print("\n10. a tape decodes in its own build's numbering (build 38974)")
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+    import codec as C                                        # noqa: PLC0415
+    pin = C.Codec()
+    b74 = C.Codec(client_build=38974)
+    # The handoff, as 38974 sends it: schema 0x01A5 on wire 0x01A6, 39 bytes.
+    sock = b"\x02\x00\x18\xf0" + bytes([3, 65, 1, 1]) + b"\x00" * 16
+    handoff = b74.encode("GAME_SMSG", 0x01A5, [sock, 7, 0, 146, 1, 99, 0])
+    new = b74.encode("GAME_SMSG", C.NEW_OPCODE | 0x0194, [0xDEADBEEF])
+    with tempfile.TemporaryDirectory() as root:
+        write_capture(root, s2c_pieces=(new, handoff), build=38974)
+        info, events = tape.load_tape(root)
+        LEDGER.ok(info["build"] == 38974 and getattr(events, "build", None) == 38974,
+                  "load_tape reads the channel's own build into info AND onto the events",
+                  f"info {info['build']}, events {getattr(events, 'build', None)}")
+        msgs, receipt = tape.decode_all(events, pin, "GAME_SMSG")
+        ops = [op for _t, op, _v in msgs]
+        LEDGER.ok(ops == [C.NEW_OPCODE | 0x0194, 0x01A5]
+                  and receipt.consumed == receipt.total,
+                  "decode_all with a PLAIN Codec() reads 38974's numbering off the tape",
+                  f"{[hex(o) for o in ops]}, {receipt.consumed}/{receipt.total}")
+        pmsgs, _r = tape.decode_all(list(events), pin, "GAME_SMSG", strict=False)
+        LEDGER.ok([op for _t, op, _v in pmsgs][:1] == [0x0194],
+                  "CONTROL: the same bytes as a plain list read the pin's 0x0194 -- "
+                  "the collision the tape's build exists to prevent",
+                  f"{[hex(op) for _t, op, _v in pmsgs]}")
+        LEDGER.ok(getattr(events[0:1], "build", None) == 38974,
+                  "a SLICE of the tape keeps its build", "list() does not, and says so")
+        found = tape.transfer_of(events, pin)
+        LEDGER.ok(found is not None and found["map_id"] == 146
+                  and found["host"] == "3.65.1.1",
+                  "transfer_of finds 38974's handoff (wire 0x01A6) with a plain codec",
+                  str(found and (found["host"], found["map_id"])))
+        LEDGER.ok(tape.transfer_of(list(events), pin) is None,
+                  "CONTROL: in the pin's numbering the same tape has NO handoff")
+        kept, dropped, _why = tape.stop_before_transfer(events, pin)
+        out, changed, _w = tape.rewrite_transfer(events, pin, "127.0.0.4")
+        LEDGER.ok(dropped == 1 and getattr(kept, "build", None) == 38974
+                  and changed > 0 and getattr(out, "build", None) == 38974
+                  and tape.transfer_of(out, pin)["host"] == "127.0.0.4",
+                  "stop_before_transfer and rewrite_transfer cut and repoint it, and "
+                  "both hand back a tape that still names 38974")
+    with tempfile.TemporaryDirectory() as root:
+        write_capture(root, s2c_pieces=(pin.encode("GAME_SMSG", 0x01A5,
+                                                    [sock, 7, 0, 146, 1, 99, 0]),))
+        info, events = tape.load_tape(root)
+        found = tape.transfer_of(events, pin)
+        LEDGER.ok(info["build"] is None and found is not None,
+                  "a tape naming NO build reads in the schema's numbering, as before")
+    LEDGER.ok(pin.for_build(38974).channels is pin.channels
+              and pin.for_build(38888) is pin,
+              "for_build renumbers the CALLER's catalog, and is the codec itself "
+              "where nothing would change")
+
+    # The server half: what it may play and serve. Locked as text, the
+    # source-lock convention for main() (test_skillbound does the same).
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    LEDGER.ok("GAME_SMSG_RENUMBER.get(_tape_build) is not GAME_SMSG_RENUMBER.get(CLIENT_BUILD)"
+              in src and "refusing to play this tape -- it is build" in src,
+              "authsrv --tape refuses a tape numbered unlike the served client")
+    LEDGER.ok("if a.client_build in GAME_SMSG_RENUMBER:" in src,
+              "and --client-build refuses a renumbered build outright")
 
 
 def section_decode_all():

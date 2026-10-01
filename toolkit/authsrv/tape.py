@@ -65,6 +65,51 @@ class TapeError(Exception):
     """A capture that cannot be turned into a tape. Never guessed past."""
 
 
+class Events(list):
+    """A tape's [(t, plaintext)] events, carrying the client BUILD the tape is.
+
+    WHY A LIST THAT KNOWS ITS BUILD. Build 38974 (2026-09-30) renumbered every
+    GAME_SMSG from 0x0194 up by one (codec.GAME_SMSG_RENUMBER), so the same bytes
+    mean different messages on different builds -- and 55 of the 120 it moved land
+    on a neighbour of the same SHAPE, so decoding a 38974 tape in the schema's
+    numbering frames cleanly and mislabels silently. Some twenty-five tools decode
+    tapes as `load_tape` then `decode_all(events, their_codec)`, each with its own
+    `Codec()`; carrying the build HERE means `decode_all` and the transfer helpers
+    read the right numbering for all of them without each one being taught.
+
+    `build` is the connection's own record (origin.build_of: the livesession
+    `origin` record checked against the client's `version` frame) and None when
+    the file cannot say -- which reads in the schema's numbering, as every tape
+    before 38974 did. A SLICE keeps the build; `list(events)`, `+` and a copy into
+    a plain list do not, and a decode of one of those falls back to the caller's
+    codec, so hand `decode_all` the Events itself.
+    """
+    build = None
+
+    def __getitem__(self, i):
+        got = list.__getitem__(self, i)
+        return self.of(got, self) if isinstance(i, slice) else got
+
+    @classmethod
+    def of(cls, items, like):
+        """`items` as Events carrying `like`'s build (None if `like` has none)."""
+        out = cls(items)
+        out.build = getattr(like, "build", None)
+        return out
+
+
+def codec_for(events, codec_obj):
+    """`codec_obj` reading the numbering of the build `events` carries.
+
+    The caller's codec when the tape names no build or the same numbering --
+    so its schema and overrides are the ones used either way (Codec.for_build is a
+    copy of it, renumbered, not a fresh default)."""
+    build = getattr(events, "build", None)
+    if build is None or not hasattr(codec_obj, "for_build"):
+        return codec_obj
+    return codec_obj.for_build(build)
+
+
 def _segments(wire_path, conn, direction):
     """[(seq, t, payload)] for one connection and direction, in sequence order.
 
@@ -345,8 +390,14 @@ def load_tape(capture_dir, connection=None):
         # field and unknown value all read "unrecorded": content.py accepts that value
         # and never promotes rows carrying it.
         "game_mode": _manifest_mode(capture_dir),
+        # THE TAPE'S CLIENT BUILD, additive like the two above (2026-10-01): the
+        # connection file's own record, which `Events.build` carries into every
+        # decode below. None when the file cannot say.
+        "build": origin.build_of(chan["path"])[0],
     }
-    return info, events
+    tape = Events(events)
+    tape.build = info["build"]
+    return info, tape
 
 
 def _manifest_mode(capture_dir):
@@ -415,6 +466,7 @@ def decode_all(events, codec_obj, channel="GAME_SMSG", mask=0, strict=True):
             times.append(t)
         off += len(b)
 
+    codec_obj = codec_for(events, codec_obj)    # the tape's own numbering
     msgs, consumed, err = codec_obj.decode_stream_at(channel, blob, mask)
     receipt = Receipt(consumed, len(blob), err)
     if strict and (err is not None or consumed != len(blob)):
@@ -484,6 +536,7 @@ def stop_before_transfer(events, codec_obj):
     partial segment whose timing no longer matches anything recorded.
     """
     off, cut = 0, None
+    codec_obj = codec_for(events, codec_obj)
     blob = b"".join(b for _t, b in events)
     while off < len(blob):
         try:
@@ -503,7 +556,7 @@ def stop_before_transfer(events, codec_obj):
         keep.append((t, b))
         seen += len(b)
     dropped = len(events) - len(keep)
-    return keep, dropped, (f"cut at byte {cut:,} of {len(blob):,}, dropping the last "
+    return Events.of(keep, events), dropped, (f"cut at byte {cut:,} of {len(blob):,}, dropping the last "
                            f"{dropped} event(s) -- they hand the client to another "
                            f"server and the cage will refuse the dial")
 
@@ -535,6 +588,7 @@ def transfer_of(events, codec_obj):
         +34 u32   player_id
         +38 u8
     """
+    codec_obj = codec_for(events, codec_obj)
     blob = b"".join(b for _t, b in events)
     off = 0
     while off < len(blob):
@@ -623,7 +677,7 @@ def rewrite_transfer(events, codec_obj, host, port=TRANSFER_PORT):
         raise TapeError(
             f"the rewrite touched bytes outside the sockaddr at "
             f"[{at}, {at + SOCKADDR_LEN}): {differing[:8]}")
-    check = transfer_of([(0.0, after)], codec_obj)
+    check = transfer_of(Events.of([(0.0, after)], events), codec_obj)
     if check is None or check["host"] != host or check["port"] != port:
         raise TapeError(
             f"the rewritten tape does not read back as {host}:{port} -- got "
@@ -635,7 +689,7 @@ def rewrite_transfer(events, codec_obj, host, port=TRANSFER_PORT):
     for t, b in events:
         out.append((t, after[seen:seen + len(b)]))
         seen += len(b)
-    return out, len(differing), (
+    return Events.of(out, events), len(differing), (
         f"0x{TRANSFER_OPCODES[0]:04X} at byte {found['offset']:,} now names "
         f"{host}:{port} instead of {found['host']}:{found['port']} "
         f"({len(differing)} byte(s) changed of {len(before):,}); "

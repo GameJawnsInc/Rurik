@@ -32,6 +32,7 @@ now. The tail fields are NOT separate fields: a caller passes one value for the
 nested_struct — a list of rows — and nothing after it.
 """
 
+import copy
 import json
 import os
 import struct
@@ -153,6 +154,19 @@ class Codec:
                     else:
                         target["messages"][key] = msg
                     self.overridden.append(f"{chan}[{key}]")
+
+    def for_build(self, build):
+        """This codec -- same schema, same overrides -- reading `build`'s numbering.
+
+        A shallow copy that shares the (read-only) channel tables, so a caller that
+        built one codec with its own overrides gets THAT catalog renumbered rather
+        than a fresh default one. `self` when nothing would change."""
+        if GAME_SMSG_RENUMBER.get(build) is self._renumber:
+            return self
+        other = copy.copy(self)
+        other.client_build = build
+        other._renumber = GAME_SMSG_RENUMBER.get(build)
+        return other
 
     def name_for(self, channel, opcode, default="?"):
         """The message's name, if anything has earned it one.

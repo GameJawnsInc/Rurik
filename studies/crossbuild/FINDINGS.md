@@ -1571,12 +1571,25 @@ independent walk got the same fix.
 
 - **`test_buildpins`' census**: the 38974 rows are class (a), build-coupled constants.
   The count is in the 327 entry of that test.
-- **`test_cage`** is red until the 38974 loopback build is caged. That needs the owner's
-  elevated `isolate_client.ps1`, as 38888's did.
+- **`test_cage`** was red until the 38974 loopback build was caged. The owner ran the
+  elevated `isolate_client.ps1` the same day, and it is green (18).
 - **The 38974 live build is `run-live/2026-09-30_8e50edfb8351`** (RUNBOOK).
-- **Remaining decoders**: every consumer that builds its own `Codec()` still decodes in
-  the pin's numbering. A 38974 tape through one of them is the silent-mislabel case
-  above. `livewire.decode_conn` is the converted path. `PLAN.md` §8 carries the rest.
+- **The decoders, converted the same day** (PLAN-LOG "Build 38974's decoders").
+  - **The tape carries its build.** `tape.load_tape` returns `tape.Events`, a list
+    carrying the connection's own build (`origin.build_of`), and puts it in
+    `info["build"]`.
+  - **Every decode reads that numbering.** `decode_all`, `transfer_of`,
+    `stop_before_transfer` and `rewrite_transfer` decode in the tape's numbering through
+    `Codec.for_build`, the CALLER's catalog renumbered. So the roughly 25 tools that pair
+    `load_tape` with their own `Codec()` read 38974 right without an edit.
+  - **The other readers:** `livewire.build_events` returns the same `Events`;
+    `cmsgstream` picks its codec per connection; `scriptrun`'s readout follows the tape.
+  - **What it does not cover:** a slice keeps the build; `list()` and `+` do not.
+  - **The replay guard:** `authsrv --tape` refuses a tape numbered unlike the served
+    client.
+  - **Tested:** `test_tape` §10 on captures it builds itself, each check with a control.
+  - **Still to see:** the first 38974 live tape framing to its last byte through this
+    path is the real verification.
 
 ## 5. What this changes elsewhere
 

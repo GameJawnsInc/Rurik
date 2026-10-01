@@ -161,7 +161,11 @@ def play_tape(send_raw, conn_id, stop, events, info, speed, codec):
             ends.append(at)
         per_event, framed_to = {}, 0
         try:
-            framed, framed_to, _e = codec.decode_stream_at(
+            # In the TAPE's own build's numbering (tape.Events, 2026-10-01). authsrv
+            # refuses to play a tape numbered unlike its client, so this is the same
+            # codec today; it stays right if that refusal ever learns to translate.
+            import tape as _tape                                 # noqa: PLC0415
+            framed, framed_to, _e = _tape.codec_for(events, codec).decode_stream_at(
                 "GAME_SMSG", b"".join(b for _t, b in events))
         except Exception:
             framed = []

@@ -6632,6 +6632,15 @@ PLAYER_RESURRECTION = True      # False (--no-player-resurrection): the press ra
 BOSS_MORALE_BOOST = True        # False (--no-boss-boost): a boss dies like anyone.
 BOSS_BOOST_PERCENT = 2          # WIKI, the page above.
 BOOST_REPAINT = True            # False (--boost-e6-only): the E6 alone; the icon stays grey.
+# RESSIG-T (2026-10-01): A RESURRECTION PRESSED AT NOBODY IS REFUSED AT ONCE. The owner,
+# in retail: Resurrection Signet with nothing selected "comes back 'Invalid Target' ...
+# even if a dead ally is nearby (refuses immediately)" -- the client sends it as
+# target 0 (ours did, 20261001T112625, 42.36 s: USE_SKILL [2, 0, 0]) and the server
+# answers. So no auto-pick of a corpse, no cast bar, nothing spent: #1966
+# (chatdefs.REFUSE_INVALID_TARGET) and the release, before the first send. The
+# SENTENCE is OBSERVED on screen; its wire form is #1934's (the attack-target gate),
+# RECONSTRUCTION. Until today the press ran its 3 s and stopped ([59], E2).
+RESURRECT_TARGET_GATE = True    # False (--no-resurrect-target-gate): cast, then stop.
 # WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
 # on plane 19), the hero's body deleted and re-created, both raised at full
 # health with the maxima kept, no 0x01D8 (340.21 s; three earlier tapes the
@@ -24822,6 +24831,16 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
               f"boost or a zone change [RESSIG-P]", flush=True)
         refuse_press(send, int(skill_id), int(copy), conn_id)
         _press_refused(state, rec, conn_id, "spent", terminal=True)
+        return
+    if RESURRECT_TARGET_GATE and not target and skill_resurrects(skill_id):
+        # RESSIG-T: a resurrection names its corpse or begins nothing (the banner
+        # at RESURRECT_TARGET_GATE) -- retail's "Invalid Target", at once.
+        print(f"[c{conn_id}] REFUSED skill {int(skill_id)}: a resurrection pressed "
+              f"with target 0 -- retail's #1966, at once [RESSIG-T]", flush=True)
+        _press_row(rec, fired=False, reason="resurrect-target-0", target=0,
+                   age=0.0, skill=skill_id)
+        refuse_press(send, int(skill_id), int(copy), conn_id,
+                     chatdefs.REFUSE_INVALID_TARGET)
         return
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
@@ -45471,6 +45490,20 @@ def main():
             TAPE_INFO, TAPE_EVENTS = tapemod.load_tape(a.tape, a.tape_connection)
         except tapemod.TapeError as ex:
             raise SystemExit(f"refusing to play this tape -- {ex}")
+        # A TAPE IS RAW BYTES IN ITS OWN BUILD'S NUMBERING, and the client hearing it
+        # reads them in ITS build's. Build 38974 renumbered every GAME_SMSG from
+        # 0x0194 up (codec.GAME_SMSG_RENUMBER), so its tapes played into a pin-
+        # generation client would deliver the manifest burst and the handoff as
+        # other messages. Refused while the two numberings differ; a tape that names
+        # no build is the schema's numbering, which is what every tape before 38974 is.
+        _tape_build = TAPE_INFO.get("build")
+        if GAME_SMSG_RENUMBER.get(_tape_build) is not GAME_SMSG_RENUMBER.get(CLIENT_BUILD):
+            raise SystemExit(
+                f"refusing to play this tape -- it is build {_tape_build}, whose "
+                f"GAME_SMSG numbering differs from the served client's "
+                f"(--client-build {CLIENT_BUILD}); the client would read its "
+                f"messages from 0x0194 up as other messages "
+                f"(studies/crossbuild/FINDINGS.md 11)")
         TAPE_SPEED = a.tape_speed
         if a.tape_rewrite_next and (a.labelrun or a.tape_no_transfer):
             raise SystemExit(
@@ -46390,6 +46423,12 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.no_resurrect_target_gate:
+        global RESURRECT_TARGET_GATE
+        RESURRECT_TARGET_GATE = False
+        print("[party] --no-resurrect-target-gate: a resurrection pressed at target 0 "
+              "casts its 3 s and stops -- every run before RESSIG-T (2026-10-01); "
+              "retail refuses it 'Invalid Target' at once.", flush=True)
     if a.boost_e6_only:
         global BOOST_REPAINT
         BOOST_REPAINT = False

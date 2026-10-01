@@ -3941,6 +3941,23 @@ in the source redden 13.
   (42.36 s). Ours casts 3 s and stops it. On retail, 0 of 95 targeted presses carried
   target 0, so there is no witness either way; the rule is the owner's.
 
+### 53.9 RESSIG-T — a resurrection pressed at nobody is refused at once (2026-10-01)
+
+**The owner, in retail:** *"retail comes back 'Invalid Target' when Res Sig is pressed with
+no target selected, even if a dead ally is nearby (refuses immediately)"*.
+
+- **Read:** retail does not auto-pick a corpse, shows no cast bar and spends nothing. The
+  sentence is the refusal block's #1966. The archive resolves it to "Invalid target.";
+  #1934 is the attack variant and #1986 the spell variant. OBSERVED on screen, n = 1.
+- **The wire form is RECONSTRUCTION:** the chat pair, then the release, before the first
+  send. That is #1934's shape, and the attack-target gate's target-0 refusal is the one
+  held on tape.
+- **Shipped:** `RESURRECT_TARGET_GATE` in `handle_skill_press`, for any resurrection skill
+  (`skill_resurrects`). `chatdefs.REFUSE_INVALID_TARGET` = 1966, now in `REFUSAL_OBSERVED`.
+  `--no-resurrect-target-gate` reverts to the 3 s cast and the stop.
+- **Tested:** `test_signetboost` §8.
+- **Not yet on our client:** whether a 38797 client draws #1966 the way retail did.
+
 ## SLICE-F54 — **HEROENERGY: a hero's energy is its own and its panel is told it. Retail sends `[62, hero, -cost/max]` right behind a hero's E4 (Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2). Ours said nothing, and sent the player's rate over a hostile pool (2026-10-01)**
 
 **The owner,** watching the healer rig's hero panels (`20261001T100733`): *"heroes don't

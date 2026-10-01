@@ -28,6 +28,44 @@ move back.
 
 ---
 
+### RESSIG-T: a resurrection pressed at nobody is refused at once -- 2026-10-01 -- **the owner's retail reading: "Invalid Target", immediately, even with a dead ally nearby. Ours cast 3 s and stopped; now #1966 and the release, before anything begins.**
+
+- **Read and shipped** (`studies/slice/FINDINGS.md` §53.9):
+  - The sentence is #1966. The archive resolves it to "Invalid target.", and it is now in
+    `chatdefs.REFUSAL_OBSERVED`.
+  - `RESURRECT_TARGET_GATE` answers a resurrection skill pressed at target 0, in
+    `handle_skill_press`, ahead of everything else.
+  - `--no-resurrect-target-gate` reverts.
+- **The wire form is RECONSTRUCTION:** #1934's chat pair, then the release.
+- **Tests:**
+  - `test_signetboost` 20 -> 25, bare and vault alike; the gate off in the source reddens 3.
+  - `test_chatdefs` 53.
+- **Open** (`PLAN.md` §8, RESSIG): our client's rendering of #1966.
+
+### Build 38974's decoders and the cage -- 2026-10-01 -- **a tape now decodes in its own build's numbering whatever codec its reader holds, so the ~25 tools that pair `load_tape` with a `Codec()` of their own read 38974 right untouched; `authsrv --tape` refuses a tape numbered unlike its client; the owner caged the 38974 loopback build.**
+
+**The design** (`studies/crossbuild/FINDINGS.md` §11.5):
+- `tape.load_tape` returns `tape.Events` carrying the connection's own build
+  (`origin.build_of`), and puts it in `info["build"]` too.
+- `decode_all` and the three transfer helpers decode through `Codec.for_build`: the
+  caller's catalog, renumbered.
+- Slices keep the build, and the cut and rewritten tapes keep it too.
+- `livewire.build_events` returns `Events`, and `cmsgstream` picks its codec per
+  connection.
+- `scriptrun`'s readout follows the tape.
+
+**A bug caught before commit:** `for_build`'s first placement sat inside
+`Codec.__init__` and swallowed the overrides merge. `test_tape` §4 went red on 0x008C
+(140), framed 3 values where the override says 4, and the Ascalon tape stopped at
+47,726 of 74,319 bytes. Moved after `__init__`, and the tape frames all 3,981 messages.
+
+**Tests:** `test_tape` 30 -> 41 (§10 builds its own captures, each check with a
+control). Also green: `test_codec` 43, `test_catalog` 25, `test_livewire` 18,
+`test_smsgsweep` 124, `test_dispatch` 54, `test_cmsgnames` 20, `test_c2striage` 54,
+`test_gapreaders` 4, `test_castcycle` 63, `test_ressig` 22, `test_srclint` 26.
+**`test_cage` 18, green**: the owner ran `isolate_client.ps1` for the 38974 loopback
+build.
+
 ### Build 38974 landed -- 2026-10-01 -- **ArenaNet updated `C:\gw` that morning. The snapshot, both client builds and the registry are done, and every per-build tool reads 38974. This build RENUMBERED, the first since the schema import: every GAME_SMSG from 0x0194 up sits +1 behind a new 0x0194, and the quest frame ids sit +2. The codec now translates per build, and the server refuses to serve 38974. The pin stays 38797; the content stays 38888.**
 
 The full record is `studies/crossbuild/FINDINGS.md` §11.
