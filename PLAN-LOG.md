@@ -28,6 +28,32 @@ move back.
 
 ---
 
+### MONSTERAI-W, the owner's eye -- 2026-10-01 -- **CONFIRMED: "saw it that time, good". Over three more runs and four more wipes the wire held: the give-up came 1.84-1.89 s after the last death and the raider stood home at +3.9 s, well before the rise. 7 of 7 wipes on our wire in all. Closed in `PLAN.md` §8.1.**
+
+**The runs:** each used tree `3975fe8b`, the `revheal2` rig, one scripted attack and a
+120 s hold. Hands off. The questions were registered before each launch
+(`DEADBOUT2/3/4-run-registered.txt`).
+- **`20261001T085421`:** PASS. One wipe: give-up at +1.87 s, HOME at +3.92 s, rise at
+  +10.60 s. Not watched.
+- **`20261001T094325`:** PASS. One wipe: give-up at +1.89 s, HOME at +3.93 s, rise at
+  +10.61 s. Not watched.
+- **`20261001T095044`:** RETRACTED on a clean close (code 0, no error dialog) at ~112 s,
+  after the check. Two wipes: the scripted one, then a second after the owner's own C +
+  space following the rise (`c2s 0x8026 ATTACK`). Give-ups at +1.84 / +1.86 s, HOME at
+  +3.88 / +3.90 s, rises at +10.65 / +10.62 s. The owner watched the first.
+
+**The questions, all three runs.**
+- **Q1, exposed:** four wipes. The raider stood 553-556 u from its anchor at each last death.
+- **Q2:** one `GIVES UP ... [MONSTERAI-W]` per wipe, then two RETURN legs, HOME before the
+  countdown stops, and 0 `its target left the area` give-ups.
+- **Q3, the owner's eye:** *"saw it that time, good"*. CONFIRMED.
+- **Nothing else moved:** each attack after the rise approached from the shrine (2326 u),
+  with 0 `PRESS ENDS THE WALK`, 0 `Pending skill` and 0 resurrect complaints. The client log
+  holds only its usual classes.
+
+**Not modelled, and not open work until patrols exist:** retail's patrollers resumed their
+route at walking speed after a wipe (MONSTERAI-W2).
+
 ### MONSTERAI-W's client run -- 2026-10-01 -- **on the wire, 3 of 3 wipes: the Bandit gave up 1.86 s after the last death, walked its two legs home and stood on its anchor 3.9 s after the death, 6.7 s before the rise. 0 give-ups at the rise. The owner's eye is still open.**
 
 **The run:** `20261001T004236`, tree `e1c2e0c7`, the `revheal2` rig. The questions were

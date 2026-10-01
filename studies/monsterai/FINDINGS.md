@@ -2999,8 +2999,10 @@ the shrine batch (§43.2 of the slice findings; a visibility effect). Open: the 
 `20261001T004236`, tree `e1c2e0c7`, hands off, three wipes. On each, the raider stood
 548–554 u from its anchor at the last death and gave up 1.86 s after it. It walked two
 RETURN legs and stood on its anchor at +3.85–3.90 s, 6.7 s before the rise (+10.63 s).
-No give-up came at the rise. OBSERVED on our wire, n = 3. The owner's eye on the client is
-open (PLAN-LOG "MONSTERAI-W's client run").
+No give-up came at the rise. OBSERVED on our wire, n = 3. Three more runs
+(`20261001T085421`, `20261001T094325`, `20261001T095044`) gave four more wipes: give-up at
++1.84–1.89 s, HOME at +3.88–3.93 s. That is 7 of 7 on our wire. **The owner watched the
+last: "saw it that time, good". CONFIRMED** (PLAN-LOG "MONSTERAI-W, the owner's eye").
 
 ---
 
