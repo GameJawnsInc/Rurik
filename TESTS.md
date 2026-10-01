@@ -3559,6 +3559,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the observer, 23 with another agent -- the rule checked before it judges ours. Proved
   red: `HIT_FINISH_FIRST = False` in the source reddens 7. Floor 9 from the bare green run
   (the vault adds 2: 11). No socket, no client),
+  `toolkit/authsrv/test_signetboost.py` (**2026-10-01, RESSIG-P / RESSIG-B: the player's own
+  Resurrection Signet raises, single use, and a boss's death is the party's morale boost
+  that recharges it.** The player's press of skill 2 at a party corpse used to raise nobody
+  (resurrect_target was a body's only); WIKI's boss boost (GWW "Morale Boost": 2%,
+  recharges skills, the signet's one refresh) had no code. §1 the REAL handle_skill_press +
+  cast_tick at a dead hero: [58], E7 [me, 2, 0], E3, [8 -> 0], the rise, in order (the
+  observer on retail, 2 of 2), no E5, no E6, the signet spent. §2 a press while spent: the
+  bare E2, nothing begins. §3 a corpse already standing at the landing: [59] + E2, nothing
+  spent, the next death raises. §4 KNOWN-BAD `--no-player-resurrection`: E5 [.., 0], E6, the
+  hero stays down. §5 the REAL kill_agent on a boss: 0x009C [.., 102] for the player and the
+  hero, E6 for both spent signets, the slots ready in the books; DP countered (+2 on top of
+  the kill's own 75-XP tick); the +10% cap holds and skills still recharge. §6 a non-boss
+  kill and `--no-boss-boost` boost nothing. §7 a glow row is a boss; the switches. Proved
+  red: both switches off in the source redden 13. Floor 18, bare and vaulted alike (skill
+  2's timing and cost pinned in main()). No socket, no client),
   `toolkit/authsrv/test_heroenergy.py` (**2026-10-01, HEROENERGY: a hero's energy is its
   own and its panel is told it.** The owner on the healer rig: "heroes don't actually spend
   energy when casting, and Monks are supposed to have 4 pips of energy regen, not 2". The

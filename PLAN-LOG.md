@@ -28,6 +28,44 @@ move back.
 
 ---
 
+### RESSIG-P and RESSIG-B -- 2026-10-01 -- **the player's own Resurrection Signet now raises a party corpse in retail's order and is spent until a morale boost; a boss's death is the party's +2% morale boost and recharges every party skill, the spent signets included. Behind `--no-player-resurrection` and `--no-boss-boost`; NOT yet run on the client.**
+
+**Asked:** the owner, *"res sig"*: the open items of SLICE-F53 53.4.
+
+**RESSIG-P.** The player's press of skill 2 at a dead hero was accepted. It ran 3 s, sent
+E5 [me, 2, 0, 0] and E6, and raised nobody: `resurrect_target` was reached from a body's
+landing only.
+- **Retail's observer** (OBSERVED, n = 2): E4 at the press, `[60, me, corpse, 2]`, then
+  `[58]`, (the `[20 … 152]` visual), E7, E3, `[8, me, 0]`, the rise. No E5.
+- **`player_resurrection_lands`** writes that completion from `cast_tick`.
+  - The signet is spent in `state["boost_spent"]`: kept through a wipe, cleared by a zone.
+  - A press while spent gets the bare release.
+  - A corpse already standing STOPS the cast (`[8 -> 0]`, `[59]`, E2), and nothing is
+    spent. RECONSTRUCTION for the observer.
+
+**RESSIG-B.** WIKI (GWW "Morale Boost", rev 2730137): *"2%, whenever any boss dies"*, to all
+party members. It recharges skills, counters death penalty and caps at +10%, and it is the
+signet's only refresh short of a zone.
+- **A boss** is a spawn row with a `glow`, carried on the entry as `boss`.
+- **`kill_agent` calls `morale_boost`** after the kill's own sequence:
+  - the player through `push_morale`;
+  - each hero by `0x009C` and its 41 / 43 / 42;
+  - then `recharge_party_skills`: the player's recharging casts take their E6 at once,
+    each spent signet gets an E6, and every party body's slots are ready, with a hero's
+    panel getting an E6 for each.
+- **The wire is RECONSTRUCTION:** no boss dies on any tape (0 of 5 glowing agents on 128
+  connections).
+
+**Tests.** `test_signetboost.py` is new: 18 checks, bare and vaulted alike.
+- Both switches off in the source redden 13.
+- Green: agentlife (704, run alone -- its scatter end-to-end failed once with 13 other tests running in parallel and passed alone: wall-clock sensitive under load, not this change), ressig, pendskill, castcycle, castgate, morale, heroenergy, instantannounce, recharge, mechanics, heroadd, pools, adrenwire, skilldamage, attribbudget, population, secondary, daggers, bodywindup, animaltoken, condwords, damagelatch, guards, interrupt, interruptshots, killwindow, killxp, labelconsumers, loot, playerswing, skillword, weapons, plus `test_checks` and the four lints.
+
+**Open:**
+- the client run;
+- whether a re-created hero's panel keeps the E7 paint after a wipe (an owner's-eye
+  question);
+- 1816's row, and the `[20 … 152]` column.
+
 ### HEROENERGY's client run -- 2026-10-01 -- **CONFIRMED: "good, their energy can drop to 0 and they don't cast until it's back to 5 (4 pips shown)". On the wire, each Monk hero's load said 4 pips over its 30, and 64 of 64 hero Orisons carried [62, hero, -5/30] right behind their E4. Closed in `PLAN.md` section 8.1.**
 
 **The run:** `20261001T105103`, tree `050f8b4d`, the `revheal3` healer rig, hands off. The

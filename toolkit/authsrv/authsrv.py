@@ -6599,11 +6599,37 @@ HERO_CAST_OPENS_E4 = True      # False (--no-hero-cast-e4): no E4, every hero E3
 # a completed raise sends E7 + E3 (a hero) and spends the slot until the row is
 # re-created -- a zone change does that (hero_body_create builds the bar fresh); the
 # shrine re-create after a wipe keeps it (no zone, no boost). A landing whose target
-# already stands is [59] (+ the hero's E2), raises nobody and spends nothing. NOT
-# HERE: the morale boost itself -- no boss death is on any tape (0 of 5 glowing
-# agents died on 128 connections), so its wire would be invented; it is open in
-# PLAN.md 8.1. --no-resurrection-single-use is the pre-fix arm.
+# already stands is [59] (+ the hero's E2), raises nobody and spends nothing. The
+# morale boost that refreshes it is RESSIG-B below (a boss's death, WIKI; its wire
+# RECONSTRUCTION -- no boss dies on any tape, 0 of 5 glowing agents on 128
+# connections), and the player's own signet is RESSIG-P.
+# --no-resurrection-single-use is the pre-fix arm.
 RESURRECTION_SINGLE_USE = True  # False (--no-resurrection-single-use): ready every fight.
+# RESSIG-P (2026-10-01): THE PLAYER'S OWN SIGNET RAISES. A press of skill 2 at a party
+# corpse was accepted, ran its 3 s, sent E5 [.., 0] and E6, and raised nobody --
+# resurrect_target was reached from a BODY's landing only (SLICE-F53 53.4). Retail's
+# observer: E4 at the press, [60, me, corpse, 2] (after a walk into range), and at the
+# completion [58, me, 0], the [20 .. 152] visual, E7 [me, 2, 0], E3, [8, me, 0], then
+# the rise -- 2 completed raises on tape (20260817T231139 :54071, 20260929T100038
+# :57580), no E5. So cast_tick's completion writes that batch for a resurrection
+# (player_resurrection_lands): the signet spent until a morale boost or a zone change
+# (state["boost_spent"]; a press of it is released bare -- the client paints the slot
+# +inf and should never send one), and a corpse that already stands STOPS the cast
+# through the cancel burst ([8 -> 0], [59], E2), nothing spent -- RECONSTRUCTION for
+# the observer (the bodies' stops are OBSERVED, 42 on tape; the observer's one stop was
+# an interrupt). --no-player-resurrection is the pre-fix arm.
+PLAYER_RESURRECTION = True      # False (--no-player-resurrection): the press raises nobody.
+# RESSIG-B (2026-10-01): A BOSS'S DEATH IS A MORALE BOOST. WIKI (GWW "Morale Boost", rev
+# 2730137): "2%, whenever any boss dies", to all party members, and it RECHARGES
+# SKILLS -- the only thing that recharges Resurrection Signet short of a zone (its own
+# notes: "Resurrection Signet ... require[s] a Morale Boost to recharge"); boosts cap
+# at +10% and counter death penalty. A boss here is a spawn row with a `glow` (the
+# boss aura, SLICE-F1). THE WIRE IS RECONSTRUCTION: no boss dies on any tape (0 of 5
+# glowing agents, 128 connections), so the boost rides the shapes a morale change
+# already has -- push_morale's for the player, the hero's 0x009C + 41 / 43 / 42 -- and
+# each recharge is the E6 that ends any recharge. --no-boss-boost reverts.
+BOSS_MORALE_BOOST = True        # False (--no-boss-boost): a boss dies like anyone.
+BOSS_BOOST_PERCENT = 2          # WIKI, the page above.
 # WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
 # on plane 19), the hero's body deleted and re-created, both raised at full
 # health with the maxima kept, no 0x01D8 (340.21 s; three earlier tapes the
@@ -21625,6 +21651,11 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # (The death penalty's other half -- WIKI "gaining 75 experience will
     # remove 1% DP" -- was sent HERE, after the flags, until RANGERPRE-S7; it
     # is the tick ahead of the award now.)
+    if BOSS_MORALE_BOOST and is_boss(agent):
+        # RESSIG-B: a boss's death is the party's morale boost, after the
+        # kill's own sequence (no tape orders the two).
+        morale_boost(send, state, conn_id, BOSS_BOOST_PERCENT,
+                     f"boss {target_id} ({agent.get('name', '?')}) died")
     print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
           f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
@@ -24780,6 +24811,15 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
              else "ATTACK_SKILL")
     skill_id, copy, target = values[1], values[2], values[3]
+    if PLAYER_RESURRECTION and int(skill_id) in (state.get("boost_spent") or {}):
+        # RESSIG-P: a SPENT signet. The client painted its slot +inf (E7) and
+        # should never press it; if it does, the bare release answers -- no
+        # sentence to copy (retail's client never sent one), nothing begins.
+        print(f"[c{conn_id}] REFUSED skill {int(skill_id)}: spent until a morale "
+              f"boost or a zone change [RESSIG-P]", flush=True)
+        refuse_press(send, int(skill_id), int(copy), conn_id)
+        _press_refused(state, rec, conn_id, "spent", terminal=True)
+        return
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
     # B2 (studies/weapons 43): a SIGNET under Rust activates x2 -- the E5 clock
@@ -25650,6 +25690,12 @@ def cast_tick(send, state, conn_id):
                     print(f"[c{conn_id}] skill {cast['skill_id']}: {_why}; "
                           f"released as a cancel", flush=True)
                     continue
+            # RESSIG-P: the player's own resurrection writes its own completion --
+            # the raise in retail's observer order, or the stop (player_resurrection_lands).
+            if (PLAYER_RESURRECTION and not cast["attack"]
+                    and skill_resurrects(cast["skill_id"])
+                    and player_resurrection_lands(send, state, conn_id, cast, now)):
+                continue
             # WEAPONS-W5b: a held staff's 570 ("Halves skill recharge of
             # spells (Chance: N%)") rolls HERE, at the completion -- WIKI (GWW
             # "Recharge time"): the recharge "is calculated as the skill
@@ -31137,6 +31183,122 @@ def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
     row = state.get("agents", {}).get(tid)
     if row is not None and row.get("dead"):
         revive_party_body(send, state, tid, row, conn_id, why=why, energy_frac=_ef)
+
+
+def player_resurrection_lands(send, state, conn_id, cast, now):
+    """RESSIG-P: the player's own resurrection completes (cast_tick's E5 phase).
+    Returns True when it has written the completion itself.
+
+    A corpse that already stands STOPS the cast: marked cancelled, so the next
+    pass sends the cancel burst ([8 -> 0], [59], E2) and nothing is spent. Else
+    the raise, in retail's observer order (2 of 2): [58], E7 for a boost-only
+    skill (E5 with its recharge for any other), E3, [8 -> 0], then the rise; the
+    boost-only skill is spent until a morale boost (morale_boost) or a zone."""
+    sid, copy, tid = int(cast["skill_id"]), int(cast["copy"]), cast.get("target")
+    if not tid or tid == PLAYER_AGENT_ID or not resurrection_target_dead(state, tid):
+        cast["cancelled"] = "its target already stands"
+        state["cast_busy_until"] = now
+        print(f"[c{conn_id}] skill {sid} STOPPED: its target ({tid}) already stands; "
+              f"nothing is spent [RESSIG-P]", flush=True)
+        return True
+    boost = RESURRECTION_SINGLE_USE and skill_recharges_on_boost(sid)
+    if not boost:
+        send(GAME_SMSG_SKILL_RECHARGE, [PLAYER_AGENT_ID, sid, copy, cast["recharge"]],
+             f"SKILL_RECHARGE(skill {sid}, {cast['recharge']}s)")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.GV_SKILL_FINISHED, PLAYER_AGENT_ID, 0],
+         f"skill_finished: skill {sid} completes (a resurrection)")
+    if boost:
+        send(GAME_SMSG_SKILL_RECHARGE_INDEFINITE, [PLAYER_AGENT_ID, sid, copy],
+             f"SKILL_RECHARGE_INDEFINITE(skill {sid}): spent until a morale boost "
+             f"[RESSIG-P]")
+    cast["e5_sent"] = True
+    send(GAME_SMSG_SKILL_ACTIVATED, [PLAYER_AGENT_ID, sid, copy],
+         f"SKILL_ACTIVATED(skill {sid}, copy {copy})")
+    cast["e3_sent"] = True
+    action_hold(send, state, 0, f"skill {sid} completes")
+    if boost:
+        cast["no_e6"] = True
+        state.setdefault("boost_spent", {})[sid] = copy
+    print(f"[c{conn_id}] the player's skill {sid} raises {target_label(state, tid)}"
+          + ("; the signet is SPENT until a morale boost or a zone change" if boost else "")
+          + " [RESSIG-P]", flush=True)
+    resurrect_target(send, state, tid, conn_id, PLAYER_AGENT_ID, sid)
+    return True
+
+
+def is_boss(agent):
+    """RESSIG-B: a boss is a hostile spawned with a glow (the boss aura)."""
+    return bool(agent and agent.get("boss")
+                and agent.get("allegiance") == agents.ALLEGIANCE_HOSTILE)
+
+
+def morale_boost(send, state, conn_id, percent, why):
+    """RESSIG-B: a skill-recharging morale boost for the whole party (WIKI: a
+    boss's death, 2%). The player and each hero gain `percent` morale (capped
+    at +10%, countering death penalty first), and every party member's skills
+    recharge -- the spent Resurrection Signet with them. RECONSTRUCTION on the
+    wire: the morale shapes a death already has, then an E6 per recharge."""
+    now = time.time()
+    push_morale(send, state, conn_id, player_morale(state) + int(percent),
+                f"a morale boost: {why}")
+    for aid, row in party_bodies(state):
+        if hero_body_id(row) is None:
+            continue
+        old = hero_morale(state, aid)
+        new = morale.clamp(old + int(percent))
+        if new == old:
+            continue
+        e_max, h_max = hero_morale_apply(state, aid, row, new)
+        send(GAME_SMSG_AGENT_MORALE, [aid, new],
+             f"morale {morale.display(new)} on hero agent {aid} (a morale boost: {why}) "
+             f"[RESSIG-B]")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_ENERGY_MAX, aid, e_max],
+             f"hero agent {aid} energy max {e_max} at morale {new}")
+        if ENERGY and HERO_ENERGY_BY_PROFESSION:
+            row["max_energy"] = float(e_max)
+            _rate = agent_energy(row).set_maximum(float(e_max))
+            if not row.get("dead"):
+                send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT, [GV_ENERGY_REGEN, aid, _f32(_rate)],
+                     f"hero agent {aid} energy regeneration over {e_max}")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_HEALTH_MAX, aid, h_max],
+             f"hero agent {aid} health max {h_max} at morale {new}")
+    recharge_party_skills(send, state, conn_id, why, now)
+
+
+def recharge_party_skills(send, state, conn_id, why, now=None):
+    """RESSIG-B: every party member's skills recharge. The player's: each cast
+    still recharging takes its E6 now (cast_tick sends it on its next pass),
+    and each spent signet gets one here. A party body's: every slot ready now;
+    a hero's panel gets an E6 for each skill still recharging or spent."""
+    now = time.time() if now is None else now
+    n = 0
+    for cast in list(state.get("pending_casts") or ()):
+        if (cast.get("e5_sent") and not cast.get("cancelled") and not cast.get("no_e6")
+                and cast.get("e6_at", 0.0) > now):
+            cast["e6_at"] = now
+            n += 1
+    spent = state.get("boost_spent") or {}
+    for sid, copy in sorted(spent.items()):
+        send(GAME_SMSG_SKILL_RECHARGED, [PLAYER_AGENT_ID, int(sid), int(copy)],
+             f"SKILL_RECHARGED(skill {sid}): {why} [RESSIG-B]")
+        n += 1
+    spent.clear()
+    for aid, row in party_bodies(state):
+        ready = row.get("skill_ready") or []
+        for i, r in enumerate(ready):
+            if r > now:
+                ready[i] = now
+        due = row.get("hero_recharged_due") or {}
+        gone = set(int(s) for s in due) | set(int(s) for s in (row.get("boost_spent") or ()))
+        if HERO_WIRE_POOLS and hero_body_id(row) is not None:
+            for sid in sorted(gone):
+                send(GAME_SMSG_SKILL_RECHARGED, [aid, sid, 0],
+                     f"SKILL_RECHARGED(hero agent {aid}, skill {sid}): {why} [RESSIG-B]")
+        n += len(gone)
+        due.clear()
+        row["boost_spent"] = set()
+    print(f"[c{conn_id}] MORALE BOOST ({why}): {n} recharge(s) for the party [RESSIG-B]",
+          flush=True)
 
 
 def hero_body_id(row):
@@ -38622,6 +38784,7 @@ def spawn_population(send, state, origin, conn_id, area=None):
             # SLICE-H11: what the body holds (the range still comes from
             # `damage` first, agent_weapon_range's order).
             "weapon_item": row.get("weapon_item"),
+            "boss": row.get("glow") is not None,     # RESSIG-B: the boss aura
         }
         # DESKWORK-D1 step 5: a `hireable` row is an outpost henchman the party
         # window offers. BEFORE its create (retail's position: 0x009B, 0x009F
@@ -46186,6 +46349,16 @@ def main():
         print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
               "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
               flush=True)
+    if a.no_player_resurrection:
+        global PLAYER_RESURRECTION
+        PLAYER_RESURRECTION = False
+        print("[party] --no-player-resurrection: the player's own Resurrection Signet "
+              "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.no_boss_boost:
+        global BOSS_MORALE_BOOST
+        BOSS_MORALE_BOOST = False
+        print("[party] --no-boss-boost: a boss's death boosts nobody and recharges "
+              "nothing -- every run before RESSIG-B (2026-10-01).", flush=True)
     if a.no_hero_spend_word:
         global HERO_SPEND_WORD
         HERO_SPEND_WORD = False

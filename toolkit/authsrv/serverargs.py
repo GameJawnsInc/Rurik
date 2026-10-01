@@ -748,6 +748,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
                          "adrenaline and skill family like the player's (107 / "
                          "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--no-player-resurrection", action="store_true",
+                    help="THE REVERT ARM for RESSIG-P: the player's own Resurrection "
+                         "Signet runs its 3 s and raises nobody (E5 [.., 0], E6), every run "
+                         "before 2026-10-01. By default it raises the corpse in retail's "
+                         "order ([58], E7, E3, [8 -> 0], the rise), is spent until a morale "
+                         "boost, and stops ([59]) on a corpse already standing.")
+    ap.add_argument("--no-boss-boost", action="store_true",
+                    help="THE REVERT ARM for RESSIG-B: a boss dies like anyone. By default "
+                         "a boss's death (a spawn row with a glow) is the party's +2%% "
+                         "morale boost and recharges every party skill, the spent signet "
+                         "included (WIKI GWW \"Morale Boost\"; the wire RECONSTRUCTION).")
     ap.add_argument("--no-hero-spend-word", action="store_true",
                     help="THE REVERT ARM for HEROENERGY's spend: a hero's paid cast "
                          "debits its pool and sends nothing, so its panel never drops "

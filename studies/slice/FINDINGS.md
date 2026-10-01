@@ -3877,6 +3877,53 @@ The same rig as `20260930T202753`, on `0d963fef`, with the questions registered 
 **CONFIRMED on the client:** the single use and the segment. Unscored for want of a frame:
 whether the re-created hero's panel still paints the signet +inf (53.4's E7 item).
 
+### 53.7 RESSIG-P and RESSIG-B — the player's own signet, and the boss's boost (2026-10-01)
+
+The owner: *"res sig"*, the open items of 53.4.
+
+**RESSIG-P, the player's signet (`PLAYER_RESURRECTION`, `--no-player-resurrection`).**
+A press of skill 2 at a party corpse was accepted. It ran its 3 s, sent E5 [me, 2, 0, 0]
+and E6, and raised nobody: `resurrect_target` was reached from a body's landing only.
+
+Retail's observer, OBSERVED n = 2 for the completion and n = 1 for the press:
+- E4 at the press, then a `0x002A` walk into range.
+- `[60, me, corpse, 2]`, then 3 s later `[58]`, the `[20 … 152]` visual, E7 [me, 2, 0],
+  E3, `[8, me, 0]`, the rise.
+
+`player_resurrection_lands` now writes that completion from `cast_tick`'s E5 phase:
+- no E5 and no E6;
+- the signet spent in `state["boost_spent"]`, which survives a wipe and is cleared by a
+  zone (a fresh state);
+- a press while spent gets the bare release.
+
+A corpse that already stands at the landing STOPS the cast through the cancel burst
+(`[8 -> 0]`, `[59]`, E2), and nothing is spent. That is RECONSTRUCTION for the observer:
+the bodies' 42 stops are OBSERVED, and the observer's one stop was an interrupt.
+
+**RESSIG-B, the boss's boost (`BOSS_MORALE_BOOST`, `--no-boss-boost`).** WIKI (GWW "Morale
+Boost", rev 2730137): *"2%, whenever any boss dies"*, to all party members. It recharges
+skills, it counters death penalty, it caps at +10%, and Resurrection Signet *"require[s] a
+Morale Boost to recharge"*.
+
+A boss is a spawn row with a `glow` (the boss aura); the entry now carries `boss`.
+`kill_agent` calls `morale_boost` after the kill's own sequence:
+- the player through `push_morale`;
+- each hero by `0x009C` and its 41 / 43 / 42;
+- then `recharge_party_skills`. That gives the player's recharging casts their E6 at once,
+  an E6 for each spent signet, every party body's slots ready, and a hero's panel an E6 per
+  skill still recharging or spent.
+
+The wire is RECONSTRUCTION: no boss dies on any tape.
+
+**Tests.** `test_signetboost.py` has 18 checks, bare and vaulted alike. The two switches off
+in the source redden 13.
+
+**Still open from 53.4:**
+- whether a re-created hero's panel keeps the E7 paint after a wipe (an owner's-eye
+  question for the next client run);
+- 1816's row;
+- the `[20 … 152]` column.
+
 ## SLICE-F54 — **HEROENERGY: a hero's energy is its own and its panel is told it. Retail sends `[62, hero, -cost/max]` right behind a hero's E4 (Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2). Ours said nothing, and sent the player's rate over a hostile pool (2026-10-01)**
 
 **The owner,** watching the healer rig's hero panels (`20261001T100733`): *"heroes don't
