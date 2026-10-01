@@ -4647,6 +4647,21 @@ the run's tape is the instrument that can go red without a client.
   sample size as last time."* There were no doubles over about 25 s. CONSISTENT; a longer
   window (more health, or real heals) would make it a CONFIRMATION.
 
+### 43.8 The longer window — `20261001T100733`, the healer rig: CONFIRMED
+
+The owner asked for real heals. The rig's two Monk heroes went to level 20 at Healing
+Prayers 12 with Orison of Healing, so the raider never gets through them (sized on a
+fake-clock replay of the world tick, validated against `20261001T004236`). The owner played
+for 2¼ minutes and closed the client cleanly.
+- **The wire:** 102 damage words on the raider, every one after its own close — 101 behind
+  `[1]`, 10 of the owner's attack skills behind `[46]`. The latch names the player at 111 of
+  111 words, 0 on another agent.
+- **The cadence:** 1.330 s p50. No hero died, no wipe.
+- **The heroes:** 90 Orison casts, the pending-skill ledger closed 90 of 90, 0 `Pending
+  skill` lines.
+- **The owner:** *"attacks looked normal the whole time."* **CONFIRMED.** The exposure is
+  under the 150 registered (the owner's close), but it is five times the first window.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

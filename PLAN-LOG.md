@@ -28,6 +28,47 @@ move back.
 
 ---
 
+### ANIMREF-RE 43's longer window -- 2026-10-01 -- **CONFIRMED: "attacks looked normal the whole time". The healer rig (level-20 Monk heroes with Orison of Healing) held the raider for 2¼ minutes: 102 player damage words, each after its own close; the latch names the player at 111 of 111 words. The owner also found two hero-energy defects; those are open.**
+
+**The rig:** `revheal3`, from the owner's *"give the heroes real heals for the longer attack
+check"*. It is revheal2's raider and player, with the two Monk heroes at level 20, Healing
+Prayers 12, bar [281 Orison of Healing, 2 Resurrection Signet], 480 health. The spec is in
+the scratchpad and the overlay in `vault/sandbox/revheal3`. Sizing came from a fake-clock
+replay of the real world-tick sweeps (`healsim.py`, scratch). Validated against
+`20261001T004236`, it gave a wipe at 21.5 s against the tape's ~24 s, in the same death order.
+- Level-3 healers wiped at 27-42 s, whatever the bar.
+- Level 20 / Healing 12 with Orison held 900 s twice: no hero death, energy near full.
+- Adding Heal Other also held, but drained one hero to 3 energy.
+
+**The run:** `20261001T100733`, tree `6510a969`. The questions were registered before launch
+(`LONG-run-registered.txt`). The owner played: attack skills, attack presses, and a clean
+close (`0x8008`, code 0, no dialog) at ~173 s. RETRACTED by the harness for that close.
+- **LONG-Q1:** 102 damage words between 38 and 173 s. That is under the 150 registered (the
+  owner's close), and about five times the first window. No hero death, no wipe.
+- **LONG-Q2:** 101 plain hits behind `[1]`, 10 attack skills behind `[46]`, none ahead. The
+  latch names the player at 111 of 111 words, 0 on another agent.
+- **LONG-Q3, the owner:** *"attacks looked normal the whole time."* CONFIRMED.
+- **LONG-Q4:**
+  - 90 Orison casts with heal lines.
+  - The pending-skill ledger closed: E4 90 = E3 90 + E2 0, with 0 `Pending skill` lines.
+    The scorer's "E4 first" count misread the log's print order; the E4 precedes every cast.
+  - The cadence held at 1.330 s p50.
+
+**Found by the owner, open** (`PLAN.md` §8.1 "Hero energy").
+- *"heroes don't actually spend energy when casting"*: the server deducts a hero's cost from
+  its pool but never says so. The player's cast sends `0x00A2 [62, me, -cost/max]`
+  (`GV_ENERGY_SPENT`); a hero's sends nothing, so the panel stays at 30. Retail sends it for
+  a hero: Koss's skill 346 (5 energy) was followed by `[62, Koss, -0.25]` (5 of 20) on 17 of
+  17 E4s, and skill 322 on 5 of 11 (`20260914T005758`).
+- *"Monks are supposed to have 4 pips of energy regen, not 2. i think the extra regen comes
+  from armor"*: three numbers disagree.
+  - The hero's `[43]` is the PLAYER's float scaled to the hero's maximum (2 pips on this
+    rig's Warrior).
+  - The server's pool is `ENEMY_ENERGY_PIPS` (5).
+  - `sandbox.py`'s table says a Monk has 4.
+  - Retail's Warrior Koss was sent 0.033 × 20 = 2 pips.
+  - The armour source is the owner's recollection, UNVERIFIED.
+
 ### MONSTERAI-W, the owner's eye -- 2026-10-01 -- **CONFIRMED: "saw it that time, good". Over three more runs and four more wipes the wire held: the give-up came 1.84-1.89 s after the last death and the raider stood home at +3.9 s, well before the rise. 7 of 7 wipes on our wire in all. Closed in `PLAN.md` §8.1.**
 
 **The runs:** each used tree `3975fe8b`, the `revheal2` rig, one scripted attack and a
