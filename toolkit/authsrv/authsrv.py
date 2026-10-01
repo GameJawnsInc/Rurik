@@ -6590,6 +6590,23 @@ RESURRECTION_SINGLE_USE = True  # False (--no-resurrection-single-use): ready ev
 # same for the observer). The delay is the median of the four: 10.0, 12.2,
 # 12.8, 10.6 s.
 WIPE_SHRINE = True             # False (--no-wipe-shrine): the timer stands the player up where it fell.
+# SHRINEWARP (2026-09-30): THE SHRINE IS A PLACEMENT, so it ends the records the body left
+# behind. The owner, on 20260930T224421: after the wipe stood everyone at the shrine,
+# C + space at the raider "caused me to warp from where i resurrected to the enemy
+# instantly". The log names it: `PRESS ENDS THE WALK: 0x002C at the modelled body
+# (1348,3312)` -- the point the player DIED at, 1,786 u from the shrine (1536,1536).
+# The player had died mid-approach, and a corpse sends no 0x003D / 0x0047, so the
+# click latch (`click_moving_at`) and its leg outlived the death BY DESIGN (kill_player:
+# the latches "stay with the arms that own them" until the next report re-stamps
+# them); the wipe moved `pos` and put the shrine on the wire but left the latch, the
+# leg and the last report (`client_pos`) describing the corpse's spot. The press then
+# found a click "in flight", lerped the stale leg and re-pinned the body on it. The
+# rule was already written: a 0x002C at a point no report describes CONTRADICTS the
+# report, so `_forget_client_position` (THE ASYMMETRY); and a 0x002C ends a walk
+# (`_note_wire_move` drops the keyboard leg on every one). The wipe's 0x002C is the
+# seventh player-0x002C site and post-dates that census, so it was never sorted.
+# --wipe-keeps-legs is the pre-fix arm.
+WIPE_PLACEMENT_ENDS_LEGS = True  # False (--wipe-keeps-legs): the press warps to the corpse.
 # SLICE-F43 (2026-09-14): THE DELAY IS A COUNTDOWN THE CLIENT IS TOLD. On the
 # hero tape retail sent `0x0180 INSTANCE_COUNTDOWN ["յ", 5, 0, 10000]`
 # three times, 0.58 s after the last death, and the shrine batch landed at
@@ -31463,6 +31480,17 @@ def wipe_to_shrine(send, state, conn_id):
     state["pos"] = (sx, sy)
     state["plane"] = spl
     state["dest"] = None
+    if WIPE_PLACEMENT_ENDS_LEGS:
+        # SHRINEWARP: the click leg the body was walking when it died is over --
+        # the placement ended it (a 0x002C stops both copies) -- and the last report
+        # describes the corpse's spot, which this 0x002C contradicts. So the latch
+        # clears, the leg goes, and the report is dropped the way every modelled
+        # placement drops it; `_click_leg_start` then answers from the placement
+        # (the shrine) until the client speaks again. The follow needs nothing
+        # here: kill_player abandoned it at the death every wipe follows.
+        state["click_moving_at"] = None
+        state["click_leg"] = None
+        _forget_client_position(state, "the wipe placed the player at the shrine")
     for i, (aid, row) in enumerate(party_bodies(state)):
         entry = remove_agent(send, state, aid,
                              "the party wiped: re-created at the shrine", conn_id)
@@ -46017,6 +46045,12 @@ def main():
         print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
               "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
               flush=True)
+    if a.wipe_keeps_legs:
+        global WIPE_PLACEMENT_ENDS_LEGS
+        WIPE_PLACEMENT_ENDS_LEGS = False
+        print("[map] --wipe-keeps-legs: the shrine placement leaves the click leg and the "
+              "last report standing -- the next attack press re-pins the body where it "
+              "died [SHRINEWARP revert]", flush=True)
     if a.hit_finish_last:
         global HIT_FINISH_FIRST
         HIT_FINISH_FIRST = False

@@ -28,6 +28,35 @@ move back.
 
 ---
 
+### SHRINEWARP -- 2026-09-30 -- **the first attack press after a party wipe warped the player from the shrine to where it died: the wipe left the corpse's click leg and last report standing, and the press re-pinned the body on them. Fixed behind `--wipe-keeps-legs`; NOT yet confirmed on the client.**
+
+**Found:** by the owner on `20260930T224421` (C + space after the shrine respawn). The log:
+`PRESS ENDS THE WALK: 0x002C at the modelled body (1348,3312)`, the death spot, 1,786 u
+from the shrine (1536,1536).
+
+**The mechanism** (studies/movecode 1z-dp):
+- The player died mid-approach. A corpse sends no `0x003D` / `0x0047`, so the click latch,
+  its leg and the last report outlived the death, as `kill_player` intends.
+- The wipe's shrine `0x002C` moved `pos` but retired none of them. It was a seventh
+  player-`0x002C` site, never sorted by `_forget_client_position`'s placement rule.
+- The press found a click "in flight" and re-pinned the body at the stale leg's end.
+
+**Shipped** (`WIPE_PLACEMENT_ENDS_LEGS`): `wipe_to_shrine` clears the latch and the leg and
+calls `_forget_client_position` after the placement.
+
+**Tests.** `test_shrinewarp.py` is new: 8 checks, bare and vaulted alike.
+- It drives the real wipe and the real press: no `0x002C` after the fix.
+- The known-bad arm sends `0x002C` at (1348,3312), the run's warp to the unit.
+- A live click leg still re-pins along it.
+- `WIPE_PLACEMENT_ENDS_LEGS = False` in the source reddens 4.
+- `test_cancelwalk`'s B1 latch lock counts four clears, the wipe named.
+- Green: agentlife, agtrack_guard, approachroute, cancelwalk (124), castcancel, castcycle,
+  d1lead, effects, keepalive, loot, playerswing (191), position_trust, ressig, router,
+  weapons, morale, kbdsync, guards, plus `test_checks` and the four lints.
+
+**Open:** the client run, and a death mid-click-leg raised in place (1z-dp.4: the same
+stale latch, a smaller hop to the leg's end).
+
 ### ANIMREF-RE 43's client runs -- 2026-09-30 -- **On the wire the fix holds: 39 of 39 player hits sent `[1]` first, and the client's latch, replayed over both tapes, pairs 39 of 39 with the player's own swing (8 % before, 30 % on another agent). Short exposure (under the registered floor of 50 per run); the owner, watching the second: "attacks seems normal, but don't have the same sample size as last time".**
 
 **The runs:** `20260930T223031` and `20260930T224421`, tree `cefc9105`, the `revheal2` rig.

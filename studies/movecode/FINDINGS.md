@@ -20334,3 +20334,65 @@ findings below survived that check (the review scratch is not in the tree). Fix 
   a hard row); the on-grant constants reuse `GRANT_ARRIVAL_*`; `captures()` sorts by (stamp, conn).
   The tests gained the known-bad echo arm, the agent-filter arm, the report-verdict arms and the
   glob-reach and re-grant-label arms; floor 21 → 28 bare (37 vaulted).
+
+## 1z-dp. SHRINEWARP — **the wipe's shrine placement left the corpse's click leg and last report standing, so the first attack press after it re-pinned the player where it died (2026-09-30)**
+
+### 1z-dp.1 The report and the log line — OBSERVED
+
+The owner, on `20260930T224421`: *"after dying and reviving at the spawn point, since
+nothing happened i C+space to attack the Bandit. this caused me to warp from where i
+resurrected to the enemy instantly."*
+
+The server log at that press:
+- `THE PARTY WIPED: everyone stands at the shrine (1536,1536)`;
+- three `TARGET_SELECT` and one `ATTACK`;
+- **`PRESS ENDS THE WALK: 0x002C at the modelled body (1348,3312) plane 0 -- the click
+  leg is superseded`**, then an approach "540 u out" from that point.
+
+(1348,3312) is where the player died beside the raider, 1,786 u from the shrine.
+
+### 1z-dp.2 The mechanism — the code, read
+
+- **The press** (`_press_supersedes`, ANIMREF-RE 39) runs only while the click latch
+  `click_moving_at` is set. It models the body with `_click_leg_start` (the leg lerped
+  to now, else the last report, else `pos`), re-pins it there with `0x002C`, and sets
+  `pos` to that point.
+- **The latch clears** only on a client `0x003D` / `0x0047`, or on that press.
+- **The approach arms the latch** and its leg (`_approach_send`).
+- **The player died mid-approach.** A corpse reports nothing, and `kill_player` leaves the
+  latches *"with the arms that own them"* by design, trusting the next report to re-stamp
+  them.
+- **The wipe** (`wipe_to_shrine`, JARIN) put `0x002C` at the shrine and moved `pos`, but
+  retired neither the latch nor its leg nor the last report (`client_pos`, at the death
+  spot).
+- **The press found a click "in flight".** The leg had long finished, so its lerp capped at
+  its end, the death spot, and the press re-pinned the body there.
+
+**The rule that should have sorted the wipe was already written.**
+- `_forget_client_position`: *"a 0x002C at a point OUR MODEL computed CONTRADICTS the last
+  report, so forget it"*. The shrine is such a point.
+- `_note_wire_move` drops the KEYBOARD leg on every player `0x002C`.
+
+Its census lists six player-`0x002C` sites. The wipe's is a seventh, added later, and was
+never sorted.
+
+### 1z-dp.3 Shipped — `WIPE_PLACEMENT_ENDS_LEGS`, `--wipe-keeps-legs` reverts
+
+After the shrine placement, `wipe_to_shrine` clears `click_moving_at` and `click_leg` and
+calls `_forget_client_position`, so `_click_leg_start` answers from the placement until the
+client speaks again. The follow needs nothing: `kill_player` abandoned it.
+
+`test_cancelwalk`'s B1 lock now counts four clears of the latch, the wipe named.
+`test_shrinewarp.py` drives the real wipe and the real press:
+- after the fix: no `0x002C`, the body stays at the shrine;
+- the known-bad arm: `0x002C` at (1348,3312), the run's warp to the unit;
+- a live click leg still re-pins ~144 u along it.
+
+### 1z-dp.4 Open
+
+- **A death mid-leg, raised in place** (a hero's signet, or the player's timer), keeps the
+  same stale latch. A press would re-pin the body at the leg's lerped point, which is the
+  leg's end once it has finished. That is zero after an approach that arrived, and up to the
+  leg's remainder after a click-walk cut short by the death. Not fixed here: one change
+  per test.
+- **The client run:** C + space after a wipe.

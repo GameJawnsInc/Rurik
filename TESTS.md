@@ -3559,6 +3559,19 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the observer, 23 with another agent -- the rule checked before it judges ours. Proved
   red: `HIT_FINISH_FIRST = False` in the source reddens 7. Floor 9 from the bare green run
   (the vault adds 2: 11). No socket, no client),
+  `toolkit/authsrv/test_shrinewarp.py` (**2026-09-30, SHRINEWARP: the wipe's shrine placement
+  ends the movement records the corpse left, so the first attack press after it does not
+  re-pin the player where it died.** The owner's warp on `20260930T224421`: `PRESS ENDS THE
+  WALK: 0x002C at the modelled body (1348,3312)`, the death spot, 1,786 u from the shrine.
+  The fixture is that state (a finished approach leg ending at the death spot, the last report
+  there, the player down). §1 the REAL `wipe_to_shrine`: the latch, the leg, the follow and
+  the report are gone and `_click_leg_start` answers the shrine. §2 the REAL
+  `_press_supersedes` after it sends no 0x002C. §3 the KNOWN-BAD arm `--wipe-keeps-legs`: the
+  press sends 0x002C at (1348,3312) -- the warp, reproduced. §4 a press on a LIVE click leg
+  still re-pins ~144 u along it (ANIMREF-RE 39 untouched). §5 the switch, and the wipe uses
+  `_forget_client_position`. `test_cancelwalk`'s B1 lock counts the latch's clears at FOUR.
+  Proved red: `WIPE_PLACEMENT_ENDS_LEGS = False` in the source reddens 4. Floor 8, bare and
+  vaulted alike. No socket, no client),
   `toolkit/authsrv/test_questflow.py` (**2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
   0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`

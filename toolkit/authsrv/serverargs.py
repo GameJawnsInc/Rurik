@@ -748,6 +748,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
                          "adrenaline and skill family like the player's (107 / "
                          "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--wipe-keeps-legs", action="store_true",
+                    help="THE REVERT ARM for SHRINEWARP: the wipe's shrine placement "
+                         "leaves the click leg, its latch and the last client report "
+                         "describing where the player died, so the first attack press "
+                         "after the wipe re-pins the body there (the owner's warp).")
     ap.add_argument("--hit-finish-last", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 43: the player's hit sends "
                          "melee_attack_finished [1] AFTER its damage word, as before. "
