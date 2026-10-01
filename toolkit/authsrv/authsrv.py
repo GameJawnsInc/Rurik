@@ -6536,6 +6536,26 @@ GAME_SMSG_INVENTORY_DESTROY = 0x0145
 # skill family (0x00E3 48, 0x00E5 35, 0x00E6) are on the wire like the
 # player's; a HENCHMAN's never are (0 on eleven henchman bodies).
 HERO_WIRE_POOLS = True         # False (--hero-silent-pools): the pre-JARIN silence.
+# HEROENERGY (2026-10-01). The owner, watching the healer rig's hero panels:
+# "heroes don't actually spend energy when casting, and Monks are supposed to have
+# 4 pips of energy regen, not 2. i think the extra regen comes from armor".
+#   * THE SPEND. ally_cast_tick debited the hero's pool and said nothing, so the
+#     panel sat full. Retail says it: Koss's skill 346 (5 energy) was E4, then
+#     0x00A2 [62, Koss, -cost/max] (-0.25 at 20, -0.2941 at 17), then E5 -- 17 of 17
+#     (20260914T005758). So a hero's paid cast sends [62] right behind its E4.
+#     A henchman's never: 0 E4 and 0 [62] on any henchman in the corpus, the
+#     hostile site's "not one spend in 722 casts by other agents" rule. For an
+#     ATTACK skill retail's [62] came later (5 of 11 within 1.5 s of the E4,
+#     none in its stamp) -- the strike, probably; ours debits at the start and
+#     says so there: RECONSTRUCTION for that one class.
+#   * THE RATE. The hero's [43] was the PLAYER's float scaled to the hero's
+#     maximum (2 pips on a Warrior player), and its server pool was the HOSTILE
+#     default (ENEMY_ENERGY 30, ENEMY_ENERGY_PIPS 5) -- three numbers. Now the
+#     pool and the word come from one place: the hero's own maximum at its morale,
+#     and pips by the armour rule (pools.PROFESSION_ENERGY, WIKI GWW "Energy": a
+#     Monk 4, a Warrior 2; OBSERVED for Koss, a Warrior hero, 2).
+HERO_SPEND_WORD = True            # False (--no-hero-spend-word): a hero's cast debits silently.
+HERO_ENERGY_BY_PROFESSION = True  # False (--hero-energy-enemy-pool): the hostile pool, the player's rate.
 # PENDSKILL (2026-09-30): A HERO'S CAST OPENS WITH 0x00E4 [hero, skill, 0], because the
 # client keeps a ledger of casts in flight and 0x00E2 / 0x00E3 CLOSE its records.
 # OBSERVED from the binary (the slice client, build 38797): the receive table's
@@ -22544,9 +22564,35 @@ def agent_energy(agent):
     """
     pool = agent.get("energy_pool")
     if pool is None:
+        if HERO_ENERGY_BY_PROFESSION and hero_body_id(agent) is not None:
+            # HEROENERGY: a hero's pool is its own -- the maximum its panel was
+            # told (prop 41, at its morale) and its profession's pips.
+            _mx, _pips = hero_energy_spec(agent)
+            pool = agent["energy_pool"] = pools.EnergyPool(_mx, _pips, time.time())
+            return pool
         pool = agent["energy_pool"] = pools.EnergyPool(
             ENEMY_ENERGY, ENEMY_ENERGY_PIPS, time.time())
     return pool
+
+
+def hero_energy_spec(agent):
+    """HEROENERGY: (maximum, pips) for a hero BODY's pool -- the maximum at its
+    morale (`max_energy`, written at the create and at each prop-41 resize), else
+    its base, and the pips of its primary by the armour rule."""
+    mx = float(agent.get("max_energy") or agent.get("base_max_energy") or ENEMY_ENERGY)
+    prof = agent.get("energy_profession", (agent.get("npc") or {}).get("profession"))
+    return mx, hero_energy_pips(prof)
+
+
+def hero_energy_pips(profession):
+    """The pips a hero of this primary regenerates: pools.PROFESSION_ENERGY."""
+    return pools.profession_energy(profession)[1]
+
+
+def hero_regen_word(e_max, profession):
+    """Property 43's value for a hero: its own pips over its own maximum -- the
+    pool's rate, computed without the body (the load block can run before it)."""
+    return _f32(pools.wire_regen_rate(hero_energy_pips(profession), float(e_max)))
 
 
 def recharging_skills(state):
@@ -29930,7 +29976,9 @@ def enemy_attack_tick(send, state, conn_id):
             # the live corpus, 722 casts by other agents -- 579 of them paid --
             # carry not one spend, and the two empty cells of that 2x2 are what
             # make it a rule rather than a tendency. So this debits the server's
-            # book and sends nothing.
+            # book and sends nothing. (A HERO is the exception the hero tape
+            # added later -- Koss's [62] behind his E4, 17 of 17 -- and it is
+            # sent from ally_cast_tick, HEROENERGY; a hostile never is one.)
             if ENERGY:
                 _cost, _units = skill_cost(skill_id)
                 if _units > 0:
@@ -30242,6 +30290,19 @@ def ally_cast_tick(send, state, conn_id):
         activation = signet_activation(state, agent_id, skill_id, activation)
         activation = dazed_activation(state, agent_id, skill_id, activation)   # B4: a spell x2
         kind = skill_target_kind(skill_id)
+        # SLICE-H4 / F24: a party body's ATTACK skill is a swing -- it waits
+        # for the swing clock, its strike is a windup away, and it closes
+        # with the attack trio's 46 through land_skill (the hostile's rule).
+        # HEROENERGY: this gate sat AFTER the debit until 2026-10-01, so a paid
+        # attack skill held by the swing clock was charged on every tick it
+        # waited (a hero's Gash drained its pool without a swing); it now runs
+        # first, and the energy is paid once, by the cast that goes ahead.
+        _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id)
+        _interval = ((agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
+                     * attack_interval_factor(state, agent_id))
+        if _atk and now - agent.get("last_swing", 0.0) < _interval:
+            continue
+        _debit = None                       # HEROENERGY: (cost, fraction) for [62]
         if ENERGY:
             cost, units = skill_cost(skill_id)
             pool = agent_energy(agent)
@@ -30257,15 +30318,11 @@ def ally_cast_tick(send, state, conn_id):
                           f"{skill_id}: needs {cost} energy, has "
                           f"{pool.current:.2f}", flush=True)
                 continue
+            if cost > 0:
+                _debit = (cost, _fraction(pools.spend_fraction(cost, pool.maximum),
+                                          agents.GV_ENERGY_SPENT,
+                                          f"hero agent {agent_id}'s energy for skill {skill_id}"))
             pool.spend(cost)
-        # SLICE-H4 / F24: a party body's ATTACK skill is a swing -- it waits
-        # for the swing clock, its strike is a windup away, and it closes
-        # with the attack trio's 46 through land_skill (the hostile's rule).
-        _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id)
-        _interval = ((agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
-                     * attack_interval_factor(state, agent_id))
-        if _atk and now - agent.get("last_swing", 0.0) < _interval:
-            continue
         # WEAPONS-W5b: a body's staff 570, rolled at its START (a body never
         # swaps mid-cast, so the start and the completion read the same item;
         # the player's rolls at the completion, where the wiki computes it);
@@ -30295,6 +30352,14 @@ def ally_cast_tick(send, state, conn_id):
             agent["cast_lands_at"] = now + activation
         # PENDSKILL: the hero's E4 opens the cast, first in its segment (50 of 50).
         hero_skill_e4(send, agent_id, agent, skill_id)
+        if (_debit is not None and HERO_SPEND_WORD and HERO_WIRE_POOLS
+                and hero_body_id(agent) is not None):
+            # HEROENERGY: the debit rides behind the E4, retail's [E4, 62, E5]
+            # (Koss, 17 of 17); a henchman's never goes on the wire.
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                 [agents.GV_ENERGY_SPENT, agent_id, _debit[1]],
+                 f"hero agent {agent_id} energy -{_debit[0]} of "
+                 f"{agent_energy(agent).maximum:.0f} for skill {skill_id} [HEROENERGY]")
         face_player(send, state, agent_id, agent, conn_id,
                     at=target_pos(state, target))
         if _atk:
@@ -30419,6 +30484,12 @@ def hero_body_create(hsend, state, _i, _hid, _haid, _hdef, pos, plane, conn_id):
          "health": _hhp_eff, "max_health": _hhp_eff,
          "base_max_health": _hhp,          # JARIN: the maxima scale with the hero's morale
          "base_max_energy": float(_hvt[1]) if _hvt else 30.0,
+         # HEROENERGY: the maximum its panel is told (the load block's prop 41,
+         # at the hero's morale) -- what its own pool fills to.
+         "max_energy": float(morale.effective_max(
+             float(_hvt[1]) if _hvt else 30.0, float(_hvt[1]) if _hvt else 30.0,
+             hero_morale(state, _haid))),
+         "energy_profession": hero_profession(_hid),   # HEROENERGY: the pips' primary
          "hero": _hid,                     # JARIN: the body IS a hero (effect list, pools, skill family)
          "weapon_item_id": (HERO_WEAPON_ITEM_ID + _i) if _wkey is not None else None,
          "attributes": hero_body_ranks(state, _hid),   # SANDBOX-U5: the spend state's, not the row's
@@ -31279,6 +31350,11 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_ENERGY_MAX, agent_id, e_max],
              f"hero agent {agent_id} energy max {e_max} at morale {after}")
+        if HERO_ENERGY_BY_PROFESSION and ENERGY:
+            # HEROENERGY: the pool fills to what the panel was just told; the
+            # rate re-derives over the new maximum and rides the rise's [43].
+            row["max_energy"] = float(e_max)
+            agent_energy(row).set_maximum(float(e_max))
     if ENERGY:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
              [GV_ENERGY_REGEN, agent_id, _f32(0.0)],
@@ -31459,8 +31535,11 @@ def hero_character_block(state, haid, hid):
                     + (f" (suppress mask 0x{_hmask:02X}) [DESKWORK-D1 step 6]" if _hmask else "")))
         out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                     [GV_ENERGY_REGEN, haid,
-                     _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43, agents.PLAYER_ENERGY, _e_max))],
-                    f"energy regeneration on hero agent {haid} [JARIN rig]"))
+                     hero_regen_word(_e_max, _hprof) if HERO_ENERGY_BY_PROFESSION
+                     else _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43, agents.PLAYER_ENERGY, _e_max))],
+                    f"energy regeneration on hero agent {haid}: "
+                    + (f"{hero_energy_pips(_hprof)} pips over {_e_max} [HEROENERGY]"
+                       if HERO_ENERGY_BY_PROFESSION else "the player's rate [JARIN rig]")))
     out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_ENERGY_MAX, haid, _e_max],
                 f"energy max {_e_max} on hero agent {haid} [JARIN rig]"))
     out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_HEALTH_MAX, haid, _h_max],
@@ -46107,6 +46186,18 @@ def main():
         print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
               "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
               flush=True)
+    if a.no_hero_spend_word:
+        global HERO_SPEND_WORD
+        HERO_SPEND_WORD = False
+        print("[party] --no-hero-spend-word: a hero's paid cast debits its pool "
+              "silently and its panel never drops -- every run before HEROENERGY "
+              "(2026-10-01); retail sends [62] behind the E4.", flush=True)
+    if a.hero_energy_enemy_pool:
+        global HERO_ENERGY_BY_PROFESSION
+        HERO_ENERGY_BY_PROFESSION = False
+        print("[party] --hero-energy-enemy-pool: a hero regenerates on the hostile "
+              "pool (30, 5 pips) while its panel is told the player's rate -- every "
+              "run before HEROENERGY (2026-10-01).", flush=True)
     if a.wipe_keeps_legs:
         global WIPE_PLACEMENT_ENDS_LEGS
         WIPE_PLACEMENT_ENDS_LEGS = False

@@ -98,6 +98,7 @@ import vaultpath    # noqa: E402
 import attribspend  # noqa: E402  (toolkit/authsrv/attribspend.py, a leaf)
 import morale       # noqa: E402  (toolkit/authsrv/morale.py, base_health)
 import skillunlock  # noqa: E402  (toolkit/authsrv/skillunlock.py, a leaf: SKILL_RECORD_COUNT_BY_BUILD)
+import pools        # noqa: E402  (toolkit/authsrv/pools.py, a leaf: PROFESSION_ENERGY)
 
 
 class SpecError(Exception):
@@ -114,15 +115,13 @@ PROFESSIONS = {1: "Warrior", 2: "Ranger", 3: "Monk", 4: "Necromancer",
 ABBREV = {1: "W", 2: "R", 3: "Mo", 4: "N", 5: "Me", 6: "E", 7: "A", 8: "Rt",
           9: "P", 10: "D"}
 
-# Base energy and pips per profession. WIKI (GWW "Energy"), and READ FROM
-# MEMORY on 2026-09-20 for every row but two: the Assassin's 25 / 4 is
-# OBSERVED on the owner's own wire ([party.daggers20]'s note, pools.py on
-# 20260817T183756) and 25 / 3 is a Ranger's on retail's wire ([player.defaults]'s
-# note, moralescan.py --pips). Until the page is read back these are DEFAULTS
-# the window shows and the operator may change, not facts this repo asserts.
-ENERGY_BY_PROFESSION = {1: (20, 2), 2: (25, 3), 3: (30, 4), 4: (30, 4),
-                        5: (30, 4), 6: (30, 4), 7: (25, 4), 8: (30, 4),
-                        9: (25, 3), 10: (25, 4)}
+# Base energy and pips per profession: pools.PROFESSION_ENERGY, the armour rule
+# the server's hero pools read too (one table, two consumers). It was READ FROM
+# MEMORY here on 2026-09-20 "until the page is read back"; the page was read on
+# 2026-10-01 (GWW "Energy", rev 2722984) and nine rows held. The Paragon's did
+# not: 25 / 3 here, 30 / 2 on the page (+10 energy, +0 regeneration from its
+# armour). Still DEFAULTS the window shows and the operator may change.
+ENERGY_BY_PROFESSION = dict(pools.PROFESSION_ENERGY)
 
 # What each profession holds by default: the content item keys the player's
 # hands take (WEAPONS-W1) and the attack_speed rates key a party body swings at

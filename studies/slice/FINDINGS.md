@@ -3876,3 +3876,68 @@ The same rig as `20260930T202753`, on `0d963fef`, with the questions registered 
 
 **CONFIRMED on the client:** the single use and the segment. Unscored for want of a frame:
 whether the re-created hero's panel still paints the signet +inf (53.4's E7 item).
+
+## SLICE-F54 — **HEROENERGY: a hero's energy is its own and its panel is told it. Retail sends `[62, hero, -cost/max]` right behind a hero's E4 (Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2). Ours said nothing, and sent the player's rate over a hostile pool (2026-10-01)**
+
+**The owner,** watching the healer rig's hero panels (`20261001T100733`): *"heroes don't
+actually spend energy when casting, and Monks are supposed to have 4 pips of energy regen,
+not 2. i think the extra regen comes from armor if i remember correctly"*.
+
+### 54.1 The spend — OBSERVED, 17 of 17
+
+On `20260914T005758` Koss's skill 346 (5 energy, instant) is E4, `0x00A2 [62, Koss, f]`,
+E5, `[48]`, `[21]`, …, E3 in one stamp. f = −0.25 at his maximum 20, and −0.2941 at 17
+after a death: −cost / current maximum, `pools.spend_fraction`'s rule for the player. That
+holds on 17 of 17 E4s. His attack skill 322 (5 energy) has no `[62]` in its E4's stamp, and
+one within 1.5 s on 5 of 11; retail probably pays an attack skill at the strike. No
+henchman in the corpus sends an E4 or a `[62]`. The hostile site's "722 casts by other
+agents, not one spend" stays true of non-hero agents.
+
+**Ours:** `ally_cast_tick` debited the pool and sent nothing, so the panel sat at its
+maximum.
+
+### 54.2 The rate — WIKI, CORROBORATED on the observer's own wire
+
+GWW "Energy" (rev 2722984, read 2026-10-01): every character has 20 energy and 2 pips
+innate. Its profession's basic armour adds the rest:
+- Warrior +0 / +0;
+- Ranger +5 / +1;
+- Assassin and Dervish +5 / +2;
+- Paragon +10 / +0;
+- Elementalist, Monk, Mesmer, Necromancer and Ritualist +10 / +2.
+
+"Hostile NPCs ... have an additional pip". The owner's recollection of armour as the
+source is the page's. The observer's modal pips on retail's property 43 agree: Warrior 2
+(30 of 33; three 3-pip events on `20260929T100038` unexplained), Ranger 3, Mesmer 4,
+Assassin 4, and the Warrior hero Koss 2. No Monk is on tape.
+
+**Ours had three numbers:**
+- The hero's `[43]` was `morale.regen_fraction(PLAYER_FLOAT_43, …)`, the player's rate
+  scaled to the hero's maximum: 2 pips on the sandbox's Warrior, the `>>` on the panel.
+- Its server pool was the hostile default (`ENEMY_ENERGY` 30, `ENEMY_ENERGY_PIPS` 5).
+- The sandbox's table said a Monk has 4. That table was written from memory "until the
+  page is read back", and its Paragon row was wrong (25 / 3 for 30 / 2).
+
+### 54.3 Shipped
+
+- **`HERO_SPEND_WORD`** (`--no-hero-spend-word`): a hero's paid cast sends `[62]` right
+  behind its E4. An attack skill's goes there too: RECONSTRUCTION, against retail's
+  later placement.
+- **`HERO_ENERGY_BY_PROFESSION`** (`--hero-energy-enemy-pool`):
+  - `pools.PROFESSION_ENERGY` is the armour rule, and `sandbox.ENERGY_BY_PROFESSION`
+    is that table.
+  - A hero body's pool is its `max_energy`, the prop-41 value at its morale, written at
+    the create and at the death's resize. Its pips are its primary's.
+  - The load block's `[43]` is `wire_regen_rate(pips, max)`, the pool's own rate.
+- **The attack-skill fix:** a party body's paid attack skill held by its swing clock was
+  debited on every tick it waited. A Warrior hero's Gash drained 20 energy in five ticks
+  without a swing. The gate now runs before the debit.
+- **`test_heroenergy.py`:** 7 checks bare, 16 with the vault. The switches off redden 5,
+  and the gate moved back reddens 1.
+
+**A consequence for the healer rig (`revheal3`).** At 5 pips a Monk's Orison loop was
+self-sustaining. At the true 4 the sim (`healsim.py`, scratch) runs the Monks to ~0
+energy, with one hero death in 600 s. A long check now needs a lighter raider or a
+smarter heal threshold.
+
+**Open:** the client run, to see whether the panel drops on a cast and draws `>>>>`.

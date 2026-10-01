@@ -294,6 +294,34 @@ OP_ADRENALINE_CLEAR = 0x00D0    # 208 {agent}                    MEASURED n=22
 OP_ADRENALINE_SET = 0x00D1      # 209 {agent, skill, copy, units}    n=0, NEVER
 OP_ADRENALINE_SPEND = 0x00D2    # 210 {agent, skill, copy}       MEASURED n=39
 
+# THE ARMOUR RULE: a character's maximum energy and pips by PRIMARY profession.
+# WIKI (GWW "Energy", rev 2722984, read 2026-10-01): "All professions ... have an
+# innate capacity of 20 energy, and 2 pips of energy regeneration", and each
+# profession's BASIC ARMOUR adds the rest -- Warrior +0 / +0, Ranger +5 / +1,
+# Assassin and Dervish +5 / +2, Paragon +10 / +0, and Elementalist, Monk, Mesmer,
+# Necromancer and Ritualist +10 / +2. "Hostile NPCs typically follow the same rule
+# but have an additional pip" (the server's hostile pool is not this table).
+# OBSERVED on retail's own property 43 for the observer (pipcensus, scratch,
+# 2026-10-01): Warrior 2 pips (33 events), Ranger 3, Mesmer 4, Assassin 4 -- and
+# the Warrior hero Koss 2 (20260914T005758). Monk, Necromancer, Elementalist,
+# Ritualist, Paragon and Dervish rest on the page alone. The owner's own
+# recollection matched the page before it was read ("Monks are supposed to have 4
+# pips ... i think the extra regen comes from armor"). Keyed by the client's
+# profession ids (1 Warrior .. 10 Dervish); an unknown id gets the innate 20 / 2.
+INNATE_ENERGY, INNATE_PIPS = 20, 2
+ARMOUR_ENERGY = {1: (0, 0), 2: (5, 1), 3: (10, 2), 4: (10, 2), 5: (10, 2),
+                 6: (10, 2), 7: (5, 2), 8: (10, 2), 9: (10, 0), 10: (5, 2)}
+PROFESSION_ENERGY = {p: (INNATE_ENERGY + e, INNATE_PIPS + r)
+                     for p, (e, r) in ARMOUR_ENERGY.items()}
+
+
+def profession_energy(profession):
+    """(maximum energy, pips) for a primary profession, by the armour rule."""
+    try:
+        return PROFESSION_ENERGY.get(int(profession), (INNATE_ENERGY, INNATE_PIPS))
+    except (TypeError, ValueError):
+        return INNATE_ENERGY, INNATE_PIPS
+
 
 class PoolError(Exception):
     """A refusal. Never a warning -- the house rule is refuse to guess."""

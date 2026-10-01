@@ -28,6 +28,49 @@ move back.
 
 ---
 
+### HEROENERGY -- 2026-10-01 -- **a hero's energy is its own and its panel is told it: a paid hero cast sends `[62, hero, -cost/max]` right behind its E4 (retail's Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2) on one pool that the server and the panel share. Behind `--no-hero-spend-word` and `--hero-energy-enemy-pool`; NOT yet seen on the client.**
+
+**Found:** by the owner on `20261001T100733`: *"heroes don't actually spend energy when
+casting, and Monks are supposed to have 4 pips of energy regen, not 2. i think the extra
+regen comes from armor"*. Both were true (studies/slice SLICE-F54).
+- The cast path debited the pool and sent nothing.
+- The hero's `[43]` was the player's rate scaled to its maximum (2 pips).
+- Its server pool was the hostile default (30, 5 pips).
+
+**The evidence.**
+- **Retail:** Koss's 5-energy skill 346 is E4, `[62, Koss, -5/max]`, E5, 17 of 17 (−0.25
+  at 20, −0.2941 at 17). No henchman sends either.
+- **WIKI:** GWW "Energy", rev 2722984. 20 energy and 2 pips innate, plus the profession's
+  basic armour; a Monk is 30 / 4.
+- **Corroboration:** the observer's own modal pips on retail agree (W 2, R 3, Me 4, A 4),
+  as does Koss's 2.
+
+**Shipped.**
+- `pools.PROFESSION_ENERGY`, the armour rule. The sandbox's table is now that table, and
+  its Paragon row, written from memory, moves from 25 / 3 to the page's 30 / 2.
+- A hero body's pool is its `max_energy` (prop 41 at its morale, resized at the death's
+  41) at its primary's pips.
+- The load block's `[43]` is that pool's rate.
+- A hero's paid cast sends `[62]` behind its E4.
+
+**Also fixed, found on the way.** A party body's paid attack skill held by its swing clock
+was debited on every tick it waited: a Warrior hero's Gash drained 20 energy in five ticks
+without a swing. The gate now runs ahead of the debit.
+
+**Tests.** `test_heroenergy.py` is new: 7 checks bare, 16 with the vault, which re-derives
+Koss's 17 and the pips per profession.
+- Red: both switches off in the source redden 5, and the gate moved back reddens 1.
+- Green: agentlife (704), adrenwire, attribbudget, bodywindup, castcycle,
+  castgate, daggers, heroadd, heroskilltoggle, instantannounce, mechanics, morale,
+  pendskill, pools, population, recharge, ressig, secondary, skilldamage, sandbox, plus
+  `test_checks` and the four lints.
+
+**The healer rig weakens, correctly.** At the true 4 pips the Monks' Orison loop no longer
+pays for itself. The sim runs them to ~0 energy, with one hero death in 600 s. A future
+long check needs a lighter raider.
+
+**Open:** the client run. Does the panel drop on each Orison and draw `>>>>`?
+
 ### ANIMREF-RE 43's longer window -- 2026-10-01 -- **CONFIRMED: "attacks looked normal the whole time". The healer rig (level-20 Monk heroes with Orison of Healing) held the raider for 2¼ minutes: 102 player damage words, each after its own close; the latch names the player at 111 of 111 words. The owner also found two hero-energy defects; those are open.**
 
 **The rig:** `revheal3`, from the owner's *"give the heroes real heals for the longer attack

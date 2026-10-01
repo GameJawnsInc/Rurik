@@ -3559,6 +3559,22 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the observer, 23 with another agent -- the rule checked before it judges ours. Proved
   red: `HIT_FINISH_FIRST = False` in the source reddens 7. Floor 9 from the bare green run
   (the vault adds 2: 11). No socket, no client),
+  `toolkit/authsrv/test_heroenergy.py` (**2026-10-01, HEROENERGY: a hero's energy is its
+  own and its panel is told it.** The owner on the healer rig: "heroes don't actually spend
+  energy when casting, and Monks are supposed to have 4 pips of energy regen, not 2". The
+  hero cast debited silently; the hero's 43 was the player's rate over a hostile pool (30, 5
+  pips). §1 the armour rule `pools.PROFESSION_ENERGY` (GWW "Energy": Monk 30 / 4, Warrior
+  20 / 2, Ranger 25 / 3, Assassin 25 / 4, Paragon 30 / 2) and the sandbox's table IS it.
+  §2 a hero body's pool: its own maximum at its profession's pips; a henchman keeps the NPC
+  pool; the known-bad arm `--hero-energy-enemy-pool` gives the Monk 5 pips. §3 the REAL
+  `hero_character_block`'s 43 for a Monk hero is 4 pips over 30 (vault: the attribute
+  cost rows). §4 the REAL `ally_cast_tick`: a Monk hero's Orison sends [62, hero, -5/30]
+  right behind its E4 and the pool pays 5; a henchman's sends none; `--no-hero-spend-word`
+  sends none. §5 a paid attack skill held by the swing clock pays nothing (the gate ran
+  after the debit). §6 the switches. §7 (vault) Koss's 346: E4 then [62, -5 / his 41] at
+  once, 17 of 17; the observer's modal pips per profession are the rule's. Proved red: both
+  switches off in the source redden 5; the gate moved back behind the debit reddens 1.
+  Floor 7 bare (§3-5 and §7 skip), 16 with the vault. No socket, no client),
   `toolkit/authsrv/test_deadbout.py` (**2026-09-30, MONSTERAI-W: a hostile's bout ends with
   its last target -- once nobody it could fight is alive in range it stands a beat and walks
   home.** The owner's report on `20260930T231034`: the Bandit Raider held aggro through the

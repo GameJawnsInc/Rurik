@@ -748,6 +748,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
                          "adrenaline and skill family like the player's (107 / "
                          "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--no-hero-spend-word", action="store_true",
+                    help="THE REVERT ARM for HEROENERGY's spend: a hero's paid cast "
+                         "debits its pool and sends nothing, so its panel never drops "
+                         "(every run before 2026-10-01). Retail sends 0x00A2 [62, hero, "
+                         "-cost/max] behind the E4, 17 of 17 on Koss.")
+    ap.add_argument("--hero-energy-enemy-pool", action="store_true",
+                    help="THE REVERT ARM for HEROENERGY's rate: a hero's server pool "
+                         "is the hostile default (30, 5 pips) and its property 43 is the "
+                         "player's rate scaled to its maximum. By default both are the "
+                         "hero's own: its maximum at its morale and its profession's pips "
+                         "by the armour rule (pools.PROFESSION_ENERGY, GWW \"Energy\").")
     ap.add_argument("--wipe-keeps-legs", action="store_true",
                     help="THE REVERT ARM for SHRINEWARP: the wipe's shrine placement "
                          "leaves the click leg, its latch and the last client report "
