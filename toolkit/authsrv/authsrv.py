@@ -6630,6 +6630,7 @@ PLAYER_RESURRECTION = True      # False (--no-player-resurrection): the press ra
 # each recharge is the E6 that ends any recharge. --no-boss-boost reverts.
 BOSS_MORALE_BOOST = True        # False (--no-boss-boost): a boss dies like anyone.
 BOSS_BOOST_PERCENT = 2          # WIKI, the page above.
+BOOST_REPAINT = True            # False (--boost-e6-only): the E6 alone; the icon stays grey.
 # WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
 # on plane 19), the hero's body deleted and re-created, both raised at full
 # health with the maxima kept, no 0x01D8 (340.21 s; three earlier tapes the
@@ -31269,16 +31270,35 @@ def recharge_party_skills(send, state, conn_id, why, now=None):
     """RESSIG-B: every party member's skills recharge. The player's: each cast
     still recharging takes its E6 now (cast_tick sends it on its next pass),
     and each spent signet gets one here. A party body's: every slot ready now;
-    a hero's panel gets an E6 for each skill still recharging or spent."""
+    a hero's panel gets an E6 for each skill still recharging or spent.
+
+    EACH E6 RIDES BEHIND AN E5 [.., 0] (BOOST_REPAINT). The owner, on
+    20261001T112625: after the boss the signets "are still visually showing
+    greyed, though they became castable". OBSERVED in the binary (build 38797):
+    E6's worker is the bare field write `mov [ecx+8], 0` -- the slot is
+    usable and the UI is never told (studies/skills 26.12) -- while E7 (and
+    E5) push the UI repaint 0x1000005d; E5 with a 0 recharge writes the field
+    0 at 0x00822C50 and falls through to that push at 0x00822C8D with a 0
+    duration. So the E5 [.., 0] repaints the icon ready; the E6 closes the
+    cycle the way every recharge does. RECONSTRUCTION (no boost on tape);
+    an E5 zeroes the slot's adrenaline too, which a recharging slot already
+    is (GWW "Adrenaline": recharging skills cannot build it)."""
     now = time.time() if now is None else now
     n = 0
+    def _repaint(aid, sid, copy):
+        if BOOST_REPAINT:
+            send(GAME_SMSG_SKILL_RECHARGE, [aid, int(sid), int(copy), 0],
+                 f"SKILL_RECHARGE(agent {aid}, skill {sid}, 0s): the boost repaints "
+                 f"the slot ready [RESSIG-B]")
     for cast in list(state.get("pending_casts") or ()):
         if (cast.get("e5_sent") and not cast.get("cancelled") and not cast.get("no_e6")
                 and cast.get("e6_at", 0.0) > now):
+            _repaint(PLAYER_AGENT_ID, cast["skill_id"], cast["copy"])
             cast["e6_at"] = now
             n += 1
     spent = state.get("boost_spent") or {}
     for sid, copy in sorted(spent.items()):
+        _repaint(PLAYER_AGENT_ID, sid, copy)
         send(GAME_SMSG_SKILL_RECHARGED, [PLAYER_AGENT_ID, int(sid), int(copy)],
              f"SKILL_RECHARGED(skill {sid}): {why} [RESSIG-B]")
         n += 1
@@ -31292,6 +31312,7 @@ def recharge_party_skills(send, state, conn_id, why, now=None):
         gone = set(int(s) for s in due) | set(int(s) for s in (row.get("boost_spent") or ()))
         if HERO_WIRE_POOLS and hero_body_id(row) is not None:
             for sid in sorted(gone):
+                _repaint(aid, sid, 0)
                 send(GAME_SMSG_SKILL_RECHARGED, [aid, sid, 0],
                      f"SKILL_RECHARGED(hero agent {aid}, skill {sid}): {why} [RESSIG-B]")
         n += len(gone)
@@ -46354,6 +46375,12 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.boost_e6_only:
+        global BOOST_REPAINT
+        BOOST_REPAINT = False
+        print("[party] --boost-e6-only: a boost recharges with the bare E6 -- "
+              "usable, but the client keeps the icon grey (20261001T112625).",
+              flush=True)
     if a.no_boss_boost:
         global BOSS_MORALE_BOOST
         BOSS_MORALE_BOOST = False

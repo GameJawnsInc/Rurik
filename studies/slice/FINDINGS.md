@@ -3924,6 +3924,23 @@ in the source redden 13.
 - 1816's row;
 - the `[20 … 152]` column.
 
+### 53.8 On the client — `20261001T112625`, and the boost's repaint
+
+- **The raise:** two player raises, each `[58]`, E7, E3, `[8, me, 0]`, the rise, with no
+  E5. The owner: *"raised and spent"*.
+- **The E7 paint survives the wipe's re-create** for the heroes and the player: *"still
+  shows spent"*. That closes the E7 item above.
+- **The boss's boost:** 102 for all three, and E6 for all three spent signets. The owner
+  saw the boost, and the signets usable but **still grey**.
+- **Why grey:** E6's worker is the bare field write and tells the UI nothing. E5 with a 0
+  recharge writes the field 0 (`0x00822C50`) and pushes the repaint `0x1000005d` with a 0
+  duration (`0x00822C8D`), as E7 pushes it with +inf.
+- **Shipped:** `BOOST_REPAINT` (`--boost-e6-only`), so each boost E6 rides behind an E5
+  `[.., 0]`. RECONSTRUCTION.
+- **A no-target press:** the client sends `USE_SKILL [2, 0, 0]` for an unspent signet too
+  (42.36 s). Ours casts 3 s and stops it. On retail, 0 of 95 targeted presses carried
+  target 0, so there is no witness either way; the rule is the owner's.
+
 ## SLICE-F54 — **HEROENERGY: a hero's energy is its own and its panel is told it. Retail sends `[62, hero, -cost/max]` right behind a hero's E4 (Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2). Ours said nothing, and sent the player's rate over a hostile pool (2026-10-01)**
 
 **The owner,** watching the healer rig's hero panels (`20261001T100733`): *"heroes don't

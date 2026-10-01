@@ -28,6 +28,51 @@ move back.
 
 ---
 
+### RESSIG-P and RESSIG-B's client run, and the boost's repaint -- 2026-10-01 -- **the owner's run confirmed the raise, the single use, the spent paint surviving a wipe and the boss's +2%; but the boost left the signets GREY though usable. The client's E6 never tells its UI (its worker is the bare field write), so each boost recharge now sends an E5 [.., 0] first, which repaints. Also found: a no-target press of the signet casts for 3 s and stops; what retail does with one is the owner's to say.**
+
+**The run:** `20261001T112625`, tree `63655adc`, the `revheal2` rig. The questions were
+registered before launch (`SIGBOOST-run-registered.txt`), and the owner drove after the
+scripted attack. PASS.
+
+**The wire.**
+- **SB-Q2 (P), two player raises (56.02, 244.13):** each is `[58, 1, 0]`, E7 `[1, 2, 0]`,
+  E3, `[8, 1, 0]`, then the hero's `0x00F1 [hero, 0]`, in one stamp. No E5 for skill 2.
+- **SB-Q2 (B), the boss's death (158.85):** `0x009C` 102 for the player and both heroes,
+  and E6 `[1, 2, 0]`, `[200, 2, 0]`, `[201, 2, 0]`. The heroes cast their signets again
+  later.
+- **SB-Q4:** 0 `Pending skill`, 0 resurrect complaints, no assert.
+
+**The owner's eye.**
+- *"raised and spent"*: (a) CONFIRMED.
+- *"yes, still shows spent for heroes and the player"*: (b) CONFIRMED. The E7 paint
+  survives the wipe's re-create, which closes 53.4's E7 item.
+- *"got a morale boost but the res sigs are still visually showing greyed, though they
+  became castable somehow even with no target"*: (c) the boost and the recharge are
+  CONFIRMED; the icon is a DEFECT.
+
+**The grey icon — read in the binary, build 38797.**
+- E6's worker is the bare `mov [ecx+8], 0`: the slot becomes usable and the UI is never
+  told (studies/skills 26.12).
+- E7 pushes the UI repaint `0x1000005d` with +inf.
+- E5 with a 0 recharge writes the field 0 at `0x00822C50` and falls through to the same
+  push at `0x00822C8D` with a 0 duration.
+
+**Shipped** (`BOOST_REPAINT`, `--boost-e6-only`): each boost recharge sends E5 `[.., 0]`
+right before its E6, for the player's spent or recharging skills and for a hero's.
+RECONSTRUCTION: no boost is on tape. `test_signetboost` now has 20 checks. All three
+switches off redden 15, and the repaint alone redden 2.
+
+**The no-target press is not the boost's.** The owner's *"castable ... even with no target"*
+is the client sending `USE_SKILL [2, 0, target 0]`. It did so at 42.36 s and 42.50 s, before
+the signet was ever used, and five times after the boost. Our server ran each as a 3 s cast
+and stopped it at the landing (`[59]`, E2, nothing spent).
+- On retail, 0 of 95 presses of a targeted skill (byte 3: 41, byte 5: 51, byte 6: 3) carried
+  target 0. That shows no witness of a no-target press, not that one cannot happen.
+- Whether retail refuses at once or casts and fails is open: the owner's question.
+
+**Open:** the repaint on the client; the no-target rule; 1816's row; the `[20 … 152]`
+column.
+
 ### RESSIG-P and RESSIG-B -- 2026-10-01 -- **the player's own Resurrection Signet now raises a party corpse in retail's order and is spent until a morale boost; a boss's death is the party's +2% morale boost and recharges every party skill, the spent signets included. Behind `--no-player-resurrection` and `--no-boss-boost`; NOT yet run on the client.**
 
 **Asked:** the owner, *"res sig"*: the open items of SLICE-F53 53.4.

@@ -3571,9 +3571,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   hero stays down. §5 the REAL kill_agent on a boss: 0x009C [.., 102] for the player and the
   hero, E6 for both spent signets, the slots ready in the books; DP countered (+2 on top of
   the kill's own 75-XP tick); the +10% cap holds and skills still recharge. §6 a non-boss
-  kill and `--no-boss-boost` boost nothing. §7 a glow row is a boss; the switches. Proved
-  red: both switches off in the source redden 13. Floor 18, bare and vaulted alike (skill
-  2's timing and cost pinned in main()). No socket, no client),
+  kill and `--no-boss-boost` boost nothing. §7 a glow row is a boss; the switches. Each
+  boost E6 rides right behind an E5 [.., 0] that repaints the icon (the bare E6 left it
+  grey on 20261001T112625; `--boost-e6-only` is that arm). Proved red: the three switches
+  off in the source redden 15, the repaint alone 2. Floor 20, bare and vaulted alike
+  (skill 2's timing and cost pinned in main()). No socket, no client),
   `toolkit/authsrv/test_heroenergy.py` (**2026-10-01, HEROENERGY: a hero's energy is its
   own and its panel is told it.** The owner on the healer rig: "heroes don't actually spend
   energy when casting, and Monks are supposed to have 4 pips of energy regen, not 2". The

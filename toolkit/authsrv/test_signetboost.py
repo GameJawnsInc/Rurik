@@ -19,7 +19,9 @@ RECONSTRUCTION, the shapes a morale change already has.
   4  the KNOWN-BAD arm (--no-player-resurrection): E5 [.., 0], E6, the corpse stays down.
   5  the REAL kill_agent on a BOSS: the player's morale +2 (0x009C [me, 102]), the hero's
      +2, the spent signets come back (E6 [me, 2, 0], E6 [hero, 2, 0], the hero's slot
-     ready); a death penalty is countered (85 -> 87) and the cap holds (110).
+     ready), each E6 right behind an E5 [.., 0] that repaints the icon (the E6 alone left
+     it grey on 20261001T112625; --boost-e6-only is that arm); a death penalty is
+     countered (+2 on the kill's own tick) and the cap holds (110).
   6  a NON-boss kill boosts nothing; the KNOWN-BAD arm (--no-boss-boost) boosts nothing.
   7  the wiring: the spawn marks a glow row as a boss; both switches.
 """
@@ -40,10 +42,10 @@ import agents                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 
 # Floor from the BARE-MACHINE green run of 2026-10-01 (RURIK_VAULT at an empty
-# directory): 18, and 18 with the vault -- nothing here reads it (skill 2's timing and
-# cost are pinned in main(), its [skill_effect.2] row is the repo's). PLAYER_RESURRECTION
-# and BOSS_MORALE_BOOST False in the source redden 13.
-LEDGER = checks.Ledger("signet and boost", floor=18)
+# directory): 20, and 20 with the vault -- nothing here reads it (skill 2's timing and
+# cost are pinned in main(), its [skill_effect.2] row is the repo's). PLAYER_RESURRECTION,
+# BOSS_MORALE_BOOST and BOOST_REPAINT False in the source redden 15; BOOST_REPAINT alone 2.
+LEDGER = checks.Ledger("signet and boost", floor=20)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -213,6 +215,14 @@ def section_boost():
     check((E6, [P, RES, 0]) in sent and (E6, [HERO, RES, 0]) in sent,
           "the spent signets come back on the wire: E6 [me, 2, 0], E6 [hero, 2, 0]",
           f"{[v for op, v in sent if op == E6]}")
+    pairs = True
+    for who in (P, HERO):
+        i = next((k for k, m in enumerate(sent) if m == (E6, [who, RES, 0])), None)
+        pairs = pairs and i is not None and i > 0 and sent[i - 1] == (E5, [who, RES, 0, 0])
+    check(pairs,
+          "each E6 rides right behind an E5 [.., 2, 0, 0] -- the repaint E6 alone never "
+          "sends (its worker is the bare field write; the owner saw the icons stay grey)",
+          f"{[(hex(op), v) for op, v in sent if op in (E5, E6)]}")
     hero = st["agents"][HERO]
     check(not st.get("boost_spent") and hero["skill_ready"][0] <= time.time()
           and not hero.get("boost_spent"),
@@ -242,6 +252,16 @@ def section_no_boost():
     check(not [1 for op, v in sent if op == E6] and st.get("boost_spent") == {RES: 0}
           and authsrv.player_morale(st) == 100,
           "a NON-boss kill boosts nobody and recharges nothing", f"{sent[:6]}")
+    saved = authsrv.BOOST_REPAINT
+    authsrv.BOOST_REPAINT = False
+    try:
+        st = _spent_world()
+        sent = _kill(st, BOSS)
+        check((E6, [P, RES, 0]) in sent and not [1 for op, v in sent if op == E5],
+              "KNOWN-BAD (--boost-e6-only): the bare E6s -- usable, the icon left grey, "
+              "as 20261001T112625 showed", f"{[(hex(op), v) for op, v in sent if op in (E5, E6)]}")
+    finally:
+        authsrv.BOOST_REPAINT = saved
     saved = authsrv.BOSS_MORALE_BOOST
     authsrv.BOSS_MORALE_BOOST = False
     try:
@@ -262,6 +282,8 @@ def section_wiring():
           "a spawn row with a glow is a boss (the boss aura)", "")
     check(authsrv.PLAYER_RESURRECTION is True and authsrv.BOSS_MORALE_BOOST is True
           and authsrv.BOSS_BOOST_PERCENT == 2
+          and authsrv.BOOST_REPAINT is True and '"--boost-e6-only"' in args
+          and "if a.boost_e6_only:" in src
           and '"--no-player-resurrection"' in args and '"--no-boss-boost"' in args
           and "if a.no_player_resurrection:" in src and "if a.no_boss_boost:" in src,
           "both ship ON at 2%; --no-player-resurrection and --no-boss-boost revert", "")

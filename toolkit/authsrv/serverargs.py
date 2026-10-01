@@ -754,6 +754,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before 2026-10-01. By default it raises the corpse in retail's "
                          "order ([58], E7, E3, [8 -> 0], the rise), is spent until a morale "
                          "boost, and stops ([59]) on a corpse already standing.")
+    ap.add_argument("--boost-e6-only", action="store_true",
+                    help="THE REVERT ARM for the boost's repaint: each recharge "
+                         "is the bare E6, which the client applies without telling "
+                         "its UI -- the slot usable, the icon still grey (the owner, "
+                         "20261001T112625). By default an E5 [.., 0] goes first and "
+                         "repaints the icon ready.")
     ap.add_argument("--no-boss-boost", action="store_true",
                     help="THE REVERT ARM for RESSIG-B: a boss dies like anyone. By default "
                          "a boss's death (a spawn row with a glow) is the party's +2%% "
