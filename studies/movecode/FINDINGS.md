@@ -20464,5 +20464,7 @@ there.
   | c5, third | 1,121 u | 1,135 u |
 
   That rules a warp out, but only on presses that never had the defect's precondition.
+- **The owner's eye:** *"the keyboard->click->distant attack didn't warp. can't say i
+  recreated last run though"*. That agrees with the wire, with the same caveat.
 - **Open:** a press while the first post-kill leg is still walking, and the owner's eye on
   it.
