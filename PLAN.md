@@ -2311,11 +2311,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **RESSIG's open ends** (SLICE-F53 53.4): a boss death's skill-recharging morale boost
-  (none on tape); E7 after a wipe's re-create.
-* **ANIMREF-RE 43, a longer window:** 39/39 hits latched right on ~25 s; needs more HP.
-* **SHRINEWARP's client run** (1z-dp): C + space after a wipe; a mid-leg death raised in place.
-* **A hero's E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
+* **RESSIG** (SLICE-F53 53.4): a boss death's morale boost (none on tape); E7 after a wipe.
+* **ANIMREF-RE 43:** 39/39 right on ~25 s; a longer window needs more HP.
+* **SHRINEWARP 1z-dp.4:** a mid-leg death raised in place keeps the stale leg.
+* **A hostile keeps its bout on a dead party** (the owner): home only at the rise.
+* **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a

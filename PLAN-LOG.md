@@ -28,6 +28,32 @@ move back.
 
 ---
 
+### SHRINEWARP's client run -- 2026-09-30 -- **no warp: the owner's two presses after a wipe (one a few seconds in, one right after the rise) both walked from the shrine, and the run carries 0 `PRESS ENDS THE WALK` lines. The owner also found a hostile holding its bout on a dead party; that is open.**
+
+**The run:** `20260930T231034`, tree `0e574365`, the `revheal2` rig, the questions registered
+before launch (`WARP-run-registered.txt`). Hands off until the shrine, then the owner's
+C + space. Three wipes. RETRACTED: a clean close (code 0, no error dialog) after the third.
+
+**The questions.**
+- **WARP-Q1, exposed:** three `THE PARTY WIPED`, and an owner ATTACK after the first two.
+- **WARP-Q2:** no `PRESS ENDS THE WALK` and no other player `0x002C` between the shrine's and
+  the client's next report.
+  - **After wipe 1**, the press a few seconds in: `APPROACH: ... 2326 u out`, the
+    shrine-to-home distance.
+  - **After wipe 2**, the press right after the rise, with the raider walking home:
+    `APPROACH: ... 2062 u out`.
+  - The warp's approach on `20260930T224421` was 540 u.
+- **WARP-Q3, the owner:** *"that worked, i did a C+space after waiting a few seconds like last
+  time, and one where i C+space right after rezzing."* CONFIRMED.
+- **WARP-Q4:** 0 `Pending skill`, 0 resurrect complaints, no assert; the client log carries
+  only its credentials line.
+
+**Found, open** (the owner: *"enemies hold aggro on dead party members"*). While the player's
+10 s respawn timer ran, the raider stood over the corpses. It walked home only when the wipe
+moved its target out of range: `GIVES UP: the player 2326 u from its anchor -- its target
+left the area`. The leash gives up by DISTANCE, and nothing releases a bout whose targets are
+all dead. In `PLAN.md` §8.1.
+
 ### SHRINEWARP -- 2026-09-30 -- **the first attack press after a party wipe warped the player from the shrine to where it died: the wipe left the corpse's click leg and last report standing, and the press re-pinned the body on them. Fixed behind `--wipe-keeps-legs`; NOT yet confirmed on the client.**
 
 **Found:** by the owner on `20260930T224421` (C + space after the shrine respawn). The log:

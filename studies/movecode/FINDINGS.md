@@ -20395,4 +20395,11 @@ client speaks again. The follow needs nothing: `kill_player` abandoned it.
   leg's end once it has finished. That is zero after an approach that arrived, and up to the
   leg's remainder after a click-walk cut short by the death. Not fixed here: one change
   per test.
-- **The client run:** C + space after a wipe.
+- **The client run:** done, 1z-dp.5.
+
+### 1z-dp.5 On the client — `20260930T231034`, CONFIRMED
+
+There were three wipes, with an owner press after the first two: one a few seconds in, one
+right after the rise. Both approaches start from the shrine (2326 u and 2062 u out, against
+the warp's 540 u). The run carries 0 `PRESS ENDS THE WALK` lines. The owner: *"that
+worked."* 1z-dp.4's mid-leg in-place case stays open.
