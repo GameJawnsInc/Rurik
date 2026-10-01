@@ -3940,4 +3940,11 @@ self-sustaining. At the true 4 the sim (`healsim.py`, scratch) runs the Monks to
 energy, with one hero death in 600 s. A long check now needs a lighter raider or a
 smarter heal threshold.
 
-**Open:** the client run, to see whether the panel drops on a cast and draws `>>>>`.
+### 54.4 On the client — `20261001T105103`: CONFIRMED
+
+- **The load:** each Monk hero's block sent 4 pips over its 30 (`[43]` 0.044, `[41]`
+  30).
+- **The casts:** 64 of 64 hero Orisons carried `[62, hero, -0.1667]` right behind the E4,
+  and no `[62]` went anywhere else.
+- **The owner:** *"good, their energy can drop to 0 and they don't cast until it's back
+  to 5 (4 pips shown)"*. The server log has 8 energy refusals.

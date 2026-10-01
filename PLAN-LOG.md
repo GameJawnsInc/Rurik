@@ -28,6 +28,23 @@ move back.
 
 ---
 
+### HEROENERGY's client run -- 2026-10-01 -- **CONFIRMED: "good, their energy can drop to 0 and they don't cast until it's back to 5 (4 pips shown)". On the wire, each Monk hero's load said 4 pips over its 30, and 64 of 64 hero Orisons carried [62, hero, -5/30] right behind their E4. Closed in `PLAN.md` section 8.1.**
+
+**The run:** `20261001T105103`, tree `050f8b4d`, the `revheal3` healer rig, hands off. The
+questions were registered before launch (`HEROEN-run-registered.txt`). RETRACTED by the
+harness on a clean close (code 0, no error dialog) after the check.
+
+**The questions.**
+- **HE-Q1:** 64 hero Orison casts.
+- **HE-Q2:**
+  - Each hero's load block sent `[43, hero, 0.044]` (4 pips over 30) and `[41, hero, 30]`.
+  - Every hero Orison E4 was followed AT ONCE by `[62, hero, -0.1667]`, 64 of 64.
+  - No `[62]` on a hero went anywhere else.
+- **HE-Q3, the owner:** *"good, their energy can drop to 0 and they don't cast until it's
+  back to 5 (4 pips shown)"*. CONFIRMED: the spend, the 4 pips and the energy gate. The
+  server log has 8 `cannot cast ... needs 5 energy` refusals, the waits the owner saw.
+- **HE-Q4:** 0 `Pending skill`, the client log's usual classes only, no hero death.
+
 ### HEROENERGY -- 2026-10-01 -- **a hero's energy is its own and its panel is told it: a paid hero cast sends `[62, hero, -cost/max]` right behind its E4 (retail's Koss, 17 of 17), and a hero regenerates at its profession's pips by the armour rule (a Monk 4, a Warrior 2) on one pool that the server and the panel share. Behind `--no-hero-spend-word` and `--hero-energy-enemy-pool`; NOT yet seen on the client.**
 
 **Found:** by the owner on `20261001T100733`: *"heroes don't actually spend energy when
