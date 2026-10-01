@@ -28,6 +28,14 @@ move back.
 
 ---
 
+### RESSIG-T's #1966 on screen, CONFIRMED -- 2026-10-01 -- **the owner on `20261001T160705`: "yes, it sent Invalid target, but only when usable. when greyed out it shows no response". That answers ST-Q3 (a) of the entry below.**
+
+- **The greyed case is the client's own:** the log carries 0 `REFUSED skill 2: spent`,
+  so no press of a spent signet reached the server. The E7's +inf paint gates it
+  locally, in ArenaNet's code.
+- **Next:** the owner is checking stock for it, and will call the run for RESSIG-T2 and
+  MOVECODE-1z-dq.
+
 ### RESSIG-T's client run, RESSIG-T2 and MOVECODE-1z-dq -- 2026-10-01 -- **`20261001T160705`, the owner driving: the boost's repaint CONFIRMED ("gets refreshed visually now"), six no-target presses refused #1966 on the wire; and two bugs the owner found. A living hero could be targeted (now #1966 at the press), and a warp after a keyboard-lead walk ended in clicks (the click leg started at the pre-lead report; now at the lead kill's own point).**
 
 **The run:** registered before launch (`RESSIGT-run-registered.txt`), tree `3a827b72`, the

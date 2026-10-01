@@ -3964,7 +3964,11 @@ no target selected, even if a dead ally is nearby (refuses immediately)"*.
 - Six target-0 presses, each `REFUSED ... #1966, at once`.
 - The boss's boost sent `E5 [1, 2, 0]` ahead of the three E6s.
 - 0 `Pending skill`, and no assert. The owner closed the client.
-- **Not yet answered:** whether "Invalid target." drew on screen for those six presses.
+- **On screen, CONFIRMED:** the owner: *"yes, it sent Invalid target, but only when
+  usable. when greyed out it shows no response"*. The greyed case is the CLIENT's: 0
+  `REFUSED skill 2: spent` in the log, so no press of a spent signet reached the server.
+  The E7's +inf paint gates the press locally, in ArenaNet's own client code. The owner
+  is checking stock.
 
 **The owner:**
 - **The repaint:** *"gets refreshed visually now"*. BOOST_REPAINT is CONFIRMED.
