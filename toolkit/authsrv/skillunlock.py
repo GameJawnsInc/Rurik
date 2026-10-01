@@ -90,6 +90,7 @@ UNLOCK_ALL_WORD = 0xFFFFFFFF
 #     38833  2026-08-13_64fae3b1369b  3,443 records at file 5,799,632
 #     38849  2026-08-20_21511009c460  3,443 records at file 5,799,632
 #     38888  2026-09-01_44fbd68767a8  3,476 records at file 5,803,376
+#     38974  2026-09-30_8e50edfb8351  3,495 records at file 5,807,280
 #
 # test_skillbound.py re-measures every vaulted row on each run, so this cannot
 # drift silently, and holds its keys equal to MAP_ID_COUNT_BY_BUILD's. WHY IT
@@ -106,6 +107,7 @@ SKILL_RECORD_COUNT_BY_BUILD = {
     38833: 3443,   # 2026-08-13
     38849: 3443,   # 2026-08-20
     38888: 3476,   # 2026-09-01
+    38974: 3495,   # 2026-09-30
 }
 # The pin's row, rebound by authsrv.main() to --client-build's. words_from_ids
 # and unlock_all_words read it at CALL time, so the rebind reaches both.

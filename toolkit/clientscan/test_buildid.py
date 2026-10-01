@@ -94,6 +94,10 @@ EXPECT = {
     # image GREW by 9,216 bytes (the first size change since 38797) and the getter
     # still sits at the same VA with the same 16 callers and the same 54 shapes.
     "2026-09-01_44fbd68767a8": dict(number=38888, va=0x004729E0, shapes=54),
+    # 38974, MEASURED 2026-10-01 off the pristine snapshot taken that day: the
+    # image grew by 13,312 bytes and the getter is STILL at 0x004729E0, with
+    # the same 16 callers and 54 shapes -- the fifth build on that VA (38519 is the one off it).
+    "2026-09-30_8e50edfb8351": dict(number=38974, va=0x004729E0, shapes=54),
 }
 EXPECT_CALLERS = 16
 

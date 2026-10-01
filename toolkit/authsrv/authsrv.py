@@ -118,6 +118,7 @@ from gwcrypto import ARC4, arc4_hash, compute_shared, make_server_seed  # noqa: 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'portal'))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from codec import Codec  # noqa: E402
+from codec import GAME_SMSG_RENUMBER  # noqa: E402  (main()'s --client-build refusal)
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 from vaultpath import resolve_out, vault_path  # noqa: E402
 import probes  # noqa: E402
@@ -6946,11 +6947,12 @@ MAP_ID_COUNT_BY_BUILD = {
     38833: 888,   # 2026-08-13
     38849: 888,   # 2026-08-20
     38888: 897,   # 2026-09-01
+    38974: 898,   # 2026-09-30 -- one map more; 0x0050's no-marker stores read 0x382
 }
 CLIENT_BUILD = 38797                               # the pin; rebound by --client-build
 MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
 # ITS SIBLING, 2026-09-28: the client's SKILL record count per build (3,438 /
-# 3,443 x3 / 3,476), each MEASURED by skilltable.locate_table over the vaulted
+# 3,443 x3 / 3,476 / 3,495), each MEASURED by skilltable.locate_table over the vaulted
 # image -- the table and how it was read live in skillunlock.py, beside the
 # SKILL_TABLE_ROWS it replaced, because sandbox.py reads it too and must not
 # import this file. main() rebinds SKILL_TABLE_ROWS to CLIENT_BUILD's row and
@@ -45306,6 +45308,19 @@ def main():
                      f"{sorted(SKILL_RECORD_COUNT_BY_BUILD)}. Add the row from "
                      f"skilltable.locate_table over that client "
                      f"(skillunlock.py says how; test_skillbound.py re-measures)")
+        # A RENUMBERED build is refused even with both rows above. 38974
+        # (2026-09-30) moved every GAME_SMSG from 0x0194 up by one
+        # (codec.GAME_SMSG_RENUMBER) and this server encodes in the schema's
+        # numbering, so the manifest burst alone (0x019F) would reach that
+        # client as a different message. Its rows exist so the TOOLS can read
+        # it; serving it is its own arc. Until then the refusal is the guard,
+        # and it is the one a missing row used to give by accident.
+        if a.client_build in GAME_SMSG_RENUMBER:
+            ap.error(f"--client-build {a.client_build} renumbers GAME_SMSG "
+                     f"from 0x{GAME_SMSG_RENUMBER[a.client_build]['at']:04X} up "
+                     f"(codec.GAME_SMSG_RENUMBER) and this server sends the "
+                     f"schema's numbering -- serving that client is not built. "
+                     f"studies/crossbuild/FINDINGS.md 11")
         CLIENT_BUILD = a.client_build
         MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
         NO_MARKER_MAP = MAP_ID_COUNT

@@ -63,7 +63,8 @@ from gwpe import PE                                          # noqa: E402
 # 2026-08-19, again from a real green run: 44 -> 73, §4 joining.
 # 2026-08-29, 73 -> 89, 38849 joining; 2026-09-13, 89 -> 105, 38888 joining --
 # 16 per build, each figure read off the green run rather than added up.
-LEDGER = checks.Ledger("msgshape table derivation", floor=105)
+# 2026-10-01, 105 -> 122, 38974 joining: its 16, plus the WIRE_OPCODE control.
+LEDGER = checks.Ledger("msgshape table derivation", floor=122)
 check = checks.adopt(LEDGER)
 
 # The routine's real entry prologue -- `push ebp / mov ebp,esp / sub esp,0x20 /
@@ -93,6 +94,14 @@ EXPECT_ENTRY = {
     # class-(c) expectation doing what it is for: a copied-down 0x007DE010 would
     # have gone red here, and it did, by name, before this row existed.
     "2026-09-01_44fbd68767a8": 0x007DE470,
+    # 38974, MEASURED 2026-10-01 from the pristine snapshot with the same
+    # deriver: still ONE hit in .text, still an int3 pad before the entry, and
+    # the VA moved again, +0x480 from 38888. The image grew by 13,312 B. The
+    # tables this function registers did change on this build -- one receive
+    # table gained an entry at 0x0194 and every s2c opcode above it sits +1
+    # (studies/crossbuild/FINDINGS.md 11) -- which this row does not test and
+    # the derivation sections below report per build.
+    "2026-09-30_8e50edfb8351": 0x007DE8F0,
 }
 
 
@@ -334,6 +343,14 @@ WSTRING_CAPS = {6: 8, 8: 20, 16: 1, 20: 24, 32: 30, 48: 1,
 # elsewhere.
 WSTRING_MSGS = {0x0074: (32, 127), 0x01BF: (20, 50)}
 
+# THE OPCODE IS PER BUILD for the second one. Build 38974 inserted a receive
+# entry at 0x0194 and every game-server opcode from there up sits +1, so
+# PARTY_HENCHMAN_ADD is 0x01C0 on it (MEASURED 2026-10-01: msgshape over both
+# pristine images, the table aligned entry for entry --
+# studies/crossbuild/FINDINGS.md 11). 0x0074 is below the insertion and holds.
+# Keyed by stamp, not by "newest", and only the build that moved is listed.
+WIRE_OPCODE = {("2026-09-30_8e50edfb8351", 0x01BF): 0x01C0}
+
 for stamp, exe in sorted(EXES.items()):
     img = MS.Image(exe)
     ws = []
@@ -359,6 +376,7 @@ for stamp, exe in sorted(EXES.items()):
           f"{dict(sorted(hist.items()))}")
 
     for op, (cap, wire) in sorted(WSTRING_MSGS.items()):
+        op = WIRE_OPCODE.get((stamp, op), op)
         hits = img.lookup(op, "RECV")
         check(len(hits) == 1, f"{stamp}: 0x{op:04X} resolves to one RECV entry",
               f"{len(hits)} hit(s)")
@@ -372,6 +390,20 @@ for stamp, exe in sorted(EXES.items()):
         check(MS.wire_max(cmds) == wire,
               f"{stamp}: and its wire total is {wire} B, as measured elsewhere",
               f"got {MS.wire_max(cmds)} -- 2 + 2*cap is most of this number")
+
+# CONTROL for WIRE_OPCODE: on a build it remaps, the OLD number must NOT carry
+# the message. Without this, an entry that happened to be unnecessary would
+# pass the loop above at either opcode and prove nothing about the shift.
+for (stamp, old), new in sorted(WIRE_OPCODE.items()):
+    if stamp not in EXES:
+        continue
+    hits = MS.Image(EXES[stamp]).lookup(old, "RECV")
+    caps = ([f.cap for f in MS.fields(hits[0][4]) if f.kind == "wstring"]
+            if len(hits) == 1 else None)
+    check(caps != [WSTRING_MSGS[old][0]],
+          f"{stamp}: 0x{old:04X} is NOT that message on this build -- it moved "
+          f"to 0x{new:04X}",
+          f"0x{old:04X} carries {caps}")
 
 
 sys.exit(LEDGER.verdict())

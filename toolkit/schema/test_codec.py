@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from codec import Codec, Undecodable  # noqa: E402
+import codec  # noqa: E402  -- NEW_OPCODE and the per-build codec, renumbered_build()
 import vaultpath  # noqa: E402
 import checks  # noqa: E402
 
@@ -46,7 +47,9 @@ AUTH_CMSG_MASK = 0x8000
 # 2026-09-28 (CASTAI-Z1): 30 -- section 6 gained the gapped-connection audit (the set
 # aside is exactly the manifests' declared set and each one is still refused), counted
 # from the green run. A vault-less run now declares five skips there, not four.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=30)
+# 2026-10-01: 43 -- renumbered_build() adds thirteen, all on synthetic frames (build
+# 38974's GAME_SMSG renumbering), so they run on a bare machine too.
+LEDGER = checks.Ledger("codec vs captured bytes", floor=43)
 check = checks.adopt_named(LEDGER)
 
 
@@ -592,7 +595,80 @@ def main():
               "a second reader re-derived each proposal and struck four headline "
               "citations and two verdicts, so filing confidence is not self-assessed")
 
+    renumbered_build()
     return LEDGER.verdict()
+
+
+def renumbered_build():
+    """codec.GAME_SMSG_RENUMBER on synthetic frames -- no vault needed.
+
+    The map's CONTENT is re-derived from the client's own tables by
+    test_catalog.py's per-build section; this checks what the codec DOES with
+    it: the wire carries the build's number, the caller sees the schema's, the
+    two directions are inverse, and nothing below the insertion or on the c2s
+    channel moves. 38974 is the build that renumbered (2026-09-30).
+    """
+    print("\nthe renumbered build (38974): wire numbers in, schema numbers out")
+    pin, b74 = codec.Codec(), codec.Codec(client_build=38974)
+
+    # MAP_MANIFEST_VERSIONS: [nested{u16, u32}] at schema 0x019F, wire 0x01A0.
+    vals = [[[7, 0x11223344]]]
+    wire = b74.encode("GAME_SMSG", 0x019F, vals)
+    LEDGER.ok(wire[:2] == b"\xa0\x01",
+              "encoding schema 0x019F for 38974 writes 0x01A0 on the wire",
+              wire[:2].hex())
+    op, got, end = b74.decode_one("GAME_SMSG", wire)
+    LEDGER.ok(op == 0x019F and got[1:] == vals and end == len(wire),
+              "and decoding it hands back the SCHEMA's 0x019F, every byte consumed",
+              f"0x{op:04X} {got} {end}/{len(wire)}")
+    LEDGER.ok(got[0] == 0x01A0,
+              "while the decoded header VALUE is still the raw wire word",
+              f"{got[0]:#06x} -- re-encoding from values must reproduce the bytes")
+    LEDGER.ok(pin.encode("GAME_SMSG", 0x019F, vals) == b"\x9f\x01" + wire[2:],
+              "CONTROL: the default codec still writes the pin's 0x019F",
+              "client_build=None is every caller before 2026-10-01, the server's included")
+
+    # The message new on 38974: wire 0x0194, one u32, no schema row.
+    new = struct.pack("<HI", 0x0194, 0xDEADBEEF)
+    op, got, end = b74.decode_one("GAME_SMSG", new)
+    LEDGER.ok(op == codec.NEW_OPCODE | 0x0194 and got[1:] == [0xDEADBEEF]
+              and end == len(new),
+              "wire 0x0194 decodes as NEW_OPCODE|0x0194 -- never under a pin number",
+              f"{op:#x} {got}")
+    LEDGER.ok(b74.encode("GAME_SMSG", op, got[1:]) == new,
+              "and it round-trips to its own bytes")
+    op_pin, _g, _e = pin.decode_one("GAME_SMSG", new)
+    LEDGER.ok(op_pin == 0x0194,
+              "CONTROL: the pin's codec reads those bytes as ITS 0x0194, a different "
+              "message", "the collision NEW_OPCODE exists to avoid")
+
+    # The one layout that changed: schema 0x0199 gained a trailing byte.
+    v99 = [5, 6, 7, 8, 9, 10, 11]
+    w99 = b74.encode("GAME_SMSG", 0x0199, v99)
+    op, got, end = b74.decode_one("GAME_SMSG", w99)
+    LEDGER.ok(w99[:2] == b"\x9a\x01" and op == 0x0199 and got[1:] == v99
+              and end == len(w99) == 2 + 4 + 2 + 1 + 4 + 1 + 1 + 1,
+              "schema 0x0199 on 38974 is wire 0x019A with SEVEN fields (16 B)",
+              f"{w99[:2].hex()} 0x{op:04X} {len(w99)} B")
+    LEDGER.ok(len(pin.encode("GAME_SMSG", 0x0199, v99[:6])) == 15,
+              "CONTROL: the pin's 0x0199 is still six fields, 15 B")
+
+    # Inverse over the whole range, and the edges that must not move.
+    ops = list(range(0, 0x01E7)) + [codec.NEW_OPCODE | 0x0194]
+    LEDGER.ok(all(b74.schema_opcode("GAME_SMSG", b74.wire_opcode("GAME_SMSG", o)) == o
+                  for o in ops),
+              "wire_opcode and schema_opcode are inverse over every schema opcode")
+    LEDGER.ok(b74.wire_opcode("GAME_SMSG", 0x0193) == 0x0193
+              and b74.wire_opcode("GAME_SMSG", 0x0194) == 0x0195
+              and b74.wire_opcode("GAME_SMSG", 0x01E6) == 0x01E7,
+              "0x0193 holds, 0x0194 -> 0x0195, the last 0x01E6 -> 0x01E7",
+              "the insertion is AT 0x0194; everything below it is untouched")
+    LEDGER.ok(all(b74.wire_opcode("GAME_CMSG", o) == o for o in range(0x00C2))
+              and all(b74.schema_opcode(ch, 0x0199) == 0x0199
+                      for ch in ("GAME_CMSG", "AUTH_SMSG", "AUTH_CMSG")),
+              "and no other channel is touched -- 38974's SEND tables are 38888's")
+    LEDGER.ok(codec.Codec(client_build=38888).schema_opcode("GAME_SMSG", 0x01A0) == 0x01A0,
+              "a build the map does not name reads in the schema's numbering")
 
 
 if __name__ == "__main__":

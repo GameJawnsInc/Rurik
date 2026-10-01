@@ -54,7 +54,7 @@ import authsrv                                              # noqa: E402
 #
 # Adding quest rows only raises the count, so the floor stays valid; an
 # EMPTY table is caught by section 0 before the count matters.
-LEDGER = checks.Ledger("the quest table and its coded strings", floor=130)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23), the kill quest +8 (sec 24); 117 -> 130 on 2026-09-14 when secs 19/19b/19c/20 went per build (38888); from the green run
+LEDGER = checks.Ledger("the quest table and its coded strings", floor=138)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23), the kill quest +8 (sec 24); 117 -> 130 on 2026-09-14 when secs 19/19b/19c/20 went per build (38888); from the green run; 130 -> 138 on 2026-10-01, build 38974 joining secs 19/19b/20 (from the green run)
 check = checks.adopt(LEDGER)
 
 # MEASURED, build 38797: UiCtlWebLink.cpp:576 asserts `challengeId < CHALLENGES`
@@ -747,10 +747,13 @@ def main():
           "the mask width the tapes carry is ceil(count/32)*4: 112 for 888, "
           "116 for 897",
           f"{authsrv.mission_mask_bytes(888)}, {authsrv.mission_mask_bytes(897)}")
-    check(authsrv.build_of_mission_mask(116) == [38888]
+    # 38974's 898 maps fill the same 29 dwords as 38888's 897, so since
+    # 2026-10-01 a 116-byte mask names BOTH: the width separates generations,
+    # not every build, and the warning it feeds says "consistent with" a set.
+    check(authsrv.build_of_mission_mask(116) == [38888, 38974]
           and 38888 not in authsrv.build_of_mission_mask(112),
-          "so a 116-byte mask names 38888 and only 38888, and a 112-byte one "
-          "cannot",
+          "so a 116-byte mask names 38888 and 38974 and nothing older, and a "
+          "112-byte one cannot",
           f"116 -> {authsrv.build_of_mission_mask(116)}, "
           f"112 -> {authsrv.build_of_mission_mask(112)}")
     check(authsrv.build_of_mission_mask(120) == [],
@@ -778,22 +781,28 @@ def main():
     #       an address: the memmove's rel32, the two `fld` of the +inf
     #       constant (0x00948654 -> 0x0094966C), and Find's `mov edx, imm32`.
     # The length of each site is the instruction it names.
-    F797, F888 = 38797, 38888
+    #
+    # 38974 (2026-09-30) is the third column, measured 2026-10-01 the same way
+    # from 38888's bytes: every code site at +0x730 from 38888, the two bus
+    # helpers at +0x450, and the +inf constant read off the relocated `fld`
+    # (0x0094966C -> 0x0094A67C). Find's assert line moved again, 4281 -> 4288.
+    F797, F888, F974 = 38797, 38888, 38974
     SITES = [
-        ({F797: 0x0080F7C2, F888: 0x0080FC22}, 3, "2.2 imul edi, ecx, 0x34 (the log's 52-byte stride)"),
-        ({F797: 0x0080F84D, F888: 0x0080FCAD}, 5, "2.2 the tail memmove"),
-        ({F797: 0x0080F855, F888: 0x0080FCB5}, 6, "2.2 dec [ebx+0x534] (the log count)"),
-        ({F797: 0x0080F85B, F888: 0x0080FCBB}, 7, "2.2 imul esi, [ebx+0x534], 0x34"),
-        ({F797: 0x0080F20B, F888: 0x0080F66B}, 6, "2.3 0x0049 writes charContext+0x528 (the ACTIVE quest)"),
-        ({F797: 0x0080F574, F888: 0x0080F9D4}, 6, "2.3 0x0050 loads the +inf marker constant"),
-        ({F797: 0x0080F600, F888: 0x0080FA60}, 6, "2.3 ...and again"),
-        ({F797: 0x0080F9CD, F888: 0x0080FE2D}, 6, "Q3  the description-filled gate on 0x0054"),
-        ({F797: 0x0080DDA7, F888: 0x0080E217}, 5, "2.2 challengeSortArray.Find (ChCliApi:4237; 4281 on 38888)"),
-        ({F797: 0x00633D70, F888: 0x006341A0}, 8, "1.6 the frame-bus POST helper"),
-        ({F797: 0x00633BD0, F888: 0x00634000}, 8, "1.6 the frame-bus SUBSCRIBE helper"),
-        ({F797: 0x00948654, F888: 0x0094966C}, 4, "2.3 the +inf constant itself, in .rdata"),
+        ({F797: 0x0080F7C2, F888: 0x0080FC22, F974: 0x00810352}, 3, "2.2 imul edi, ecx, 0x34 (the log's 52-byte stride)"),
+        ({F797: 0x0080F84D, F888: 0x0080FCAD, F974: 0x008103DD}, 5, "2.2 the tail memmove"),
+        ({F797: 0x0080F855, F888: 0x0080FCB5, F974: 0x008103E5}, 6, "2.2 dec [ebx+0x534] (the log count)"),
+        ({F797: 0x0080F85B, F888: 0x0080FCBB, F974: 0x008103EB}, 7, "2.2 imul esi, [ebx+0x534], 0x34"),
+        ({F797: 0x0080F20B, F888: 0x0080F66B, F974: 0x0080FD9B}, 6, "2.3 0x0049 writes charContext+0x528 (the ACTIVE quest)"),
+        ({F797: 0x0080F574, F888: 0x0080F9D4, F974: 0x00810104}, 6, "2.3 0x0050 loads the +inf marker constant"),
+        ({F797: 0x0080F600, F888: 0x0080FA60, F974: 0x00810190}, 6, "2.3 ...and again"),
+        ({F797: 0x0080F9CD, F888: 0x0080FE2D, F974: 0x0081055D}, 6, "Q3  the description-filled gate on 0x0054"),
+        ({F797: 0x0080DDA7, F888: 0x0080E217, F974: 0x0080E947}, 5, "2.2 challengeSortArray.Find (ChCliApi:4237; 4281 on 38888; 4288 on 38974)"),
+        ({F797: 0x00633D70, F888: 0x006341A0, F974: 0x006345F0}, 8, "1.6 the frame-bus POST helper"),
+        ({F797: 0x00633BD0, F888: 0x00634000, F974: 0x00634450}, 8, "1.6 the frame-bus SUBSCRIBE helper"),
+        ({F797: 0x00948654, F888: 0x0094966C, F974: 0x0094A67C}, 4, "2.3 the +inf constant itself, in .rdata"),
     ]
-    FAMILY = {38797: F797, 38833: F797, 38849: F797, 38888: F888}
+    FAMILY = {38797: F797, 38833: F797, 38849: F797, 38888: F888, 38974: F974}
+    RELOCATED = (F888, F974)       # the families checked against the pin under a mask
     ADDRESS_OPERAND_SITES = {0x0080F84D, 0x0080F574, 0x0080F600, 0x0080DDA7}
     try:
         sys.path.insert(0, os.path.join(HERE, "clientscan"))
@@ -860,7 +869,7 @@ def main():
     PIN = 38797
     by_num = dict(imgs)
     fam797 = [(n, im) for n, im in imgs if FAMILY.get(n) == F797]
-    fam888 = [(n, im) for n, im in imgs if FAMILY.get(n) == F888]
+    relocated = [(FAMILY[n], n, im) for n, im in imgs if FAMILY.get(n) in RELOCATED]
     older = [(n, im) for n, im in imgs if n < PIN]
     if len(fam797) < 2:
         LEDGER.skip("the 38797-family site check",
@@ -876,16 +885,16 @@ def main():
               f"bytes differ between the pin and a build the owner ran is "
               f"reading different code than it was measured on, which is the "
               f"failure studies/pvpui/FINDINGS.md 4 and 15.0 each paid for once")
-    if not fam888 or PIN not in by_num:
-        LEDGER.skip("the 38888 site check",
-                    f"needs the pin and a 38888 image; have {sorted(by_num)}")
+    if not relocated or PIN not in by_num:
+        LEDGER.skip("the relocated-family site check",
+                    f"needs the pin and a 38888 or 38974 image; have {sorted(by_num)}")
     else:
         pin_im = by_num[PIN]
-        for n888, im888 in fam888:
+        for fam, n888, im888 in relocated:
             span = va_span(pin_im, im888)
-            diff = [(hex(va[F888]), what) for va, n, what in SITES
+            diff = [(hex(va[fam]), what) for va, n, what in SITES
                     if masked(window(pin_im, va[F797], n), span)
-                    != masked(window(im888, va[F888], n), span)]
+                    != masked(window(im888, va[fam], n), span)]
             check(not diff,
                   f"(b) all {len(SITES)} sites read the SAME INSTRUCTION on "
                   f"{n888} at their relocated VAs, address operands masked",
@@ -893,7 +902,7 @@ def main():
                   f"opcode bytes is not the site, it is a coincidence of the "
                   f"search")
             raw_differ = {va[F797] for va, n, what in SITES
-                          if window(pin_im, va[F797], n) != window(im888, va[F888], n)}
+                          if window(pin_im, va[F797], n) != window(im888, va[fam], n)}
             check(raw_differ == ADDRESS_OPERAND_SITES,
                   "and the sites whose RAW bytes changed are exactly the four "
                   "that carry an address operand",
@@ -903,7 +912,7 @@ def main():
                   f"about the code and not about the relink")
             unmasked_same = [what for va, n, what in SITES
                              if va[F797] not in ADDRESS_OPERAND_SITES
-                             and window(pin_im, va[F797], n) == window(im888, va[F888], n)]
+                             and window(pin_im, va[F797], n) == window(im888, va[fam], n)]
             check(len(unmasked_same) == len(SITES) - len(ADDRESS_OPERAND_SITES),
                   "CONTROL: the eight address-free sites match UNMASKED too, so "
                   "the mask is not what makes (b) true",
@@ -914,18 +923,20 @@ def main():
         LEDGER.skip("the frame-bus pairing per build",
                     f"needs two builds with a framebus table; have {[n for n, _ in tabled]}")
     else:
-        want = {o: sorted(v) for o, v in framebus.QUEST_EXPECTED.items()}
+        # PER BUILD since 38974 renumbered the frame bus by +2: the pairing is
+        # the pin's, at each build's own ids (framebus.quest_expected).
         bad = {n: g for n, g in ((n, framebus.quest_family(im))
-                                 for n, im in tabled) if g != want}
+                                 for n, im in tabled)
+               if g != {o: sorted(v) for o, v in framebus.quest_expected(n).items()}}
         check(not bad,
               f"and the frame-bus pairing holds on every build with a table "
               f"({', '.join(str(n) for n, _ in tabled)})",
               f"{bad} -- 11 of 11 bodies posting the recorded frame id is what "
               f"twelve names in overrides.json rest on, and it is worth knowing "
               f"on the build the owner actually runs, not only on the pin")
-        cwant = {o: sorted(v) for o, v in framebus.COMPLETION_EXPECTED.items()}
         cbad = {n: g for n, g in ((n, framebus.completion_family(im))
-                                  for n, im in tabled) if g != cwant}
+                                  for n, im in tabled)
+                if g != {o: sorted(v) for o, v in framebus.completion_expected(n).items()}}
         check(not cbad,
               "and so does the completion family's -- which was NEVER in the "
               "twelve sites and had moved on 38833 and 38849 unnoticed until "

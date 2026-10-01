@@ -261,10 +261,25 @@ class Image:
         self.text = self.pe.data[self.raw:self.raw + self.size]
 
     # -- the allocators, derived ----------------------------------------
+    # A FUNCTION ENTRY IS AN INT3 PAD *AND* A 16-BYTE BOUNDARY. Until build
+    # 38974 (2026-09-30) "the byte before is 0xCC" was the whole rule, and that
+    # build broke it without moving a single assert: the action routine's own
+    # `mov ecx, 0x0093EFCC` (an assert's expression pointer) carries a 0xCC
+    # byte, so the walk back from AvChar.cpp:1251 stopped INSIDE the routine
+    # and split it from its :1243 -- "0 functions assert both" -- and the
+    # .rdata shift that build made took single-0xCC non-boundaries in .text
+    # from 8,793 to 13,763. MEASURED over all of .text on 38797 / 38888 /
+    # 38974: of the boundaries with a pad of 3+ int3, 14,508 / 14,509 / 14,525
+    # are 16-aligned and 187 are not (187 on each of the three), so MSVC's
+    # alignment is the rule and an operand byte satisfies it 1 time in 16.
+    def _is_entry(self, off):
+        return (self.pe.data[off - 1] == 0xCC
+                and self.pe.off_to_rva(off) % 16 == 0)
+
     def _fn_entry(self, off):
-        """File offset of the function containing `off`, by MSVC's int3 padding."""
-        d = self.pe.data
-        while off > 0 and d[off - 1] != 0xCC:
+        """File offset of the function containing `off`: the nearest aligned
+        int3-padded boundary at or before it (see `_is_entry`)."""
+        while off > 0 and not self._is_entry(off):
             off -= 1
         return off
 
@@ -275,11 +290,9 @@ class Image:
         return self._fn_entry(i)
 
     def _next_fn(self, off):
-        d, i = self.pe.data, off
+        d, i = self.pe.data, off + 1
         limit = self.raw + self.size
-        while i < limit and d[i] != 0xCC:      # to this function's pad
-            i += 1
-        while i < limit and d[i] == 0xCC:      # past it
+        while i < limit and not (self._is_entry(i) and d[i] != 0xCC):
             i += 1
         return i
 

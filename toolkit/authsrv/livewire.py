@@ -57,16 +57,24 @@ CMSG_MASK = 0x8000
 HANDSHAKE_C2S_GAME = 130
 HANDSHAKE_S2C = 22
 
-# One codec for the module: the schema is tracked in git and immutable at
-# runtime, so sharing it is safe and saves the JSON parse per connection.
-_CODEC = None
+# One codec PER BUILD for the module: the schema is tracked in git and immutable
+# at runtime, so sharing it is safe and saves the JSON parse per connection. Per
+# build since 2026-10-01, when 38974 renumbered every GAME_SMSG from 0x0194 up
+# (codec.GAME_SMSG_RENUMBER): a capture decodes through the codec for the build
+# its own records name (origin.build_of), and one whose build is UNKNOWN gets the
+# schema's numbering, which is what every capture before that build used.
+_CODECS = {}
 
 
-def _get_codec():
-    global _CODEC
-    if _CODEC is None:
-        _CODEC = codecmod.Codec()
-    return _CODEC
+def _get_codec(build=None):
+    if build not in _CODECS:
+        _CODECS[build] = codecmod.Codec(client_build=build)
+    return _CODECS[build]
+
+
+def conn_build(capdir, conn_file):
+    """The client build one connection file says it is (None if it cannot say)."""
+    return originmod.build_of(os.path.join(capdir, conn_file))[0]
 
 
 def captures_root():
@@ -152,7 +160,7 @@ def decode_conn(capdir, conn_file):
     _, s2c_events, _s2c_err = build_events(capdir, conn_file, "s2c")
     merged = []
     ok = True
-    cod = _get_codec()
+    cod = _get_codec(conn_build(capdir, conn_file))
     if c2s_events:
         msgs, receipt = tape.decode_all(c2s_events, cod, channel="GAME_CMSG",
                                         mask=CMSG_MASK, strict=False)

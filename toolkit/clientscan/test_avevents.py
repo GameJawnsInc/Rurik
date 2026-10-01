@@ -56,8 +56,9 @@ import vaultpath                                             # noqa: E402
 # vaulted build (38833) adding 7. Per-build sections mean the floor tracks how
 # many builds the vault holds, which is the intent -- a run that silently saw
 # fewer builds measured less than a healthy one. 26 -> 33 for 38849 on
-# 2026-08-29, 33 -> 40 for 38888 on 2026-09-13, both from real green runs.
-LEDGER = checks.Ledger("AgentView event allocators", floor=40)
+# 2026-08-29, 33 -> 40 for 38888 on 2026-09-13, both from real green runs;
+# 40 -> 47 for 38974 on 2026-10-01, from its green run.
+LEDGER = checks.Ledger("AgentView event allocators", floor=47)
 check = checks.adopt(LEDGER)
 
 # MEASURED 2026-08-12. Class-(c) expectations: a new build SHOULD move these,
@@ -80,16 +81,31 @@ EXPECT = {
     # kinds still derive on it, so the census held while the addresses did not
     # -- exactly the shape a class-(c) row is expected to go red in.
     "2026-09-01_44fbd68767a8": {0x007F32F0: "action", 0x007F57B0: "effect"},
+    # 38974, MEASURED 2026-10-01 by `Image.allocators` over the pristine image
+    # -- AFTER a deriver fix this build forced. Its first run refused the
+    # build ("0 functions assert both AvChar.cpp:1243/1251") with every assert
+    # line unchanged: the action routine carries `mov ecx, 0x0093EFCC`, whose
+    # 0xCC byte the int3-pad walk took for a function boundary, splitting the
+    # routine between its two asserts. `_is_entry` now also requires the
+    # 16-byte boundary MSVC pads to (census in avevents.py); the five older
+    # rows re-derive unchanged under it. Both moved again, action +0x6B0 and
+    # effect +0x6A0; the bodies are 38888's byte for byte bar address
+    # operands (86 / 89 of the first 96 bytes), 23 sites and 22 kinds.
+    "2026-09-30_8e50edfb8351": {0x007F39A0: "action", 0x007F5E50: "effect"},
 }
 EXPECT_ACTION_SITES = 23
 EXPECT_ACTION_KINDS = 22
 
 
 def fn_entry(pe, off):
-    """The function containing `off`, by MSVC's int3 padding. Written here so
-    this test does not ask the module under test where its functions start."""
+    """The function containing `off`, by MSVC's int3 padding ON A 16-BYTE
+    BOUNDARY. Written here so this test does not ask the module under test
+    where its functions start. The alignment term arrived with build 38974,
+    whose action routine carries a 0xCC operand byte (`mov ecx, 0x0093EFCC`)
+    between its two asserts -- see `AV.Image._is_entry` for the census."""
     d = pe.data
-    while off > 0 and d[off - 1] != 0xCC:
+    while off > 0 and not (d[off - 1] == 0xCC
+                           and pe.off_to_rva(off) % 16 == 0):
         off -= 1
     return off
 

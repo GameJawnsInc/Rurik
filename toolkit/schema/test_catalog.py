@@ -66,7 +66,9 @@ AUTH_RECV_TABLES = (0x00BEC540, 0x00BEC394)
 # retraction. None of them are fixture-dependent: the per-message loop adds
 # findings to `disagreed`, not checks, so the total does not drift with the
 # catalog's size. A run that reports fewer has stopped executing a section.
-LEDGER = checks.Ledger("catalog vs client tables", floor=13)
+# 13 -> 25 on 2026-10-01: per_build() adds two per vaulted build, six builds,
+# read off the green run.
+LEDGER = checks.Ledger("catalog vs client tables", floor=25)
 
 # Same (ok, label, detail) order the call sites below already use.
 check = checks.adopt(LEDGER)
@@ -217,7 +219,91 @@ def main():
           "and needs no FIELD correction (name-only override rows are fine)",
           f"override row keys: {sorted(row) or 'none'}")
 
+    per_build()
     return LEDGER.verdict()
+
+
+# THE CATALOG AS EACH VAULTED BUILD NUMBERS IT (2026-10-01). Build 38974 put a
+# new GAME_SMSG at 0x0194 and moved everything above it up one, so "our
+# catalog against the client's tables" became a per-build question: this runs
+# the comparison above over EVERY vaulted image, through the codec built for
+# that image's build (codec.GAME_SMSG_RENUMBER), and requires zero disagreement
+# on each. It goes through the Codec on purpose -- the translation is the thing
+# under test -- where the pin section above restates the merge so a merge bug
+# cannot choose what it compares. THE CONTROL is the same comparison through the
+# PIN's numbering: it must disagree heavily on a renumbered build and not at
+# all on the others, or the map is unneeded or the comparator blind.
+#
+# MEASURED 2026-10-01: every build through its own codec compares 477 messages
+# (478 on 38974, its new 0x0194 included), and 38797 / 38833 / 38849 / 38888 /
+# 38974 agree on every one. Through the pin's numbering 38974 disagrees on 66 --
+# NOT on all 121 it moved: 55 of them have the same shape as the neighbour they
+# slid onto, which is exactly the silent mislabel the translation exists to stop
+# (no framing error would ever have flagged those). 38519 disagrees on 2 under
+# either numbering, and they are LAYOUTS, not numbers: 0x008C
+# MAP_EXPLORATION_MARK and 0x0092 COMPASS_PING each lack the trailing field the
+# pin carries (a byte, a word). No tape is 38519, so the map does not carry
+# them; they are pinned here so a change to either reads as a change.
+EXPECT_SHARED_BY_BUILD = {38974: 478}       # every other vaulted build: EXPECT_SHARED
+EXPECT_DISAGREES_BY_BUILD = {38519: 2}
+EXPECT_PIN_DISAGREES_BY_BUILD = {38519: 2, 38974: 66}
+
+
+def per_build():
+    print("\nper build: the catalog through codec.Codec(client_build=...)")
+    try:
+        sys.path.insert(0, HERE)
+        import codec as C                                    # noqa: PLC0415
+        import vaultpath                                     # noqa: PLC0415
+        root = vaultpath.vault_root()
+    except (Exception, SystemExit) as exc:                   # noqa: BLE001
+        LEDGER.skip("the per-build catalog", f"{type(exc).__name__}: {exc}")
+        return
+    images = [(b, os.path.join(root, "client", b.stamp, "Gw.exe")) for b in P.BUILDS]
+    images = [(b, p) for b, p in images if os.path.exists(p)]
+    if len(images) < 2:
+        LEDGER.skip("the per-build catalog",
+                    f"needs two vaulted builds; have {[b.number for b, _ in images]}")
+        return
+    pin_cod = C.Codec()
+    for b, path in images:
+        cod = C.Codec(client_build=b.number)
+        shared = bad = pin_bad = 0
+        first = None
+        for op, direction, tva, _disp, cmds in MS.Image(path).messages():
+            if direction != "RECV" or tva in AUTH_RECV_TABLES:
+                continue
+            try:
+                want = [theirs(f) for f in MS.fields(cmds)]
+            except MS.Undecodable:
+                continue
+            try:
+                got = cod.fields_for("GAME_SMSG", cod.schema_opcode("GAME_SMSG", op))
+            except C.Undecodable:
+                continue
+            shared += 1
+            mine = [x for x in (ours(f) for f in got) if x is not None]
+            if mine != want:
+                bad += 1
+                first = first or (op, mine, want)
+            try:
+                pm = [x for x in (ours(f) for f in pin_cod.fields_for("GAME_SMSG", op))
+                      if x is not None]
+            except C.Undecodable:
+                pm = None
+            pin_bad += pm != want
+        n = EXPECT_SHARED_BY_BUILD.get(b.number, EXPECT_SHARED)
+        nb = EXPECT_DISAGREES_BY_BUILD.get(b.number, 0)
+        check(shared == n and bad == nb,
+              f"{b.number}: {n} messages compared through its own numbering, "
+              f"{nb} disagree", f"{shared} compared, {bad} disagree"
+              + (f"; first 0x{first[0]:04X} ours {first[1]} binary {first[2]}"
+                 if first else ""))
+        k = EXPECT_PIN_DISAGREES_BY_BUILD.get(b.number, 0)
+        check(pin_bad == k,
+              f"{b.number}: CONTROL -- through the PIN's numbering, {k} disagree",
+              f"{pin_bad} -- a renumbered build must disagree there, and one the "
+              f"map does not name must not")
 
 
 if __name__ == "__main__":

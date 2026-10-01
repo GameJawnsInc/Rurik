@@ -28,6 +28,65 @@ move back.
 
 ---
 
+### Build 38974 landed -- 2026-10-01 -- **ArenaNet updated `C:\gw` that morning. The snapshot, both client builds and the registry are done, and every per-build tool reads 38974. This build RENUMBERED, the first since the schema import: every GAME_SMSG from 0x0194 up sits +1 behind a new 0x0194, and the quest frame ids sit +2. The codec now translates per build, and the server refuses to serve 38974. The pin stays 38797; the content stays 38888.**
+
+The full record is `studies/crossbuild/FINDINGS.md` §11.
+
+**Vault (not in git).**
+- Snapshot `vault/client/2026-09-30_8e50edfb8351`, MANIFEST verified byte-identical.
+- `Gw.live` (stock DH, updater LIVE, key-tap; 58 B in 6 runs) and `Gw.custom` (ours,
+  updater off, key-tap; 189 B in 8 runs), both built from the snapshot.
+- `dh_params_2026-09-30_8e50edfb8351.txt`.
+- `run-live/` and `run/` assembled; `dhbuild` says every build is where it belongs.
+
+**Measured on the image** with the repo's own derivers:
+- **Held:** the getter (0x004729E0); the DH accessor; all 8 corpus anchors; 938 source
+  paths, the same set; every c2s table.
+- **Moved:** RegisterMsgs +0x480; the AgentView allocators +0x6B0 / +0x6A0; the quest
+  bodies +0x730 and the bus helpers +0x450; maps 897 -> 898; skill records 3,476 -> 3,495.
+- **Renumbered:**
+  - The s2c receive table gained 0x0194 [u32], and 0x0194..0x01E6 moved to 0x0195..0x01E7.
+  - The schema's 0x0199 gained a trailing u8.
+  - The quest frame ids moved +2.
+
+**Code.**
+- `codec.GAME_SMSG_RENUMBER` and `Codec(client_build=)`: schema numbers to callers, the
+  build's on the wire, `NEW_OPCODE | 0x0194` for the new message.
+- `livewire.decode_conn` picks the codec from the connection's own build.
+- `authsrv --client-build 38974` is refused by name. The new rows would otherwise have
+  admitted it, and the server encodes in the pin's numbering.
+- `framebus.BuildTables.frame_shift` and `quest_expected`.
+- `avevents._is_entry` needs a 16-byte boundary. 38974's `mov ecx, 0x0093EFCC` had split
+  the action routine at a 0xCC operand byte; the five older builds re-derive unchanged.
+- The 38974 rows in `pinned.BUILDS`, `test_buildid`, `MAP_ID_COUNT_BY_BUILD`,
+  `SKILL_RECORD_COUNT_BY_BUILD`, `test_msgshape`, `test_avevents`, `test_srctree` and
+  `test_quests` §20.
+
+**Tests (affected only).** Green:
+
+| Test | Checks | Test | Checks |
+|---|---|---|---|
+| test_buildid | 69 | test_pinned | 166 |
+| test_msgshape | 122 | test_avevents | 47 |
+| test_srctree | 66 | test_framebus | 45 |
+| test_catalog | 25 | test_codec | 43 |
+| test_livewire | 18 | test_quests | 138 |
+| test_skillbound | 70 | test_buildpins | 49 |
+| test_handshake | 24 | test_dispatch | 54 |
+| test_smsgsweep | 124 | test_harness | 218 |
+| test_sandbox | 178 | test_srclint | 26 |
+| test_provlint | 19 | test_checks | 20 |
+| test_smsgnames3 | 42 | test_itemmoves | 212 |
+| test_skillcast | 190 | test_adrenwire | 97 |
+
+**RED: test_cage**, on the uncaged 38974 loopback build, the owner's UAC.
+
+**Open** (`PLAN.md` §8, "Builds 38888/38974"):
+- The loopback build's cage.
+- The decoders that build their own `Codec()`.
+- Serving a 38974 client.
+- Moving the content to 38974, which is the owner's ruling.
+
 ### RESSIG-P and RESSIG-B's client run, and the boost's repaint -- 2026-10-01 -- **the owner's run confirmed the raise, the single use, the spent paint surviving a wipe and the boss's +2%; but the boost left the signets GREY though usable. The client's E6 never tells its UI (its worker is the bare field write), so each boost recharge now sends an E5 [.., 0] first, which repaints. Also found: a no-target press of the signet casts for 3 s and stops; what retail does with one is the owner's to say.**
 
 **The run:** `20261001T112625`, tree `63655adc`, the `revheal2` rig. The questions were

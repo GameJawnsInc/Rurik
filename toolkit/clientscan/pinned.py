@@ -358,6 +358,32 @@ BUILDS = (
                   "against keys/dh_params_2026-09-01_44fbd68767a8.txt. "
                   "vault/run-live/<stamp>/ and vault/client-patched-live/"),
           )),
+    # ArenaNet updated C:\gw on 2026-10-01 at 11:43 local (PE timestamp
+    # 2026-09-30 19:23 UTC); the owner reported "there was a game update" the
+    # same morning. Snapshotted that day once the client closed (MANIFEST
+    # verified byte-identical) and both configurations built from the snapshot
+    # with the key-tap. The image GREW again (10,506,432 B, +13,312), and this
+    # one renumbered things, not only moved them: the s2c opcodes from 0x0194
+    # up sit +1 (a new message at 0x0194) and the quest frame ids +2 --
+    # studies/crossbuild/FINDINGS.md 11. The PIN stays 38797. Byte diffs vs
+    # pristine measured 2026-10-01.
+    Build(stamp="2026-09-30_8e50edfb8351", number=38974, size=10_506_432,
+          pristine="8e50edfb83515fabfec50bfd9d17968e8635a39b4c3e796e311bbc5cd15e5878",
+          pristine_via=VIA_SNAPSHOT,
+          patched=(
+              PatchedCopy(
+                  "5de3606291fb847fccfcdde7e9b10e0c9924036e357006121dc38d6d216bbbcc",
+                  "loopback build -- OUR DH, updater off, multi-instance, key-tap. "
+                  "189 B in 8 runs vs pristine, dhbuild classifies `ours`. "
+                  "vault/run/<stamp>/ and vault/client-patched/; keyed by "
+                  "keys/rurik_dh_2026-09-30_8e50edfb8351.json"),
+              PatchedCopy(
+                  "4c2ad0efed49f46a378b206fac7acf39d7d2a07d6da36318d46727a5a8030cd8",
+                  "LIVE-CAPTURE build -- stock DH, updater LIVE, multi-instance, "
+                  "key-tap. 58 B in 6 runs vs pristine, dhbuild classifies `stock` "
+                  "against keys/dh_params_2026-09-30_8e50edfb8351.txt. "
+                  "vault/run-live/<stamp>/ and vault/client-patched-live/"),
+          )),
 )
 
 # THE PIN DOES NOT FOLLOW THE NEWEST BUILD, and this line used to read

@@ -1475,6 +1475,109 @@ That prose is left for the next edit of those rows. Disrupting Chop 340's disabl
 OBSERVED on a tape and is unchanged. The fourteen SLICE-H17b override rows equal the 38888
 table, 14 of 14.
 
+## 11. Build 38974 landed — 2026-10-01 — and it RENUMBERED, not only moved
+
+ArenaNet updated `C:\gw` at 11:43 local on 2026-10-01 (PE timestamp 2026-09-30 19:23 UTC),
+and the owner reported it the same morning. Snapshot `vault/client/2026-09-30_8e50edfb8351`
+(MANIFEST verified byte-identical) was taken once the client closed. Both configurations
+were built from it with the key-tap, and both run directories assembled. `dhbuild.py` says
+every build is where it belongs. The image grew again, 10,493,120 -> 10,506,432 B
+(+13,312). **The pin stays 38797**, and the content overlay stays 38888 (§10; moving it is
+the owner's ruling, and 38974's skill table has 19 more records).
+
+Every figure below was MEASURED on the pristine 38974 image with the repo's own derivers,
+against the 38888 snapshot. Labels are the house vocabulary.
+
+### 11.1 What held
+
+- **The build getter** is still 0x004729E0, with 16 callers and 54 shapes. That is five
+  builds on one VA.
+- **The DH accessor** resolves, with g = 4 over a 512-bit prime. GO.
+- **All 8 signature-corpus anchors** hold at their expected hit counts (`updatecheck --after`).
+- **The source-path census** is 938, and the SET is 38888's exactly.
+- **The c2s message tables** (every SEND table) are identical to 38888's, including
+  `0x0092`'s cap of array8[116].
+- **`AvChar.cpp`'s assert lines** are unchanged.
+
+### 11.2 What moved
+
+- **`RegisterMsgs`**: 0x007DE470 -> 0x007DE8F0 (+0x480).
+- **The AgentView allocators**: action 0x007F32F0 -> 0x007F39A0 (+0x6B0), effect
+  0x007F57B0 -> 0x007F5E50 (+0x6A0). The bodies are 38888's bar address operands, with 23
+  call sites and 22 kinds.
+- **The quest family** (all 15 bodies) moved +0x730, and the two frame-bus helpers +0x450.
+  Two bodies share their first 0x60 bytes, 0x004E's and 0x006C's, so the masked search
+  could not separate them. The client's receive table confirmed both, along with
+  0x0096 / 0x0097 / 0x00FB (`msghandler.py`).
+- **The +inf marker constant**: 0x0094966C -> 0x0094A67C.
+- **`challengeSortArray.Find`'s assert**: `ChCliApi.cpp` 4281 -> 4288.
+
+### 11.3 What changed (the first renumbering since the schema was imported)
+
+**One new s2c message, and every game-server opcode above it moved up by one.**
+`msgshape --all` over both images, aligned table by table with a sequence matcher:
+- 19 of 21 tables are identical.
+- The receive table holding 0x016E..0x01B1 gained an entry at **0x0194: [u32]**.
+- Every entry from 0x0194 up shifted +1: 0x0194..0x01E6 -> 0x0195..0x01E7, 120 messages.
+- One of them also changed shape. 38888's **0x0199 [agent_id, u16, u8, u32, u8, u8]**
+  is 38974's 0x019A with a **seventh field, a trailing u8** (15 -> 16 B).
+
+Through the pin's numbering, 66 of 38974's 478 shared messages disagree with the client's
+own tables. The other 55 that moved slid onto a neighbour of the same shape. **A decoder
+without a per-build map would mislabel those silently, with no framing error**, and
+MAP_MANIFEST_VERSIONS (0x019F, wire 0x01A0 on 38974) is in every map load.
+`codec.GAME_SMSG_RENUMBER` carries the map:
+- A `Codec(client_build=38974)` hands callers the schema's numbering.
+- It decodes the new message as `NEW_OPCODE | 0x0194`.
+- It writes the build's numbering on encode.
+
+`livewire.decode_conn` picks the codec from the connection's own `build` record.
+`test_catalog.py` compares every vaulted image through its own codec: 477 messages and 0
+disagreements on 38797..38888, 478 and 0 on 38974. That check fails on the next build
+that renumbers. RECONSTRUCTION until a live 38974 tape frames to its last byte through
+it: the map is read from the client's own format tables, but no 38974 wire exists yet.
+
+**The quest frame ids moved +2.** Every `push 0x100001xx` from 0x1000014C to 0x10000160
+occurs exactly as often on 38974 as id - 2 does on 38888 (21 of 21; 4 of 21 at +0). So
+two UI frames were inserted below the quest band. Disassembled with addresses normalised,
+all fifteen bodies are 38888's instruction for instruction except:
+- the frame-id push, +2 in each of the 13 that post;
+- 0x0050's two stores of the "no marker" map id, 0x381 -> 0x382.
+
+`framebus.BuildTables.frame_shift` carries it. The pairing holds 11 of 11 and 4 of 4
+at the shifted ids.
+
+**The map table grew by one, 897 -> 898** (`areatable`, both locators agreeing; 0x0050's
+stores above; five `+0x134` stores in `test_quests` §19b). The mission mask is still 29
+dwords, 116 bytes, so a 116-byte mask names 38888 OR 38974. **The skill table grew by
+19, 3,476 -> 3,495 records** (`skilltable`, score 1988).
+
+### 11.4 A deriver this build broke without moving its anchor
+
+`avevents.Image.allocators` refused 38974: "0 functions assert both AvChar.cpp:1243/1251".
+Both asserts were present and unchanged. The action routine's
+`mov ecx, 0x0093EFCC` (an assert's expression pointer) carries a 0xCC byte, and the
+int3-pad walk took that byte for a function boundary, splitting the routine between its
+two asserts.
+
+The image's `.rdata` shift multiplied such bytes. Single-0xCC "boundaries" in `.text`
+went from 8,793 on 38888 to 13,763 on 38974. A function entry is now an int3-padded
+offset ON A 16-BYTE BOUNDARY. Of the pads of 3+ int3, 14,508 / 14,509 / 14,525 are aligned
+on 38797 / 38888 / 38974 against 187 unaligned on each. Re-derived under the new rule,
+the five older builds are unchanged, so that rule is MEASURED. `test_avevents`'s own
+independent walk got the same fix.
+
+### 11.5 What it costs, and what is open
+
+- **`test_buildpins`' census**: the 38974 rows are class (a), build-coupled constants.
+  The count is in the 327 entry of that test.
+- **`test_cage`** is red until the 38974 loopback build is caged. That needs the owner's
+  elevated `isolate_client.ps1`, as 38888's did.
+- **The 38974 live build is `run-live/2026-09-30_8e50edfb8351`** (RUNBOOK).
+- **Remaining decoders**: every consumer that builds its own `Codec()` still decodes in
+  the pin's numbering. A 38974 tape through one of them is the silent-mislabel case
+  above. `livewire.decode_conn` is the converted path. `PLAN.md` §8 carries the rest.
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.

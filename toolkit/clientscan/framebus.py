@@ -99,8 +99,22 @@ SUBSCRIBE = 0x00633BD0
 # 0x93, 0x38, 0x3E -- so the old lengths bound them). A build with no row gets
 # NO table: `tables_for` returns None and the caller says so, rather than
 # applying the pin's offsets to a stranger's bytes (the 38833 header bug, above).
+#
+# 38974 (2026-09-30) ADDED A COLUMN, `frame_shift`: the FRAME IDS moved, not
+# only the code. Every id from 0x1000014C to 0x10000160 is pushed exactly as
+# often on 38974 as id - 2 is on 38888 (21 of 21 counts, 0x14C:3 -> 0x14E:3
+# through 0x160:6 -> 0x162:6), so two UI frames were inserted BELOW the quest
+# band and the whole band renumbered by +2 (at +0, 4 of the 21 agree). And
+# disassembled, all fifteen bodies are 38888's instruction for instruction
+# with addresses normalised; the ONLY other change is 0x0050's two stores of
+# the "no marker" map id, 0x381 -> 0x382 (897 -> 898, the map table's growth
+# -- authsrv.MAP_ID_COUNT_BY_BUILD). So a build's posted ids are the pin's
+# plus its shift, and its band is QUEST_BAND plus its shift (`band_for`,
+# `quest_expected`, `completion_expected`); the names in overrides.json are
+# about OPCODES and do not move. Default 0, so every older row reads as before.
 BuildTables = collections.namedtuple(
-    "BuildTables", "build post subscribe quest_bodies completion_bodies")
+    "BuildTables", "build post subscribe quest_bodies completion_bodies frame_shift",
+    defaults=(0,))
 
 _PIN_QUEST_BODIES = [
     (0x0080F0A0, 0x0049), (0x0080F250, 0x004A), (0x0080F270, 0x004B),
@@ -130,6 +144,22 @@ TABLES = {
          (0x0080FD40, 0x0053), (0x0080FDF0, 0x0054)],
         [(0x00810F50, 0x00810FC1, 0x006C), (0x00812740, 0x008127ED, 0x0096),
          (0x008127F0, 0x00812865, 0x0097), (0x008155C0, 0x00815634, 0x00FB)]),
+    # 38974, MEASURED 2026-10-01 the same way as 38888's row, from 38888's
+    # bytes: every body by a masked search (rel32 and in-image dwords
+    # wildcarded), all fifteen at +0x730 and both helpers at +0x450. 0x004E and
+    # 0x006C share their first 0x60 bytes, so those two were confirmed off the
+    # receive table instead (`msghandler.py 0x004E` -> call 0x00810200,
+    # `0x006C` -> 0x00811680), and 0x0096 / 0x0097 / 0x00FB were too. The pairing
+    # then holds 11 of 11 and 4 of 4 at the shifted ids -- see `frame_shift`.
+    38974: BuildTables(
+        38974, 0x006345F0, 0x00634450,
+        [(0x0080FC30, 0x0049), (0x0080FDE0, 0x004A), (0x0080FE00, 0x004B),
+         (0x0080FE20, 0x004C), (0x0080FF50, 0x004D), (0x00810000, 0x0050),
+         (0x00810200, 0x004E), (0x00810280, 0x0051), (0x00810330, 0x0052),
+         (0x00810470, 0x0053), (0x00810520, 0x0054)],
+        [(0x00811680, 0x008116F1, 0x006C), (0x00812E70, 0x00812F1D, 0x0096),
+         (0x00812F20, 0x00812F95, 0x0097), (0x00815CF0, 0x00815D64, 0x00FB)],
+        frame_shift=2),
 }
 
 
@@ -188,6 +218,31 @@ COMPLETION_EXPECTED = {
     0x006C: [0x10000156], 0x0096: [0x10000158],
     0x0097: [0x10000157], 0x00FB: [0x10000159],
 }
+
+
+# THE TWO TABLES ABOVE ARE THE PIN'S IDS. A build whose frame bus renumbered
+# (38974: +2, see BuildTables) posts the same pairing at shifted ids, so ask
+# these rather than the tables whenever the build is not the pin's.
+def frame_shift(build):
+    """How far `build`'s frame ids sit from the pin's (0 for a build with no
+    table, which gets the pin's offsets and the pin's ids alike)."""
+    t = tables_for(build)
+    return t.frame_shift if t else 0
+
+
+def band_for(build):
+    s = frame_shift(build)
+    return (QUEST_BAND[0] + s, QUEST_BAND[1] + s)
+
+
+def quest_expected(build):
+    s = frame_shift(build)
+    return {op: [f + s for f in ids] for op, ids in QUEST_EXPECTED.items()}
+
+
+def completion_expected(build):
+    s = frame_shift(build)
+    return {op: [f + s for f in ids] for op, ids in COMPLETION_EXPECTED.items()}
 
 # Who listens, from §1.6's subscribe-side scan. Prose for the reader; the module
 # asserts nothing about it. 0x10000155-0x10000159 were scanned as ONE band row,
@@ -310,10 +365,11 @@ def quest_family(img=None):
     img = img or Image()
     t = tables_for(img.build)
     bodies = t.quest_bodies if t else QUEST_BODIES
+    band = band_for(img.build)
     out = {}
     for i, (va, op) in enumerate(bodies):
         end = bodies[i + 1][0] if i + 1 < len(bodies) else va + QUEST_TAIL
-        out[op] = sorted(f for f, kind, _p, _c in publishes(img, va, end)
+        out[op] = sorted(f for f, kind, _p, _c in publishes(img, va, end, band)
                          if kind == "post")
     return out
 
@@ -323,7 +379,8 @@ def completion_family(img=None):
     img = img or Image()
     t = tables_for(img.build)
     bodies = t.completion_bodies if t else COMPLETION_BODIES
-    return {op: sorted(f for f, kind, _p, _c in publishes(img, lo, hi)
+    band = band_for(img.build)
+    return {op: sorted(f for f, kind, _p, _c in publishes(img, lo, hi, band)
                        if kind == "post")
             for lo, hi, op in bodies}
 
@@ -335,7 +392,8 @@ def main():
     ap.add_argument("--at", type=lambda s: int(s, 0),
                     help="body VA; scan from here to --end")
     ap.add_argument("--end", type=lambda s: int(s, 0))
-    ap.add_argument("--band", nargs=2, type=lambda s: int(s, 0), default=QUEST_BAND)
+    ap.add_argument("--band", nargs=2, type=lambda s: int(s, 0), default=None,
+                    help="default: QUEST_BAND, shifted by the build's frame_shift")
     args = ap.parse_args()
 
     exe, why = ((args.exe, "given on the command line") if args.exe
@@ -358,30 +416,36 @@ def main():
               f"build {t.build}'s own table, MEASURED on it.")
     bodies = t.quest_bodies if t else QUEST_BODIES
     cbodies = t.completion_bodies if t else COMPLETION_BODIES
-    print(f"band: {args.band[0]:#010x}..{args.band[1]:#010x}\n")
+    shift = frame_shift(build)
+    band = tuple(args.band) if args.band else band_for(build)
+    if shift:
+        print(f"        frame ids sit {shift:+d} from the pin's on this build "
+              f"(BuildTables.frame_shift); subscribers are the pin's, by id - {shift}")
+    print(f"band: {band[0]:#010x}..{band[1]:#010x}\n")
 
     if args.at:
         end = args.end or args.at + 0x100
-        for f, kind, pv, cv in publishes(img, args.at, end, tuple(args.band)):
+        for f, kind, pv, cv in publishes(img, args.at, end, band):
             where = f" call {cv:#010x}" if cv else ""
             print(f"  {f:#010x} {kind:<10} push {pv:#010x}{where}"
-                  f"   {SUBSCRIBERS.get(f, '')}")
+                  f"   {SUBSCRIBERS.get(f - shift, '')}")
         return 0
 
     got = quest_family(img)
+    qwant, cwant = quest_expected(build), completion_expected(build)
     agree = 0
     print(f"{'opcode':8} {'body':>12}  posts        subscribers")
     print("-" * 100)
     for va, op in bodies:
         ids = got[op]
-        ok = ids == sorted(QUEST_EXPECTED[op])
+        ok = ids == sorted(qwant[op])
         agree += ok
         shown = ", ".join(f"{f:#010x}" for f in ids) or "(none)"
         print(f"0x{op:04X}   {va:#012x}  {shown:<12} "
-              f"{SUBSCRIBERS.get(ids[0], '') if ids else 'nothing in the direct push/call form'}")
+              f"{SUBSCRIBERS.get(ids[0] - shift, '') if ids else 'nothing in the direct push/call form'}")
         if not ok:
             print(f"{'':8} {'':12}  ^^ DISAGREES with QUEST_EXPECTED "
-                  f"{[hex(x) for x in QUEST_EXPECTED[op]]}")
+                  f"{[hex(x) for x in qwant[op]]}")
     print("-" * 100)
     print(f"{agree} of {len(bodies)} bodies match the recorded pairing")
 
@@ -391,14 +455,14 @@ def main():
     print("-" * 100)
     for lo, _hi, op in cbodies:
         ids = cgot[op]
-        ok = ids == sorted(COMPLETION_EXPECTED[op])
+        ok = ids == sorted(cwant[op])
         cagree += ok
         shown = ", ".join(f"{f:#010x}" for f in ids) or "(none)"
         print(f"0x{op:04X}   {lo:#012x}  {shown:<12} "
-              f"{SUBSCRIBERS.get(ids[0], '') if ids else '(none)'}")
+              f"{SUBSCRIBERS.get(ids[0] - shift, '') if ids else '(none)'}")
         if not ok:
             print(f"{'':8} {'':12}  ^^ DISAGREES with COMPLETION_EXPECTED "
-                  f"{[hex(x) for x in COMPLETION_EXPECTED[op]]}")
+                  f"{[hex(x) for x in cwant[op]]}")
     print("-" * 100)
     print(f"{cagree} of {len(cbodies)} completion bodies match the "
           f"recorded pairing")

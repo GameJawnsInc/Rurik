@@ -80,6 +80,10 @@ EXPECT_PATHS = {
     # five census figures held while the count did not. `asserts.py` on the
     # SAME image names 866 files (up from 865), all contained, remainder 72.
     "2026-09-01_44fbd68767a8": 938,
+    # 38974, MEASURED 2026-10-01 by `st.source_paths` over the pristine image:
+    # 938, and the SET is 38888's exactly (nothing new, nothing gone) -- the
+    # code moved and renumbered without adding a translation unit.
+    "2026-09-30_8e50edfb8351": 938,
 }
 BUILDS = [(b.stamp, EXPECT_PATHS.get(b.stamp)) for b in pinned.BUILDS]
 
@@ -115,8 +119,9 @@ MOCK_STRINGS = {("ascii", "mockDevice"), ("utf16", "mock"), ("utf16", "MockDevic
 # per-build term is why registering a build moves this number by 9 rather than
 # by 1, and re-deriving it here beats bumping the constant. 39 -> 48 when
 # 38849 registered (2026-08-29), 48 -> 57 when 38888 did (2026-09-13): five
-# builds, each floor read off its own green run.
-LEDGER = checks.Ledger("srctree", floor=57)
+# builds, each floor read off its own green run; 57 -> 66 when 38974 did
+# (2026-10-01), six builds.
+LEDGER = checks.Ledger("srctree", floor=66)
 check = checks.adopt(LEDGER)
 
 

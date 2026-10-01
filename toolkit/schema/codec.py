@@ -62,6 +62,47 @@ FIXED = {"msg_header": 2, "word": 2, "byte": 1, "dword": 4,
 COUNTED = {"string16": 2, "array16": 2, "array8": 1, "array32": 4}
 
 
+# THE GAME SERVER'S OPCODES ARE PER BUILD FROM 38974 ON. That build (2026-09-30)
+# inserted one receive entry at 0x0194 and every GAME_SMSG from 0x0194 up --
+# 120 messages, 0x0194..0x01E6 -- now sits at opcode + 1 (0x0195..0x01E7). One
+# of them also changed shape: the schema's 0x0199 gained a trailing byte.
+# MEASURED 2026-10-01 by msgshape over the pristine 38888 and 38974 images, the
+# two receive tables aligned entry for entry (studies/crossbuild/FINDINGS.md 11);
+# every other table, and the whole of GAME_CMSG, is identical between them.
+#
+# The schema stays NUMBERED AS THE PIN (38797, through 38888 identically), and so
+# does every name, constant and comparison in the toolkit, so a codec built for a
+# renumbered build TRANSLATES at the wire: `decode_one` hands back the schema's
+# opcode and `encode` writes the build's. A message the schema has no row for
+# decodes under `NEW_OPCODE | wire` -- never under a pin number, where it would
+# collide with the message that number really names.
+#
+# `client_build=None` (every caller before this) is the schema's own numbering.
+# A build that is not a key here is ALSO the schema's numbering, and that is a
+# measurement only for the builds `test_catalog.py` compares, not a default for
+# builds yet to come: it reads every vaulted image's tables through this map and
+# goes red on a vaulted build whose numbering or layouts differ from the pin's.
+# Through the pin's numbering 38974 disagrees on 66 of its 478 messages, and the
+# other 55 it moved landed on a neighbour of the same SHAPE -- a decode without
+# this map mislabels those silently, with no framing error to flag it.
+NEW_OPCODE = 0x10000
+GAME_SMSG_RENUMBER = {
+    38974: dict(
+        at=0x0194, shift=1,
+        new={0x0194: [{"type": "msg_header", "length": 0x0194},
+                      {"type": "dword", "length": 0}]},
+        layout={0x0199: [{"type": "msg_header", "length": 0x0199},
+                         {"type": "agent_id", "length": 0},
+                         {"type": "word", "length": 0},
+                         {"type": "byte", "length": 0},
+                         {"type": "dword", "length": 0},
+                         {"type": "byte", "length": 0},
+                         {"type": "byte", "length": 0},
+                         {"type": "byte", "length": 0}]},
+    ),
+}
+
+
 class Undecodable(Exception):
     pass
 
@@ -71,10 +112,13 @@ class NeedMoreData(Exception):
 
 
 class Codec:
-    def __init__(self, path=DEFAULT_SCHEMA, overrides=None):
+    def __init__(self, path=DEFAULT_SCHEMA, overrides=None, client_build=None):
         with open(path, encoding="utf-8") as f:
             self.schema = json.load(f)
         self.channels = self.schema["channels"]
+        # Whose numbering the WIRE is in; see GAME_SMSG_RENUMBER. None = the schema's.
+        self.client_build = client_build
+        self._renumber = GAME_SMSG_RENUMBER.get(client_build)
 
         # messages.json is generated from OpenTyria and carries
         # `authority: imported`. Where our own captures contradict it, the
@@ -126,6 +170,15 @@ class Codec:
         return (chan["messages"].get(str(opcode)) or {}).get("name") or default
 
     def fields_for(self, channel, opcode):
+        """The fields of `opcode` IN THE SCHEMA'S NUMBERING, as this codec's
+        build sends them (a renumbered build's changed layouts included; a
+        message new on it is `NEW_OPCODE | wire`)."""
+        r = self._renumber if channel == "GAME_SMSG" else None
+        if r:
+            if opcode & NEW_OPCODE and (opcode & 0xFFFF) in r["new"]:
+                return r["new"][opcode & 0xFFFF]
+            if opcode in r["layout"]:
+                return r["layout"][opcode]
         chan = self.channels.get(channel)
         if not chan:
             raise Undecodable(f"unknown channel {channel}")
@@ -134,6 +187,25 @@ class Codec:
             raise Undecodable(f"{channel} has no opcode {opcode} (0x{opcode:04x})")
         return m["fields"]
 
+    def schema_opcode(self, channel, wire):
+        """The schema's opcode for `wire` as this codec's build numbers it;
+        `NEW_OPCODE | wire` for a message the schema has no row for."""
+        r = self._renumber if channel == "GAME_SMSG" else None
+        if not r or wire < r["at"]:
+            return wire
+        if wire in r["new"]:
+            return NEW_OPCODE | wire
+        return wire - r["shift"]
+
+    def wire_opcode(self, channel, opcode):
+        """`schema_opcode`'s inverse: what this codec's build puts on the wire."""
+        r = self._renumber if channel == "GAME_SMSG" else None
+        if not r:
+            return opcode
+        if opcode & NEW_OPCODE:
+            return opcode & 0xFFFF
+        return opcode + r["shift"] if opcode >= r["at"] else opcode
+
     # ---------------------------------------------------------------- decode
     def decode_one(self, channel, data, off=0, mask=0):
         """Decode one message at `off`. Returns (opcode, values, new_off)."""
@@ -141,6 +213,7 @@ class Codec:
             raise NeedMoreData("no header")
         raw_header = struct.unpack_from("<H", data, off)[0]
         opcode = raw_header & ~mask if mask else raw_header
+        opcode = self.schema_opcode(channel, opcode)
         fields = self.fields_for(channel, opcode)
 
         values = []
@@ -305,7 +378,8 @@ class Codec:
         if len(values) != want:
             raise ValueError(
                 f"{channel} 0x{opcode:04x} wants {want} values, got {len(values)}")
-        out = bytearray(struct.pack("<H", opcode if header_value is None else header_value))
+        out = bytearray(struct.pack(
+            "<H", self.wire_opcode(channel, opcode) if header_value is None else header_value))
         for f, v in zip(payload, values):
             if f["type"] == "nested_struct":
                 element = payload[nested + 1:]
