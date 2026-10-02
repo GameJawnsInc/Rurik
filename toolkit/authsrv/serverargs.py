@@ -775,14 +775,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before it). By default a swing that never landed holds no "
                          "clock: retail swings at the press 13 of 13, and a landed swing "
                          "holds the period 65 of 65.")
+    ap.add_argument("--walk-start-is-still", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.14: a key report 0 u from a stop "
+                         "(the client's own 0x0047, or our pin + halt) is a body that moved "
+                         "nothing -- it cancels no windup and keeps the target and the "
+                         "follow (1z-ds.10's round 5). By default it is a walk-start and a "
+                         "move: retail cancels 29 of 32 walk-starts in the windup and sends 0 "
+                         "re-approaches after 27 post-stop walk-starts.")
     ap.add_argument("--no-park-walk-start", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.10: the key report after our "
                          "pin + halt is read as mid-walk -- displacement from the report "
                          "before the pin (a body on the pin 'moved'; the swing is "
                          "cancelled) and the lead degraded under the fence latch (the "
                          "key does nothing). By default it is a walk-start: retail "
-                         "answers it with [8, me, 0] and a real lead, 26 of 26, and "
-                         "cancels 0 of 3 swings on it.")
+                         "answers it with [8, me, 0] and a real lead, 26 of 26.")
     ap.add_argument("--attack-reach-wiki", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.9: a melee press opens the "
                          "swing from 144 u (the wiki's range), every build before "

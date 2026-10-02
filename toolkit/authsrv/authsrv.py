@@ -19708,6 +19708,9 @@ PRESS_STOP_ON_BODY = True   # False (--press-stop-on-frame): round 2, the frame 
 #       "attack_stopped: the player moves before the swing landed" fired on a report 0 u
 #       from our own pin. RETAIL: of the first key reports after its in-reach stops that
 #       came before the swing's close, 0 of 3 carry [3, me, 0] (pressstopjoin's cell).
+#       REFUTED AS EVIDENCE by round 6 (1z-ds.14, below): the cell is empty -- two of the
+#       three swings were already closed by a TARGET_SELECT [3], the third was 16 ms from
+#       its landing -- and retail cancels 29 of 32 walk-starts inside the windup.
 #   (2) ITS LEAD was degraded to the zero-lead point: our 0x002C stamped the fence latch,
 #       and the latch re-arms only at a walk-start "after the keyboard latch was clear" --
 #       which our own halt never clears (kbd_moving_at has two writers, the client's
@@ -19722,6 +19725,30 @@ PRESS_STOP_ON_BODY = True   # False (--press-stop-on-frame): round 2, the frame 
 # stop branch -- never by the follow branch, which halts nothing) newer than the last report
 # makes the next moving report a WALK-START: displacement from the pin, the latch re-armed.
 PARK_IS_WALK_START = True   # False (--no-park-walk-start): rounds 1-3 (the false cancels, the dead key).
+# ROUND 6 (MOVECODE-1z-ds.14): A WALK-START IS A MOVE. Round 5 measured the walk-start's
+# displacement from our pin (0 u), so cancel_on_move took its STILL path (1z-db's rule for
+# a report that moved nothing): no [3], and the target and the follow kept. Two of retail's
+# answers say a walk-start is not that (toolkit/authsrv/walkstartjoin.py):
+#   (1) INSIDE THE WINDUP retail CANCELS it. Of its moving 0x003D inside the player's own
+#       windup, every one is a walk-start, and 29 of 32 are cancelled ([8,me,0] + [3,me,0] +
+#       the lead in one batch, 30-65 ms later); after the client's own 0x0047 with the
+#       report 0 u from it, 6 of 6; after a server 0x0028 [me], 8 of 10 (the two that landed
+#       came at most 16 ms before the landing). Round 5's "0 of 3" was empty: two of its three swings had
+#       already been closed by a TARGET_SELECT [3] before the walk (pressstopjoin's close
+#       reads only [1] and 0x00A4), the third came 16 ms before the landing.
+#   (2) AFTER THE LANDING retail ENDS THE CHAIN: after the first key report following its
+#       own in-reach stop, 0 of 27 re-approaches and 0 new starts before the next press.
+#       Ours kept the target, and attack_tick's ungated approach_tick sent a follow back
+#       at a body walking away on keys: 124708 34.06 / 36.18 / 62.00, 141035 41.04, plus
+#       a chain swing at 52.34 with no press -- 5 events in the two runs with round 5.
+# The same STILL path held a second door since 1z-db: a walk-start at the point of the
+# client's own 0x0047 (last_report carries stops). So a moving report whose last movement
+# input was a stop -- the 0x0047, or our pin + halt newer than it -- is read as a move
+# (`moved=None`, the click arm's meaning). 1z-db's still rule keeps what it was built from:
+# repeated still reports after a MOVING report (the wall tap). The fence half of round 5
+# (the re-arm, the real lead) is untouched. Safe only with 1z-ds.13: the re-press after a
+# cancelled windup swings at once.
+WALK_START_IS_MOVE = True   # False (--walk-start-is-still): round 5's still walk-start.
 
 
 def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
@@ -42908,11 +42935,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # compare against -- the first report of a
                             # session cancels as it always did.
                             _prev = state.get("last_report")
+                            _stopped = _prev is not None and bool(_prev[2])
                             # MOVECODE-1z-ds.10: OUR park is newer than the last
                             # report -> the body stands on the pin; measure from it.
                             _park = state.get("cast_stop_pin")
-                            if (PARK_IS_WALK_START and _park is not None
-                                    and (_prev is None or _park[0] > float(_prev[3]))):
+                            _parked = (_park is not None
+                                       and (_prev is None or _park[0] > float(_prev[3])))
+                            if PARK_IS_WALK_START and _parked:
                                 _prev = (float(_park[1][0]), float(_park[1][1]))
                             _moved = None
                             if _prev is not None and len(values) > 1:
@@ -42922,6 +42951,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         float(values[1][1]) - float(_prev[1]))
                                 except Exception:          # noqa: BLE001
                                     _moved = None
+                            # MOVECODE-1z-ds.14: A WALK-START IS A MOVE. The last
+                            # movement input was a stop -- the client's own 0x0047,
+                            # or our pin + halt newer than it -- so this report is
+                            # the key going down, 0 u from where the body stood.
+                            # Explicit, as the click's (moved=None): it cancels a
+                            # windup and ends the chain (WALK_START_IS_MOVE's block).
+                            if WALK_START_IS_MOVE and (_stopped or _parked):
+                                if rec is not None:
+                                    rec.event("walk_start", by=("park" if _parked else "stop"),
+                                              moved=(None if _moved is None
+                                                     else round(_moved, 2)))
+                                _moved = None
                             # The pause's own read of the same number
                             # (MOVECODE-1z-df): consecutive still reports.
                             _kbd_report_still(state, _moved)
@@ -46795,6 +46836,13 @@ def main():
               "forgot keeps the clock even when the move cancelled the swing in its "
               "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
               "retail swings at the press, 13 of 13.", flush=True)
+    if a.walk_start_is_still:
+        global WALK_START_IS_MOVE
+        WALK_START_IS_MOVE = False
+        print("[kbd] --walk-start-is-still: a key report 0 u from a stop (the client's "
+              "0x0047 or our pin + halt) moved nothing -- no windup cancel, the target and "
+              "the follow kept (MOVECODE-1z-ds.10's round 5); retail cancels 29 of 32 and "
+              "re-approaches 0 of 27.", flush=True)
     if a.no_park_walk_start:
         global PARK_IS_WALK_START
         PARK_IS_WALK_START = False

@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.14 -- 2026-10-02 -- **A walk-start is a move. The key report after a stop (the client's 0x0047, or our pin + halt) moved 0 u and took 1z-db's still path: no windup cancel, and the target kept, so the server sent follows after a body walking away (5 events in the two runs with 1z-ds.10). Retail cancels 29 of 32 walk-starts inside the windup and re-approaches 0 of 27 times after a post-stop walk-start; 1z-ds.10's "0 of 3" was an empty cell.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.14. Census `toolkit/authsrv/walkstartjoin.py`.
+- **Shipped:** `WALK_START_IS_MOVE` (`--walk-start-is-still` reverts). `test_kbdsync` 255 -> 260.
+- **Unrun:** the owner's eye on the restored windup cancel.
+
 ### MOVECODE-1z-ds.13 -- 2026-10-02 -- **A swing cancelled in its windup holds no clock. swingclockjoin's 33 off-period presses read: 18 are its own operand (the 0x0035 modifier, an attack-skill start); on corrected operands "cancelled in the windup" separates WAIT from RESET 13/0 against 1/65, where ours (reset iff retarget) gets 10 wrong. Retail's same-target re-press after a windup cancel swings at the press, 5 of 5; ours waited out the cancelled swing's period.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.13. Census `toolkit/authsrv/swingcanceljoin.py`.

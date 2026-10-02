@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=255)   # MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=260)   # MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2649,7 +2649,7 @@ def main():
     MOVE30 = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
     STOPPED30 = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
 
-    def parked30(on=True, swing=False):
+    def parked30(on=True, swing=False, walk=True):
         """Press-stop a walking body (as section 29), then send its next key report."""
         t = _t27.time()
         st, _w, _r = press29()
@@ -2660,13 +2660,14 @@ def main():
         if swing:
             st["attacking"] = FOE29
             st["player_swing"] = {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}
-        saved = authsrv.PARK_IS_WALK_START
+        saved = (authsrv.PARK_IS_WALK_START, authsrv.WALK_START_IS_MOVE)
         authsrv.PARK_IS_WALK_START = on
+        authsrv.WALK_START_IS_MOVE = walk
         try:
             st2, w2 = drive_heading([1, [float(pin[0]), float(pin[1])], 0, [0.0, -766.0], 1],
                                     state=st)
         finally:
-            authsrv.PARK_IS_WALK_START = saved
+            authsrv.PARK_IS_WALK_START, authsrv.WALK_START_IS_MOVE = saved
         return st2, w2, pin
 
     st30, w30, pin30 = parked30()
@@ -2682,9 +2683,14 @@ def main():
     st30b, w30b, _p = parked30(swing=True)
     stops30b = [v for op, v, _l in w30b.rows
                 if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
-    check(stops30b == [] and st30b.get("player_swing") is not None,
-          "30b. with a swing in its windup, that report cancels NOTHING: 0 u from our pin is "
-          "a body that has not moved (retail: 0 of 3 pre-landing cancels)", f"{stops30b}")
+    g30b = w30b.of(MOVE30)
+    ws30b = [e.get("by") for e in st30b["_rec"].of("walk_start")]
+    check(len(stops30b) == 1 and st30b.get("player_swing_cancel") == "movement"
+          and g30b and "KBD LEAD" in g30b[0][2] and ws30b == ["park"],
+          "30b. RE-AIMED by 1z-ds.14: with a swing in its windup, that walk-start CANCELS it "
+          "([3]) and still gets a real lead -- retail cancels 29 of 32 walk-starts in the "
+          "windup; round 5's '0 of 3' was an empty cell",
+          f"stops {stops30b}, cancel {st30b.get('player_swing_cancel')}, grant {g30b}, rows {ws30b}")
     st30c, w30c, _p = parked30(on=False, swing=True)
     g30c = w30c.of(MOVE30)
     stops30c = [v for op, v, _l in w30c.rows
@@ -2714,6 +2720,76 @@ def main():
           "30e. the follow branch (pin alone, no halt) writes no park marker -- only a pin "
           "AND a halt make the next report a walk-start",
           f"cast_stop_pin {st30e.get('cast_stop_pin')}, {[l[:30] for _o, _v, l in w30e.rows]}")
+
+    # MOVECODE-1z-ds.14: after the landing the walk-start ENDS THE CHAIN. Retail, after the
+    # first key report following its in-reach stop: 0 of 27 re-approaches, 0 new starts before
+    # the next press. Ours kept the target and attack_tick's approach_tick followed a body
+    # walking away (124708 36.18: a 0x002A 138 u out, 0.22 s after the walk-start).
+    def ended30(walk=True):
+        st, w, _pin = parked30(walk=walk)        # no swing in flight: past the landing
+        st["agents"][FOE29]["pos"] = (0.0, -400.0)   # the body walks off; the foe is 279 u out
+        st.update({"player_health": 100.0, "player_dead": False, "player_last_swing": 0.0})
+        wt = Sent(st)
+        authsrv.attack_tick(wt, st, 0, rec=FakeRec())
+        return st, w, wt
+
+    st30f, w30f, wt30f = ended30()
+    mf30f = st30f.get("chain_moved_from") or {}
+    stops30f = [v for op, v, _l in w30f.rows
+                if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+    check(st30f.get("attacking") is None and mf30f.get("target") == FOE29
+          and mf30f.get("cancelled") is False and stops30f == []
+          and not wt30f.of(authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION),
+          "30f. past the landing the walk-start ENDS the chain: the target is forgotten (the "
+          "re-press resumes on the clock), no [3], and the next tick sends no follow after the "
+          "walking body -- retail 0 of 27",
+          f"attacking {st30f.get('attacking')}, moved_from {mf30f}, stops {stops30f}, "
+          f"tick {[l[:40] for _o, _v, l in wt30f.rows]}")
+    st30g, _w, wt30g = ended30(walk=False)
+    st30g2, w30g2, _p = parked30(swing=True, walk=False)
+    stops30g2 = [v for op, v, _l in w30g2.rows
+                 if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+    check(st30g.get("attacking") == FOE29 and wt30g.of(authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION)
+          and stops30g2 == [] and st30g2.get("player_swing_cancel") is None,
+          "30g. KNOWN-BAD ARM (--walk-start-is-still, round 5): the same walk-start keeps the "
+          "target and the tick FOLLOWS the walking body, and in the windup cancels nothing",
+          f"attacking {st30g.get('attacking')}, tick {[l[:40] for _o, _v, l in wt30g.rows]}, "
+          f"stops {stops30g2}")
+
+    # The client's own 0x0047 is the second door: a walk-start at the stop's point moved 0 u.
+    def stop30(last_stop, walk=True):
+        t = _t27.time()
+        st, _w, _r = press29(kbd_moving_at=None)          # parked: no pin, no marker (29d)
+        st.update({"last_report": (0.0, 0.0, last_stop, t - 0.3), "plane": 0,
+                   "pathmap": None, "attacking": FOE29,
+                   "player_swing": {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}})
+        saved = authsrv.WALK_START_IS_MOVE
+        authsrv.WALK_START_IS_MOVE = walk
+        try:
+            st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, -766.0], 1], state=st)
+        finally:
+            authsrv.WALK_START_IS_MOVE = saved
+        return st2, [v for op, v, _l in w2.rows
+                     if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+
+    st30h, stops30h = stop30(True)
+    st30h0, stops30h0 = stop30(True, walk=False)
+    check(len(stops30h) == 1 and [e.get("by") for e in st30h["_rec"].of("walk_start")] == ["stop"]
+          and stops30h0 == [],
+          "30h. the 0x0047 door: a walk-start 0 u from the client's own stop cancels the windup "
+          "(retail 6 of 6 at 0 u) -- and the known-bad arm spares it, 1z-db's still path",
+          f"shipped {stops30h}, known-bad {stops30h0}")
+    st30i, stops30i = stop30(False)
+    check(stops30i == [] and not st30i["_rec"].of("walk_start")
+          and st30i.get("attacking") == FOE29,
+          "30i. CONTROL: a still report after a MOVING report is 1z-db's wall tap, not a "
+          "walk-start -- it still cancels nothing and keeps the target",
+          f"stops {stops30i}, attacking {st30i.get('attacking')}")
+    check(SRC.count("_kbd_report_still(state, _moved)") == 1
+          and SRC.count("moved=_moved)") == 1
+          and "--walk-start-is-still" in ARGS_SRC and "if a.walk_start_is_still:" in SRC,
+          "30j. the walk-start feeds the arm's one `_moved` (the streak and the cancel read "
+          "the same number, one call each); --walk-start-is-still is wired")
 
     return LEDGER.verdict()
 

@@ -21185,3 +21185,79 @@ holds nothing.
   - g: CONTROL, a retarget after the cancel swings at once under both arms.
 - **Red:** with the gate out of `begin_attack`, 17b-b and 17b-d go red; with the record's key
   out, 17b-a, b, d and f.
+
+### 1z-ds.14 A walk-start is a move: it cancels a windup and ends a post-landing chain (`WALK_START_IS_MOVE`, `--walk-start-is-still` reverts)
+
+**What the sweep found** (the 1z-ds.13 pass, lane D, OBSERVED and re-measured): a REGRESSION
+from 1z-ds.10.
+- PARK_IS_WALK_START measures the walk-start's displacement from our pin, which is 0 u, so
+  `cancel_on_move` took 1z-db's STILL path. That path skips the [3], the target-forget and
+  the approach-abandon.
+- **The chain outlived the owner walking away.** `attack_tick` runs `approach_tick` on every
+  tick that holds a target, so once the body was out of reach the server sent a 0x002A follow
+  back toward the target while the owner held a key to walk off.
+  - 20261002T124708: 34.06 (128 u), 36.18 (138 u), 62.00 (132 u).
+  - 20261002T141035: 41.04 (141 u), and a chain swing at 52.34 with no press since 50.99.
+    That one came off a second report on the pin, which made the still-streak 2.
+  - 0 in the four older runs, where the door did not exist.
+- **The same still path had a second door since 1z-db:** a walk-start at the point of the
+  client's own 0x0047, because `last_report` carries stops. 12 such walk-starts in the six
+  runs, none exposed.
+
+**RETAIL** (OBSERVED, `toolkit/authsrv/walkstartjoin.py`, new and read-only; reproduces
+the lane, its refuter and the critic):
+- **Census 1, inside the windup.** Of the first moving 0x003D inside an own windup, every
+  one but one is a walk-start, and retail cancels 29 of 32:
+
+  | What came before | Cancelled | Landed |
+  |---|---|---|
+  | The client's own 0x0047, report 0 u from it | 6 | 0 |
+  | The client's own 0x0047, report moved | 3 | 0 |
+  | A server 0x0028 [me] since the last input (retail's press stop) | 8 | 2 |
+  | No input in the 10 s before | 12 | 0 |
+  | A continuing walk | 0 | 1 |
+
+  The two that landed after a halt came at most 16 ms before their landing (697.197 at
+  0.549 s; 454.644 at 0.638 s if that set is the 1.5 s spear). The cancel goes out as
+  [8, me, 0] + [3, me, 0] + the lead in one batch, 30-65 ms after the report.
+- **Census 2, after a stop.** Of 39 stopped in-reach presses, 27 had a moving 0x003D as
+  their first input after the press. Before the next press, retail sent 0 attack follows and
+  started 0 new swings. The one 0x002A in the window is an interact walk, ordered by its own
+  c2s 0x003F.
+- **1z-ds.10's "0 of 3 pre-landing cancels" was an empty cell.** Two of its three swings had
+  already been closed by a TARGET_SELECT [3] before the walk (pressstopjoin's close reads
+  only [1] and 0x00A4). The third came 16 ms before its landing.
+
+**Shipped:** `WALK_START_IS_MOVE`.
+- In the 0x003D arm, a moving report whose last movement input was a stop is read as a move
+  (`moved=None`, the click arm's meaning). The stop is either the client's 0x0047
+  (`last_report[2]`) or our pin + halt newer than it. A `walk_start` row says which door.
+- `cancel_on_move` then takes its existing not-still path:
+  - before the landing, the [3] and the cancel;
+  - after it, no [3] (MOVE_KEEPS_CHAIN), but the target is forgotten (with 1z-dg's record,
+    so a re-press resumes the clock) and the follow is abandoned.
+- 1z-db's still rule keeps what it was built from: repeated still reports after a MOVING
+  report (the wall tap).
+- The fence half of 1z-ds.10 (the re-arm, the real lead) is untouched.
+- **Safe only with 1z-ds.13.** The four 20261002T122114 on-pin cancels that 1z-ds.10 removed
+  come back, and they are ones retail also makes. Their cost was the re-press then waiting
+  out the cancelled swing's clock, and 1z-ds.13 removed that.
+
+**Tests:** `test_kbdsync` §30, 255 -> 260:
+- 30b re-aimed: a walk-start on the pin inside the windup CANCELS it and still gets a real
+  lead.
+- 30f: past the landing, it ends the chain. The target is forgotten, no [3], and the next
+  tick sends no follow after the walking body.
+- 30g: the known-bad arm keeps the target, the tick follows, and nothing in the windup is
+  cancelled.
+- 30h: the 0x0047 door cancels; its known-bad arm spares it.
+- 30i: CONTROL, the wall tap (a still report after a MOVING report) still cancels nothing.
+- 30j: one `_moved` feeds the streak and the cancel; the flag is wired.
+- **Red:** with the walk-start's `_moved = None` out, 30b, 30f and 30h go red. Without the
+  0x0047 door, 30h; without the park door, 30b and 30f.
+
+**UNVERIFIED on the client.** The owner never felt round 5's no-cancel in the windup: the
+"feels good now" run had 1 in-windup park walk-start (141035 39.276, 47 ms before the
+landing), whose hit landed while the body walked. The run asks: *"a tap during the windup
+cancels the swing; does the re-press swing at once? Walking away after a swing: does the
+body ever get pulled back toward the target?"*
