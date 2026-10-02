@@ -761,6 +761,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-10-01. By default both use the last 0x003D report "
                          "advanced along its heading at its family speed (<= 2.0 s), "
                          "then the press's own lead kill (<= 0.5 s).")
+    ap.add_argument("--swing-clock-charges-moving", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.11: charge the player's swing "
+                         "clock for the body's moving time (1z-dg), so a press after a "
+                         "move waits the period PLUS the moving span. By default the "
+                         "clock runs start-to-start at the period: retail's swing lands "
+                         "there on 55 of 88 presses inside the interval after a move, at "
+                         "period + span on 0 (swingclockjoin.py).")
     ap.add_argument("--no-park-walk-start", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.10: the key report after our "
                          "pin + halt is read as mid-walk -- displacement from the report "

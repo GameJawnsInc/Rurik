@@ -661,7 +661,10 @@ def section_landing_hold_release():
 
 
 def section_chain_pause():
-    """ANIMREF-RE 31: the swing clock freezes while the body moves.
+    """ANIMREF-RE 31: no swing opens while the body moves. RE-AIMED 2026-10-02 by
+    MOVECODE-1z-ds.11: the clock CHARGE this docstring argues for below is REFUTED
+    (swingclockjoin.py: 55 of 88 binding presses at the period, 0 at period + span);
+    the ratio of medians was the player's re-press time, not a frozen clock.
 
     THE METRIC IS RETAIL'S OWN AND IT MUST RANK THE KNOWN-BAD ARM BADLY.
     Retail's attack-started gaps are a metronome when the player stands still
@@ -679,9 +682,10 @@ def section_chain_pause():
     """
     import authsrv
 
-    print("\n5. ANIMREF-RE 31: the chain pauses while the body moves")
+    print("\n5. ANIMREF-RE 31: no swing OPENS on a moving body; the clock is not "
+          "charged for it (MOVECODE-1z-ds.11)")
 
-    def gap_with_move(paused, move_span):
+    def gap_with_move(paused, move_span, charges=False):
         """Seconds between two ATTACK_STARTEDs with `move_span` of motion
         inside, driven through the REAL attack_tick on a synthetic clock."""
         sent = []
@@ -690,9 +694,10 @@ def section_chain_pause():
         agent = {"name": "t", "dead": False, "last_hit": 0.0,
                  "max_health": 1e9, "health": 1e9, "pos": (0.0, 0.0)}
         state = {"agents": {10: agent}, "pos": (0.0, 0.0), "attacking": 10}
-        saved = authsrv.CHAIN_PAUSES_WHILE_MOVING
+        saved = (authsrv.CHAIN_PAUSES_WHILE_MOVING, authsrv.SWING_CLOCK_CHARGES_MOVING)
         saved_time = authsrv.time.time
         authsrv.CHAIN_PAUSES_WHILE_MOVING = paused
+        authsrv.SWING_CLOCK_CHARGES_MOVING = charges
         clock = [1000.0]
         authsrv.time.time = lambda: clock[0]
         try:
@@ -714,72 +719,65 @@ def section_chain_pause():
                 state["player_swing_cancel"] = None
             return starts
         finally:
-            authsrv.CHAIN_PAUSES_WHILE_MOVING = saved
+            authsrv.CHAIN_PAUSES_WHILE_MOVING, authsrv.SWING_CLOCK_CHARGES_MOVING = saved
             authsrv.time.time = saved_time
 
-    def ratio(paused, move_span=1.5):
-        quiet = gap_with_move(paused, 0.0)
-        moved = gap_with_move(paused, move_span)
-        if len(quiet) < 3 or len(moved) < 3:
-            return None, quiet, moved
-        # the gap that CONTAINS the move: the first gap whose span covers t=2.0
-        qg = [b - a for a, b in zip(quiet, quiet[1:])]
-        mg = [b - a for a, b in zip(moved, moved[1:])]
-        base = sorted(qg)[len(qg) // 2]
-        # the move-containing gap is the widest one in the moved arm
-        return (max(mg) / base if base else None), qg, mg
+    # MOVECODE-1z-ds.11 (2026-10-02) RE-AIMED this section. It used to pin the CHARGE --
+    # "the move-containing gap stretches by the moving span" -- on retail's ratio of
+    # medians (1.51, n = 40). swingclockjoin.py split the corpus on the presses the two
+    # rules disagree about (made inside the interval after a move, n = 88): start-to-start
+    # lands at the PERIOD on 55 and at period + span on 0. A move-containing gap is long on
+    # retail because the player re-presses later, not because the clock froze. What stays
+    # is the REFUSAL: a swing that falls due while the body moves waits for it to stop.
+    # The move runs 2.0 -> 4.0 s; the chain's start at 1.75 makes the next due at 3.5,
+    # inside the move.
+    interval = authsrv.ATTACK_INTERVAL
+    span = 2.0
+    shipped = gap_with_move(True, span)
+    charge = gap_with_move(True, span, charges=True)
+    legacy = gap_with_move(False, span)
+    quiet = gap_with_move(True, 0.0)
 
-    r_on, q_on, m_on = ratio(True)
-    r_off, q_off, m_off = ratio(False)
+    def move_gap(starts):
+        before = [t for t in starts if t - 1000.0 < 2.0]
+        after = [t for t in starts if t - 1000.0 >= 2.0]
+        return (after[0] - before[-1], before[-1] - 1000.0) if before and after else (None, None)
 
-    check(r_on is not None and r_off is not None,
-          "both arms produced enough ATTACK_STARTEDs to form gaps -- the "
-          "rig is not vacuous",
-          f"paused starts-gaps={m_on}, legacy={m_off}")
-    if r_on is None or r_off is None:
+    g_ship, last_ship = move_gap(shipped)
+    g_charge, _l = move_gap(charge)
+    g_legacy, _l = move_gap(legacy)
+    qg = [b - a for a, b in zip(quiet, quiet[1:])]
+    check(g_ship is not None and g_charge is not None and g_legacy is not None and len(qg) >= 3,
+          "every arm produced starts on both sides of the move -- the rig is not vacuous",
+          f"shipped {g_ship}, charge {g_charge}, legacy {g_legacy}, quiet gaps {qg[:4]}")
+    if g_ship is None or g_charge is None or g_legacy is None:
         return
-
-    check(r_off < 1.10,
-          "KNOWN-BAD ARM: with the pause off the move-containing gap is "
-          "indistinguishable from the metronome -- the free-running chain "
-          "the operator played and called 'very floaty'. Retail scores 1.51 "
-          "here; a chain that never notices scores ~1.0, and ours measured "
-          "1.003 on the live wire",
-          f"legacy ratio {r_off:.3f} (gaps {m_off})")
-    check(r_on > 1.30,
-          "SHIPPED ARM: the move-containing gap stretches -- the swing "
-          "clock froze for the moving span, so the attack animation can "
-          "finish and hand the pose back to locomotion (priority table "
-          "0x00A92ED8: locomotion 0x0040 against an attack's 0x0110/0x0120)",
-          f"paused ratio {r_on:.3f} (gaps {m_on})")
-    check(r_on > r_off + 0.25,
-          "and the two arms SEPARATE -- a metric that scored them alike "
-          "would be measuring the wrong quantity, which is the whole reason "
-          "this section exists",
-          f"{r_on:.3f} against {r_off:.3f}")
-
-    # THE SHAPE OF THE PAUSE: gap - moving_span must land back on the
-    # metronome. Retail's residual p50 is 1.330 s, exactly its quiet median;
-    # `next - last_move` does NOT land there (0 of 40), which is what makes
-    # this a PAUSE rather than a re-stamp.
-    span = 1.5
-    base = sorted(q_on)[len(q_on) // 2]
-    residual = max(m_on) - span
-    check(abs(residual - base) < 0.20,
-          "and it is a PAUSE, not a re-stamp: gap minus the moving span "
-          "lands back on the metronome, the corpus's own signature "
-          "(residual p50 1.330 s against a 1.330 s quiet median, 10/40 in "
-          "band, while next-minus-last-move is 0/40)",
-          f"residual {residual:.3f}s against a {base:.3f}s metronome")
+    move_end = 2.0 + span
+    check(abs(g_ship - (move_end - last_ship)) <= 0.051,
+          "SHIPPED: the swing due inside the move waits for the body to STOP and no longer "
+          "-- it opens on the first tick after the move, the period counted from the last "
+          "start with nothing added (retail: 55 of 88 binding presses at the period)",
+          f"gap {g_ship:.2f} s; the move ended {move_end - last_ship:.2f} s after the last start")
+    check(abs(g_charge - (interval + span)) <= 0.10,
+          "KNOWN-BAD ARM (--swing-clock-charges-moving, 1z-dg's charge): the gap is the period "
+          "PLUS the moving span -- retail lands there on 0 of 88",
+          f"gap {g_charge:.2f} s against period + span {interval + span:.2f}")
+    check(abs(g_legacy - interval) <= 0.051,
+          "KNOWN-BAD ARM (--legacy-move-stops-chain): no refusal, so the swing opens ON the "
+          "moving body at the period -- the slide",
+          f"gap {g_legacy:.2f} s against the period {interval:.2f}")
+    check(g_charge > g_ship + 0.5 and g_ship > g_legacy + 0.2,
+          "and the three arms SEPARATE",
+          f"charge {g_charge:.2f} > shipped {g_ship:.2f} > legacy {g_legacy:.2f}")
 
     check(authsrv.CHAIN_PAUSES_WHILE_MOVING is True
-          and authsrv.MOVE_KEEPS_CHAIN is True,
-          "both halves are the SHIPPED default and revert together on "
-          "--legacy-move-stops-chain -- one behaviour, one A/B, which is "
-          "the ANIMREF-RE 29 lesson (two independent defaults meant one run "
-          "convicted the pair and cleared neither)",
-          f"pause={authsrv.CHAIN_PAUSES_WHILE_MOVING}, "
-          f"lawA={authsrv.MOVE_KEEPS_CHAIN}")
+          and authsrv.MOVE_KEEPS_CHAIN is True
+          and authsrv.SWING_CLOCK_CHARGES_MOVING is False,
+          "the refusal and LAW A are the SHIPPED default (reverting together on "
+          "--legacy-move-stops-chain, the ANIMREF-RE 29 lesson), and the clock charge is OFF "
+          "(1z-ds.11)",
+          f"pause={authsrv.CHAIN_PAUSES_WHILE_MOVING}, lawA={authsrv.MOVE_KEEPS_CHAIN}, "
+          f"charge={authsrv.SWING_CLOCK_CHARGES_MOVING}")
 
 
 def section_click_leg_eta():
@@ -2070,8 +2068,8 @@ def section_no_target_charge():
     import agents
     import authsrv
 
-    print("\n17. the pause charges the WHOLE moving span whatever the target, "
-          "and the re-press after a move RESUMES the chain (MOVECODE-1z-dg)")
+    print("\n17. the re-press after a move RESUMES the chain on the swing clock, "
+          "uncharged (MOVECODE-1z-dg, re-aimed by 1z-ds.11)")
     # 1z-dc measured the accumulator charging 19 % of the real moving span;
     # RUN-1zDB/1zDC's rows named the starved branch: `no-target`. Section 5's
     # rig never saw it because it keeps `attacking` through the move -- the
@@ -2086,7 +2084,7 @@ def section_no_target_charge():
         def __init__(self): self.rows = []
         def event(self, kind, **kw): self.rows.append((kind, kw))
 
-    def lifecycle(charges, move_at=2.0, span=1.5, repress_target=10):
+    def lifecycle(charges, move_at=2.0, span=1.5, repress_target=10, clock_charge=False):
         """Starts (synthetic clock) of a chain that a real move interrupts:
         the move's report forgets the target, the body moves for `span`,
         the stop clears the latch and the client re-presses `repress_target`
@@ -2100,11 +2098,12 @@ def section_no_target_charge():
                  "attacking": 10, "player_health": 100.0, "player_dead": False,
                  "last_report": (0.0, 0.0, False, 999.0)}
         rec = _Rec()
-        saved = authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET
+        saved = (authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET, authsrv.SWING_CLOCK_CHARGES_MOVING)
         saved_time = authsrv.time.time
         clock = [1000.0]
         authsrv.time.time = lambda: clock[0]
         authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = charges
+        authsrv.SWING_CLOCK_CHARGES_MOVING = clock_charge
         try:
             starts = []
             forgot = repressed = False
@@ -2129,7 +2128,7 @@ def section_no_target_charge():
                 agent["health"] = 1e9
             return starts, rec.rows, state
         finally:
-            authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = saved
+            authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET, authsrv.SWING_CLOCK_CHARGES_MOVING = saved
             authsrv.time.time = saved_time
 
     def gap_across(starts, move_at=2.0):
@@ -2137,51 +2136,55 @@ def section_no_target_charge():
         after = [t for t, _ in starts if t - 1000.0 >= move_at]
         return (after[0] - before[-1]) if before and after else None
 
+    # MOVECODE-1z-ds.11 RE-AIMED this section. 1z-dg shipped two halves; the RESUME stays
+    # (the re-press keeps the clock) and the CHARGE goes: on retail a press made inside the
+    # interval after a move swings at the PERIOD from the previous start (55 of 88), never
+    # at period + span (0 of 88; swingclockjoin.py). The binding case is a SHORT move -- the
+    # re-press lands inside the interval -- so span 0.5 s: move 2.0 -> 2.5, re-press 2.54,
+    # the previous start at 1.75, the period due at 3.5.
     interval = authsrv.ATTACK_INTERVAL
-    span = 1.5
-    s_off, rows_off, st_off = lifecycle(False, span=span)
-    s_on, rows_on, st_on = lifecycle(True, span=span)
-    g_off, g_on = gap_across(s_off), gap_across(s_on)
-    check(g_off is not None and g_on is not None and len(s_on) >= 3,
-          "both arms produced starts before and after the move -- the rig "
-          "is not vacuous",
-          f"off={[(round(t - 1000, 2), a) for t, a in s_off]} "
-          f"on={[(round(t - 1000, 2), a) for t, a in s_on]}")
-    if g_off is None or g_on is None:
+    span = 0.5
+    s_ship, rows_ship, _st = lifecycle(True, span=span)
+    s_reset, rows_reset, _st = lifecycle(False, span=span)
+    s_charge, rows_charge, _st = lifecycle(True, span=span, clock_charge=True)
+    g_ship, g_reset, g_charge = gap_across(s_ship), gap_across(s_reset), gap_across(s_charge)
+    check(None not in (g_ship, g_reset, g_charge) and len(s_ship) >= 3,
+          "every arm produced starts before and after the move -- the rig is not vacuous",
+          f"ship={[(round(t - 1000, 2), a) for t, a in s_ship]} "
+          f"reset={[(round(t - 1000, 2), a) for t, a in s_reset]}")
+    if None in (g_ship, g_reset, g_charge):
         return
-    check(g_off < interval + span - 0.30,
-          "KNOWN-BAD ARM: the gap across the move is the stop plus a tick -- "
-          "the move forgot the target, every moving tick left at "
-          "`no-target` above the accumulator, and the re-press reset the "
-          "clock (1z-dc's 19 %)",
-          f"gap {g_off:.2f} s against interval+span {interval + span:.2f}")
-    check(abs(g_on - (interval + span)) <= 0.15,
-          "SHIPPED: the gap across the move is interval + moving span -- "
-          "retail's own START-to-START signature with the re-press inside it "
-          "(1z-dc.3: 2.701 modelled against 2.657 measured)",
-          f"gap {g_on:.2f} s against {interval + span:.2f}")
-    check(g_on > g_off + 0.5,
-          "and the two arms SEPARATE",
-          f"{g_on:.2f} against {g_off:.2f}")
-    cp_on = [kw for k, kw in rows_on if k == "chain_pause"]
-    cp_off = [kw for k, kw in rows_off if k == "chain_pause"]
-    check(cp_on and abs(cp_on[-1]["charged"] - span) <= 0.15
-          and cp_on[-1]["left"].get("no-target", 0) > 0,
-          "the row on the resumed swing says the WHOLE span was charged and "
-          "names the ticks that left at no-target",
-          f"{cp_on[-1] if cp_on else None}")
-    check(cp_off and cp_off[-1]["charged"] < 0.15,
-          "KNOWN-BAD ARM's row: the same ticks, charged nothing",
-          f"{cp_off[-1] if cp_off else None}")
-    pv_on = [kw for k, kw in rows_on if k == "press_verdict"]
-    check(any(kw.get("reason") == "swing" and kw.get("age", 0) > 0.5
-              for kw in pv_on),
-          "the re-press is ANSWERED by the tick when the residual elapses, "
-          "not refused -- its row carries the wait as `age`",
-          f"{[(kw.get('reason'), kw.get('age')) for kw in pv_on]}")
+    check(abs(g_ship - interval) <= 0.051,
+          "SHIPPED: a re-press inside the interval after a move swings ONE PERIOD after the "
+          "previous start -- retail's START-to-START on 55 of 88 binding presses",
+          f"gap {g_ship:.2f} s against the period {interval:.2f}")
+    check(g_reset < interval - 0.30,
+          "KNOWN-BAD ARM (--no-pause-charge-without-target): the re-press resets the clock "
+          "and swings at once, inside the period",
+          f"gap {g_reset:.2f} s against the period {interval:.2f}")
+    check(abs(g_charge - (interval + span)) <= 0.10,
+          "KNOWN-BAD ARM (--swing-clock-charges-moving): the period PLUS the moving span -- "
+          "1z-dg's charge, which retail shows on 0 of 88",
+          f"gap {g_charge:.2f} s against {interval + span:.2f}")
+    check(g_charge > g_ship + 0.3 and g_ship > g_reset + 0.3,
+          "and the three arms SEPARATE",
+          f"charge {g_charge:.2f} > shipped {g_ship:.2f} > reset {g_reset:.2f}")
+    cp_ship = [kw for k, kw in rows_ship if k == "chain_pause"]
+    cp_charge = [kw for k, kw in rows_charge if k == "chain_pause"]
+    check(cp_ship and cp_ship[-1]["charged"] < 0.06
+          and cp_charge and abs(cp_charge[-1]["charged"] - span) <= 0.10,
+          "the row on the resumed swing: the shipped clock charged nothing, the charge arm "
+          "the whole span",
+          f"shipped {cp_ship[-1] if cp_ship else None}, charge {cp_charge[-1] if cp_charge else None}")
+    pv_ship = [kw for k, kw in rows_ship if k == "press_verdict"]
+    check(any(kw.get("reason") == "swing" and 0.85 <= kw.get("age", 0) <= 1.05
+              for kw in pv_ship),
+          "the re-press is ANSWERED by the tick when the period elapses -- its row carries "
+          "the ~0.96 s wait as `age`",
+          f"{[(kw.get('reason'), kw.get('age')) for kw in pv_ship]}")
     s_new, _rows, _st = lifecycle(True, span=span, repress_target=11)
     g_new = gap_across(s_new)
-    check(g_new is not None and g_new < interval + span - 0.30
+    check(g_new is not None and g_new < interval - 0.30
           and s_new[-1][1] == 11,
           "CONTROL: a press on a DIFFERENT target after the move is a "
           "retarget and swings at once -- only the target the move forgot "

@@ -19069,6 +19069,20 @@ CHAIN_PAUSES_WHILE_MOVING = True   # False (--legacy-move-stops-chain)
 # same clock and the same moving body; the mid-chain re-approach sub-case has
 # no retail witness and is UNVERIFIED, stated rather than carved out.
 CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = True   # --no-pause-charge-without-target reverts
+# REFUTED 2026-10-02 (MOVECODE-1z-ds.11, toolkit/authsrv/swingclockjoin.py): THE CLOCK IS NOT
+# CHARGED FOR MOVING TIME. The owner, 20261002T124708: "sometimes when i press the attack
+# button right next to the enemy i'll just slowly turn for ~1s before attacking". Every such
+# press was held by `interval` 0.53-1.23 s -- the moving span charged on top of the period.
+# Over the live corpus, presses made INSIDE the interval after the body had moved (the
+# presses the two rules split on, n = 88): start-to-start lands within 0.05 s of the PERIOD
+# on 55 and of period + moving span on 0 (median residual against period + span -1.0 s).
+# 1z-dg's "28 of 28" was the re-press count, not the gap; its gap witness was one chain
+# (1z-dc.3, 2.657 s), a press that came after the interval had already run out, where both
+# rules agree. So: the swing clock runs START-to-START at the period whatever the body did;
+# what stays is the REFUSAL to open a swing on a moving body (CHAIN_PAUSES_WHILE_MOVING) and
+# 1z-dg's resume (a re-press on the target a move forgot keeps the clock, so it still waits
+# out the period from the previous start -- 55 of 88 say it must).
+SWING_CLOCK_CHARGES_MOVING = False   # True (--swing-clock-charges-moving): 1z-dg's charge.
 
 
 # `_chain_pause_charge` moved to `pressverdict.py` with the rest of the press and
@@ -21426,7 +21440,7 @@ def attack_tick(send, state, conn_id, rec=None):
     if not _moving_now:
         state["chain_pause_tick"] = None
     elif (CHAIN_PAUSE_CHARGES_WITHOUT_TARGET and CHAIN_PAUSES_WHILE_MOVING
-          and not state.get("player_dead")):
+          and SWING_CLOCK_CHARGES_MOVING and not state.get("player_dead")):
         # MOVECODE-1z-dg: the clock is charged HERE, before any of the four
         # returns below, so a moving tick with no target (the move forgot
         # it), a gone target or an out-of-reach body charges the same as one
@@ -21566,7 +21580,7 @@ def attack_tick(send, state, conn_id, rec=None):
     # hand the pose back to locomotion.
     moving = CHAIN_PAUSES_WHILE_MOVING and _moving_now
     if moving:
-        if not CHAIN_PAUSE_CHARGES_WITHOUT_TARGET:
+        if not CHAIN_PAUSE_CHARGES_WITHOUT_TARGET and SWING_CLOCK_CHARGES_MOVING:
             # The pre-1z-dg placement: charged only by a tick that got past
             # the four returns above, which is the starvation §1z-dc
             # measured. Kept as the flag's revert arm.
@@ -46736,6 +46750,13 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.swing_clock_charges_moving:
+        global SWING_CLOCK_CHARGES_MOVING
+        SWING_CLOCK_CHARGES_MOVING = True
+        print("[map] --swing-clock-charges-moving: the swing clock is charged for the "
+              "body's moving time (MOVECODE-1z-dg) -- every build before 1z-ds.11; "
+              "retail's swing lands at the period on 55 of 88, at period + span on 0.",
+              flush=True)
     if a.no_park_walk_start:
         global PARK_IS_WALK_START
         PARK_IS_WALK_START = False

@@ -28,6 +28,14 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.11 -- 2026-10-02 -- **The owner's "~1 s slow turn before attacking right next to the enemy" (`20261002T124708`): in-reach presses held by `interval` 0.53-1.23 s because the swing clock was charged for the moving span (ANIMREF-RE 31 / MOVECODE-1z-dg). Retail, read from the captures (`swingclockjoin.py`): presses inside the interval after a move swing at the PERIOD on 55 of 88, at period + span on 0. The charge is off; the refusal to swing on a moving body and the resume stay.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.11.
+- **Flag:** `SWING_CLOCK_CHARGES_MOVING = False`; `--swing-clock-charges-moving` reverts.
+- **Tests:** `test_playerswing` §5 and §17 re-aimed (209), with the gate out of the source
+  reddening 6.
+- **Status:** unrun on the client.
+
 ### MOVECODE-1z-ds.10 -- 2026-10-02 -- **The QWE run (`20261002T122114`, "less sticky ... quarterstepping more awkward"): the key report after our pin + halt sat ON the pin, but its displacement was read from the pre-pin report (4 of 5 cancels on a body that had not moved) and its lead was degraded under the fence latch our own pin stamped (the tap did nothing). Retail answers that report with [8, me, 0] and a real lead (26 of 26, p50 767 u) and cancels 0 of 3. Our park now makes the next report a walk-start.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.10.

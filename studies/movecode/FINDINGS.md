@@ -21017,3 +21017,52 @@ its own keys, which only an open fence allows.
 - 30e: the follow branch writes no marker.
 
 Each piece removed from the source reddens its own check (30a, 30b).
+
+### 1z-ds.11 The swing clock is NOT charged for moving time: 1z-dg's charge refuted (`SWING_CLOCK_CHARGES_MOVING`, `--swing-clock-charges-moving` reverts)
+
+**The owner** (`20261002T124708`, the 1z-ds.10 run): *"still doesn't feel right. even with
+no backswing pending, sometimes when i press the attack button right next to the enemy
+i'll just slowly turn for ~1s before attacking. it's as if I'm still pathing server side
+or something and my attack command is delayed until that completes"*.
+
+**The tape:**
+- Every such press was in reach, stopped and held, and refused by `interval` for 0.53 to
+  1.23 s. At 58.17 the body was 63.5 u from the target and waited 1.25 s.
+- The interval in force was the period PLUS the moving span. ANIMREF-RE §31 froze the
+  clock while the body moves, and MOVECODE-1z-dg charged the freeze through the whole span.
+- So each in-reach press after a quarterstep waited ~0.3–0.45 s longer than the period
+  allows: 0.78 s against retail's 0.32 at 18.40, and 0.57 s against 0.16 at 32.63.
+
+**RETAIL** (OBSERVED, `toolkit/authsrv/swingclockjoin.py`, new and read-only):
+- **The binding presses** are those made INSIDE the interval after the body moved, the
+  ones the two rules disagree about. n = 88.
+  - Start-to-start lands within 0.05 s of the **period on 55**, and of **period + span on
+    0**.
+  - The median residual against period + span is about −1.0 s.
+- **Unmoved and binding:** 6 of 10 at the period.
+- **Where 1z-dg went wrong:**
+  - Its "28 of 28" was the re-press count, not the gap.
+  - Its gap witness was one chain (1z-dc.3, 2.657 s). There the press came after the
+    interval had run out, so both rules agree.
+  - §31's ratio of medians (1.51) is the player's later re-press, not a frozen clock.
+
+**Shipped:** the clock charge is off, while the rest of §31 and 1z-dg stays.
+- **The refusal stays** (`CHAIN_PAUSES_WHILE_MOVING`): a swing that falls due while the
+  body moves waits for it to stop.
+- **1z-dg's resume stays:** a re-press on the target the move forgot keeps the clock, so it
+  waits out the period from the previous start. 55 of 88 say it must.
+
+**Tests:** `test_playerswing` §5 and §17 RE-AIMED, at 209 checks unchanged. The old
+"shipped" checks pinned the refuted charge.
+- **§5,** a chain whose next swing falls due mid-move:
+  - shipped: the swing opens on the first tick after the stop;
+  - charge arm: period + span;
+  - legacy arm: opens on the moving body.
+- **§17,** a re-press inside the interval after a 0.5 s move:
+  - shipped: 1.75 s, one period;
+  - reset arm: 0.80 s;
+  - charge arm: 2.20 s.
+- Removing the gate from the source reddens six checks.
+
+**OPEN:** the 33 binding presses that swing EARLY, 0.2–1.6 s inside the period. That is
+probably a cancelled previous swing or a retarget restarting the clock. Unread.
