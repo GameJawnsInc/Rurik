@@ -775,6 +775,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before it). By default a swing that never landed holds no "
                          "clock: retail swings at the press 13 of 13, and a landed swing "
                          "holds the period 65 of 65.")
+    ap.add_argument("--frame-ignores-placement", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.20: after one of our placements "
+                         "(PRESS ENDS THE WALK, the wipe) the player's reach frame is the last "
+                         "0x0047 from BEFORE it -- every build before it. By default a "
+                         "placement newer than the last report is where the body stands.")
+    ap.add_argument("--press-keeps-click-dest", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.20: PRESS ENDS THE WALK leaves the "
+                         "abandoned click's destination armed, so the server's model walks on "
+                         "to it -- every build before it.")
     ap.add_argument("--press-keeps-kbd-drop", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.18: the router drops a click "
                          "inside the keyboard latch even when our own stop pin or follow "

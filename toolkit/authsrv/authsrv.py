@@ -21088,8 +21088,11 @@ def _approach_abandon(state):
     chain starts, 11/15), it clicked (0x003E), or the target went away.
     The three arms and attack_tick call this; the latch itself is theirs to
     clear. Forgets the follow and stops the server copy's integrator walk
-    -- the click arm never sets `dest`, so a stale one here would march
-    the model to a point the body abandoned.
+    -- a stale `dest` here would march the model to a point the body
+    abandoned. CORRECTED 2026-10-02 (MOVECODE-1z-ds.20): this used to add "the
+    click arm never sets `dest`"; router_answer_click does, which is why
+    `_press_supersedes` now clears it itself (PRESS_ENDS_CLEARS_DEST) -- this
+    function clears it only when an approach exists.
 
     RANGERPRE-S16: it also forgets an approach that ARRIVED and whose swing has
     not opened yet (`approach_closed`), BEFORE the early return -- arrival has
@@ -21367,6 +21370,11 @@ def _press_supersedes(send, state, conn_id, target_id, rec=None):
     model = _click_leg_start(state, now, silent=True)
     state["click_moving_at"] = None
     state["click_leg"] = None
+    if PRESS_ENDS_CLEARS_DEST:
+        # MOVECODE-1z-ds.20: the click the press abandoned set `dest` (the router's
+        # answer); left armed, the integrator walks our model on to it while the 0x002C
+        # holds the body at the pin, and the next placement re-pins there.
+        state["dest"] = None
     _approach_abandon(state)
     # MOVECODE-1z-v: the press ends the ROUTE as well as the leg. A live
     # chain would otherwise keep granting its remaining 0x0029 legs at
@@ -35768,8 +35776,17 @@ def _npc_frame(state, now):
     resolver's disc runs in (F5). The last accepted report while the player
     STANDS (the last thing heard was a 0x0047 and no click leg is in flight:
     world-0 equals the drawn body when standing, ANIMREF-RE 40.11); the
-    mirror's sync copy while they MOVE; state["pos"] when there is neither."""
+    mirror's sync copy while they MOVE; state["pos"] when there is neither.
+
+    MOVECODE-1z-ds.20: OUR PLACEMENT, when it is newer than the last report and
+    no leg is in flight -- the body stands where our 0x002C put it (both copies
+    land on its point), and the report describes somewhere it no longer is
+    (PLACEMENT_IS_FRAME's block)."""
     lr = state.get("last_report")
+    if PLACEMENT_IS_FRAME and state.get("click_moving_at") is None:
+        pin = state.get("cast_stop_pin")
+        if pin is not None and (lr is None or float(pin[0]) > float(lr[3])):
+            return (float(pin[1][0]), float(pin[1][1]))
     if lr is not None and lr[2] and state.get("click_moving_at") is None:
         return (lr[0], lr[1])
     p = _npc_mirror_pos(state, now)
@@ -35852,6 +35869,33 @@ def _npc_disc_hit_ms(sa, fx, fy, radius, t0_ms, t1_ms):
 # three distances at every send: the next session attributes this under either
 # arm rather than needing a dedicated run. --no-approach-frame reverts.
 APPROACH_READS_FRAME = True
+# A PLACEMENT OF OURS IS THE STANDING FRAME (MOVECODE-1z-ds.20; found by the 1z-ds.13-.19
+# review's integration drive, reproduced by its refuter, PRE-EXISTING at 76379721).
+# `_npc_frame` answered "the player stands" with the last report whenever it was a 0x0047 and
+# no click leg was in flight -- but a modelled placement (PRESS ENDS THE WALK, the wipe) clears
+# the latch and forgets client_pos, never last_report. So after stand -> click -> press, the
+# frame was the 0x0047 from BEFORE the click: the gate swung and landed hits from 288 u
+# (reach 128) with no follow, or sent a phantom "911 u out" follow whose leg then held the next
+# swing 1.15 s late; after the wipe, a press before any report landed on a foe 1,273 u away.
+# The phantom leg also became the body model, so the next press's PRESS ENDS THE WALK re-pinned
+# the body on it: in the owner's own captures, 71 of 138 PRESS ENDS THE WALK pins had a 0x0047
+# as the last report, each approach after them started from that stale point (30-1,310 u off
+# the pin), and 33 consecutive-pin pairs land the later pin on such a phantom line -- jumps up
+# to 1,282 u (20260929T132158 23.06). Since 1z-ds.17 every modelled placement writes
+# `cast_stop_pin`, so the frame reads it: a marker newer than the last report, with no leg in
+# flight, is where the body stands. Monkeypatched by the refuter: the "300 u out" follow and
+# the first swing at +0.85 s come back, and later pins move the body 0 u.
+PLACEMENT_IS_FRAME = True   # False (--frame-ignores-placement): the pre-placement 0x0047.
+# THE PRESS ENDS THE CLICK'S DESTINATION TOO (MOVECODE-1z-ds.20; the same review's refuter,
+# PRE-EXISTING). `_press_supersedes` cleared the click latch and leg and called
+# `_approach_abandon`, which clears `dest` only when an approach exists ("the click arm never
+# sets dest" -- false: router_answer_click sets it). So a press answered by a swing left the
+# integrator walking state["pos"] to the abandoned click point while our 0x002C held the body at
+# the pin, and with the report forgotten every later reader fell back to that drifting pos: the
+# next approach's snap guard re-pinned a standing body 217 u away, and the next click's leg
+# started 108 u off it. Clearing `dest` at the placement removes both (3 u in the refuter's
+# counterfactual).
+PRESS_ENDS_CLEARS_DEST = True   # False (--press-keeps-click-dest): the drifting model.
 
 
 def _reach_frame(state, now=None):
@@ -46958,6 +47002,18 @@ def main():
               "forgot keeps the clock even when the move cancelled the swing in its "
               "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
               "retail swings at the press, 13 of 13.", flush=True)
+    if a.frame_ignores_placement:
+        global PLACEMENT_IS_FRAME
+        PLACEMENT_IS_FRAME = False
+        print("[map] --frame-ignores-placement: the reach frame after one of our placements is "
+              "the last 0x0047 from before it -- every build before MOVECODE-1z-ds.20 (swings "
+              "from 288 u, phantom follows, warps on the phantom leg).", flush=True)
+    if a.press_keeps_click_dest:
+        global PRESS_ENDS_CLEARS_DEST
+        PRESS_ENDS_CLEARS_DEST = False
+        print("[map] --press-keeps-click-dest: PRESS ENDS THE WALK leaves the abandoned "
+              "click's dest armed -- the model walks on to it (every build before "
+              "MOVECODE-1z-ds.20).", flush=True)
     if a.press_keeps_kbd_drop:
         global PRESS_ENDS_KBD_DROP
         PRESS_ENDS_KBD_DROP = False

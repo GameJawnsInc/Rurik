@@ -21499,3 +21499,59 @@ the parts the round's critic re-ran carry a second witness):
 - Retail has no 1.33 s row inside the band, so which side is right is UNVERIFIED.
 - What would settle it: a live capture of parked sword presses at 120-136 u from a target
   that never moved, scored with `reachjoin.py`.
+
+### 1z-ds.20 Our placement is the standing frame, and the press ends the click's destination (`PLACEMENT_IS_FRAME`, `PRESS_ENDS_CLEARS_DEST`)
+
+**How it was found:** the adversarial review of 1z-ds.13-.19.
+- One lane drove the owner's play patterns through the real handlers on a synthetic clock:
+  82 pattern runs, 0 violations of the invariants this arc set.
+- The same lane then found one HIGH defect that PRE-EXISTS the arc. It reproduces
+  identically at 76379721.
+- Its refuter reproduced it in its own rig AND in the owner's captures.
+
+**1. The reach frame after a placement of ours was the pre-placement 0x0047** (OBSERVED).
+- **The defect:** `_npc_frame` answered "the player stands" with the last report whenever it
+  was a 0x0047 and no click leg was in flight. A modelled placement (PRESS ENDS THE WALK, the
+  wipe) clears the latch and forgets `client_pos`, but never `last_report`. So after stand ->
+  click -> press, the frame was the 0x0047 from BEFORE the click.
+- **In the rigs:**
+  - Swings and hits landed from 288 u with no follow (reach 128).
+  - A phantom "911 u out" follow went out beside the swing, and its leg held the next swing
+    1.15 s late. From 1,511 u there was no second swing within 5 s.
+  - After the wipe, a press before any report landed on a foe 1,273 u away.
+  - The phantom leg became the body model, so the next press's PRESS ENDS THE WALK re-pinned
+    the body on that line: 487 u and 113 u warps.
+- **In the owner's captures** (the refuter, read-only):
+  - 71 of 138 PRESS ENDS THE WALK pins had a 0x0047 as the last report.
+  - Each approach after them started from that stale point, 30-1,310 u off the pin.
+  - 33 consecutive-pin pairs land the later pin on a phantom line, with jumps up to 1,282 u
+    (20260929T132158 23.06; 25.28 is 679 u; 35.90 is 923 u).
+- **Shipped:** `PLACEMENT_IS_FRAME` (`--frame-ignores-placement` reverts).
+  - With no leg in flight, a `cast_stop_pin` newer than the last report is the frame. Since
+    1z-ds.17 every modelled placement writes it.
+  - A 0x0047 that comes after the placement out-ranks it again.
+
+**2. PRESS ENDS THE WALK left the abandoned click's `dest` armed** (OBSERVED, the refuter).
+- **The defect:** `_approach_abandon` clears `dest` only when an approach exists. Its
+  docstring's "the click arm never sets dest" was false: `router_answer_click` sets it.
+- **What it caused:** the integrator walked our model on to the click point while our 0x002C
+  held the body at the pin.
+  - The next approach's snap guard re-pinned a standing body 217 u away.
+  - The next click's leg started 108 u off it.
+- **Shipped:** `PRESS_ENDS_CLEARS_DEST` (`--press-keeps-click-dest` reverts). In the
+  counterfactual both warps fall to 3 u.
+
+**Why it matters for the owner:**
+- Stand -> click near the foe -> press is the owner's mouse pattern.
+- Both defects are candidates for 1z-ds.5's "slight warp with a click-to-move -> attack",
+  which 1z-ds.18 (B1) said it did not fix.
+
+**Tests:** `test_playerswing` §20, 226 -> 232:
+- a: stand -> click -> press after arrival; the frame is our pin, the swing opens at once,
+  and no follow goes out;
+- b: the known-bad arm reads (0, 911) and sends the phantom follow;
+- c: a press mid-walk ends the click's dest, against the known-bad arm;
+- d: the wipe's placement is the frame;
+- e: CONTROL, a newer 0x0047 out-ranks the placement;
+- f: the wiring.
+- **Red:** with the frame branch out, 20a and 20d go red; with the dest clear out, 20c.

@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=226)   # MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=232)   # MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2752,6 +2752,89 @@ def section_dead_press():
           "19f. --press-allows-dead-player is wired")
 
 
+def section_placement_frame():
+    """MOVECODE-1z-ds.20: our placement is the standing frame, and the press ends the click's
+    destination. Found by the 1z-ds.13-.19 review's integration drive (pre-existing): after
+    stand -> click -> press, the reach frame was the 0x0047 from BEFORE the click."""
+    import time
+    import authsrv
+    import leadgeom
+
+    print("\n20. 1z-ds.20: a placement of ours is where the body stands")
+    DEST, START = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+
+    def stand_click_press(frame_on=True, dest_on=True, leg_age=3.0):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        t = time.time()
+        st = _state()
+        st["agents"][10]["pos"] = (0.0, 40.0)
+        st.update({"pos": (0.0, 911.0), "plane": 0, "player_health": 100.0,
+                   "player_dead": False, "player_last_swing": 0.0,
+                   "last_report": (0.0, 911.0, True, t - leg_age - 0.5),   # the 0x0047 BEFORE the click
+                   "click_moving_at": t - leg_age, "dest": (0.0, 100.0),
+                   "click_leg": leadgeom._leg_record((0.0, 911.0), (0.0, 100.0), t - leg_age, 288.0)})
+        saved = (authsrv.PLACEMENT_IS_FRAME, authsrv.PRESS_ENDS_CLEARS_DEST)
+        authsrv.PLACEMENT_IS_FRAME, authsrv.PRESS_ENDS_CLEARS_DEST = frame_on, dest_on
+        try:
+            authsrv._press_supersedes(send, st, 0, 10)
+            pin = [v for op, v, l in sent if "PRESS ENDS THE WALK" in l]
+            dest_after = st.get("dest")
+            authsrv.begin_attack(send, st, 10, 0)
+            frame = authsrv._reach_frame(st)          # what the tick's reach gate will read
+            sent.clear()
+            authsrv.attack_tick(send, st, 0)
+        finally:
+            authsrv.PLACEMENT_IS_FRAME, authsrv.PRESS_ENDS_CLEARS_DEST = saved
+        ops = [op for op, _v, _l in sent]
+        return pin, dest_after, frame, ops, sent
+
+    pin, _d, frame, ops, sent = stand_click_press()
+    check(pin and abs(pin[0][1][1] - 100.0) < 1.0 and abs(frame[1] - 100.0) < 1.0
+          and any(op == START for op in ops) and DEST not in ops,
+          "20a. stand -> click -> press after arrival: the frame is OUR pin (0, 100), 60 u from "
+          "the foe, so the swing opens at once and no follow goes out",
+          f"pin {pin}, frame {frame}, tick {[l[:40] for _o, _v, l in sent]}")
+    _p, _d, frame0, ops0, sent0 = stand_click_press(frame_on=False)
+    check(abs(frame0[1] - 911.0) < 1.0 and DEST in ops0,
+          "20b. KNOWN-BAD ARM (--frame-ignores-placement): the frame is the pre-click 0x0047 "
+          "(0, 911), and the tick sends a phantom follow 871 u out beside the swing -- the "
+          "review's variant B, whose leg then held the next swing 1.15 s late",
+          f"frame {frame0}, tick {[l[:40] for _o, _v, l in sent0]}")
+    _p, dest1, _f, _o, _s = stand_click_press(leg_age=1.0)
+    _p, dest0, _f, _o, _s = stand_click_press(leg_age=1.0, dest_on=False)
+    check(dest1 is None and dest0 == (0.0, 100.0),
+          "20c. a press 1 s into the click walk ends the click's destination too; the known-bad "
+          "arm (--press-keeps-click-dest) leaves (0, 100) armed for the integrator to walk on to",
+          f"shipped {dest1}, known-bad {dest0}")
+    t = time.time()
+    st = _state()
+    st.update({"last_report": (0.0, 109.0, True, t - 5.0), "pos": (900.0, 900.0)})
+    authsrv._forget_client_position(st, "the wipe placed the player at the shrine (test)")
+    fw = authsrv._reach_frame(st)
+    saved = authsrv.PLACEMENT_IS_FRAME
+    authsrv.PLACEMENT_IS_FRAME = False
+    try:
+        fw0 = authsrv._reach_frame(st)
+    finally:
+        authsrv.PLACEMENT_IS_FRAME = saved
+    check(abs(fw[0] - 900.0) < 1.0 and abs(fw[1] - 900.0) < 1.0 and abs(fw0[1] - 109.0) < 1.0,
+          "20d. the wipe's shrine placement is the frame before any report -- the known-bad arm "
+          "keeps the corpse's 0x0047 (a press then landed on a foe 1,273 u away)",
+          f"shipped {fw}, known-bad {fw0}")
+    st["last_report"] = (50.0, 50.0, True, time.time() + 1.0)      # the client speaks after it
+    fr = authsrv._reach_frame(st)
+    check(abs(fr[0] - 50.0) < 1.0 and abs(fr[1] - 50.0) < 1.0,
+          "20e. CONTROL: a 0x0047 newer than our placement is the frame again -- the client's word "
+          "out-ranks ours once it speaks", f"{fr}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    check("--frame-ignores-placement" in args_src and "if a.frame_ignores_placement:" in src
+          and "--press-keeps-click-dest" in args_src and "if a.press_keeps_click_dest:" in src,
+          "20f. --frame-ignores-placement and --press-keeps-click-dest are wired")
+
+
 def section_press_stop_hold():
     """MOVECODE-1z-ds.6: the press stop carries retail's [8, me, 1], kept to the next input.
 
@@ -2908,6 +2991,7 @@ def main():
     section_press_ends_kbd_latch()
     section_press_stop_hold()
     section_dead_press()
+    section_placement_frame()
     section_still_streak()
     section_no_target_charge()
     section_reach_frame()

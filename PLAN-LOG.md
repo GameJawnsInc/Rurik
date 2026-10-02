@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.20 -- 2026-10-02 -- **Two PRE-EXISTING warp sources the 1z-ds.13-.19 review found: after one of our placements the reach frame was the 0x0047 from before it (swings from 288 u, phantom follows, re-pins on the phantom line up to 1,282 u in the owner's captures), and PRESS ENDS THE WALK left the abandoned click's dest armed (the model walked on, the next placement warped 108-217 u).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.20.
+- **Shipped:** `PLACEMENT_IS_FRAME` (`--frame-ignores-placement`), `PRESS_ENDS_CLEARS_DEST`
+  (`--press-keeps-click-dest`). `test_playerswing` 226 -> 232.
+
 ### MOVECODE-1z-ds.19 -- 2026-10-02 -- **Press-to-swing latency by class: retail answers every ungated press in 26-64 ms and every late one at its gate's own instant; ours on the shipped code sits on that rule except 1z-ds.13's cell, which also covers 3 walk-in re-presses. Added 17b-h (the walk-in variant) and the `follow_swing` row (the gates that held a follow-answered press).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.19.
