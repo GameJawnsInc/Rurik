@@ -138,7 +138,10 @@ def cast_stop_reckon(state, now, step):
       and cleared by the 0x0047 arm, touched in no third place -- READ
       here, never written.
     - heading/heading_mt: the last report's vec2 and movementType.
-    - cast_stop_pin: OUR OWN note, written at each pin send. A pin newer
+    - cast_stop_pin: OUR OWN note, written at each pin send (the cast-stop
+      pin, the press stop, and since MOVECODE-1z-ds.17 every modelled
+      placement through _forget_client_position -- which also drops
+      client_pos, so "no-report" answers first there). A pin newer
       than the last report means WE parked the body and the client has
       said nothing since (the halt is never reported, R8) -- reckoning
       from the stale pre-pin report would extrapolate a leg the body

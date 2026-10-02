@@ -21326,3 +21326,67 @@ The release stays transition-only, so a report with no hold up sends nothing new
 - The walk-start's batch through the real 0x003D arm is `[8, me, 0]`, then `[3]`.
 - The known-bad arm sends the old stop-first order.
 - With the branch out of the source, 30k goes red.
+
+### 1z-ds.17 Every modelled placement parks the body (`PLACEMENT_PARKS`, `--park-marker-stop-only` reverts)
+
+**The residual** (1z-ds.12's open item; the first pass's lane C, re-measured by a refuter
+with its own latch emulator):
+- Round 5's park marker (`cast_stop_pin`) had two writers, "a pin AND a halt": the press
+  stop and the cast-stop pin.
+- Our other modelled placements wrote none:
+  - the press FOLLOW PIN;
+  - PRESS ENDS THE WALK;
+  - the approach re-pin from a leg or estimate point;
+  - the wipe.
+- So after them, a key report on the pin with the keyboard latch still set got
+  `ZERO LEAD [fence-shut]`.
+- **Replayed over the six owner runs under the shipped code:** 8 such grants in 6
+  episodes.
+  - The follow pin: 122114 18.88; 141035 42.84, which are 1z-ds.12's two zero leads.
+  - PRESS ENDS THE WALK: 194258 36.32, 201800 52.53, 122114 16.15.
+  - The wipe: 201800 42.74.
+- **The discriminating subset:** in 5 of the 6 episodes the body walked off the pin at
+  282-297 u/s under the owner's keys while we granted zero leads. Only an open client fence
+  allows that. The 6th was re-pinned before it could be scored.
+
+**RETAIL** (OBSERVED, `walkstartjoin.py` census 4): the first key report after a
+follow-answered press is answered with a real lead.
+- 25 rows; 23 got a 0x0029 within 60 ms, p50 768 u, with 0 zero leads.
+- Retail sent 0 0x002C to the player between the press and the report.
+
+**Shipped:** `PLACEMENT_PARKS`.
+- **The marker:** `_forget_client_position` writes `cast_stop_pin` at the placement.
+  - Its four callers are exactly the modelled placements: the press stop's two branches,
+    the approach re-pin from a leg or estimate, PRESS ENDS THE WALK and the wipe.
+  - Each sets `state["pos"]` to its point first.
+- **Corrective pins stay out.** AGTRACK RE-PIN, RESYNC, PLANE-REPAIR and an approach
+  re-pin at the client's own report never forget the report, so they never write the
+  marker. They keep 1z-ci's walked-off-pin rule.
+  - This split rests on MECHANISM, not a census. PLANE-REPAIR fires only on a stuck body,
+    and the one client lock in the agenttap corpus (20260904T110026) followed corrective
+    pins.
+  - All 35 agenttap rows are corrective pins. No modelled placement has ever been tapped.
+- **The in-flight guard** (mandatory, per the refuter): no forced walk-start while our own
+  follow's eta has not passed (REALFIX 0.11 stage 2).
+  - It is read before `cancel_on_move`, which under 1z-ds.14 abandons that follow.
+  - Walked-off-pin still lifts the latch there.
+- **Under 1z-ds.14** the marker also makes the next moving report a move. That ends the
+  chain or cancels the windup, so round 1's worry that C would keep a chain alive is moot.
+- **Docs:** the `_forget_client_position` docstring now counts eight 0x002C sites and four
+  callers.
+
+**Tests:** `test_kbdsync` §30, 261 -> 267:
+- 30e is re-aimed: the follow branch still halts nothing, but now writes the marker at its
+  pin;
+- 30l: a key report on a follow-branch pin re-arms as a walk-start with a real lead;
+- 30m: the known-bad arm reproduces 43.766's zero lead;
+- 30n: the class, PRESS ENDS THE WALK's placement parks too;
+- 30o: CONTROL, a corrective pin at the client's own report writes no marker and stays
+  shut;
+- 30p: the in-flight guard;
+- 30q: the source lock and the wiring.
+- **Red:** with the helper's write out, 30e, 30l and 30n go red; with the guard out, 30p.
+
+**Not changed:** whether the follow branch should pin at all. The second pass's lane P1 says
+it should not: retail pins 0 of 527 presses, and our pinned follows lag on the client 2-3 of 9
+against 0 of 13 unpinned. That is to be measured on its own run.

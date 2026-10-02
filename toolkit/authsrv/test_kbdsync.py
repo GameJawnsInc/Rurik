@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=261)   # MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=267)   # MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2716,9 +2716,15 @@ def main():
           "30d. CONTROL: a report 60 u off the pin is movement and cancels the windup as "
           "before -- the change is the baseline, not the rule", f"{stops30d}")
     st30e, w30e, _r = press29(foe_at=(2000.0, 0.0), pos=(1990.0, 0.0))
-    check(not st30e.get("cast_stop_pin") and any("PRESS FOLLOW PIN" in l for _o, _v, l in w30e.rows),
-          "30e. the follow branch (pin alone, no halt) writes no park marker -- only a pin "
-          "AND a halt make the next report a walk-start",
+    _pin30e = [v for op, v, _l in w30e.rows if op == PIN29]
+    check(isinstance(st30e.get("cast_stop_pin"), tuple) and len(_pin30e) == 1
+          and math.hypot(st30e["cast_stop_pin"][1][0] - _pin30e[0][1][0],
+                         st30e["cast_stop_pin"][1][1] - _pin30e[0][1][1]) < 0.5
+          and not w30e.of(HALT29)
+          and any("PRESS FOLLOW PIN" in l for _o, _v, l in w30e.rows),
+          "30e. RE-AIMED by 1z-ds.17: the follow branch still halts nothing (the pin alone), "
+          "but its pin now writes the park marker at the pin's own point -- the 0x002C parks "
+          "the body by itself",
           f"cast_stop_pin {st30e.get('cast_stop_pin')}, {[l[:30] for _o, _v, l in w30e.rows]}")
 
     # MOVECODE-1z-ds.14: after the landing the walk-start ENDS THE CHAIN. Retail, after the
@@ -2810,6 +2816,107 @@ def main():
           and "--walk-start-is-still" in ARGS_SRC and "if a.walk_start_is_still:" in SRC,
           "30j. the walk-start feeds the arm's one `_moved` (the streak and the cancel read "
           "the same number, one call each); --walk-start-is-still is wired")
+
+    # MOVECODE-1z-ds.17: EVERY MODELLED PLACEMENT PARKS. 20261002T141035 43.766: after a
+    # follow-branch press (the pin alone) the next key report sat ON the pin with the keyboard
+    # latch still set, and got ZERO LEAD [fence-shut] twice; the body then walked 70 u off at
+    # 298 u/s under the owner's keys. Retail answers that report with a real lead, 23 of 25.
+    def report_on(st, pin, parks=True, approach=None):
+        t = _t27.time()
+        st["last_report"] = (0.0, 0.0, False, t - 0.42)
+        st["plane"] = 0
+        st["pathmap"] = None
+        if approach is not None:
+            st["approach"] = approach
+        saved = authsrv.PLACEMENT_PARKS
+        authsrv.PLACEMENT_PARKS = parks
+        try:
+            st2, w2 = drive_heading([1, [float(pin[0]), float(pin[1])], 0, [0.0, -766.0], 1],
+                                    state=st)
+        finally:
+            authsrv.PLACEMENT_PARKS = saved
+        rearm = [e.get("by") for e in st2["_rec"].of("fence") if e.get("act") == "rearm"]
+        return st2, w2.of(MOVE30), rearm
+
+    def follow_press(parks=True):
+        saved = authsrv.PLACEMENT_PARKS
+        authsrv.PLACEMENT_PARKS = parks
+        try:
+            st, w, _r = press29(foe_at=(2000.0, 0.0), pos=(1990.0, 0.0))
+        finally:
+            authsrv.PLACEMENT_PARKS = saved
+        return st, [v for op, v, _l in w.rows if op == PIN29][0][1]
+
+    st30l, pin30l = follow_press()
+    st30l, g30l, re30l = report_on(st30l, pin30l)
+    check(re30l == ["walk-start"] and st30l.get("fence_shut_at") is None and len(g30l) == 1
+          and "KBD LEAD" in g30l[0][2]
+          and math.hypot(g30l[0][1][1][0] - pin30l[0], g30l[0][1][1][1] - pin30l[1]) > 100.0,
+          "30l. after a FOLLOW-branch pin, a key report ON the pin re-arms the latch as a "
+          "walk-start and gets a REAL lead (141035 43.766's shape; retail 23 of 25, 0 zero)",
+          f"rearm {re30l}, grants {g30l}")
+    st30m, pin30m = follow_press(parks=False)
+    st30m, g30m, re30m = report_on(st30m, pin30m, parks=False)
+    check(re30m == [] and st30m.get("fence_shut_at") is not None and g30m
+          and "ZERO LEAD" in g30m[0][2],
+          "30m. KNOWN-BAD ARM (--park-marker-stop-only): the same report keeps the latch shut "
+          "and gets the fence-shut ZERO LEAD -- the run's 43.766 and 43.798 exactly",
+          f"rearm {re30m}, grants {g30m}")
+
+    # The class: PRESS ENDS THE WALK (a press on a click leg) is the same placement.
+    import leadgeom as _lg30
+    t30n = _t27.time()
+    st30n = {"pos": (0.0, 0.0), "plane": 0, "client_pos": (0.0, 0.0),
+             "client_pos_at": t30n - 1.0, "client_plane": 0, "kbd_moving_at": t30n - 0.5,
+             "heading": (0.0, -766.0), "heading_mt": 1, "pathmap": _PM29(),
+             "click_moving_at": t30n - 0.3,
+             "click_leg": _lg30._leg_record((0.0, 0.0), (0.0, -300.0), t30n - 0.3, 288.0),
+             "agents": {FOE29: {"name": "raider", "dead": False, "pos": (0.0, -60.0),
+                                "health": 100.0, "max_health": 100.0,
+                                "allegiance": _ag29.ALLEGIANCE_HOSTILE}}}
+    w30n = Sent(st30n)
+    authsrv._press_supersedes(w30n, st30n, 0, FOE29)
+    ends30n = [v for op, v, l in w30n.rows if op == PIN29 and "PRESS ENDS THE WALK" in l]
+    ok30n = len(ends30n) == 1 and isinstance(st30n.get("cast_stop_pin"), tuple)
+    if ok30n:
+        st30n, g30n, re30n = report_on(st30n, ends30n[0][1])
+    else:
+        g30n, re30n = [], None
+    check(ok30n and re30n == ["walk-start"] and g30n and "KBD LEAD" in g30n[0][2],
+          "30n. THE CLASS: PRESS ENDS THE WALK's placement parks too -- its next key report "
+          "re-arms as a walk-start with a real lead (194258 36.32 / 201800 52.53 / 122114 "
+          "16.15's shape)", f"ends {ends30n}, rearm {re30n}, grants {g30n}")
+
+    # CONTROL: a CORRECTIVE pin (the client's own report, never forgotten) keeps 1z-ci's rule.
+    t30o = _t27.time()
+    st30o = {"pos": (0.0, 0.0), "plane": 0, "client_pos": (0.0, 0.0),
+             "client_pos_at": t30o - 0.1, "client_plane": 0, "kbd_moving_at": t30o - 0.1,
+             "heading": (0.0, -766.0), "heading_mt": 1, "pathmap": None}
+    Sent(st30o)(PIN29, [authsrv.PLAYER_AGENT_ID, [0.0, 0.0], 0], "AGTRACK RE-PIN (test)")
+    st30o, g30o, re30o = report_on(st30o, (0.0, 0.0))
+    check(st30o.get("cast_stop_pin") is None and re30o == []
+          and st30o.get("fence_shut_at") is not None and g30o and "ZERO LEAD" in g30o[0][2],
+          "30o. CONTROL: a corrective 0x002C at the client's own report writes no marker; its "
+          "next report on it stays on 1z-ci's walked-off-pin rule (the 20260904T110026 lock "
+          "followed corrective pins)", f"rearm {re30o}, grants {g30o}")
+
+    # The in-flight guard: OUR follow still walks the body (REALFIX 0.11 stage 2).
+    st30p, pin30p = follow_press()
+    t30p = _t27.time()
+    st30p, g30p, re30p = report_on(st30p, pin30p, approach={
+        "target": FOE29, "t0": t30p, "told": (2000.0, 0.0), "sent_at": t30p, "eta": t30p + 1.0})
+    check(re30p == [] and st30p.get("fence_shut_at") is not None,
+          "30p. the in-flight guard: while our own follow's eta has not passed, the marker "
+          "forces no walk-start -- the client's walk-start applier may not run under a server "
+          "order; walked-off-pin still lifts it", f"rearm {re30p}")
+    _fcp = SRC[SRC.index("def _forget_client_position("):]
+    _fcp = _fcp[:_fcp.index("\ndef ")]
+    check(_fcp.count('state["cast_stop_pin"] = (') == 1
+          and SRC.count("_forget_client_position(") - 1 == 4
+          and "--park-marker-stop-only" in ARGS_SRC and "if a.park_marker_stop_only:" in SRC,
+          "30q. the marker is written once inside _forget_client_position, whose four callers "
+          "are the modelled placements; --park-marker-stop-only is wired",
+          f"{SRC.count('_forget_client_position(') - 1} call sites")
 
     return LEDGER.verdict()
 

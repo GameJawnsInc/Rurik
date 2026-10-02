@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.17 -- 2026-10-02 -- **Every modelled placement parks the body. Round 5's park marker had two writers; the follow pin, PRESS ENDS THE WALK, the approach re-pin and the wipe left the next key report fence-shut: 8 zero leads in 6 episodes over the owner runs, 5 of them with the body walking off the pin at run speed. Retail answers that report with a real lead, 23 of 25.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.17. Census `walkstartjoin.py` census 4.
+- **Shipped:** `PLACEMENT_PARKS` (`--park-marker-stop-only` reverts), with the in-flight guard.
+  `test_kbdsync` 261 -> 267.
+- **Closes:** §8's "the follow-branch walk-start".
+
 ### MOVECODE-1z-ds.16 -- 2026-10-02 -- **A movement cancel sends the hold's release before the stop: retail 33 of 33; ours sent the stop first. 1z-ds.14 made that batch common.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.16. Census `walkstartjoin.py` census 3.

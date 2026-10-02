@@ -775,6 +775,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before it). By default a swing that never landed holds no "
                          "clock: retail swings at the press 13 of 13, and a landed swing "
                          "holds the period 65 of 65.")
+    ap.add_argument("--park-marker-stop-only", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.17: only the press stop and the "
+                         "cast-stop pin park the body for the next key report "
+                         "(1z-ds.10); the follow pin, PRESS ENDS THE WALK, the approach "
+                         "re-pin and the wipe leave the fence latch shut until the body "
+                         "walks 24 u off. By default every modelled placement parks: "
+                         "retail answers that report with a real lead, 23 of 25.")
     ap.add_argument("--cancel-stop-first", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.16: a movement report that "
                          "releases the hold and stops the chain sends the stop [3, me, 0] "

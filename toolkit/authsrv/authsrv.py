@@ -7604,18 +7604,25 @@ def _forget_client_position(state, why):
     point OUR MODEL computed CONTRADICTS the last report, so forget it; a
     0x002C at THE REPORT ITSELF agrees with it, so keep it -- the report
     still describes where the body is, and dropping it would fail every
-    consumer closed over a fact we still hold. Six sites in this file send a
-    0x002C for the player, and five of them sort by that one test:
-      forget -- `_press_supersedes` (the click leg lerped to the press) and
-        `_approach_send`'s snap re-pin WHEN `_click_leg_source` says "leg".
-        The cast-stop pin is the third modelled placement and reaches the
-        same end by its own older route: `cast_stop_pin` out-ranks any
-        report older than the pin, which is the pattern named above.
+    consumer closed over a fact we still hold. Eight sites in this file send
+    a 0x002C for the player (re-counted 2026-10-02, MOVECODE-1z-ds.17), and
+    they sort by that one test:
+      forget -- the four callers of this helper: `_press_stops_body` (the
+        press stop and the follow branch, at the reckoned body),
+        `_approach_send`'s snap re-pin WHEN `_click_leg_source` says "leg"
+        or "estimate", `_press_supersedes` (the click leg lerped to the
+        press) and `wipe_to_shrine`. The cast-stop pin is a fifth modelled
+        placement and reaches the same end by its own older route:
+        `cast_stop_pin` out-ranks any report older than the pin.
       keep -- `_maybe_resync` and `_agtrack_maybe_repin` (both send
-        `client_pos` verbatim, one from the guard's copy of it) and
-        `_approach_send` when its point came from "report".
+        `client_pos` verbatim, one from the guard's copy of it),
+        `_approach_send` when its point came from "report", and the
+        plane-repair fire (below).
     `_approach_send` is the only site that can be either, which is why it
-    asks `_click_leg_source` instead of assuming.
+    asks `_click_leg_source` instead of assuming. SINCE 1z-ds.17 THIS HELPER
+    ALSO WRITES `cast_stop_pin` (PLACEMENT_PARKS): every forget is a modelled
+    placement, and the placement parks the body, so the next moving report is
+    a walk-start. The "keep" sites never come here and never write it.
 
     ONE SITE DOES NOT SORT CLEANLY and it is left alone on purpose: the
     plane-repair fire sends the report's own POSITION with a CORRECTED
@@ -7636,6 +7643,14 @@ def _forget_client_position(state, why):
     state.pop("client_pos", None)
     state.pop("client_plane", None)
     state.pop("client_pos_at", None)
+    # MOVECODE-1z-ds.17: A MODELLED PLACEMENT PARKS THE BODY. Every caller has just set
+    # state["pos"] to the point its 0x002C carried, and that 0x002C zeroed the client's
+    # velocity (_note_wire_move's decode), so the next moving report is a walk-start --
+    # 1z-ds.10's rule, which until now only the press stop and the cast-stop pin fed
+    # (PLACEMENT_PARKS's block). Corrective pins (the client's own report) never come here.
+    if PLACEMENT_PARKS and state.get("pos") is not None:
+        state["cast_stop_pin"] = (time.time(), (float(state["pos"][0]),
+                                                float(state["pos"][1])))
     if TRACE_MOVE:
         print(f"[trace] client-sourced position forgotten: {why}", flush=True)
 
@@ -19722,7 +19737,8 @@ PRESS_STOP_ON_BODY = True   # False (--press-stop-on-frame): round 2, the frame 
 #       is a park -- 20261001T194258 t=47.761, the report after a cast-stop pin, got a zero
 #       lead and the body walked 181 u under its own keys, which only an open fence allows.
 # So a pin + halt of ours (`cast_stop_pin`, written by the cast-stop pin and the press stop's
-# stop branch -- never by the follow branch, which halts nothing) newer than the last report
+# stop branch -- and since round 7 by every modelled placement, the follow branch included:
+# the 0x002C parks the body on its own) newer than the last report
 # makes the next moving report a WALK-START: displacement from the pin, the latch re-armed.
 PARK_IS_WALK_START = True   # False (--no-park-walk-start): rounds 1-3 (the false cancels, the dead key).
 # ROUND 6 (MOVECODE-1z-ds.14): A WALK-START IS A MOVE. Round 5 measured the walk-start's
@@ -19749,6 +19765,23 @@ PARK_IS_WALK_START = True   # False (--no-park-walk-start): rounds 1-3 (the fals
 # (the re-arm, the real lead) is untouched. Safe only with 1z-ds.13: the re-press after a
 # cancelled windup swings at once.
 WALK_START_IS_MOVE = True   # False (--walk-start-is-still): round 5's still walk-start.
+# ROUND 7 (MOVECODE-1z-ds.17): EVERY MODELLED PLACEMENT PARKS. Round 5's marker had two
+# writers -- the press stop and the cast-stop pin, "a pin AND a halt" -- but the 0x002C itself
+# parks the body (its handler zeroes the velocity, _note_wire_move's decode). The six owner
+# runs, replayed under the shipped code: 8 fence-shut zero leads in 6 episodes after OUR
+# placements with no halt -- the press FOLLOW PIN (122114 18.88; 141035 42.84, the "feels
+# good now" run's two zero leads), PRESS ENDS THE WALK (194258 36.32; 201800 52.53; 122114
+# 16.15) and the wipe (201800 42.74). In 5 of the 6 the body walked off the pin at 282-297 u/s
+# under the owner's keys while we granted zero leads -- which only an open client fence
+# allows; the 6th was re-pinned first. Retail answers that report with a real lead (23 of 25,
+# p50 768 u, 0 zero leads). So `_forget_client_position` -- whose callers are exactly the
+# modelled placements -- writes the marker; the CORRECTIVE pins (AGTRACK RE-PIN, RESYNC,
+# PLANE-REPAIR, an approach re-pin at the client's own report) never call it and keep 1z-ci's
+# walked-off-pin rule. That split rests on MECHANISM, not on a census: PLANE-REPAIR fires only
+# on a stuck body, and the one client lock in the agenttap corpus (20260904T110026) came after
+# corrective pins; no modelled placement has ever been tapped. And not while our own follow
+# still walks the body (the in-flight guard in the 0x003D arm).
+PLACEMENT_PARKS = True   # False (--park-marker-stop-only): round 5's two writers.
 
 
 def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
@@ -42954,6 +42987,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
                         cw_hit = None
+                        # MOVECODE-1z-ds.17's in-flight guard, read BEFORE
+                        # cancel_on_move can abandon the follow: OUR 0x002A is
+                        # still walking the body (REALFIX 0.11 stage 2).
+                        _ap_live = state.get("approach")
+                        _follow_walking = (_ap_live is not None
+                                           and time.time() < float(_ap_live.get("eta") or 0.0))
                         if moving:
                             # Keyboard movement cancels the same things a
                             # click does. Guarded on the enum being set even
@@ -43124,8 +43163,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # moving, whatever the keyboard latch still says.
                         _park = state.get("cast_stop_pin")
                         _lr = state.get("last_report")
+                        # MOVECODE-1z-ds.17: not while OUR follow still walks the
+                        # body -- the client's walk-start applier may not run under
+                        # a server order (REALFIX 0.11 stage 2); walked-off-pin
+                        # still lifts the latch there, as before.
                         if (PARK_IS_WALK_START and _park is not None
-                                and (_lr is None or _park[0] > float(_lr[3]))):
+                                and (_lr is None or _park[0] > float(_lr[3]))
+                                and not (PLACEMENT_PARKS and _follow_walking)):
                             _kbd_was_moving = False
                         state["kbd_moving_at"] = time.time() if moving else None
                         # MOVECODE-1z-aa: the fence we shut RE-ARMS at a
@@ -46873,6 +46917,13 @@ def main():
               "forgot keeps the clock even when the move cancelled the swing in its "
               "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
               "retail swings at the press, 13 of 13.", flush=True)
+    if a.park_marker_stop_only:
+        global PLACEMENT_PARKS
+        PLACEMENT_PARKS = False
+        print("[kbd] --park-marker-stop-only: only the press stop and the cast-stop pin make "
+              "the next key report a walk-start (MOVECODE-1z-ds.10); our other placements "
+              "leave the fence latch to walked-off-pin -- every build before 1z-ds.17.",
+              flush=True)
     if a.cancel_stop_first:
         global CANCEL_RELEASES_FIRST
         CANCEL_RELEASES_FIRST = False

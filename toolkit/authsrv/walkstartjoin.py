@@ -36,6 +36,10 @@ MEASURED 2026-10-02 over the live corpus (122 connections with an observer):
   interact walk (20260913T210901 377.8, ordered by its own c2s 0x003F).
   CENSUS 3 (MOVECODE-1z-ds.16): a moving 0x003D that arrives while the hold is up and draws
   both [8, me, 0] and [3, me, 0] within 0.1 s: 33 rows, the release first on 33.
+  CENSUS 4 (MOVECODE-1z-ds.17): the first key report after a follow-answered press: 25 rows
+  (walking 19, parked 6); a 0x0029 lead within 60 ms on 23, p50 768 u, 0 zero leads; retail
+  placed me with a 0x002C between the press and the report 0 times. The two without a lead
+  (20260817T183756 323.03, 325.8) were answered by the next report.
 Read-only; standard library only; refuses non-live captures by construction
 (livewire.live_connections).
 """
@@ -150,6 +154,73 @@ def batch_rows(cap, merged, me):
     return rows
 
 
+def after_follow_rows(cap, merged, me):
+    """CENSUS 4: a press from a walking (moving 0x003D <= 3 s old) or parked (a 0x0047) body,
+    answered by MY own 0x002A follow within 0.25 s ahead of any own start, whose first c2s
+    input after it is a MOVING 0x003D: retail's 0x0029 lead to me within 60 ms of it (its
+    length from the report's point; < 1 u is a zero lead), and any 0x002C to me between."""
+    rows = []
+    for i, (t, d, op, v) in enumerate(merged):
+        if d != "c2s" or op != 0x0026:
+            continue
+        last = None
+        for j in range(i - 1, -1, -1):
+            tj, dj, opj, vj = merged[j]
+            if t - tj > 10.0:
+                break
+            if dj == "c2s" and opj in (0x003D, 0x003E, 0x0047):
+                last = (tj, opj, vj)
+                break
+        if last is None:
+            continue
+        if (last[1] == 0x003D and len(last[2]) > 4 and isinstance(last[2][4], int)
+                and last[2][4] and t - last[0] <= 3.0):
+            arm = "walking"
+        elif last[1] == 0x0047:
+            arm = "parked"
+        else:
+            continue
+        fj = None
+        for j in range(i + 1, len(merged)):
+            tj, dj, opj, vj = merged[j]
+            if tj - t > 0.25:
+                break
+            if dj == "s2c" and opj == 0x002A and _is(vj, 1, me):
+                fj = j
+                break
+            if dj == "s2c" and opj == 0x00A0 and _is(vj, 1, 4) and _is(vj, 2, me):
+                break
+        if fj is None:
+            continue
+        rep, pinned = None, False
+        for j in range(fj + 1, len(merged)):
+            tj, dj, opj, vj = merged[j]
+            if tj - t > 8.0:
+                break
+            if dj == "c2s" and opj in (0x003D, 0x003E, 0x0047, 0x0026, 0x0027, 0x0046):
+                rep = j
+                break
+            if dj == "s2c" and opj == 0x002C and _is(vj, 1, me):
+                pinned = True
+        if rep is None:
+            continue
+        tr, rop, rv = merged[rep][0], merged[rep][2], merged[rep][3]
+        if not (rop == 0x003D and len(rv) > 4 and isinstance(rv[4], int) and rv[4]):
+            continue
+        lead = None
+        for k in range(rep + 1, len(merged)):
+            tk, dk, opk, vk = merged[k]
+            if tk - tr > 0.06:
+                break
+            if dk == "s2c" and opk == 0x0029 and _is(vk, 1, me) and lead is None:
+                try:
+                    lead = math.hypot(vk[2][0] - rv[1][0], vk[2][1] - rv[1][1])
+                except (TypeError, IndexError):
+                    lead = None
+        rows.append((cap, round(t, 2), arm, None if lead is None else round(lead, 1), pinned))
+    return rows
+
+
 def after_stop_rows(cap, merged, me):
     rows, cells, ctrl = [], 0, 0
     for i, (t, d, op, v) in enumerate(merged):
@@ -203,7 +274,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rows", action="store_true", help="every row")
     a = ap.parse_args()
-    wrows, arows, brows, cells, ctrl, nconn = [], [], [], 0, 0, 0
+    wrows, arows, brows, frows, cells, ctrl, nconn = [], [], [], [], 0, 0, 0
     for capdir, gf in livewire.live_connections():
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         me = pressstopjoin.whose_agent(merged)
@@ -213,6 +284,7 @@ def main():
         cap = os.path.basename(capdir)
         wrows += windup_rows(cap, merged, me)
         brows += batch_rows(cap, merged, me)
+        frows += after_follow_rows(cap, merged, me)
         r, c, k = after_stop_rows(cap, merged, me)
         arows += r
         cells += c
@@ -243,6 +315,16 @@ def main():
           f"{sum(r[2] == 'STOP FIRST' for r in brows)}")
     for r in brows:
         if r[2] != "release first" or a.rows:
+            print("   ", r)
+    leads = sorted(r[3] for r in frows if r[3] is not None)
+    print(f"\n#### CENSUS 4: the first key report after a follow-answered press -- {len(frows)} rows "
+          f"(walking {sum(r[2] == 'walking' for r in frows)}, parked "
+          f"{sum(r[2] == 'parked' for r in frows)}); answered with a 0x0029 within 60 ms "
+          f"{len(leads)}" + (f", p50 {leads[len(leads) // 2]:.0f} u, zero leads (< 1 u) "
+                             f"{sum(x < 1.0 for x in leads)}" if leads else "")
+          + f"; a 0x002C to me between press and report {sum(r[4] for r in frows)}")
+    for r in frows:
+        if r[3] is None or r[3] < 1.0 or r[4] or a.rows:
             print("   ", r)
 
 
