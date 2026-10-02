@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=204)   # MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=207)   # MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2549,6 +2549,49 @@ def section_press_stop_hold():
     check(seq4 == [PIN, HALT] and holds(sent4) == [] and not st4.get("press_hold"),
           "9l-f. KNOWN-BAD ARM (--no-press-stop-hold): the pin and the halt with no hold -- "
           "round 1, retail's 0 of 42", f"{seq4}")
+
+    # 1z-ds.7: REACH IS THE BODY'S. The owner's walk-ins (20261002T005405: 3 of 7 stops
+    # judged in reach on a stale frame, the body 162-170 u out, then released for a
+    # follow). Retail: 0 stops before 57 follows.
+    def placed(frame, rep, heading, age, on_body=True):
+        sent_p = []
+        send_p = lambda op, vals, label="", quiet=False: sent_p.append((op, vals, label))  # noqa: E731
+        t = time.time()
+        stp = _state()
+        stp.update({"pos": frame, "client_pos": rep, "client_pos_at": t - age,
+                    "client_plane": 0, "kbd_moving_at": t - age, "heading": heading,
+                    "heading_mt": 1, "pathmap": _PM()})
+        saved = authsrv.PRESS_STOP_ON_BODY
+        authsrv.PRESS_STOP_ON_BODY = on_body
+        try:
+            authsrv.begin_attack(send_p, stp, 10, 0)
+            batch = [("8:%d" % v[2]) if op == INT and v[0] == GV8 else op
+                     for op, v, _l in sent_p]
+            sent_p.clear()
+            authsrv.attack_tick(send_p, stp, 0)
+        finally:
+            authsrv.PRESS_STOP_ON_BODY = saved
+        tick = [op for op, _v, _l in sent_p]
+        swung = any("player swings" in l for _op, _v, l in sent_p)
+        return batch, tick, swung, stp
+
+    # frame ON the target (0 u), the body 0.5 s down +x at 288 u/s: (244, 0), 244 u out
+    b7, k7, sw7, s7 = placed((0.0, 0.0), (100.0, 0.0), (766.0, 0.0), 0.5)
+    check(b7 == [PIN] and DEST in k7 and not sw7 and not s7.get("action_hold")
+          and not s7.get("press_hold"),
+          "9l-g. the frame says IN reach but the reckoned body is 244 u OUT: the pin ALONE "
+          "(no hold, no halt), and the tick answers with the follow, no swing -- retail "
+          "sends 0 stops before 57 follows", f"press {b7}, tick {k7}, swung {sw7}")
+    # frame 500 u out (stale), the body 0.6 s down -x from 300: (127, 0), IN reach
+    b8, k8, sw8, _s8 = placed((500.0, 0.0), (300.0, 0.0), (-766.0, 0.0), 0.6)
+    check(b8 == [PIN, "8:1", HALT] and sw8 and DEST not in k8,
+          "9l-h. the stale frame says OUT but the body is 127 u IN: the full stop, and the "
+          "swing opens at once instead of an 80 u walk-in", f"press {b8}, tick {k8}, swung {sw8}")
+    b9, k9, sw9, _s9 = placed((0.0, 0.0), (100.0, 0.0), (766.0, 0.0), 0.5, on_body=False)
+    check(b9 == [PIN, "8:1", HALT] and DEST in k9 and not sw9,
+          "9l-i. KNOWN-BAD ARM (--press-stop-on-frame): 9l-g's press is STOPPED on the "
+          "frame's word, then walked in -- the owner's 'attack start delay'",
+          f"press {b9}, tick {k9}")
 
 
 def main():

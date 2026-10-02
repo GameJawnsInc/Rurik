@@ -20819,3 +20819,59 @@ Each piece removed from the source reddens its own checks:
 - the landing exemption: b, c;
 - the follow release: e;
 - the forget: c, e.
+
+### 1z-ds.7 The hold's run (`20261002T005405`), and reach judged on the body
+
+**The owner:** *"still feeling an attack start delay on some presses i think. it's like
+the game is trying to make me walk in range to attack even though I'm already close
+enough? represses do make me move again"*.
+
+**The wire** (PRESSHOLD-run-registered):
+- **PH-Q0:** clean.
+- **PH-Q4:** 0 `Pending skill`; 0 re-pins at a keyboard-walk press.
+- **PH-Q1:** 7 press stops fired.
+- **PH-Q2 (a):** 7 of 7 sent the pin, then `[8, me, 1]`, then the 0x0028.
+- **PH-Q2 (b):** no landing release fired inside a press hold.
+- **PH-Q2 (c):** each release went out 0.8–1.3 ms ahead of its report's lead.
+- **PH-Q2 (d):** the body moved 54–163 u within 1.5 s of each re-press, 4 of 4. The hold
+  never stuck.
+
+**What the owner felt:**
+- **Three of the seven stops were released 7–46 ms later for a FOLLOW** (31.38, 36.72,
+  39.00).
+  - The stop judged reach on the swing gate's frame, at 143, 105 and 133 u, all inside
+    144.
+  - The reckoned body was 166, 170 and 162 u out.
+  - The pin moved the frame onto the body, the gate read out of reach, and a follow
+    walked the body 82–90 u in. The swing came 0.36–1.13 s after the press.
+
+**Retail never stops before a follow (OBSERVED, this session):**
+- 57 walking presses were answered by a follow within 0.25 s: 38 melee, 19 ranged.
+- **0 of 57** carry a 0x0028 [me] or an `[8, me, 1]` before it.
+- The follow alone redirects the walking body, p50 38 ms after the press.
+
+**Shipped:** `PRESS_STOP_ON_BODY`; `--press-stop-on-frame` reverts. The press decides on
+the reckoned BODY:
+
+| Body | Frame | Sent |
+|---|---|---|
+| In reach | either | the stop: pin, hold, halt |
+| Out of reach | in reach | the pin ALONE: no halt, no hold |
+| Out of reach | out of reach | nothing, as before |
+
+- With the pin alone, the gate reads the body and the tick's follow walks it in from
+  there. That is retail's shape, with our 0x002C under it for R10's reason.
+- A body the stale frame called OUT, but which is in reach, now gets the stop and its
+  swing at once, instead of an 80 u walk-in.
+
+**Tests:** `test_playerswing` §9l, 204 -> 207:
+- 9l-g: frame in, body 244 u out. The pin alone, then the follow, and no swing.
+- 9l-h: a frame 500 u out, the body 127 u in. The stop, and the swing at once.
+- 9l-i: the known-bad arm, where 9l-g's press is stopped and then walked in.
+
+With the body decision undone in the source, 9l-g and 9l-h go red.
+
+**Not changed: the 144 u reach.** For a sword it sits inside a loose retail bracket:
+accepted at <= 82.7 u, refused at >= 205.5 u. Daggers are tighter: 109.7 accepted, 146.3
+refused. So a press at 162–170 u is inside a band nothing has measured. If walk-ins at
+that distance still feel early, the bracket is the next measurement.

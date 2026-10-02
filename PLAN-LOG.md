@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.7 -- 2026-10-02 -- **The hold's run (`20261002T005405`): 7 of 7 press batches pin, hold, halt; the hold kept through the landing and released by the re-press (4 of 4, "represses do make me move again"). The owner's "attack start delay ... walk in range though I'm already close enough" = 3 stops judged in reach on a stale frame, the body 162-170 u out, released for a follow. Retail stops before 0 of 57 follows. Reach is now judged on the reckoned body: in reach the stop, out of reach the pin alone and the follow.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.7.
+- **Flag:** `PRESS_STOP_ON_BODY`; `--press-stop-on-frame` reverts.
+- **Tests:** `test_playerswing` 207 (9l-g..i).
+- **Status:** unrun on the client.
+
 ### MOVECODE-1z-ds.6 -- 2026-10-01 -- **The press stop now carries retail's action hold: [8, me, 1] between the pin and the 0x0028 (retail 42 of 42, hold then stop in one instant on 40), kept through the landing to the player's next input (retail: released after the close on 35 of 36 -- a 0x003D 26, a skill 7, a follow 1). For the owner's "waiting to turn to directly face the target"; stock turns at once.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.6.

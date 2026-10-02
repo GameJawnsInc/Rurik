@@ -19647,20 +19647,42 @@ PRESS_STOPS_BODY = True   # False (--no-press-stop): the swing opens on a walkin
 PRESS_STOP_HOLDS = True  # False (--no-press-stop-hold): the pin and the halt, no hold (round 1).
 
 
-def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
-    """(1z-ds) An accepted press in reach while the body walks: pin it, then halt it.
+# ROUND 3, 1z-ds.7 -- REACH IS THE BODY'S (the owner, 20261002T005405: "still feeling an
+# attack start delay on some presses ... like the game is trying to make me walk in range
+# to attack even though I'm already close enough"). Three of that run's seven stops were
+# judged IN reach on the swing gate's frame (143 / 105 / 133 u) -- a frame our zero-lead
+# regime can leave behind the body -- while the reckoned body stood 166 / 170 / 162 u out;
+# the pin moved the frame onto the body, the gate then read OUT of reach, and the stop was
+# released 7-46 ms later for a follow: stop, hold, release, walk in. RETAIL never does that:
+# of 57 walking presses answered by a follow (38 melee, 19 ranged), 0 carry a 0x0028 or an
+# [8, me, 1] before it -- the follow alone redirects the walking body, p50 38 ms. So the
+# press decides on the reckoned BODY: in reach, the stop (pin, hold, halt); out of reach
+# with the frame saying in, the PIN ALONE -- no halt, no hold -- so the gate reads the body
+# and the tick's follow walks it in from where it is (retail's shape, our 0x002C beneath it
+# for the reason R10 gives); out on both, nothing. A body the stale frame called OUT but
+# that is in reach now gets the stop and its swing at once, instead of an 80 u walk-in.
+PRESS_STOP_ON_BODY = True   # False (--press-stop-on-frame): round 2, the frame decides.
 
-    Returns whether the pair went out. Reads the swing gate's frame and the cast-stop
+
+def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
+    """(1z-ds) An accepted press while the body walks: pin it -- and, when the BODY is in
+    reach, hold and halt it (1z-ds.7: reach is judged on the reckoned body).
+
+    Returns whether a pin went out. Reads the swing gate's frame and the cast-stop
     reckoner; writes what the cast-stop pin writes, plus the forget."""
     if not PRESS_STOPS_BODY:
         return False
     px, py = _reach_frame(state, now)
-    ax, ay = agent["pos"]
-    dist = math.hypot(float(ax) - px, float(ay) - py)
-    if dist > attack_reach():
+    ax, ay = float(agent["pos"][0]), float(agent["pos"][1])
+    dist = math.hypot(ax - px, ay - py)
+    reach = attack_reach()
+    frame_in = dist <= reach
+    if not frame_in and not PRESS_STOP_ON_BODY:
         return False                    # out of reach: the follow answers this press
     est, plane, why = cast_stop_reckon(state, now)
     if est is None:
+        if not frame_in:
+            return False                # out of reach and nothing to reckon: the follow
         if rec is not None:
             rec.event("press_stop", fired=False, why=why, target=target_id,
                       dist=round(dist, 1))
@@ -19669,31 +19691,42 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
                   f"pin-or-nothing, the swing may open on a moving body "
                   f"[MOVECODE-1z-ds]", flush=True)
         return False
+    body = math.hypot(ax - float(est[0]), ay - float(est[1]))
+    body_in = body <= reach if PRESS_STOP_ON_BODY else frame_in
+    if not body_in and not frame_in:
+        return False                    # out on both: the follow answers, as before
+    stop = body_in
     send(GAME_SMSG_AGENT_UPDATE_POSITION,
          [PLAYER_AGENT_ID, [float(est[0]), float(est[1])], plane],
-         f"PRESS STOP PIN 0x002C at ({est[0]:.0f},{est[1]:.0f}) plane {plane} -- "
-         f"{why}: a press in reach on a walking body [MOVECODE-1z-ds]")
+         (f"PRESS STOP PIN 0x002C at ({est[0]:.0f},{est[1]:.0f}) plane {plane} -- "
+          f"{why}: a press in reach on a walking body [MOVECODE-1z-ds]" if stop else
+          f"PRESS FOLLOW PIN 0x002C at ({est[0]:.0f},{est[1]:.0f}) plane {plane} -- "
+          f"{why}: the body is {body:.0f} u out though the frame said {dist:.0f} u; no "
+          f"halt, the follow walks it in from here [MOVECODE-1z-ds.7]"))
     state["cast_stop_pin"] = (now, est)
     state["pos"] = (float(est[0]), float(est[1]))
     state["dest"] = None
-    # A held heading grant is a walk for a body we just parked -- the stop arm's
+    # A held heading grant is a walk for a body we just placed -- the stop arm's
     # and the click arm's own rule (heading_hold_tick's docstring).
     state["heading_hold"] = None
-    if PRESS_STOP_HOLDS:
-        # Retail's order: the hold, then the stop (40 of 42 in one instant).
-        action_hold(send, state, 1, f"a press in reach stops the walking body, "
-                    f"held to the next input [MOVECODE-1z-ds.6]")
-        state["press_hold"] = True
-    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
-         f"AGENT_STOP_MOVING(player) [MOVECODE-1z-ds pin:{why}]")
-    _forget_client_position(state, "a press stopped the walking body")
+    if stop:
+        if PRESS_STOP_HOLDS:
+            # Retail's order: the hold, then the stop (40 of 42 in one instant).
+            action_hold(send, state, 1, f"a press in reach stops the walking body, "
+                        f"held to the next input [MOVECODE-1z-ds.6]")
+            state["press_hold"] = True
+        send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+             f"AGENT_STOP_MOVING(player) [MOVECODE-1z-ds pin:{why}]")
+    _forget_client_position(state, "a press placed the walking body")
     if rec is not None:
         rec.event("press_stop", fired=True, why=why, target=target_id,
-                  dist=round(dist, 1), point=[float(est[0]), float(est[1])],
-                  plane=plane)
-    print(f"[c{conn_id}] press stops the body at ({est[0]:.0f},{est[1]:.0f}) -- "
-          f"in reach of agent {target_id} ({dist:.0f} u), walking ({why}) "
-          f"[MOVECODE-1z-ds]", flush=True)
+                  dist=round(dist, 1), body=round(body, 1),
+                  mode=("stop" if stop else "follow"),
+                  point=[float(est[0]), float(est[1])], plane=plane)
+    print(f"[c{conn_id}] press {'stops' if stop else 'places'} the body at "
+          f"({est[0]:.0f},{est[1]:.0f}) -- {body:.0f} u from agent {target_id} "
+          f"(frame {dist:.0f} u, reach {reach:.0f}), walking ({why}) "
+          f"[MOVECODE-1z-ds{'' if stop else '.7: the follow walks it in'}]", flush=True)
     return True
 
 
@@ -46656,6 +46689,11 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.press_stop_on_frame:
+        global PRESS_STOP_ON_BODY
+        PRESS_STOP_ON_BODY = False
+        print("[map] --press-stop-on-frame: the press stop judges reach on the swing "
+              "gate's frame -- MOVECODE-1z-ds rounds 1-2.", flush=True)
     if a.no_press_stop_hold:
         global PRESS_STOP_HOLDS
         PRESS_STOP_HOLDS = False
