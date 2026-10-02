@@ -19819,6 +19819,21 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
     return True
 
 
+# A DEAD PLAYER'S PRESS IS NO ORDER (MOVECODE-1z-ds.15). 20261002T124708: the KILL at 39.103,
+# then a c2s 0x0026 handled after it in the killing-blow instant. begin_attack had no
+# player_dead gate, so the corpse got a KBD LEAD KILL 0x0029, a PRESS STOP PIN, the hold and a
+# halt, and `attacking` was set; attack_tick's dead branch returned without clearing it, and
+# 0.055 s after the shrine rise (49.75) the tick sent a 2325 u follow -- the risen body walked
+# ~982 u before the owner's first key. RETAIL (toolkit/authsrv/risejoin.py): 0 of 23 rises walk
+# the body before the player's own first input (3 rises with no input for 15 s), and retail's
+# client sends 0 presses while dead, so refuse-against-queue has no witness; refusing is the
+# reading the rises agree with. The skill arm has had this gate since 2026-08-11 ("the corpse
+# could cast"). Three sites: the 0x0026 arm spares the corpse the lead kill and the walk's
+# placement, begin_attack refuses (its row says so), and attack_tick's dead branch drops an
+# order set across the kill (the press runs on the connection thread, the kill on the tick).
+PRESS_REFUSES_DEAD_PLAYER = True   # False (--press-allows-dead-player): every build before it.
+
+
 def begin_attack(send, state, target_id, conn_id, rec=None):
     """A click on a hostile agent starts an attack that the tick keeps up.
 
@@ -19836,6 +19851,10 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
     silent again.
     """
     now = time.time()
+    if PRESS_REFUSES_DEAD_PLAYER and state.get("player_dead"):
+        # MOVECODE-1z-ds.15: a corpse orders nothing (the flag's block).
+        _press_row(rec, fired=False, reason="dead-player", target=target_id, age=0.0)
+        return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         # Clicking anything else -- scenery, a corpse -- stops the swing rather
@@ -21514,6 +21533,11 @@ def attack_tick(send, state, conn_id, rec=None):
         _swing_dropped(state, rec, conn_id, "dead-player")
         state["player_swing"] = None
         _press_refused(state, rec, conn_id, "dead-player", terminal=True)
+        if PRESS_REFUSES_DEAD_PLAYER:
+            # MOVECODE-1z-ds.15: an order set across the kill dies with the player --
+            # kill_player cleared it, a press handled after it on the connection
+            # thread could set it again, and the rise would resume it.
+            state["attacking"] = None
         return
     if knocked_down(state, PLAYER_AGENT_ID):
         # SLICE-H12: a down body opens no swing and lands none; the chain
@@ -42480,8 +42504,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # begin_attack refuses it (the party-target gate),
                         # and a refused order must not end the walk it never
                         # replaced. (A dead one keeps the corpse's answer.)
+                        # MOVECODE-1z-ds.15: NOT for a dead player -- begin_attack
+                        # refuses the press, so nothing ends a walk on its behalf.
                         _pb = party_body(state, values[1])
-                        if _pb is None or _pb.get("dead"):
+                        _corpse = PRESS_REFUSES_DEAD_PLAYER and state.get("player_dead")
+                        if (_pb is None or _pb.get("dead")) and not _corpse:
                             _kbd_lead_kill(send, state, conn_id, rec, "press")
                             _press_supersedes(send, state, conn_id, values[1],
                                               rec=rec)
@@ -46836,6 +46863,13 @@ def main():
               "forgot keeps the clock even when the move cancelled the swing in its "
               "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
               "retail swings at the press, 13 of 13.", flush=True)
+    if a.press_allows_dead_player:
+        global PRESS_REFUSES_DEAD_PLAYER
+        PRESS_REFUSES_DEAD_PLAYER = False
+        print("[map] --press-allows-dead-player: an attack press from a dead player is "
+              "taken -- the corpse pinned and halted, the order kept to the rise "
+              "(every build before MOVECODE-1z-ds.15; retail walks 0 of 23 risen bodies "
+              "before their input).", flush=True)
     if a.walk_start_is_still:
         global WALK_START_IS_MOVE
         WALK_START_IS_MOVE = False

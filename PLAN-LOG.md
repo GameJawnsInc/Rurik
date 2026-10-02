@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.15 -- 2026-10-02 -- **A dead player's press is no order. A press handled in the killing-blow instant pinned and halted the corpse and set `attacking`; the order outlived the death and, 0.055 s after the shrine rise, sent a 2325 u follow (20261002T124708). Retail walks 0 of 23 risen bodies before their own first input, and presses 0 times while dead.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.15. Census `toolkit/authsrv/risejoin.py`.
+- **Shipped:** `PRESS_REFUSES_DEAD_PLAYER` (`--press-allows-dead-player` reverts), at the 0x0026
+  arm, begin_attack and attack_tick's dead branch. `test_playerswing` 216 -> 223.
+
 ### MOVECODE-1z-ds.14 -- 2026-10-02 -- **A walk-start is a move. The key report after a stop (the client's 0x0047, or our pin + halt) moved 0 u and took 1z-db's still path: no windup cancel, and the target kept, so the server sent follows after a body walking away (5 events in the two runs with 1z-ds.10). Retail cancels 29 of 32 walk-starts inside the windup and re-approaches 0 of 27 times after a post-stop walk-start; 1z-ds.10's "0 of 3" was an empty cell.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.14. Census `toolkit/authsrv/walkstartjoin.py`.

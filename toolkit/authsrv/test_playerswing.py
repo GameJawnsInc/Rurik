@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=216)   # MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=223)   # MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2561,6 +2561,159 @@ def section_combat_deadlines():
         authsrv.COMBAT_DEADLINES = True
 
 
+def section_dead_press():
+    """MOVECODE-1z-ds.15: a dead player's attack press is no order, and an order set across the
+    kill dies with the player. 20261002T124708 39.10: a press handled in the killing-blow instant
+    pinned and halted the corpse and set `attacking`; 0.055 s after the rise the tick sent a
+    2325 u follow. Retail walks 0 of 23 risen bodies before their own input (risejoin.py)."""
+    import ast
+    import time
+    import authsrv
+    import leadgeom
+
+    print("\n19. 1z-ds.15: a dead player's press orders nothing; the order dies with the player")
+
+    class _Rec:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    class _PM:
+        def walkable(self, x, y):
+            return True
+
+        def clip(self, x0, y0, x1, y1, step=None):
+            return (x1, y1)
+
+        def plane_at(self, x, y, prefer=None):
+            return prefer
+
+        def containing(self, x, y):
+            return []
+
+    PIN, HALT = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION, authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+
+    def walking_dead(dead=True):
+        t = time.time()
+        st = _state()
+        st.update({"client_pos": (30.0, 0.0), "client_pos_at": t - 0.1, "client_plane": 0,
+                   "kbd_moving_at": t - 0.1, "heading": (0.0, 766.0), "heading_mt": 1,
+                   "pathmap": _PM(), "player_dead": dead, "player_health": 100.0})
+        return st
+
+    def press(on, dead=True):
+        sent, rec = [], _Rec()
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        st = walking_dead(dead)
+        saved = authsrv.PRESS_REFUSES_DEAD_PLAYER
+        authsrv.PRESS_REFUSES_DEAD_PLAYER = on
+        try:
+            authsrv.begin_attack(send, st, 10, 0, rec=rec)
+        finally:
+            authsrv.PRESS_REFUSES_DEAD_PLAYER = saved
+        return st, sent, rec
+
+    st, sent, rec = press(True)
+    pv = [kw for k, kw in rec.rows if k == "press_verdict"]
+    check(sent == [] and st.get("attacking") is None
+          and [kw.get("reason") for kw in pv] == ["dead-player"],
+          "19a. a dead player's press on a walking body sends NOTHING -- no pin, hold or halt "
+          "on the corpse -- sets no order, and its row says dead-player",
+          f"sent {[l[:30] for _o, _v, l in sent]}, attacking {st.get('attacking')}, rows {pv}")
+    stk, sentk, _r = press(False)
+    opsk = [op for op, _v, _l in sentk]
+    check(PIN in opsk and HALT in opsk and stk.get("attacking") == 10,
+          "19b. KNOWN-BAD ARM (--press-allows-dead-player): the corpse is pinned and halted "
+          "and the order is taken -- 20261002T124708 39.104",
+          f"{[l[:30] for _o, _v, l in sentk]}, attacking {stk.get('attacking')}")
+    stc, sentc, _r = press(True, dead=False)
+    check(PIN in [op for op, _v, _l in sentc] and stc.get("attacking") == 10,
+          "19c. CONTROL: the same press from a LIVING player stops the body and takes the "
+          "order -- the gate is the death, not the press",
+          f"{[l[:30] for _o, _v, l in sentc]}")
+
+    # The REAL 0x0026 arm (lifted out of the receive loop as test_position_trust's
+    # receive_arm does; that one matches `opcode == NAME`, this arm is `opcode in (...)`).
+    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    node = None
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                and isinstance(n.test.left, ast.Name) and n.test.left.id == "opcode"
+                and len(n.test.ops) == 1 and isinstance(n.test.ops[0], ast.In)
+                and isinstance(n.test.comparators[0], ast.Tuple)
+                and any(isinstance(e, ast.Name) and e.id == "GAME_CMSG_ATTACK_AGENT"
+                        for e in n.test.comparators[0].elts)):
+            node = n
+    check(node is not None, "the 0x0026 arm is found in the source -- the drive below is real")
+    if node is None:
+        return
+    args = ast.arguments(posonlyargs=[], args=[ast.arg(p) for p in
+                                               ("values", "state", "rec", "send", "conn_id")],
+                         vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
+    mod = ast.Module(body=[ast.FunctionDef(name="_arm", args=args, body=node.body,
+                                           decorator_list=[], returns=None, type_params=[])],
+                     type_ignores=[])
+    ast.fix_missing_locations(mod)
+    ns = {}
+    exec(compile(mod, authsrv.__file__, "exec"), authsrv.__dict__, ns)   # noqa: S102
+    arm = ns["_arm"]
+
+    def arm_press(on):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        t = time.time()
+        st = walking_dead(True)
+        st.update({"click_moving_at": t - 0.2,
+                   "click_leg": leadgeom._leg_record((0.0, 0.0), (0.0, 300.0), t - 0.2, 288.0)})
+        saved = authsrv.PRESS_REFUSES_DEAD_PLAYER
+        authsrv.PRESS_REFUSES_DEAD_PLAYER = on
+        try:
+            arm([0, 10], st, _Rec(), send, 0)
+        finally:
+            authsrv.PRESS_REFUSES_DEAD_PLAYER = saved
+        return st, sent
+
+    sta, senta = arm_press(True)
+    stb, sentb = arm_press(False)
+    check(senta == [] and sta.get("click_moving_at") is not None
+          and any("PRESS ENDS THE WALK" in l for _o, _v, l in sentb),
+          "19d. through the REAL 0x0026 arm: the corpse's press ends no walk on its behalf "
+          "(no PRESS ENDS THE WALK 0x002C) -- the known-bad arm places the corpse",
+          f"shipped {[l[:30] for _o, _v, l in senta]}, known-bad {[l[:30] for _o, _v, l in sentb]}")
+
+    def across_kill(on):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        st = _state()
+        st["agents"][10]["pos"] = (400.0, 0.0)
+        st.update({"attacking": 10, "player_dead": True, "player_health": 0.0,
+                   "player_last_swing": 0.0})
+        saved = authsrv.PRESS_REFUSES_DEAD_PLAYER
+        authsrv.PRESS_REFUSES_DEAD_PLAYER = on
+        try:
+            authsrv.attack_tick(send, st, 0)          # dead: the branch that returns
+            kept = st.get("attacking")
+            st.update({"player_dead": False, "player_health": 100.0})   # the rise
+            sent.clear()
+            authsrv.attack_tick(send, st, 0)
+        finally:
+            authsrv.PRESS_REFUSES_DEAD_PLAYER = saved
+        return kept, [op for op, _v, _l in sent]
+
+    kept1, ops1 = across_kill(True)
+    kept0, ops0 = across_kill(False)
+    check(kept1 is None and DEST not in ops1 and kept0 == 10 and DEST in ops0,
+          "19e. an order set across the kill dies at the next dead tick, so the risen body is "
+          "walked nowhere -- the known-bad arm keeps it and FOLLOWS 400 u out on the first live "
+          "tick (124708 49.805: 2325 u, 0.055 s after the rise; retail 0 of 23)",
+          f"shipped kept {kept1} ops {ops1}; known-bad kept {kept0} ops {ops0}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    check("--press-allows-dead-player" in args_src and "if a.press_allows_dead_player:" in src,
+          "19f. --press-allows-dead-player is wired")
+
+
 def section_press_stop_hold():
     """MOVECODE-1z-ds.6: the press stop carries retail's [8, me, 1], kept to the next input.
 
@@ -2716,6 +2869,7 @@ def main():
     section_press_supersedes_and_move_ends()
     section_press_ends_kbd_latch()
     section_press_stop_hold()
+    section_dead_press()
     section_still_streak()
     section_no_target_charge()
     section_reach_frame()

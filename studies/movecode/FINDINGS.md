@@ -21261,3 +21261,46 @@ the lane, its refuter and the critic):
 landing), whose hit landed while the body walked. The run asks: *"a tap during the windup
 cancels the swing; does the re-press swing at once? Walking away after a swing: does the
 body ever get pulled back toward the target?"*
+
+### 1z-ds.15 A dead player's press is no order, and the order dies with the player (`PRESS_REFUSES_DEAD_PLAYER`, `--press-allows-dead-player` reverts)
+
+**The tape** (the 1z-ds.13 pass, lane D; OBSERVED and re-measured), 20261002T124708:
+- **39.103:** the KILL, then a c2s 0x0026 handled after it in the killing-blow instant.
+- `begin_attack` had no `player_dead` gate:
+  - the 0x0026 arm sent the corpse a `KBD LEAD KILLED on press` 0x0029;
+  - `_press_stops_body` sent the PRESS STOP PIN, the hold and a 0x0028;
+  - `attacking` was set.
+- `attack_tick`'s dead branch returns without clearing `attacking`.
+- **49.750:** the shrine rise. **49.805:** `APPROACH: player -> agent 110 ... 2325 u out`.
+- **53.262:** the first c2s, at (1437,2513), 982 u from the shrine. The body walked our order
+  for 3.5 s before the owner touched a key.
+- This was 1 of the run's 3 rises. The other two had no press in the killing instant.
+
+**RETAIL** (OBSERVED, `toolkit/authsrv/risejoin.py`, new and read-only):
+- **Rises:** 26 observer deaths, 23 rises. A server walk (0x002A / 0x0029 [me]) before the
+  observer's own first input: 0 of 23.
+- **The discriminating rows:** 3 rises have no input and no walk for 15 s, so a surviving
+  order would have walked them.
+- **Presses while dead:** 0 c2s 0x0026. Retail's client does not press while dead, so there
+  is no witness on refusing against queueing. Refusing is the reading the rises agree with.
+
+**Shipped:** `PRESS_REFUSES_DEAD_PLAYER`, at three sites:
+- **The 0x0026 arm** skips `_kbd_lead_kill` and `_press_supersedes` for a dead player. The
+  skill arm has had its own gate since 2026-08-11 ("the corpse could cast").
+- **`begin_attack`** refuses the press with a `dead-player` row. This also covers its harness
+  caller.
+- **`attack_tick`'s dead branch** clears `attacking`. The press runs on the connection
+  thread and the kill on the tick, so a press can still land after the kill.
+
+**Tests:** `test_playerswing` §19, 216 -> 223:
+- a: begin_attack on a dead walking player sends nothing, sets no order, and writes a
+  dead-player row;
+- b: the known-bad arm pins and halts the corpse;
+- c: CONTROL: the same press from a living player stops the body;
+- d: through the REAL 0x0026 arm (lifted from the source by AST), the corpse's press places
+  nothing, where the known-bad arm sends PRESS ENDS THE WALK;
+- e: an order set across the kill dies at the next dead tick; the known-bad arm follows 400 u
+  out on the first live tick;
+- f: the flag is wired.
+- **Red:** each site out of the source reddens its own check (begin_attack 19a, the arm 19d,
+  the dead tick 19e).

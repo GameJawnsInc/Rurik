@@ -775,6 +775,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before it). By default a swing that never landed holds no "
                          "clock: retail swings at the press 13 of 13, and a landed swing "
                          "holds the period 65 of 65.")
+    ap.add_argument("--press-allows-dead-player", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.15: an attack press from a dead "
+                         "player is taken (the corpse pinned and halted, the order kept "
+                         "through the rise), every build before it. By default it is "
+                         "refused and the order dies with the player: retail walks 0 of 23 "
+                         "risen bodies before their own first input.")
     ap.add_argument("--walk-start-is-still", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.14: a key report 0 u from a stop "
                          "(the client's own 0x0047, or our pin + halt) is a body that moved "
