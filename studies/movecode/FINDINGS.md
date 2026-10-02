@@ -20705,3 +20705,58 @@ and the 37.93 slide is what that exposure became.
 
 1z-ds removes the slide whatever the lead state, because the reckoner reads the report,
 not the lead. The latch miss is recorded here, not fixed.
+
+### 1z-ds.5 On the client: `20261001T201800`, the slide is GONE; three residuals
+
+The owner drove the registered run.
+
+**The owner's eye:**
+- *"now it doesn't slide during attacking, but it feels a bit off … i feel like we're
+  waiting to turn to directly face the target when issuing an attack command after
+  moving/holding movement keys"*.
+- On Q2: *"i did not walk on. had to press it again to start moving. i believe that's
+  accurate retail behavior"*.
+- *"got a slight warp with a click-to-move -> attack at the beginning of the run"*.
+
+**The wire:**
+- **PS-Q0:** clean. No assert, no crash dialog, the owner closed the client.
+- **PS-Q4:** 0 `Pending skill`. All 19 keyboard-walk presses killed their lead exactly on
+  the estimate.
+- **PS-Q1:** 18 `press_stop` rows fired, and one was refused `no-report`, a repeat inside
+  the forget. Well exposed.
+- **PS-Q2 (a):** 18 of 18 sent the 0x002C, then the 0x0028, in the press instant.
+- **PS-Q2 (b):** 11 of 17 next reports lie 0 u from the pin. The other 6 (60–200 u) had a
+  follow walk the body first, because the target had moved or the pinned body was out of
+  reach.
+- **PS-Q2 (c):** the slide is gone by the owner's eye. The tape cannot score it, because
+  the body stands silently, so the registered check reads the eye.
+
+**1z-ds is CONFIRMED for the slide.** Three residuals, each measured:
+
+1. **The wait is mostly the attack interval.** Seven presses were held by `interval` for
+   0.09 to 1.24 s, because the start-to-start clock is charged with the moving span
+   (1z-dg, retail 28 of 28). The body now STANDS through that wait, where it used to walk
+   through it. Retail waits too: in the widened walking cell, 23 of 64 swings come more
+   than 0.25 s after the press, at most 1.05 s.
+2. **Retail's press batch carries the action hold, and ours does not.**
+   - In `pressstopjoin`'s 42-press cell, `0x009F [8, me, 1]` precedes the swing on 42 of
+     42. It sits immediately ahead of the 0x0028, in the same instant, on 40.
+   - Our player hold goes out only at death on this tape.
+   - `[8 -> 1]` makes the client zero the view speed: `0x0081BE90` with 0.0f, skillcast
+     §16.2.
+   - Retail sends the player no rotation: 0 of 64 walking and 0 of 52 parked in-reach
+     presses carry a 0x002E. So the client turns itself.
+   - Whether the missing hold is the "waiting to turn" is UNVERIFIED.
+3. **A click DROPPED after a press.**
+   - At 47.043 the router refused a click `kbd-drop`: the keyboard latch was 2.79 s old.
+     But the 44.271 press had killed the lead and handed the body to our follow.
+   - The next press (48.174) placed the body on the click's straight-line model
+     (`PRESS ENDS THE WALK`), which the client, walking its own path, may not have walked.
+     It is the likely "slight warp", unmeasured: no report between 44.25 and 51.05.
+   - `PRESS_ENDS_KBD_LATCH` ends the latch for the swing gate only. ANIMREF §41.4 left
+     rule 1 alone as "measured at zero" cost; this is a candidate cost.
+
+**Also,** at 20.87 the press stopped a body that the stale frame put in reach (117 u),
+but the pin put it 179 u out. The follow then walked it in, and the swing came 1.74 s
+later. The 0x0028 and the 0x002A went out 8 ms apart, so the visible stop is at most a
+frame.

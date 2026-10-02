@@ -28,6 +28,10 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds CONFIRMED -- 2026-10-01 -- **`20261001T201800`: the slide is gone (the owner: "now it doesn't slide during attacking"); 18 press stops, all pin then halt in the press instant. The owner on Q2: "had to press it again to start moving. i believe that's accurate retail behavior". Three residuals measured and left OPEN: a "waiting to turn" feel (retail's press batch carries [8, me, 1] 42 of 42, ours none), the interval wait now stood through, and a click dropped kbd-drop after a press (the likely "slight warp").**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.5.
+
 ### MOVECODE-1z-ds -- 2026-10-01 -- **The owner's "slides during attacks" (`20261001T194258`): an in-reach press on a body walking under held keys sent NOTHING, and the swing opened on the walking body (530 u and 181 u to the next report). Retail stops it, a 0x0028 [me] in the press batch on 39 of 42. Ours now sends the cast-stop's pin pair at the press, ahead of the swing.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.
