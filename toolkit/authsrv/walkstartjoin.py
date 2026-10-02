@@ -34,6 +34,8 @@ MEASURED 2026-10-02 over the live corpus (122 connections with an observer):
   CENSUS 2: 39 stopped presses (CONTROL 39 of 39 swing), 27 first inputs a moving 0x003D;
   0 attack follows and 0 new starts before the next press (21) / skill (1) / 4 s (5); 1
   interact walk (20260913T210901 377.8, ordered by its own c2s 0x003F).
+  CENSUS 3 (MOVECODE-1z-ds.16): a moving 0x003D that arrives while the hold is up and draws
+  both [8, me, 0] and [3, me, 0] within 0.1 s: 33 rows, the release first on 33.
 Read-only; standard library only; refuses non-live captures by construction
 (livewire.live_connections).
 """
@@ -122,6 +124,32 @@ def windup_rows(cap, merged, me):
     return rows
 
 
+def batch_rows(cap, merged, me):
+    """CENSUS 3: a moving c2s 0x003D that arrives while the hold (prop 8) is UP and draws both
+    an own [8, me, 0] and an own [3, me, 0] within 0.1 s -- which comes first?"""
+    rows, held = [], 0
+    for i, (t, d, op, v) in enumerate(merged):
+        if d == "s2c":
+            if op == 0x009F and _is(v, 1, 8) and _is(v, 2, me) and len(v) > 3:
+                held = 1 if _is(v, 3, 1) else 0
+            continue
+        if op != 0x003D or held != 1 or not (len(v) > 4 and isinstance(v[4], int) and v[4]):
+            continue
+        i8 = i3 = None
+        for j in range(i + 1, len(merged)):
+            tj, dj, opj, vj = merged[j]
+            if tj - t > 0.1:
+                break
+            if dj == "s2c" and opj == 0x009F and _is(vj, 2, me) and _is(vj, 3, 0):
+                if _is(vj, 1, 8) and i8 is None:
+                    i8 = j
+                if _is(vj, 1, 3) and i3 is None:
+                    i3 = j
+        if i8 is not None and i3 is not None:
+            rows.append((cap, round(t, 3), "release first" if i8 < i3 else "STOP FIRST"))
+    return rows
+
+
 def after_stop_rows(cap, merged, me):
     rows, cells, ctrl = [], 0, 0
     for i, (t, d, op, v) in enumerate(merged):
@@ -175,7 +203,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rows", action="store_true", help="every row")
     a = ap.parse_args()
-    wrows, arows, cells, ctrl, nconn = [], [], 0, 0, 0
+    wrows, arows, brows, cells, ctrl, nconn = [], [], [], 0, 0, 0
     for capdir, gf in livewire.live_connections():
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         me = pressstopjoin.whose_agent(merged)
@@ -184,6 +212,7 @@ def main():
         nconn += 1
         cap = os.path.basename(capdir)
         wrows += windup_rows(cap, merged, me)
+        brows += batch_rows(cap, merged, me)
         r, c, k = after_stop_rows(cap, merged, me)
         arows += r
         cells += c
@@ -207,6 +236,13 @@ def main():
     print(f"  window ended by: {dict(collections.Counter(r[6] for r in arows))}")
     for r in arows:
         if r[3] or r[5] or a.rows:
+            print("   ", r)
+    print(f"\n#### CENSUS 3: held moving 0x003D answered by both [8, me, 0] and [3, me, 0] within "
+          f"0.1 s -- {len(brows)} rows: release first "
+          f"{sum(r[2] == 'release first' for r in brows)}, stop first "
+          f"{sum(r[2] == 'STOP FIRST' for r in brows)}")
+    for r in brows:
+        if r[2] != "release first" or a.rows:
             print("   ", r)
 
 

@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.16 -- 2026-10-02 -- **A movement cancel sends the hold's release before the stop: retail 33 of 33; ours sent the stop first. 1z-ds.14 made that batch common.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.16. Census `walkstartjoin.py` census 3.
+- **Shipped:** `CANCEL_RELEASES_FIRST` (`--cancel-stop-first` reverts). `test_kbdsync` 260 -> 261.
+
 ### MOVECODE-1z-ds.15 -- 2026-10-02 -- **A dead player's press is no order. A press handled in the killing-blow instant pinned and halted the corpse and set `attacking`; the order outlived the death and, 0.055 s after the shrine rise, sent a 2325 u follow (20261002T124708). Retail walks 0 of 23 risen bodies before their own first input, and presses 0 times while dead.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.15. Census `toolkit/authsrv/risejoin.py`.

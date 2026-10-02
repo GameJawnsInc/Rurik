@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=260)   # MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=261)   # MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2785,6 +2785,26 @@ def main():
           "30i. CONTROL: a still report after a MOVING report is 1z-db's wall tap, not a "
           "walk-start -- it still cancels nothing and keeps the target",
           f"stops {stops30i}, attacking {st30i.get('attacking')}")
+    # MOVECODE-1z-ds.16: that cancel's batch is retail's -- the hold's release AHEAD of the
+    # stop, 33 of 33 (walkstartjoin.py census 3); ours sent the stop first.
+    def order30(first):
+        saved = authsrv.CANCEL_RELEASES_FIRST
+        authsrv.CANCEL_RELEASES_FIRST = first
+        try:
+            _st, w, _p = parked30(swing=True)
+        finally:
+            authsrv.CANCEL_RELEASES_FIRST = saved
+        seq = [("8:%d" % v[2]) if v[0] == authsrv.agents.GV_DISABLED else "3"
+               for op, v, _l in w.rows if op == STOPPED30
+               and v[0] in (authsrv.agents.GV_DISABLED, authsrv.agents.GV_ATTACK_STOPPED)
+               and v[1] == authsrv.PLAYER_AGENT_ID]
+        return seq
+    seq30k, seq30k0 = order30(True), order30(False)
+    check(seq30k == ["8:0", "3"] and seq30k0 == ["3", "8:0"]
+          and "--cancel-stop-first" in ARGS_SRC and "if a.cancel_stop_first:" in SRC,
+          "30k. the walk-start's cancel batch releases the hold FIRST, then stops the swing -- "
+          "retail 33 of 33; the known-bad arm (--cancel-stop-first) is the old stop-first order",
+          f"shipped {seq30k}, known-bad {seq30k0}")
     check(SRC.count("_kbd_report_still(state, _moved)") == 1
           and SRC.count("moved=_moved)") == 1
           and "--walk-start-is-still" in ARGS_SRC and "if a.walk_start_is_still:" in SRC,

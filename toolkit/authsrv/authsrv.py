@@ -20005,6 +20005,9 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
 # still reports in 122 episodes over 46 captures, 160 within 2 s of a swing.
 MOVE_CANCEL_NEEDS_DISPLACEMENT = True   # --no-move-cancel-displacement reverts
 KBD_STILL_STREAK_MIN = 2
+# MOVECODE-1z-ds.16: a movement report that releases the hold and stops the chain sends the
+# release first, as retail does 33 of 33 (cancel_on_move's own site).
+CANCEL_RELEASES_FIRST = True   # False (--cancel-stop-first): the [3] ahead of the [8, me, 0].
 
 
 def _kbd_report_still(state, moved):
@@ -20152,6 +20155,12 @@ def cancel_on_move(send, state, conn_id, moved=None):
               f"not move -- the swing keeps its windup and its target "
               f"[MOVECODE-1z-db, 1z-dd]",
               flush=True)
+    # MOVECODE-1z-ds.16: THE RELEASE GOES FIRST. Retail answers a held moving report that
+    # draws both with [8, me, 0] AHEAD of [3, me, 0], 33 of 33 (walkstartjoin.py census 3;
+    # 31 in the windup); ours sent the stop first. 1z-ds.14 made that batch common -- every
+    # walk-start in the windup after a press stop, which carries the hold.
+    if CANCEL_RELEASES_FIRST:
+        action_hold(send, state, 0, "the player moves")
     if chain_live and not still and (pre_landing or not MOVE_KEEPS_CHAIN):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
@@ -20163,7 +20172,8 @@ def cancel_on_move(send, state, conn_id, moved=None):
     # STOPPED anywhere near (the chain was already idle) (castmech 3c).
     # Transition-only, so a flag already 0 sends nothing here -- which is also
     # what keeps this from duplicating the release inside the cast burst below.
-    action_hold(send, state, 0, "the player moves")
+    if not CANCEL_RELEASES_FIRST:
+        action_hold(send, state, 0, "the player moves")
     # THE TARGET FOLLOWS THE SAME SPLIT. A cancel is a real close -- the 18
     # of 343 corpus mid-chain moves that DO carry property 3 are genuine
     # chain ends -- so a pre-landing move forgets the target exactly as the
@@ -46863,6 +46873,12 @@ def main():
               "forgot keeps the clock even when the move cancelled the swing in its "
               "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
               "retail swings at the press, 13 of 13.", flush=True)
+    if a.cancel_stop_first:
+        global CANCEL_RELEASES_FIRST
+        CANCEL_RELEASES_FIRST = False
+        print("[map] --cancel-stop-first: a movement cancel sends [3, me, 0] ahead of the "
+              "hold's [8, me, 0] -- every build before MOVECODE-1z-ds.16; retail sends the "
+              "release first, 33 of 33.", flush=True)
     if a.press_allows_dead_player:
         global PRESS_REFUSES_DEAD_PLAYER
         PRESS_REFUSES_DEAD_PLAYER = False

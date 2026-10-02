@@ -21304,3 +21304,25 @@ body ever get pulled back toward the target?"*
 - f: the flag is wired.
 - **Red:** each site out of the source reddens its own check (begin_attack 19a, the arm 19d,
   the dead tick 19e).
+
+### 1z-ds.16 The cancel batch releases the hold first (`CANCEL_RELEASES_FIRST`, `--cancel-stop-first` reverts)
+
+**Found by the second pass's critic** (OBSERVED, re-counted by `toolkit/authsrv/walkstartjoin.py`
+census 3):
+- **Retail:** a moving 0x003D that arrives while the hold is up and draws both
+  `[8, me, 0]` and `[3, me, 0]` within 0.1 s sends the release FIRST, 33 of 33 (31 of them
+  in the windup).
+- **Ours:** `cancel_on_move` sent the [3] first and released after it. On the hold-era tapes
+  the [3] came first 5 of 5.
+- **Why it matters now:** 1z-ds.14 made this batch common. Every walk-start in the windup
+  after a press stop is one, and the press stop carries the hold.
+- **The client effect is UNVERIFIED.** The hold's clearing path arms a 250 ms re-face (F24),
+  and which message lands first decides what the client is doing when it runs.
+
+**Shipped:** `CANCEL_RELEASES_FIRST`. `cancel_on_move` releases the hold ahead of the stop.
+The release stays transition-only, so a report with no hold up sends nothing new.
+
+**Tests:** `test_kbdsync` 30k, 260 -> 261.
+- The walk-start's batch through the real 0x003D arm is `[8, me, 0]`, then `[3]`.
+- The known-bad arm sends the old stop-first order.
+- With the branch out of the source, 30k goes red.
