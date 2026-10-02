@@ -30,9 +30,14 @@ carrying the constant's own name so that the body is the line that shipped; it i
 read at the call site in `authsrv.py`, never bound as a default value, because a
 default is evaluated at `def` time and would freeze the flag.
 
+MOVECODE-1z-ds.19 added the follow's half: `_follow_close` and the `press_followed`
+record `_press_answered` opens at a follow and `_press_refused` counts into -- the
+gates that held a follow-answered press after its walk, which the press row could
+not say (its row closes at the 0x002A).
+
 THE FAKE CLOCK DOES NOT REACH HERE. `test_position_trust.py` drives time by
-rebinding `authsrv.time`; the three functions below that call `time.time()`
-(`_swing_dropped`, `_press_refused`, `_press_answered`) read *this* module's
+rebinding `authsrv.time`; the four functions below that call `time.time()`
+(`_swing_dropped`, `_press_refused`, `_press_answered`, `_follow_close`) read *this* module's
 `time`, which that rebind does not touch. Nothing depends on it today -- these
 rows are telemetry and no check compares an `age` against a driven clock -- but a
 later test that drives the clock and then asserts on a row would be reading the
@@ -164,12 +169,48 @@ def _swing_dropped(state, rec, conn_id, branch, **detail):
           f"[SWINGCANCEL, studies/movecode 1z-cx]", flush=True)
 
 
+# THE FOLLOW'S HALF (MOVECODE-1z-ds.19, the second pass's lane P3, U1). A press answered by a
+# FOLLOW closes its press_verdict row at the 0x002A -- `_press_answered` empties
+# `press_pending` -- so whatever then held the swing after the walk arrived (the interval,
+# the moving gate, a cast) wrote nothing: 18 of the owner runs' 32 walk-in holds had to be
+# reconstructed from chain_pause rows and the approach's eta. `press_followed` carries the
+# answered press on, counts the ticks each attack_tick branch held it, and one
+# `follow_swing` row closes it at the swing (or at the branch that ended it). Rows only.
+_FOLLOW_BRANCHES = ("dead-player", "move-ended-order", "target-gone", "reach",
+                    "swing-in-flight", "cast", "moving", "interval")
+
+
+def _follow_close(state, rec, conn_id, fired, reason):
+    """Emit and drop the followed press's row (one per follow-answered press)."""
+    pf = state.pop("press_followed", None)
+    if pf is None:
+        return
+    now = time.time()
+    if rec is not None:
+        try:
+            rec.event("follow_swing", target=pf["target"], fired=fired, reason=reason,
+                      age=round(now - pf["t"], 3), walk=round(now - pf["follow_at"], 3),
+                      held=dict(pf["held"]))
+        except Exception:      # telemetry must never take the tick down
+            pass
+    if pf["held"]:
+        print(f"[c{conn_id}] follow-answered press on agent {pf['target']}: "
+              f"{reason} {now - pf['follow_at']:.3f} s after the follow, held "
+              f"{pf['held']} [MOVECODE-1z-ds.19]", flush=True)
+
+
 def _press_refused(state, rec, conn_id, branch, **detail):
     """attack_tick found a PENDING press and did not open its swing this
     tick. The FIRST refusal writes the row and prints -- the R11 rule, "a
     suppressed grant is PRINTED, never silent", applied to the swing -- and
     every later tick only counts. `terminal` closes the press: nothing will
     ever answer it (the order was forgotten or the target went)."""
+    if (state.get("press_pending") is None and state.get("press_followed") is not None
+            and branch in _FOLLOW_BRANCHES):
+        pf = state["press_followed"]
+        pf["held"][branch] = pf["held"].get(branch, 0) + 1
+        if detail.get("terminal"):
+            _follow_close(state, rec, conn_id, False, branch)
     pend = state.get("press_pending")
     if pend is None or pend.get("answered") is not None:
         return
@@ -203,10 +244,23 @@ def _press_answered(state, rec, conn_id, how, **detail):
     when the press was refused first, which branch held it and for how many
     ticks -- so a capture shows the starve AND its release."""
     pend = state.get("press_pending")
+    _fresh = pend is not None and pend.get("answered") is None
+    if state.get("press_followed") is not None:
+        # A swing with no press pending is the followed press's own; a swing or a follow
+        # answering a NEWER press supersedes it (MOVECODE-1z-ds.19). A re-path of the same
+        # follow (no press pending) leaves it open.
+        if how == "swing":
+            _follow_close(state, rec, conn_id, not _fresh,
+                          "superseded" if _fresh else "swing")
+        elif how == "follow" and _fresh:
+            _follow_close(state, rec, conn_id, False, "superseded")
     if pend is None or pend.get("answered") is not None:
         return
     now = time.time()
     age = round(now - pend["t"], 3)
+    if how == "follow":
+        state["press_followed"] = {"t": pend["t"], "target": pend["target"],
+                                   "follow_at": now, "held": {}}
     pend["answered"] = how
     _press_row(rec, fired=True, reason=how, target=pend["target"], age=age,
                refused_by=pend.get("refused"), ticks=pend["ticks"], **detail)

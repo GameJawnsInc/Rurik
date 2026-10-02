@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=223)   # MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=226)   # MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2085,7 +2085,7 @@ def section_no_target_charge():
         def event(self, kind, **kw): self.rows.append((kind, kw))
 
     def lifecycle(charges, move_at=2.0, span=1.5, repress_target=10, clock_charge=False,
-                  frees=True):
+                  frees=True, target_pos=None):
         """Starts (synthetic clock) of a chain that a real move interrupts:
         the move's report forgets the target, the body moves for `span`,
         the stop clears the latch and the client re-presses `repress_target`
@@ -2127,6 +2127,8 @@ def section_no_target_charge():
                 moving = move_at <= t < move_at + span
                 state["kbd_moving_at"] = clock[0] if moving else None
                 if t >= move_at + span + 0.04 and forgot and not repressed:
+                    if target_pos is not None:      # 17b-h: the re-press finds it out of reach
+                        state["agents"][repress_target]["pos"] = target_pos
                     authsrv.begin_attack(send, state, repress_target, 0, rec=rec)
                     repressed = True
                 before = len(sent)
@@ -2272,6 +2274,42 @@ def section_no_target_charge():
           "17b-g. CONTROL: a pre-landing cancel then a press on ANOTHER target swings at once "
           "under both arms -- retail's retarget cancel cell, which ours already matched",
           f"gaps {g_r1} / {g_r0}")
+    # 17b-h: the walk-in variant (the second pass's lane P3: 201800 51.411, 005405 31.378,
+    # 124708 25.160). The re-press after the windup cancel finds the target out of reach, so
+    # a FOLLOW answers it; retail swings on arrival, ours waited max(arrival, the cancelled
+    # start + period) -- the same resume, so the same flag.
+    s_wf, rows_wf, st_wf = lifecycle(True, move_at=2.0, span=0.5, target_pos=(200.0, 0.0))
+    s_wh, rows_wh, st_wh = lifecycle(True, move_at=2.0, span=0.5, target_pos=(200.0, 0.0),
+                                     frees=False)
+    a_wf = [t - 1000.0 for t, _a in s_wf if t - 1000.0 >= 2.0]
+    a_wh = [t - 1000.0 for t, _a in s_wh if t - 1000.0 >= 2.0]
+    follows_wf = [c for c, op, _v, _l in st_wf["_t_sent"]
+                  if op == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION]
+    check(follows_wf and a_wf and a_wh and a_wf[0] < 1.75 + interval - 0.2
+          and a_wh[0] >= 1.75 + interval - 0.051 and a_wh[0] - a_wf[0] > 0.2,
+          "17b-h. the WALK-IN variant: a follow answers the re-press, and the swing opens on "
+          "ARRIVAL, not at the cancelled start + period; the known-bad arm waits the period "
+          "(1.75 + 1.75)",
+          f"follow at {[round(c - 1000.0, 2) for c in follows_wf]}, shipped first start "
+          f"{a_wf[:1]}, known-bad {a_wh[:1]}")
+    # 17b-i/j. MOVECODE-1z-ds.19 (U1): the gates that held a follow-answered press after its
+    # walk now leave a row -- the press row closed at the 0x002A and said nothing more.
+    fs_wh = [kw for k, kw in rows_wh if k == "follow_swing"]
+    fs_wf = [kw for k, kw in rows_wf if k == "follow_swing"]
+    pvf_wh = [kw for k, kw in rows_wh if k == "press_verdict" and kw.get("reason") == "follow"]
+    def _walked(h):
+        return h.get("reach", 0) + h.get("moving", 0)      # the walk's own gates
+    check(len(fs_wh) == 1 and fs_wh[0].get("fired") is True
+          and _walked(fs_wh[0]["held"]) >= 1 and fs_wh[0]["held"].get("interval", 0) >= 1
+          and len(pvf_wh) == 1,
+          "17b-i. a follow-answered press whose clock outlasts the walk writes ONE follow_swing "
+          "row naming both gates that held it (the walk, then the interval), and the press row "
+          "is still the single `follow` row",
+          f"follow_swing {fs_wh}, press follow rows {len(pvf_wh)}")
+    check(len(fs_wf) == 1 and fs_wf[0].get("fired") is True
+          and _walked(fs_wf[0]["held"]) >= 1 and "interval" not in fs_wf[0]["held"],
+          "17b-j. CONTROL: when the walk outlasts the clock the row names the walk alone -- "
+          "the interval is not counted on every tick", f"follow_swing {fs_wf}")
 
 
 def section_reach_frame():

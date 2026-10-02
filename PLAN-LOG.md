@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.19 -- 2026-10-02 -- **Press-to-swing latency by class: retail answers every ungated press in 26-64 ms and every late one at its gate's own instant; ours on the shipped code sits on that rule except 1z-ds.13's cell, which also covers 3 walk-in re-presses. Added 17b-h (the walk-in variant) and the `follow_swing` row (the gates that held a follow-answered press).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.19.
+- **Shipped:** the `follow_swing` row (`pressverdict.py`, telemetry, no flag). `test_playerswing`
+  223 -> 226.
+- **Registered:** the reach band (119.6, 135.8] needs a retail capture.
+
 ### MOVECODE-1z-ds.18 -- 2026-10-02 -- **A click after OUR stop or follow is answered, not kbd-dropped. All three owner-run drops came after a press had handed the body to our follow; retail answers every click inside our latch, 34 of 34.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.18. Census `toolkit/authsrv/kbdclickjoin.py`.

@@ -21444,3 +21444,58 @@ against 0 of 13 unpinned. That is to be measured on its own run.
 - h: one writer, and the wiring.
 - **Red:** with the stand-down out, 1d-a/b/g go red; with the marker out, 1d-g/h; with
   `>=` for `>`, 1d-e.
+
+### 1z-ds.19 Press-to-swing latency by class, 1z-ds.13's walk-in variant, and the `follow_swing` row
+
+**The second pass's lane P3** (OBSERVED by the lane; its refuter returned nothing, so only
+the parts the round's critic re-ran carry a second witness):
+- **Retail never makes a press wait without a gate.**
+  - Ungated presses are answered 26-64 ms after the press (n=98, p50 38 ms, including the
+    round trip). These are parked or walking in reach, after a windup cancel, or a retarget.
+  - Every press answered later than about 65 ms is held by one of four gates, and the swing
+    lands on that gate's own instant:
+    - a cast or aftercast: the swing comes at the E3, 19 of 19;
+    - a landed swing's clock: p0 + base x modifier, 90 of 93 (the 3 misses are lane A's IAS
+      rows);
+    - a walk-in: the swing opens about 66 u from the target, n=16;
+    - a re-press while its own follow still walks.
+  - Lane A's 20 "late, cause unread" presses are 13 cast holds and 7 re-presses during a
+    running follow.
+- **Ours on 20261002T141035 (the shipped code)** sits on retail's rule in every class.
+  - Every d-class swing comes at start-to-start 1.330-1.331.
+  - Every walk-in opens at 66-77 u (our 80 u disc).
+- **The one remaining tape-level divergence is 1z-ds.13's cell**, and it reaches 7 presses,
+  not 4. The critic re-ran this 7 of 7.
+  - 4 are in reach.
+  - 3 come behind a WALK-IN: 201800 51.411, 005405 31.378, 124708 25.160. There the re-press
+    after a windup cancel is answered by a follow, and our swing waited max(arrival, the
+    cancelled start + period) where retail swings on arrival.
+  - 1z-ds.13's conjunct covers them, because they go through the same `begin_attack` resume.
+
+**Added:**
+- **`test_playerswing` 17b-h, the walk-in variant.** The same windup-cancel rig, with the
+  target 200 u out at the re-press.
+  - The follow answers it, and the swing opens on ARRIVAL at 3.05.
+  - The known-bad arm waits the cancelled period, to 3.5.
+  - Both of 1z-ds.13's mutations redden it.
+- **U1: the `follow_swing` row** (`pressverdict.py`, rows only, no flag).
+  - **The gap:** a follow-answered press closes its `press_verdict` row at the 0x002A. So
+    whatever held the swing after the walk arrived wrote nothing; 18 of the owner runs' 32
+    walk-in holds had to be reconstructed.
+  - **The fix:** `press_followed` carries the answered press on and counts the ticks each
+    `attack_tick` branch held it. One `follow_swing` row closes it at the swing, or at the
+    branch that ended it, or as `superseded`.
+  - **No source change in `attack_tick`:** it hooks the existing `_press_refused` /
+    `_press_answered` calls.
+  - **Tests:**
+    - 17b-i: a press whose clock outlasts the walk names both gates (the walk's `reach`, then
+      `interval`), and the press row is still the single `follow` row.
+    - 17b-j: CONTROL, when the walk outlasts the clock the row names the walk alone.
+    - Red: with the count out, or the record out, both go red. 223 -> 226.
+
+**Not changed, registered:** the reach band (119.6, 135.8].
+- 8 of the 59 owner presses with a known body distance fall inside it: ours swung 5 at once
+  and walked 3 in.
+- Retail has no 1.33 s row inside the band, so which side is right is UNVERIFIED.
+- What would settle it: a live capture of parked sword presses at 120-136 u from a target
+  that never moved, scored with `reachjoin.py`.
