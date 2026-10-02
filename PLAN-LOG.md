@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.12 -- 2026-10-02 -- **`20261002T141035` CONFIRMS 1z-ds.10 and 1z-ds.11. The owner: "feels good now". Interval-held presses swing at start-to-start 1.330-1.331 s against the 1.33 period (waits 0.20-0.39 s, down from 0.53-1.23), every chain_pause charged 0.0, 11 walk-start re-arms after our parks, 0 movement cancels (5 on the QWE run).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.12.
+- **Closes:** the §8 line for 1z-ds.10/.11.
+- **Still open in §8:** the 33 early swings, the kbd-drop click, the follow-branch
+  walk-start.
+
 ### MOVECODE-1z-ds.11 -- 2026-10-02 -- **The owner's "~1 s slow turn before attacking right next to the enemy" (`20261002T124708`): in-reach presses held by `interval` 0.53-1.23 s because the swing clock was charged for the moving span (ANIMREF-RE 31 / MOVECODE-1z-dg). Retail, read from the captures (`swingclockjoin.py`): presses inside the interval after a move swing at the PERIOD on 55 of 88, at period + span on 0. The charge is off; the refusal to swing on a moving body and the resume stay.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.11.

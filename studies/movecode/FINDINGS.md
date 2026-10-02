@@ -21066,3 +21066,37 @@ or something and my attack command is delayed until that completes"*.
 
 **OPEN:** the 33 binding presses that swing EARLY, 0.2–1.6 s inside the period. That is
 probably a cancelled previous swing or a retarget restarting the clock. Unread.
+
+### 1z-ds.12 On the client: `20261002T141035` CONFIRMS 1z-ds.10 and 1z-ds.11 -- "feels good now"
+
+The owner drove Q/W/E attacking and quarterstepping. **The owner's eye:** *"feels good
+now"*.
+
+**The wire** (SWINGCLOCK-run-registered):
+- **SC-Q0:** clean. **SC-Q4:** 0 `Pending skill`.
+- **SC-Q2a:** all 4 presses held by the interval swing at start-to-start
+  1.330–1.331 s against the 1.33 period, waiting 0.20–0.39 s. Last run they waited
+  0.53–1.23 s.
+- **SC-Q2b:** every `chain_pause` row charged 0.0 (12 of 12).
+- **SC-Q2c:**
+  - 11 walk-start re-arms after our parks;
+  - 0 movement cancels, against 5 on the QWE run;
+  - 2 fence-shut zero leads, against about 8.
+- **SC-Q2d:** 0.84 swings per press, against the registered 0.85. That is a near miss, not
+  a defect. The 3 presses without a swing are two follows the owner overrode and two
+  repeat presses with a swing already in flight; one of those swung 0.29 s later.
+
+**The two zero leads left** (43.77, 43.80) follow a FOLLOW-branch press, which pins with no
+halt and so writes no park marker (30e). But its walk-in ends parked at the disc, so the
+next key report is a walk-start too. Recorded, not fixed.
+
+**The 1z-ds arc CLOSES on the owner's word.**
+- **Shipped and confirmed:**
+  - the in-reach stop with retail's hold;
+  - reach judged on the body, with the measured 128 u;
+  - our park's next key report as a walk-start;
+  - the uncharged swing clock.
+- **Open:**
+  - the 33 early-swinging binding presses (1z-ds.11);
+  - .5's kbd-drop click;
+  - the follow-branch walk-start residual above.
