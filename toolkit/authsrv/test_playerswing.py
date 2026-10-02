@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=198)   # MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=204)   # MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2455,6 +2455,102 @@ def section_combat_deadlines():
         authsrv.COMBAT_DEADLINES = True
 
 
+def section_press_stop_hold():
+    """MOVECODE-1z-ds.6: the press stop carries retail's [8, me, 1], kept to the next input.
+
+    Retail's in-reach walking press batch (pressstopjoin's 42-press cell) is the hold then
+    the 0x0028 -- 42 of 42 carry the hold, 40 in the stop's own instant -- and the hold is
+    released after the swing's close on 35 of 36, by the player's next input, never by the
+    landing. Driven through the real begin_attack and attack_tick, the landing included."""
+    import time
+    import authsrv
+
+    print("\n9l. 1z-ds.6: the press stop holds the walk gate to the next input")
+
+    class _PM:
+        def walkable(self, x, y):
+            return True
+
+        def clip(self, x0, y0, x1, y1, step=None):
+            return (x1, y1)
+
+        def plane_at(self, x, y, prefer=None):
+            return prefer
+
+        def containing(self, x, y):
+            return []
+
+    INT, GV8 = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.agents.GV_DISABLED
+    PIN, HALT = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION, authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+
+    def holds(rows):
+        return [v[2] for op, v, _l in rows if op == INT and v[0] == GV8 and v[1] == PLAYER]
+
+    def walking(hold=True):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        t = time.time()
+        st = _state()
+        st.update({"client_pos": (30.0, 0.0), "client_pos_at": t - 0.1, "client_plane": 0,
+                   "kbd_moving_at": t - 0.1, "heading": (0.0, 766.0), "heading_mt": 1,
+                   "pathmap": _PM()})
+        saved = authsrv.PRESS_STOP_HOLDS
+        authsrv.PRESS_STOP_HOLDS = hold
+        try:
+            authsrv.begin_attack(send, st, 10, 0)
+        finally:
+            authsrv.PRESS_STOP_HOLDS = saved
+        return st, send, sent
+
+    st, send, sent = walking()
+    seq = [("8:%d" % v[2]) if op == INT and v[0] == GV8 else op for op, v, _l in sent]
+    check(seq == [PIN, "8:1", HALT] and st.get("press_hold") is True
+          and st.get("action_hold") == 1,
+          "9l-a. the press batch is the pin, [8, me, 1], then the 0x0028 -- retail's hold "
+          "ahead of its stop (40 of 42 in one instant), our pin ahead of both", f"{seq}")
+    sent.clear()
+    authsrv.attack_tick(send, st, 0)
+    opened = [l for op, _v, l in sent if "player swings" in l]
+    sent.clear()
+    _rewind(st, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
+    authsrv.attack_tick(send, st, 0)
+    check(len(opened) == 1 and holds(sent) == [] and st.get("action_hold") == 1
+          and st.get("press_hold") is True,
+          "9l-b. the swing opens and LANDS with the hold kept -- retail ends it after the "
+          "close on 35 of 36, at the next input, never at the landing",
+          f"opened {opened}, landing holds {holds(sent)}, hold {st.get('action_hold')}")
+    sent.clear()
+    authsrv.cancel_on_move(send, st, 0, moved=5.0)
+    check(holds(sent) == [0] and "press_hold" not in st and st.get("action_hold") == 0,
+          "9l-c. the next movement report releases it ([8, me, 0], the 26-of-42 cause) and "
+          "the mark goes with it", f"{holds(sent)}")
+
+    st2, send2, sent2 = walking()
+    st2.pop("press_hold", None)          # not a subscript: a mutation must FAIL here, not abort
+    authsrv.attack_tick(send2, st2, 0)
+    sent2.clear()
+    _rewind(st2, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
+    authsrv.attack_tick(send2, st2, 0)
+    check(holds(sent2) == [0],
+          "9l-d. CONTROL: the same landing with the mark gone releases the hold -- the "
+          "exemption, not the landing path, is what keeps it", f"{holds(sent2)}")
+
+    st3, send3, sent3 = walking()
+    sent3.clear()
+    authsrv._approach_send(send3, st3, 0, 10, st3["agents"][10], time.time())
+    ops3 = [("8:%d" % v[2]) if op == INT and v[0] == GV8 else op for op, v, _l in sent3]
+    check(ops3[:2] == ["8:0", DEST] and "press_hold" not in st3,
+          "9l-e. a NEW follow releases it first, adjacent to the 0x002A (retail's "
+          "re-approach shape, RANGERPRE-S16)", f"{ops3}")
+
+    st4, _send4, sent4 = walking(hold=False)
+    seq4 = [op for op, _v, _l in sent4]
+    check(seq4 == [PIN, HALT] and holds(sent4) == [] and not st4.get("press_hold"),
+          "9l-f. KNOWN-BAD ARM (--no-press-stop-hold): the pin and the halt with no hold -- "
+          "round 1, retail's 0 of 42", f"{seq4}")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -2470,6 +2566,7 @@ def main():
     section_reach_and_approach()
     section_press_supersedes_and_move_ends()
     section_press_ends_kbd_latch()
+    section_press_stop_hold()
     section_still_streak()
     section_no_target_charge()
     section_reach_frame()

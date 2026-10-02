@@ -19494,6 +19494,7 @@ def action_hold(send, state, value, why):
     """
     if not value:
         state.pop("approach_hold", None)
+        state.pop("press_hold", None)          # MOVECODE-1z-ds.6: the press stop's, too
     if state.get("action_hold", 0) == value:
         return
     state["action_hold"] = value
@@ -19628,6 +19629,22 @@ def refuse_party_target(state, target_id, conn_id, rec, what, skill_id=None):
 # (_forget_client_position's rule): a later approach must not re-pin at that report
 # advanced along its heading, past the point the body was stopped on.
 PRESS_STOPS_BODY = True   # False (--no-press-stop): the swing opens on a walking body (the slide).
+# ROUND 2, 1z-ds.6 -- THE HOLD (the owner, 20261001T201800: "it doesn't slide during
+# attacking, but it feels a bit off ... waiting to turn to directly face the target";
+# on stock the body turns to face at once even when the swing comes later). Retail's
+# press batch is [8, me, 1] THEN the 0x0028: pressstopjoin's 42-press cell carries the
+# hold by the swing on 42 of 42, in the stop's own instant and ahead of it on 40, and
+# ours sent none. Its LIFETIME is measured too: released after the swing's close on
+# 35 of 36, by the player's next input -- a 0x003D 26, a skill press 7, a follow 1 --
+# never by the landing: RANGERPRE-S16's approach hold, the same shape. So it is kept
+# through the landing (`press_hold`, beside `approach_hold`) and ended by the release
+# sites that already exist: cancel_on_move (unconditional on every movement report,
+# ahead of that report's lead -- retail's [8, me, 0] then the 0x0029), a skill press,
+# a NEW follow (released adjacent to it, as for the approach's), the target's death.
+# What [8 -> 1] does on the client is read (skillcast 16.2): the walk-gate bit, and
+# 0x0081BE90(0.0f) zeroes the view's speed. That it is what turns the body at once is
+# UNVERIFIED -- the run asks.
+PRESS_STOP_HOLDS = True  # False (--no-press-stop-hold): the pin and the halt, no hold (round 1).
 
 
 def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
@@ -19662,6 +19679,11 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
     # A held heading grant is a walk for a body we just parked -- the stop arm's
     # and the click arm's own rule (heading_hold_tick's docstring).
     state["heading_hold"] = None
+    if PRESS_STOP_HOLDS:
+        # Retail's order: the hold, then the stop (40 of 42 in one instant).
+        action_hold(send, state, 1, f"a press in reach stops the walking body, "
+                    f"held to the next input [MOVECODE-1z-ds.6]")
+        state["press_hold"] = True
     send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
          f"AGENT_STOP_MOVING(player) [MOVECODE-1z-ds pin:{why}]")
     _forget_client_position(state, "a press stopped the walking body")
@@ -21018,9 +21040,9 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # (the target walked out of range mid-chain) releases it first, adjacent to
     # the 0x002A -- retail's re-approach, :55934 337.5687: [8, 31, 0] then
     # 0x002A [31, ..., 45]. A re-path is the same follow and releases nothing.
-    if not repath and state.get("approach_hold"):
+    if not repath and (state.get("approach_hold") or state.get("press_hold")):
         action_hold(send, state, 0, f"the re-approach to agent {target_id} "
-                    f"[RANGERPRE-S16]")
+                    f"[RANGERPRE-S16, MOVECODE-1z-ds.6]")
     # The dest is the TARGET'S OWN position, not the stop point: that is the
     # message retail sends (bit-exact on 16/16 never-moved targets) and it
     # is what makes the client's own resolver stop the body at reach. Both
@@ -21249,7 +21271,8 @@ def _land_player_swing(send, state, conn_id, swing):
         # 454.7078, 516.6069 ...) -- and ends it at the next release: a
         # keyboard move, a re-approach, a skill press or the target's death
         # (the census at APPROACH_START_HALTS).
-        if LANDING_HOLD_RELEASE and not state.get("approach_hold"):
+        if (LANDING_HOLD_RELEASE and not state.get("approach_hold")
+                and not state.get("press_hold")):
             action_hold(send, state, 0,
                         "the shot is away -- movement is legal now")
         return
@@ -21264,7 +21287,9 @@ def _land_player_swing(send, state, conn_id, swing):
     if SECOND_STRIKE and _res is not None and _doubles:
         state["player_second_strike"] = {"target": swing["target"],
                                          "at": second_strike_due(state, time.time())}
-    if LANDING_HOLD_RELEASE:
+    # MOVECODE-1z-ds.6: NOT the press stop's hold -- retail ends it at the next
+    # input, after the close on 35 of 36 (the flag's block).
+    if LANDING_HOLD_RELEASE and not state.get("press_hold"):
         action_hold(send, state, 0,
                     "the swing landed -- movement is legal now")
 
@@ -46631,6 +46656,11 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.no_press_stop_hold:
+        global PRESS_STOP_HOLDS
+        PRESS_STOP_HOLDS = False
+        print("[map] --no-press-stop-hold: the press stop sends its pin and halt with no "
+              "[8, me, 1] -- MOVECODE-1z-ds round 1.", flush=True)
     if a.no_press_stop:
         global PRESS_STOPS_BODY
         PRESS_STOPS_BODY = False

@@ -28,6 +28,14 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.6 -- 2026-10-01 -- **The press stop now carries retail's action hold: [8, me, 1] between the pin and the 0x0028 (retail 42 of 42, hold then stop in one instant on 40), kept through the landing to the player's next input (retail: released after the close on 35 of 36 -- a 0x003D 26, a skill 7, a follow 1). For the owner's "waiting to turn to directly face the target"; stock turns at once.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.6.
+- **Flag:** `PRESS_STOP_HOLDS`; `--no-press-stop-hold` reverts.
+- **Tests:** `test_playerswing` 204: §9l, with four source mutations each reddening their
+  own checks.
+- **Status:** unrun on the client.
+
 ### MOVECODE-1z-ds CONFIRMED -- 2026-10-01 -- **`20261001T201800`: the slide is gone (the owner: "now it doesn't slide during attacking"); 18 press stops, all pin then halt in the press instant. The owner on Q2: "had to press it again to start moving. i believe that's accurate retail behavior". Three residuals measured and left OPEN: a "waiting to turn" feel (retail's press batch carries [8, me, 1] 42 of 42, ours none), the interval wait now stood through, and a click dropped kbd-drop after a press (the likely "slight warp").**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.5.

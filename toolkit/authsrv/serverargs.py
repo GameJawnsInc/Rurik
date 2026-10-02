@@ -761,6 +761,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-10-01. By default both use the last 0x003D report "
                          "advanced along its heading at its family speed (<= 2.0 s), "
                          "then the press's own lead kill (<= 0.5 s).")
+    ap.add_argument("--no-press-stop-hold", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.6: the press stop sends "
+                         "its pin and halt with no action hold (round 1). By default "
+                         "[8, me, 1] rides ahead of the halt, retail's 42 of 42, and "
+                         "is kept through the landing to the player's next input.")
     ap.add_argument("--no-press-stop", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds: a press in reach while "
                          "the body walks under held keys sends nothing and the swing "

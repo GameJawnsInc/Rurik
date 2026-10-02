@@ -20760,3 +20760,62 @@ The owner drove the registered run.
 but the pin put it 179 u out. The follow then walked it in, and the swing came 1.74 s
 later. The 0x0028 and the 0x002A went out 8 ms apart, so the visible stop is at most a
 frame.
+
+### 1z-ds.6 Round 2 shipped: `PRESS_STOP_HOLDS`, the press batch's action hold (`--no-press-stop-hold` reverts)
+
+**The owner** checked stock after the 1z-ds.5 run: *"stock does seem to function as you
+said - turn to face at once, even if swing comes later"*; *"it felt snappier but hard to
+give certain claims"*. Their call: *"let's start with the hold since we know stock does
+it and that we're missing it"*.
+
+**What ships:**
+- `_press_stops_body` sends the pin, then `[8, me, 1]`, then the 0x0028. Retail's order
+  is hold then stop, in one instant, on 40 of 42.
+- The hold is marked `press_hold`.
+
+**Its LIFETIME, measured first** (`pressstopjoin`'s cell, the first `[8, me, 0]` after
+the press):
+- Released after the swing's close on **35 of 36**.
+- Released by the player's next input:
+
+  | Cause | Count |
+  |---|---|
+  | c2s 0x003D | 26 |
+  | A skill press | 7 |
+  | A follow | 1 |
+  | Other (target death and the like, 2.5–6.6 s) | 8 |
+
+- **Never at the landing.** That is RANGERPRE-S16's approach-hold shape.
+
+**So:**
+- **At the landing:** both releases (the melee landing and the ranged launch) skip a
+  hold marked `press_hold`.
+- **A new follow** releases it adjacent to the 0x002A, as it does the approach's.
+- **Any release** (`action_hold(0)`) forgets the mark.
+- **The ending sites already exist:**
+  - `cancel_on_move`, unconditional on every movement report, and ahead of that report's
+    lead in the 0x003D arm. That is retail's `[8, me, 0]` then the 0x0029.
+  - The skill press.
+  - The target's death.
+
+**Q2 stays as the owner felt it:** a held key does not walk on after the swing. A
+re-press is that report.
+
+**What `[8 -> 1]` does on the client** (skillcast §16.2): it sets the walk-gate bit, and
+`0x0081BE90(0.0f)` zeroes the view's speed. That it is what turns the body at once is
+UNVERIFIED. The run asks.
+
+**Tests:** `test_playerswing` §9l, 198 -> 204, driven through the real `begin_attack`
+and `attack_tick`, the landing included:
+- the batch order;
+- the hold kept through the landing;
+- the next report releasing it;
+- the CONTROL: the same landing without the mark releases;
+- a new follow releasing it first;
+- the known-bad arm.
+
+Each piece removed from the source reddens its own checks:
+- the send: a–e;
+- the landing exemption: b, c;
+- the follow release: e;
+- the forget: c, e.
