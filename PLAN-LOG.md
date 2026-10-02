@@ -28,6 +28,10 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.8 -- 2026-10-02 -- **Retail's press reach read from the captures, no run: `reachjoin.py` (new). On 1.33 s weapons (sword/axe/daggers) the body estimate separates swings (<= 119.6 u) from follows (>= 135.8 u) with 0 misclassified over 36 rows; the bare report misses 2, the 0.257 s server copy 3, and the lag sweep is clean only at 0-0.10 s. Retail decides on the BODY, and its melee reach is (119.6, 135.8], not 144. ATTACK_REACH is unchanged pending the owner.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.8.
+
 ### MOVECODE-1z-ds.7 -- 2026-10-02 -- **The hold's run (`20261002T005405`): 7 of 7 press batches pin, hold, halt; the hold kept through the landing and released by the re-press (4 of 4, "represses do make me move again"). The owner's "attack start delay ... walk in range though I'm already close enough" = 3 stops judged in reach on a stale frame, the body 162-170 u out, released for a follow. Retail stops before 0 of 57 follows. Reach is now judged on the reckoned body: in reach the stop, out of reach the pin alone and the follow.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.7.

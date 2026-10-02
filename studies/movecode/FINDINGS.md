@@ -20875,3 +20875,61 @@ With the body decision undone in the source, 9l-g and 9l-h go red.
 accepted at <= 82.7 u, refused at >= 205.5 u. Daggers are tighter: 109.7 accepted, 146.3
 refused. So a press at 162–170 u is inside a band nothing has measured. If walk-ins at
 that distance still feel early, the bracket is the next measurement.
+
+### 1z-ds.8 Retail's press reach, measured from the captures: (119.6, 135.8] on the BODY
+
+The owner asked for this to be read from captures rather than from more runs or
+descriptions. A new read-only census does it: `toolkit/authsrv/reachjoin.py`.
+
+**How it is built:**
+- **The answer:** each retail press answered within 0.25 s is a SWING (the observer's own
+  attack_started) or a FOLLOW (its own 0x002A first).
+- **The target's position comes from the wire:**
+  - a FOLLOW's own destination, exact;
+  - the nearest follow by any other mover naming the target;
+  - a never-moved target's 0x0020 spawn, at any age. That is ANIMREF §38.4's DR-free tier,
+    which my first pass wrongly limited to 0.6 s.
+- **The player is scored on four operands:**
+  - the bare last report;
+  - that report advanced along its heading to the press (`est`, our operand since 1z-ds.7);
+  - the reported polyline 0.257 s back (`lag`, §38.3's model of retail's server copy);
+  - a hostile's follow destination naming the player (`srv`).
+- **The weapon** is the 0x0035 attack period in force at the press. A connection's 0x00A4
+  launches mislabel the set-swapping 20260919T103604, whose 1.5 s rows are a spear.
+
+**MEASURED:**
+- 270 answered presses, 100 claim rows (target fix within 30 u, no server leg, the player
+  parked or on a report no older than 1 s).
+- **1.33 s weapons** (sword/axe/daggers), 36 rows:
+
+  | Operand | Swings | Follows | Cut | Misclassified |
+  |---|---|---|---|---|
+  | `est` (the body) | 22.8–119.6 u | from 135.8 u | 119.6 | **0** |
+  | `rep` (bare report) | | | | 2 |
+  | `lag` (0.257 s copy) | | | | 3 |
+
+  `rep` fails on stale reports of bodies walking away. `lag` fails at 0.257 s.
+- **The lag sweep** separates cleanly only at 0–0.10 s.
+- **Every radius in the corpus is 12.0**, so edge-to-edge is centre minus 24 and
+  discriminates nothing.
+
+**Two results:**
+1. **Retail decides reach on the BODY.** 1z-ds.7's operand is retail's.
+2. **Retail's melee reach is (119.6, 135.8] centre to centre, not the wiki's 144.**
+   - **The edges:**
+     - 20260917T224104 t=442.14: a swing at 119.6 from a 0x0047-parked body to a
+       never-moved target.
+     - 20260817T231139 t=366.86: a follow at `est` 135.8. The report was 33 ms old and the
+       target was itself walking, ±12 u over the 41 ms to the answer.
+   - **The confound:** all three sub-144 follows were walking away from the target. A
+     ~40 ms look-ahead would lift them toward 144. But the walking-toward follow at 146.3
+     (20260819T132414 t=234.12) then bounds the edge at ~135, so the bracket survives
+     either reading.
+
+**What it means for the owner's runs:**
+- **The 162–170 u walk-ins were retail-correct distances.** The stutter around them
+  (stop, release, walk) was ours, and 1z-ds.7 removed it.
+- **Presses at ~136–144 u** are swung at once by ours, where retail walks in first.
+
+**Not changed in this step:** `ATTACK_REACH` stays 144 pending the owner's word. It is the
+one gameplay constant this moves, and it moves against their last feel report.
