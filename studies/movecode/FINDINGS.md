@@ -20933,3 +20933,33 @@ descriptions. A new read-only census does it: `toolkit/authsrv/reachjoin.py`.
 
 **Not changed in this step:** `ATTACK_REACH` stays 144 pending the owner's word. It is the
 one gameplay constant this moves, and it moves against their last feel report.
+
+### 1z-ds.9 Shipped: `ATTACK_REACH` 144 -> 128 (`--attack-reach-wiki` reverts)
+
+**The owner:** *"if you think it brings us closer to stock behavior"*. It does. 1z-ds.8's
+bracket (119.6, 135.8] excludes 144, so every value inside the bracket is closer to stock
+than 144 was.
+
+**The value is 128, the bracket's midpoint.** It is never more than ~8 u from whichever
+end is true. The constant's comment and `attack_reach()`'s docstring carry the
+measurement.
+
+**What it changes:**
+- A melee press from about 128–144 u now walks in first, as retail's would from 135.8 u
+  up.
+- The follow still ends at the 80 u disc, so every follow arrives in reach.
+- Ranged weapons keep their own range.
+- `INTERACT_RANGE` (also 144, the dialog range) is a different constant and is untouched.
+
+**Tests:**
+- `test_playerswing` 207 -> 209:
+  - The constant check now asserts the measured bracket, the two older DR-free brackets,
+    and that 144 lies outside the measured one.
+  - A parked press at 136 u is walked in, and one at 120 u swings.
+  - The known-bad arm, the wiki's 144, swings the 136 u press at once.
+  - With 144 back in the source, three checks go red.
+- **Fixtures moved:**
+  - 9l-h's body moves from 127 u to 107 u.
+  - `test_kbdsync` §29's target moves to 60 u from the reckoned body, which was 135 u and
+    so now out of reach.
+- **`test_weapons`:** two literals now read `ATTACK_REACH`.

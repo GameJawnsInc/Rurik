@@ -18509,7 +18509,16 @@ ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 #     CORROBORATED. The same code runs server-side (Engine\Agent is
 #     shared), which is why retail's approach lands where the client's
 #     own stop does and needs no stop message on the natural path (8/9).
-ATTACK_REACH = 144.0       # units, centre to centre. WIKI, bracketed OBSERVED.
+# MEASURED 2026-10-02 (MOVECODE-1z-ds.8, toolkit/authsrv/reachjoin.py) -- and it moves
+# the number off the wiki's. With a never-moved target's 0x0020 spawn counted at any age
+# the census has 62 swings with a target fix, not 6: on 1.33 s weapons (sword / axe /
+# daggers) the reckoned BODY separates swings at <= 119.6 u from follows at >= 135.8 u
+# with 0 misclassified over 36 claim rows (the bare report misses 2, the 0.257 s server
+# copy 3). Retail's edge is in (119.6, 135.8], so 144 swung at once from up to ~24 u
+# where retail walks in first. 128 is the bracket's midpoint: never more than ~8 u from
+# whichever end is true. --attack-reach-wiki restores 144.
+ATTACK_REACH = 128.0       # units, centre to centre. OBSERVED bracket (119.6, 135.8], its midpoint.
+ATTACK_REACH_WIKI = 144.0  # the wiki's melee range, every build before 2026-10-02.
 FOLLOW_STOP_PAD = 56.0     # units. Client def pad, f32 @0x00A52D60. OBSERVED.
 BOUNDING_RADIUS = 12.0     # units. 0x0020 field 11 as we send it (0x41400000).
 # Retail re-paths a running follow on a 0.500 s tick while the target moves
@@ -20731,8 +20740,8 @@ def _player_body_moving(state):
 
 
 def attack_reach():
-    """How far a press opens a swing from, centre to centre: the derived
-    144 u under --attack-approach, the old 1500 u otherwise (ANIMREF-RE 38;
+    """How far a press opens a swing from, centre to centre: the measured
+    128 u under --attack-approach (1z-ds.8), the old 1500 u otherwise (ANIMREF-RE 38;
     the two ship together because a reach with no approach is a dead
     press)."""
     how = player_ranged()                  # WEAPONS-W2a: a ranged weapon's own range
@@ -46689,6 +46698,12 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.attack_reach_wiki:
+        global ATTACK_REACH
+        ATTACK_REACH = ATTACK_REACH_WIKI
+        print(f"[map] --attack-reach-wiki: a melee press swings at once from "
+              f"{ATTACK_REACH_WIKI:.0f} u -- every build before MOVECODE-1z-ds.9 "
+              f"(retail's measured edge is (119.6, 135.8]).", flush=True)
     if a.press_stop_on_frame:
         global PRESS_STOP_ON_BODY
         PRESS_STOP_ON_BODY = False

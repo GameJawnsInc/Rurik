@@ -761,6 +761,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-10-01. By default both use the last 0x003D report "
                          "advanced along its heading at its family speed (<= 2.0 s), "
                          "then the press's own lead kill (<= 0.5 s).")
+    ap.add_argument("--attack-reach-wiki", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.9: a melee press opens the "
+                         "swing from 144 u (the wiki's range), every build before "
+                         "2026-10-02. By default 128 u, the midpoint of retail's "
+                         "measured edge (119.6, 135.8] (reachjoin.py, 0 misclassified "
+                         "over 36 presses).")
     ap.add_argument("--press-stop-on-frame", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.7: the press stop judges "
                          "reach on the swing gate's frame, so a body the stale frame "

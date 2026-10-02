@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=207)   # MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=209)   # MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1033,12 +1033,14 @@ def section_reach_and_approach():
           "would (retail's radius-42 model 0x200013BC would stop at 110 u -- "
           "a falsifiable prediction nobody has run)",
           f"{authsrv.follow_stop_radius({'radius': 42.0})}")
-    check(authsrv.ATTACK_REACH == 144.0
+    check(authsrv.ATTACK_REACH == 128.0
+          and 119.6 < authsrv.ATTACK_REACH <= 135.8
           and 82.7 < authsrv.ATTACK_REACH <= 205.5
-          and 109.7 < authsrv.ATTACK_REACH <= 146.3,
-          "ATTACK_REACH = 144 sits inside BOTH DR-free brackets retail's wire "
-          "gives -- Sword (82.7, 205.5], Daggers (109.7, 146.3] -- and is the "
-          "wiki's melee range; the tapes bracket it, they do not select it",
+          and 109.7 < authsrv.ATTACK_REACH <= 146.3
+          and not 119.6 < authsrv.ATTACK_REACH_WIKI <= 135.8,
+          "ATTACK_REACH = 128, the midpoint of retail's measured edge (119.6, 135.8] "
+          "(reachjoin.py, 1z-ds.8: 0 misclassified over 36 presses) and inside both "
+          "older DR-free brackets; the wiki's 144 is OUTSIDE the measured one",
           f"ATTACK_REACH = {authsrv.ATTACK_REACH}")
     check(authsrv.follow_stop_radius({}) < authsrv.ATTACK_REACH,
           "the stop radius is inside the reach, so a follow that arrives is "
@@ -1052,9 +1054,36 @@ def section_reach_and_approach():
           f"attack_reach() = {authsrv.attack_reach()}")
     authsrv.ATTACK_APPROACH = True
     try:
-        check(authsrv.attack_reach() == 144.0,
-              "the shipped reach is the derived 144 u",
+        check(authsrv.attack_reach() == authsrv.ATTACK_REACH == 128.0,
+              "the shipped reach is the measured 128 u",
               f"attack_reach() = {authsrv.attack_reach()}")
+        # 1z-ds.9: a PARKED press at 136 u -- between the two reaches. Retail walks
+        # in from there (its follows start at 135.8); the wiki's 144 swung at once.
+        def parked_at(dist, reach):
+            got = []
+            snd = lambda op, vals, label="", quiet=False: got.append((op, label))  # noqa: E731
+            stp = _state()
+            stp["agents"][10]["pos"] = (dist, 0.0)
+            saved_r = authsrv.ATTACK_REACH
+            authsrv.ATTACK_REACH = reach
+            try:
+                authsrv.begin_attack(snd, stp, 10, 0)
+                authsrv.attack_tick(snd, stp, 0)
+            finally:
+                authsrv.ATTACK_REACH = saved_r
+            return (any("player swings" in l for _o, l in got),
+                    any(op == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION for op, _l in got))
+        sw136, fo136 = parked_at(136.0, authsrv.ATTACK_REACH)
+        sw136w, fo136w = parked_at(136.0, authsrv.ATTACK_REACH_WIKI)
+        sw120, _fo120 = parked_at(120.0, authsrv.ATTACK_REACH)
+        check(fo136 and not sw136 and sw120,
+              "1z-ds.9: a parked press at 136 u is walked in (retail's follows start at "
+              "135.8) and one at 120 u swings at once (retail's swings reach 119.6)",
+              f"136: swing {sw136} follow {fo136}; 120: swing {sw120}")
+        check(sw136w and not fo136w,
+              "KNOWN-BAD ARM (--attack-reach-wiki): the same 136 u press swings at once "
+              "from the wiki's 144 -- what every build before 2026-10-02 did",
+              f"136 under 144: swing {sw136w} follow {fo136w}")
 
         sent = []
         send = lambda op, vals, label="", quiet=False: sent.append(
@@ -2582,10 +2611,10 @@ def section_press_stop_hold():
           "9l-g. the frame says IN reach but the reckoned body is 244 u OUT: the pin ALONE "
           "(no hold, no halt), and the tick answers with the follow, no swing -- retail "
           "sends 0 stops before 57 follows", f"press {b7}, tick {k7}, swung {sw7}")
-    # frame 500 u out (stale), the body 0.6 s down -x from 300: (127, 0), IN reach
-    b8, k8, sw8, _s8 = placed((500.0, 0.0), (300.0, 0.0), (-766.0, 0.0), 0.6)
+    # frame 500 u out (stale), the body 0.6 s down -x from 280: (107, 0), IN reach
+    b8, k8, sw8, _s8 = placed((500.0, 0.0), (280.0, 0.0), (-766.0, 0.0), 0.6)
     check(b8 == [PIN, "8:1", HALT] and sw8 and DEST not in k8,
-          "9l-h. the stale frame says OUT but the body is 127 u IN: the full stop, and the "
+          "9l-h. the stale frame says OUT but the body is 107 u IN: the full stop, and the "
           "swing opens at once instead of an 80 u walk-in", f"press {b8}, tick {k8}, swung {sw8}")
     b9, k9, sw9, _s9 = placed((0.0, 0.0), (100.0, 0.0), (766.0, 0.0), 0.5, on_body=False)
     check(b9 == [PIN, "8:1", HALT] and DEST in k9 and not sw9,

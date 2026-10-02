@@ -2572,7 +2572,7 @@ def main():
     PIN29, HALT29 = (authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
                      authsrv.GAME_SMSG_AGENT_STOP_MOVING)
 
-    def press29(foe_at=(60.0, 0.0), on=True, **over):
+    def press29(foe_at=(0.0, -60.0), on=True, **over):
         t = _t27.time()
         st = {"pos": (0.0, 0.0), "plane": 0, "client_pos": (0.0, 0.0),
               "client_pos_at": t - 0.42, "client_plane": 0,

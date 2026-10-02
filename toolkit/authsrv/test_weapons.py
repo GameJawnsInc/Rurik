@@ -480,8 +480,9 @@ def section_ranged():
         authsrv.apply_party_character({"player_weapon": "starter_bow"})
         far = authsrv.attack_reach()
         authsrv.apply_party_character({"player_weapon": "starter_sword"})
-        check(far == 1498.0 and authsrv.attack_reach() == authsrv.ATTACK_REACH == 144.0,
-              "the press opens from the WEAPON's range: 1498 with the bow, 144 with a sword")
+        check(far == 1498.0 and authsrv.attack_reach() == authsrv.ATTACK_REACH == 128.0,
+              "the press opens from the WEAPON's range: 1498 with the bow, the measured "
+              "melee 128 with a sword")
 
         st, at_windup, at_arrival = _one_shot("starter_bow", 800.0)
         launch = [v for op, v in at_windup if op == 0x00A4]
@@ -538,7 +539,7 @@ def section_ranged():
         authsrv.RANGED_DELIVERY = False
         try:
             _st, at_windup, at_arrival = _one_shot("starter_bow", 100.0)
-            check(authsrv.player_ranged() is None and authsrv.attack_reach() == 144.0
+            check(authsrv.player_ranged() is None and authsrv.attack_reach() == authsrv.ATTACK_REACH
                   and len(words(at_windup)) == 1 and len(prop1(at_windup)) == 1
                   and not any(op in (0x00A4, 0x00A7) for op, _v in at_windup + at_arrival),
                   "--no-projectiles: the word and property 1 at the windup from melee reach, "

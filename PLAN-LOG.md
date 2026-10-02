@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.9 -- 2026-10-02 -- **ATTACK_REACH 144 -> 128, the midpoint of retail's measured melee edge (119.6, 135.8] (1z-ds.8, reachjoin.py, 0 misclassified over 36 presses); --attack-reach-wiki reverts. The owner: "if you think it brings us closer to stock behavior".**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.9.
+- **Tests:** `test_playerswing` 209: the 136 u press walks in, the 120 u press swings,
+  and the known-bad arm swings at 136. Fixtures moved: `test_kbdsync` §29 and 9l-h.
+- **Status:** unrun on the client.
+
 ### MOVECODE-1z-ds.8 -- 2026-10-02 -- **Retail's press reach read from the captures, no run: `reachjoin.py` (new). On 1.33 s weapons (sword/axe/daggers) the body estimate separates swings (<= 119.6 u) from follows (>= 135.8 u) with 0 misclassified over 36 rows; the bare report misses 2, the 0.257 s server copy 3, and the lag sweep is clean only at 0-0.10 s. Retail decides on the BODY, and its melee reach is (119.6, 135.8], not 144. ATTACK_REACH is unchanged pending the owner.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.8.
