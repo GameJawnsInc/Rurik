@@ -775,6 +775,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "before it). By default a swing that never landed holds no "
                          "clock: retail swings at the press 13 of 13, and a landed swing "
                          "holds the period 65 of 65.")
+    ap.add_argument("--press-keeps-kbd-drop", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.18: the router drops a click "
+                         "inside the keyboard latch even when our own stop pin or follow "
+                         "came after the last key report (every build before it). By "
+                         "default such a click is answered: retail answers every click "
+                         "inside the latch, 34 of 34.")
     ap.add_argument("--park-marker-stop-only", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.17: only the press stop and the "
                          "cast-stop pin park the body for the next key report "

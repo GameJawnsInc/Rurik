@@ -2807,6 +2807,20 @@ ECHO_ANY_REFUSAL = False
 #     mid-keyboard clicks show larger displacements than the dropped ones do in
 #     the current build.
 ANSWER_KBD_CLICK = False
+# MOVECODE-1z-ds.18 (the first pass's lane B, re-measured by its refuter): the router's
+# mid-keyboard drop stands down when OUR movement order for the body is newer than the
+# keyboard latch -- the press-stop / modelled-placement marker (`cast_stop_pin`) or our follow
+# (`follow_order_at`, every _approach_send). In the six owner runs all three kbd-drops
+# (20261001T201800 47.043; 20261002T122114 6.371, 8.054) came 0.5-2.8 s after a press had
+# killed the keyboard lead and handed the body to our follow: the premise "the keyboard owns
+# the body" was false each time. RETAIL answers every click inside our latch, 34 of 34 (p50
+# 41 ms), and the one after its own press-follow verbatim in 31 ms. R1-B1's hazard -- a click
+# racing a still-held key -- stays covered: any key report re-stamps the latch past our order
+# (after a kill + follow, the next 0x003D came >= 0.27 s later on 59 of 59). The other 1,333
+# corpus drops (a click straight into a live keyboard walk) are untouched. This does NOT fix
+# 201800's "slight warp" -- the next press's PRESS ENDS THE WALK is built from click_leg,
+# which a verbatim answer does not touch.
+PRESS_ENDS_KBD_DROP = True   # False (--press-keeps-kbd-drop): the drop after our order too.
 
 # --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
 # been run. The module global defaults False and main()'s argparse layer flips
@@ -10977,7 +10991,30 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         # within one RTT (29/29, ROUTER.md sec.1), and the floor's hazard (a
         # grant onto a silent mid-walk client) is gone when every grant is a
         # legal leg.
-        if not ANSWER_KBD_CLICK:
+        #
+        # MOVECODE-1z-ds.18: NOT WHEN OUR OWN ORDER IS NEWER THAN THE LATCH. A press that
+        # stopped the walking body (the stop pin, or since 1z-ds.17 any modelled placement:
+        # `cast_stop_pin`) or handed it to our follow (`follow_order_at`) has already ended the
+        # keyboard's authority -- R1-B1's hazard is a click racing a STILL-HELD key, and a key
+        # report after our order re-stamps the latch and restores the drop (PRESS_ENDS_KBD_DROP).
+        _ended = None
+        if PRESS_ENDS_KBD_DROP:
+            _pin = state.get("cast_stop_pin")
+            _fol = state.get("follow_order_at")
+            if _pin is not None and float(_pin[0]) > kbd_at:
+                _ended = ("pin", float(_pin[0]))
+            elif _fol is not None and float(_fol[0]) > kbd_at:
+                _ended = ("follow", float(_fol[0]))
+        if _ended is not None:
+            if rec is not None:
+                rec.event("router_route", verdict="kbd-answered",
+                          arm="press-ended", by=_ended[0], pass_through=True,
+                          dest=[dx, dy], keyboard_age=round(kage, 3),
+                          order_age=round(now - _ended[1], 3))
+            print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}) {kage:.2f}s after the "
+                  f"last key report, but OUR {_ended[0]} came after it: answered, not "
+                  f"dropped [MOVECODE-1z-ds.18]", flush=True)
+        elif not ANSWER_KBD_CLICK:
             state["grant_pending"] = None
             if rec is not None:
                 rec.event("router_route", verdict="kbd-drop",
@@ -11004,15 +11041,16 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         # clip-fallback / refused). A scorer counting clicks by router_route
         # rows must drop verdict == "kbd-answered", which is why the row also
         # carries arm= and pass_through=.
-        if rec is not None:
-            rec.event("router_route", verdict="kbd-answered",
-                      arm="answer-kbd-click", pass_through=True,
-                      dest=[dx, dy], keyboard_age=round(kage, 3))
-        print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}) arrived "
-              f"{kage:.2f}s into a keyboard walk: ANSWERED, not dropped "
-              f"(--answer-kbd-click). DIAGNOSTIC/REVERT ARM -- R1-B1 is "
-              f"REFUTED as a default on the legacy path; say so when you "
-              f"report the run.", flush=True)
+        else:
+            if rec is not None:
+                rec.event("router_route", verdict="kbd-answered",
+                          arm="answer-kbd-click", pass_through=True,
+                          dest=[dx, dy], keyboard_age=round(kage, 3))
+            print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}) arrived "
+                  f"{kage:.2f}s into a keyboard walk: ANSWERED, not dropped "
+                  f"(--answer-kbd-click). DIAGNOSTIC/REVERT ARM -- R1-B1 is "
+                  f"REFUTED as a default on the legacy path; say so when you "
+                  f"report the run.", flush=True)
     origin = (float(pos[0]), float(pos[1]))
     snapped_d = None
     if not pm.walkable(origin[0], origin[1]):
@@ -21263,6 +21301,9 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     state["click_moving_at"] = now
     leg = _leg_record((px, py), stop_point, now, speed)
     state["click_leg"] = leg
+    # MOVECODE-1z-ds.18: OUR movement order for the body, on every send (re-paths too) --
+    # the router reads it against the keyboard latch (PRESS_ENDS_KBD_DROP).
+    state["follow_order_at"] = (now, target_id)
     # And the server's own copy walks there: the world tick's integrator
     # advances state["pos"] toward `dest` at the leg's own speed (1z-cu:
     # this leg's, written beside it) and clears it on arrival -- the same
@@ -46917,6 +46958,12 @@ def main():
               "forgot keeps the clock even when the move cancelled the swing in its "
               "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
               "retail swings at the press, 13 of 13.", flush=True)
+    if a.press_keeps_kbd_drop:
+        global PRESS_ENDS_KBD_DROP
+        PRESS_ENDS_KBD_DROP = False
+        print("[router] --press-keeps-kbd-drop: a click inside the keyboard latch is dropped "
+              "even when our own stop or follow came after the last key report -- every "
+              "build before MOVECODE-1z-ds.18; retail answers 34 of 34.", flush=True)
     if a.park_marker_stop_only:
         global PLACEMENT_PARKS
         PLACEMENT_PARKS = False

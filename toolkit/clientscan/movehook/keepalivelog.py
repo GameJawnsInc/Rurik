@@ -258,9 +258,14 @@ def main(argv=None):
                 r.get("verdict") for r in routes).most_common():
             print(f"  {str(v):<16} x{n}")
         if passthru:
-            print(f"  {'(kbd-answered)':<16} x{len(passthru)}   "
-                  f"--answer-kbd-click let these through the keyboard drop; "
-                  f"each one's real verdict is counted above")
+            # MOVECODE-1z-ds.18: two arms write the pass-through row now -- the
+            # flag (`answer-kbd-click`) and the default `press-ended` (our own
+            # stop or follow came after the last key report). Name each.
+            for arm, n in collections.Counter(
+                    r.get("arm") or "answer-kbd-click" for r in passthru).most_common():
+                print(f"  {'(kbd-answered)':<16} x{n}   arm {arm} let these "
+                      f"through the keyboard drop; each one's real verdict is "
+                      f"counted above")
         wp = [r.get("n_wp") for r in routes
               if isinstance(r.get("n_wp"), int)]
         if wp:

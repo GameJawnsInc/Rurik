@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.18 -- 2026-10-02 -- **A click after OUR stop or follow is answered, not kbd-dropped. All three owner-run drops came after a press had handed the body to our follow; retail answers every click inside our latch, 34 of 34.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.18. Census `toolkit/authsrv/kbdclickjoin.py`.
+- **Shipped:** `PRESS_ENDS_KBD_DROP` (`--press-keeps-kbd-drop` reverts), with the follow marker
+  `follow_order_at`. `test_router` 126 -> 134. `keepalivelog.py` names the pass-through arm.
+- **Closes:** §8's "kbd-drop click".
+
 ### MOVECODE-1z-ds.17 -- 2026-10-02 -- **Every modelled placement parks the body. Round 5's park marker had two writers; the follow pin, PRESS ENDS THE WALK, the approach re-pin and the wipe left the next key report fence-shut: 8 zero leads in 6 episodes over the owner runs, 5 of them with the body walking off the pin at run speed. Retail answers that report with a real lead, 23 of 25.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.17. Census `walkstartjoin.py` census 4.

@@ -21390,3 +21390,57 @@ follow-answered press is answered with a real lead.
 **Not changed:** whether the follow branch should pin at all. The second pass's lane P1 says
 it should not: retail pins 0 of 527 presses, and our pinned follows lag on the client 2-3 of 9
 against 0 of 13 unpinned. That is to be measured on its own run.
+
+### 1z-ds.18 A click after OUR order is answered, not kbd-dropped (`PRESS_ENDS_KBD_DROP`, `--press-keeps-kbd-drop` reverts)
+
+**1z-ds.5 residual 3** (the first pass's lane B; re-measured by its refuter):
+- **The drops:** every click our router refused as `kbd-drop` in the six owner runs came
+  0.5-2.8 s after a press that had killed the keyboard lead and handed the body to OUR
+  follow. There were three: 20261001T201800 47.043, latch 2.79 s old; 20261002T122114
+  6.371 and 8.054.
+- **What it cost:** the premise "the keyboard owns the body" was false each time. Our
+  integrator froze at the click (179 u off by the next report at 122114 8.679).
+- **Corpus-wide:** 4 of our 1,340 kbd-drops have this shape. The other 1,333 are clicks
+  straight into a live keyboard walk.
+
+**RETAIL** (OBSERVED, `toolkit/authsrv/kbdclickjoin.py`, promoted from the lane's script):
+- **Inside our latch:** retail answers every click, 34 of 34 (p50 41 ms, max 62 ms, 21
+  verbatim). That is 16 of 16 straight into a walk, 17 of 17 after an earlier click, and
+  1 of 1 after its own press-follow (verbatim, +31 ms).
+- **Outside the latch:** 125 of 126 answered.
+- **Caveats** (the refuter):
+  - Retail's one press-follow row is click -> press -> follow -> click. The owner's two
+    key -> press -> follow -> click drops have n=0 on retail.
+  - The post-STOP cell is n=0 too.
+
+**Shipped:** `PRESS_ENDS_KBD_DROP`.
+- **When the drop stands down:** our order for the body is newer than the keyboard latch.
+  That is either `cast_stop_pin` (the press stop, the cast-stop pin, and since 1z-ds.17 every
+  modelled placement) or `follow_order_at`, a new `(t, target)` written at every
+  `_approach_send`, re-paths included.
+- **The comparison is strict `>`:** a tie is the report speaking last.
+- **R1-B1's hazard stays covered.** That hazard is a click racing a still-held key, and any
+  key report re-stamps the latch past our order. After a kill + follow, the next 0x003D came
+  at least 0.27 s later on 59 of 59.
+- **Telemetry:**
+  - The router writes a pass-through row: `kbd-answered`, `arm=press-ended`,
+    `by=pin|follow`.
+  - `keepalivelog.py` now names each pass-through arm; it credited them all to the flag.
+- **Not the warp:** this does NOT fix 201800's "slight warp". The next press's PRESS ENDS
+  THE WALK is built from `click_leg`, which a verbatim answer leaves untouched (retrodicted
+  3 of 3).
+- **That warp, recorded:** the follow leg starts at the frame, not the body (B2). The
+  refuter's reading of the client decode puts the snap line at gate 1's 299 u, not
+  R_MATCH's 100, so the 48.175 placement is the more likely warp. UNVERIFIED without a tap.
+
+**Tests:** `test_router` §1d, 126 -> 134:
+- a: the 47.043 shape is answered verbatim, and the integrator walks the click;
+- b: after our pin, answered;
+- c: CONTROL, a key report newer than both orders is dropped (R1-B1's class);
+- d: the operand is our order, not the press;
+- e: a tie is dropped;
+- f: the known-bad arm;
+- g: through the real `_approach_send`, the marker is stamped and the click answered;
+- h: one writer, and the wiring.
+- **Red:** with the stand-down out, 1d-a/b/g go red; with the marker out, 1d-g/h; with
+  `>=` for `>`, 1d-e.

@@ -62,7 +62,8 @@ import authsrv                                                 # noqa: E402
 # +7 section 6, MOVECODE-1z-bb; +5 MOVECODE-1z-bh (the kbd-drop's revert arm:
 # `--answer-kbd-click` now reaches router_answer_click, and the drop it reverts
 # is OURS rather than retail's -- review sec.1.7). 126 on the green run.
-LEDGER = checks.Ledger("router wiring", floor=126)
+# +8 MOVECODE-1z-ds.18 (section 1d: the drop stands down after OUR order). 134 on the green run.
+LEDGER = checks.Ledger("router wiring", floor=134)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -356,6 +357,79 @@ def main():
         authsrv.ANSWER_KBD_CLICK = _saved_akc
     check("the module global is restored for every later section",
           authsrv.ANSWER_KBD_CLICK is False)
+
+    # 1d. MOVECODE-1z-ds.18: the drop stands down when OUR order is newer than the latch.
+    # 20261001T201800 47.043: the click came 2.79 s after the last key report, but 2.77 s
+    # after a press that killed the lead and sent our follow -- dropped. Retail answers every
+    # click inside our latch, 34 of 34 (kbdclickjoin.py).
+    def kbd_click(on=True, **marks):
+        st = base_state()
+        now = authsrv.time.time()
+        st["kbd_moving_at"] = now - marks.pop("kbd_age")
+        for k, age in marks.items():
+            if k == "follow":
+                st["follow_order_at"] = (now - age, 10)
+            elif k == "pin":
+                st["cast_stop_pin"] = (now - age, (0.0, 0.0))
+            elif k == "press":
+                st["attack_press_at"] = now - age
+            elif k == "follow_at_latch":
+                st["follow_order_at"] = (st["kbd_moving_at"], 10)
+        saved = authsrv.PRESS_ENDS_KBD_DROP
+        authsrv.PRESS_ENDS_KBD_DROP = on
+        try:
+            handled, sent, rows = answer(st, (50.0, 50.0))
+        finally:
+            authsrv.PRESS_ENDS_KBD_DROP = saved
+        verdicts = [(r["verdict"], r.get("arm"), r.get("by")) for r in rows
+                    if r["kind"] == "router_route"]
+        return st, handled, sent, verdicts
+
+    st1d, h1d, s1d, v1d = kbd_click(kbd_age=2.79, follow=2.75)
+    check("1d-a. the 47.043 shape: a click 2.79 s into the latch but after OUR follow is "
+          "answered verbatim, its pass-through row naming the follow -- and the integrator "
+          "walks the click instead of freezing",
+          h1d and [op for op, _p, _l in s1d] == [SPEED_OP, MOVE_OP]
+          and s1d[1][1][1] == [50.0, 50.0]
+          and v1d[0] == ("kbd-answered", "press-ended", "follow") and v1d[-1][0] == "verbatim"
+          and st1d["dest"] == (50.0, 50.0))
+    _st, h1db, s1db, v1db = kbd_click(kbd_age=0.5, pin=0.4)
+    check("1d-b. after OUR stop pin (or any modelled placement, 1z-ds.17) the same: "
+          "answered, by the pin",
+          h1db and len(s1db) == 2 and v1db[0] == ("kbd-answered", "press-ended", "pin"))
+    _st, h1dc, s1dc, v1dc = kbd_click(kbd_age=0.3, follow=1.0, pin=1.2)
+    check("1d-c. CONTROL, R1-B1's class kept: a key report NEWER than both our orders is a "
+          "live keyboard -- dropped, nothing sent",
+          h1dc and s1dc == [] and [v[0] for v in v1dc] == ["kbd-drop"])
+    _st, h1dd, s1dd, v1dd = kbd_click(kbd_age=0.2, press=0.1)
+    check("1d-d. the operand is OUR ORDER, not the press: a press with no stop or follow "
+          "of ours leaves the drop in place",
+          s1dd == [] and [v[0] for v in v1dd] == ["kbd-drop"])
+    _st, _h, s1de, v1de = kbd_click(kbd_age=1.0, follow_at_latch=0)
+    check("1d-e. a tie (our order stamped at the report's own instant) is the report "
+          "speaking last -- dropped",
+          s1de == [] and [v[0] for v in v1de] == ["kbd-drop"])
+    _st, _h, s1df, v1df = kbd_click(on=False, kbd_age=2.79, follow=2.75)
+    check("1d-f. KNOWN-BAD ARM (--press-keeps-kbd-drop): the 47.043 click is dropped, "
+          "nothing sent", s1df == [] and [v[0] for v in v1df] == ["kbd-drop"])
+    st1dg = base_state()
+    st1dg["kbd_moving_at"] = authsrv.time.time() - 0.5
+    authsrv._approach_send(FakeSend(), st1dg, 1, 77, {"pos": (1000.0, 0.0), "name": "hatcher"},
+                           authsrv.time.time(), rec=FakeRec())
+    fo1dg = st1dg.get("follow_order_at")
+    authsrv._approach_abandon(st1dg)          # the click arm's own call, ahead of the router
+    h1dg, s1dg, r1dg = answer(st1dg, (50.0, 50.0))
+    check("1d-g. through the REAL _approach_send: the follow stamps the marker (time, "
+          "target), and the click after it is answered",
+          fo1dg is not None and fo1dg[1] == 77 and fo1dg[0] > st1dg["kbd_moving_at"]
+          and h1dg and len(s1dg) == 2)
+    _src = open(authsrv.__file__, encoding="utf-8").read()
+    _args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                 encoding="utf-8").read()
+    check("1d-h. the marker has one writer (beside the follow's leg); --press-keeps-kbd-drop "
+          "is wired",
+          _src.count('state["follow_order_at"] = (') == 1
+          and "--press-keeps-kbd-drop" in _args and "if a.press_keeps_kbd_drop:" in _src)
 
     # refused: origin off-mesh (the P-17 wall-press door, CLOSED).
     st = base_state(pos=(150.0, 0.0))
