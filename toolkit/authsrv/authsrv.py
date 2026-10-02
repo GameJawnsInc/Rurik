@@ -19591,6 +19591,90 @@ def refuse_party_target(state, target_id, conn_id, rec, what, skill_id=None):
     return True
 
 
+# ---- MOVECODE-1z-ds (2026-10-01): AN IN-REACH PRESS STOPS A BODY WALKING ON HELD KEYS
+#
+# The owner, after 1z-dr's round 2 (20261001T194258): "had a couple slides during
+# attacks". Both on the tape, and both one shape: a 0x0026 in reach while the client
+# walked under its own keys (its last 0x003D moving, 0.42 s and 0.16 s old, no 0x0047),
+# and NOTHING went out at the press. The order waited 0.22 / 0.32 s for the attack
+# interval, the swing opened on a body that walked on straight through it -- 530 u and
+# 181 u to the next report, along the reported heading -- and the hit landed while it
+# walked away. The press had no keyboard lead to kill (a pin had shut our fence latch,
+# so that report's grant was the zero-lead point) and no follow to send (in reach), and
+# the swing's [8 -> 1] shuts only a walk START, never a walk already running -- the
+# cast path's F28 glide, for the 0x0026 opcode.
+#
+# RETAIL, read for this step (livewire.decode_conn, every live capture, the observer
+# by property 41): 527 presses, 180 whose last movement input is a MOVING 0x003D at
+# most 3 s old with no stop between, 42 of those answered by the observer's own
+# attack_started within 0.25 s with no follow ahead of it -- the in-reach cell. 39 of
+# the 42 carry a bare 0x0028 [me], 37 of them within 60 ms of the press (p50 40 ms):
+# in the swing's own batch 24 times, AHEAD of it 15 -- 11 of the 12 swings that waited
+# over 0.1 s on their interval had the stop at the press. And the body stops: 28 of 28
+# next reports sit where stopping at the press puts it, none where walking on would.
+# OBSERVED. (The three without: one a body that had already stopped -- 43 u in 1.9 s --
+# and two with no report after.)
+#
+# OURS SENDS THE CAST-STOP'S PAIR, not the bare halt, for the reason R10 gives: under
+# our grants the sync copy can sit at a stale zero-lead point (this run's 37.93 swing:
+# the copy at the press report, the body 121 u on), and a bare 0x0028 lands the body
+# there -- CANCELWALK-F34's warp. The 0x002C hard-sets both copies at the reckoned body
+# first. Same reckoner, same pin-or-nothing: a refusal sends nothing and its why is the
+# row. The in-reach test reads the swing gate's own operand (_reach_frame, 1z-dm), so
+# the press that gate answers with a swing is the one whose body stands; out of reach
+# the follow re-orders the body itself and is left alone, as retail leaves it. RUN
+# BEFORE `attacking` is published: the world tick may open the swing on its next pass.
+# The pin is a MODELLED placement, so the last report is forgotten
+# (_forget_client_position's rule): a later approach must not re-pin at that report
+# advanced along its heading, past the point the body was stopped on.
+PRESS_STOPS_BODY = True   # False (--no-press-stop): the swing opens on a walking body (the slide).
+
+
+def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
+    """(1z-ds) An accepted press in reach while the body walks: pin it, then halt it.
+
+    Returns whether the pair went out. Reads the swing gate's frame and the cast-stop
+    reckoner; writes what the cast-stop pin writes, plus the forget."""
+    if not PRESS_STOPS_BODY:
+        return False
+    px, py = _reach_frame(state, now)
+    ax, ay = agent["pos"]
+    dist = math.hypot(float(ax) - px, float(ay) - py)
+    if dist > attack_reach():
+        return False                    # out of reach: the follow answers this press
+    est, plane, why = cast_stop_reckon(state, now)
+    if est is None:
+        if rec is not None:
+            rec.event("press_stop", fired=False, why=why, target=target_id,
+                      dist=round(dist, 1))
+        if why not in ("parked", "pinned-parked", "no-report"):
+            print(f"[c{conn_id}] press-stop SUPPRESSED: reckon refused ({why}) -- "
+                  f"pin-or-nothing, the swing may open on a moving body "
+                  f"[MOVECODE-1z-ds]", flush=True)
+        return False
+    send(GAME_SMSG_AGENT_UPDATE_POSITION,
+         [PLAYER_AGENT_ID, [float(est[0]), float(est[1])], plane],
+         f"PRESS STOP PIN 0x002C at ({est[0]:.0f},{est[1]:.0f}) plane {plane} -- "
+         f"{why}: a press in reach on a walking body [MOVECODE-1z-ds]")
+    state["cast_stop_pin"] = (now, est)
+    state["pos"] = (float(est[0]), float(est[1]))
+    state["dest"] = None
+    # A held heading grant is a walk for a body we just parked -- the stop arm's
+    # and the click arm's own rule (heading_hold_tick's docstring).
+    state["heading_hold"] = None
+    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+         f"AGENT_STOP_MOVING(player) [MOVECODE-1z-ds pin:{why}]")
+    _forget_client_position(state, "a press stopped the walking body")
+    if rec is not None:
+        rec.event("press_stop", fired=True, why=why, target=target_id,
+                  dist=round(dist, 1), point=[float(est[0]), float(est[1])],
+                  plane=plane)
+    print(f"[c{conn_id}] press stops the body at ({est[0]:.0f},{est[1]:.0f}) -- "
+          f"in reach of agent {target_id} ({dist:.0f} u), walking ({why}) "
+          f"[MOVECODE-1z-ds]", flush=True)
+    return True
+
+
 def begin_attack(send, state, target_id, conn_id, rec=None):
     """A click on a hostile agent starts an attack that the tick keeps up.
 
@@ -19628,6 +19712,9 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
     # every accepted order, repeats included -- a repeat press on a starved
     # chain is still the player's hands speaking after the last report.
     state["attack_press_at"] = now
+    # MOVECODE-1z-ds: a press the swing gate will answer stops a walking body
+    # FIRST -- before `attacking` below reaches the world tick.
+    _press_stops_body(send, state, conn_id, target_id, agent, now, rec=rec)
     if state.get("attacking") != target_id:
         # A RETARGET STOPS THE SWING IN FLIGHT. The corpus's one candidate
         # cancel (studies/combat 17c) is exactly this shape: two c2s
@@ -46544,6 +46631,12 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.no_press_stop:
+        global PRESS_STOPS_BODY
+        PRESS_STOPS_BODY = False
+        print("[map] --no-press-stop: a press in reach on a body walking under held "
+              "keys opens the swing on the walking body -- every run before "
+              "MOVECODE-1z-ds (2026-10-01).", flush=True)
     if a.no_kbd_body_estimate:
         global KBD_BODY_ESTIMATE
         KBD_BODY_ESTIMATE = False

@@ -403,20 +403,21 @@ def section_stop_answer():
           "ONE R6 gate and ONE R6-labelled send -- a gate whose send was "
           "deleted, or a second site borrowing R6's label, reddens this")
     sites = stop_moving_sites()
-    check(len(sites) == 8
+    check(len(sites) == 9
           and all(b == "agents.agent_stop_moving" for _, _, b, _ in sites),
-          "EIGHT 0x0028 send sites, every payload from the builder the "
+          "NINE 0x0028 send sites, every payload from the builder the "
           "wire-shape check above drives -- never a hand-built [agent] "
           "literal, which would skip that builder's agent-id-0 refusal and "
           "put a silent no-op on the wire", f"{sites}")
     player = [s for s in sites if s[3] == "PLAYER_AGENT_ID"]
-    check(len(player) == 5
-          and sorted(s[1][-1] for s in player) == ["attack_tick",
+    check(len(player) == 6
+          and sorted(s[1][-1] for s in player) == ["_press_stops_body",
+                                                   "attack_tick",
                                                    "handle",
                                                    "handle_skill_press",
                                                    "send_transfer",
                                                    "serve_pickup"],
-          "and exactly FIVE of them name the PLAYER: R6's stop-ack in the "
+          "and exactly SIX of them name the PLAYER: R6's stop-ack in the "
           "0x0047 handler and R8/R10's cast-stop in handle_skill_press, "
           "each behind its own gate -- since SLICE-B8 the transfer's "
           "own halt in send_transfer, which is retail's measured pair "
@@ -437,11 +438,16 @@ def section_stop_answer():
           ":62994; test_approachroute section 3), after a SERVER-ordered walk "
           "the client reports nothing on (the sync copy walks the follow too), "
           "never at a keyboard stop, and only at the first start after OUR "
-          "follow arrived -- so it is not a stop-window send either. THIS is "
+          "follow arrived -- so it is not a stop-window send either -- and "
+          "since MOVECODE-1z-ds the press stop in _press_stops_body, retail's "
+          "own: an in-reach 0x0026 on a body walking under held keys carries "
+          "0x0028 [me] within 60 ms on 37 of 42 (39 in all; pressstopjoin.py), "
+          "sent only behind R10's co-locating 0x002C (pin-or-nothing), so it "
+          "is a press-batch send, not a stop-window one. THIS is "
           "the count carrying the safety argument -- "
           "studies/movement/FINDINGS.md's stop census is scoped to the "
           "player's own stop window (0x0028 in 7 of 114 stops, 'a server "
-          "author must not send 0x0028 on a stop'), and a sixth "
+          "author must not send 0x0028 on a stop'), and a seventh "
           "player-directed site is a new warp channel into both copies until "
           "its own retail witness says otherwise",
           f"{player}")

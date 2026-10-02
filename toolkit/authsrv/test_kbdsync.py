@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=243)   # MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=250)   # MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2546,6 +2546,98 @@ def main():
           and SRC.count('state["client_heading"] = None') == 1,
           "28c. the heading is written by the accepted 0x003D and cleared by the "
           "0x0047, and nowhere else")
+
+    # 29. MOVECODE-1z-ds: an in-reach press STOPS a body walking on held keys. The
+    # owner's "slides during attacks" (20261001T194258, 37.70 and 47.95): a 0x0026 in
+    # reach 0.42 s after a moving report, nothing sent at the press, and the swing
+    # opened 0.22 s later on a body that walked on 530 u. Retail: a 0x0028 [me] in the
+    # press batch, 39 of 42 (pressstopjoin.py). Ours: the cast-stop's pin pair.
+    print("\n29. 1z-ds: an in-reach press pins and halts a body walking on held keys")
+    import agents as _ag29
+
+    class _PM29:
+        def walkable(self, x, y):
+            return True
+
+        def clip(self, x0, y0, x1, y1, step=None):
+            return (x1, y1)
+
+        def plane_at(self, x, y, prefer=None):
+            return prefer
+
+        def containing(self, x, y):
+            return []                   # the plane-echo tripwire: offers nothing
+
+    FOE29 = 10
+    PIN29, HALT29 = (authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                     authsrv.GAME_SMSG_AGENT_STOP_MOVING)
+
+    def press29(foe_at=(60.0, 0.0), on=True, **over):
+        t = _t27.time()
+        st = {"pos": (0.0, 0.0), "plane": 0, "client_pos": (0.0, 0.0),
+              "client_pos_at": t - 0.42, "client_plane": 0,
+              "kbd_moving_at": t - 0.42, "heading": (0.0, -766.0), "heading_mt": 1,
+              "pathmap": _PM29(), "heading_hold": {"at": t, "point": (0.0, -520.0)},
+              "agents": {FOE29: {"name": "raider", "dead": False, "pos": foe_at,
+                                 "health": 100.0, "max_health": 100.0,
+                                 "allegiance": _ag29.ALLEGIANCE_HOSTILE}}}
+        st.update(over)
+        w, r = Sent(st), FakeRec()
+        saved = authsrv.PRESS_STOPS_BODY
+        authsrv.PRESS_STOPS_BODY = on
+        try:
+            authsrv.begin_attack(w, st, FOE29, 0, rec=r)
+        finally:
+            authsrv.PRESS_STOPS_BODY = saved
+        return st, w, r
+
+    st29, w29, r29 = press29()
+    ops29 = [op for op, _v, _l in w29.rows]
+    pin29 = w29.of(PIN29)
+    check(len(pin29) == 1 and len(w29.of(HALT29)) == 1
+          and ops29.index(PIN29) < ops29.index(HALT29)
+          and abs(pin29[0][1][1][0]) < 0.5 and abs(pin29[0][1][1][1] + 121.0) < 1.0
+          and st29.get("attacking") == FOE29,
+          "29a. a press in reach 0.42 s after a moving report: ONE 0x002C at the "
+          "reckoned body (0, -121) -- 0.42 s x 288 u/s down the heading -- then ONE "
+          "0x0028, and the order is taken", f"{w29.rows}")
+    row29 = r29.of("press_stop")
+    check(st29.get("client_pos") is None and st29.get("dest") is None
+          and abs(st29["pos"][1] + 121.0) < 1.0
+          and isinstance(st29.get("cast_stop_pin"), tuple)
+          and st29.get("heading_hold") is None
+          and len(row29) == 1 and row29[0]["fired"] is True,
+          "29b. the pin is a MODELLED placement: the report is forgotten, the "
+          "server's model parks on the pin, the held heading grant is dropped, the "
+          "pin note lands for the second press, and the row says it fired",
+          f"client_pos {st29.get('client_pos')}, pos {st29.get('pos')}, "
+          f"hold {st29.get('heading_hold')}, rows {row29}")
+    w29r = Sent(st29)
+    authsrv.begin_attack(w29r, st29, FOE29, 0, rec=r29)
+    check(not w29r.of(PIN29) and not w29r.of(HALT29),
+          "29c. a repeat press before the client speaks again sends nothing more "
+          "(the report is forgotten: the reckon answers no-report)", f"{w29r.rows}")
+    st29p, w29p, r29p = press29(kbd_moving_at=None)
+    check(not w29p.of(PIN29) and not w29p.of(HALT29)
+          and [e.get("why") for e in r29p.of("press_stop")] == ["parked"],
+          "29d. a PARKED body (no keyboard latch) gets nothing -- pin-or-nothing, "
+          "the refusal on the row", f"{w29p.rows} {r29p.of('press_stop')}")
+    st29o, w29o, r29o = press29(foe_at=(2000.0, 0.0))
+    check(not w29o.of(PIN29) and not w29o.of(HALT29) and not r29o.of("press_stop"),
+          "29e. OUT of reach the press is left to the follow, as retail leaves it -- "
+          "no pin, no halt, no row", f"{w29o.rows}")
+    st29k, w29k, _r29k = press29(on=False)
+    check(not w29k.of(PIN29) and not w29k.of(HALT29)
+          and st29k.get("client_pos") == (0.0, 0.0),
+          "29f. KNOWN-BAD ARM (--no-press-stop): the same press sends nothing and the "
+          "swing would open on the walking body -- the slide", f"{w29k.rows}")
+    _ba29 = SRC[SRC.index("def begin_attack("):]
+    _ba29 = _ba29[:_ba29.index("\ndef ")]
+    check(SRC.count("_press_stops_body(send, state, conn_id, target_id, agent, now, rec=rec)") == 1
+          and _ba29.index("_press_stops_body(") < _ba29.index('state["attacking"] = target_id')
+          and "--no-press-stop" in ARGS_SRC and "if a.no_press_stop:" in SRC,
+          "29g. the stop runs inside begin_attack, AHEAD of `attacking` reaching the "
+          "world tick, from one call site; --no-press-stop is wired")
 
     return LEDGER.verdict()
 

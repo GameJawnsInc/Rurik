@@ -20572,3 +20572,136 @@ With round 2 undone in the source, all three go red.
 **Note:** three of that file's SLICE-F50 deadline checks go red only under heavy parallel
 load (38 processes). Alone they are green; they are wall-clock checks this change does not
 touch.
+
+### 1z-dr.5 On the client: `20261001T194258` CONFIRMS round 2
+
+The owner drove it: hold W, Q or E, and attack a distant enemy without clicking.
+
+**The owner's eye:** *"seems to have fixed it."* No backwards snap.
+
+**The wire** (`score_kbdpress`, the registered KP-Q0..Q4):
+
+- **KP-Q0:** no assert and no crash dialog. The owner closed the client, so the harness
+  retracted its verdict.
+- **KP-Q1:** 19 presses killed a live keyboard lead. Report ages ran from 0.00 to 0.94 s.
+- **KP-Q2:**
+  - (a) Every kill point lies 0 u from the estimate.
+  - (b) 0 APPROACH RE-PINs fired at a press.
+  - (c) 19 of 19 next reports fit the walk budget from the kill point.
+- **KP-Q4:** 0 `Pending skill`.
+
+**1z-dr CLOSES.** The owner flagged a new class on the same run: *"had a couple slides
+during attacks"*. That is 1z-ds.
+
+## 1z-ds. An in-reach press on a body walking under held keys opened the swing on the walking body: the slide (2026-10-01)
+
+### 1z-ds.1 The report and the tape (OBSERVED)
+
+The owner, on `20261001T194258`: *"had a couple slides during attacks"*. Of the run's 8
+player swings, every one opened while the last 0x003D said the body was moving, because
+the owner held keys by design:
+- **4 stood.** The press sent a follow: 3 after killing a live keyboard lead, 1 after
+  superseding a follow leg. The body stood through the swing, with at most 14 u of drift
+  before the next walk-start.
+- **2 were stopped** by the attack-skill press's own cast-stop pin.
+- **2 did not stop:**
+
+| Press | Report before | At the press | Swing | Next report |
+|---|---|---|---|---|
+| 37.703 | 0.42 s old, mt 1, heading (0.14, -0.99) | nothing | 37.928, after the interval | 39.405: 530 u along that heading |
+| 47.949 | 0.16 s old, mt 6 | nothing | 48.273, after the interval | 48.762: 181 u, the mt-6 rate end to end |
+
+The hits landed at 38.494 and 48.620 while the body walked away from the target. Both
+presses had one thing in common:
+- **No lead to kill.** The report before each was granted
+  `ZERO LEAD (…) [d1-fallback]`, a lead degraded to the zero-lead point because our fence
+  latch was shut. A `PRESS ENDS THE WALK` 0x002C (36.317) and a `CAST-STOP PIN` (47.279)
+  had shut it. The next report sat ON the pin, so the walked-off-pin rule could not lift
+  it.
+- **No follow to send,** because the target was in reach.
+
+So nothing went out at the press. The swing's [8 -> 1] shuts only a walk START, never a
+walk already running (cancelwalk F22). This is the cast path's F28 glide, for the 0x0026
+opcode.
+
+### 1z-ds.2 Retail (OBSERVED, `toolkit/authsrv/pressstopjoin.py`)
+
+The census covers every live connection. Both directions are on one clock, and the
+observer is identified by property 41.
+
+**The cell:**
+
+| Step | Count |
+|---|---|
+| Presses | 527 |
+| Last movement input a MOVING 0x003D, at most 3 s old, no stop after it | 180 |
+| Of those, answered within 0.25 s by the observer's own attack_started, no follow ahead of it (in reach) | 42 |
+
+**What retail sends:**
+- **39 of the 42 carry a bare 0x0028 [me].**
+  - **Timing:** 37 of them within 60 ms of the press (p50 0.040 s).
+  - **Placement:** 24 in the swing's own batch, 15 ahead of it. In 11 of the 12 swings
+    that waited more than 0.1 s on the interval, the stop came at the press.
+- **The body stops:** 28 of 28 next reports sit nearer the stop-at-press distance than
+  the walk-on distance.
+- **The three without a stop:** one body had already stopped (43 u in 1.9 s), and two
+  have no report after.
+
+This is the 0x0026 twin of SLICE-F20's attack-skill rule (a bare 0x0028 in the press
+batch, 2 of 2).
+
+### 1z-ds.3 Shipped: `PRESS_STOPS_BODY` (`--no-press-stop` reverts)
+
+`_press_stops_body` runs inside `begin_attack` on every accepted order, BEFORE `attacking`
+is published to the world tick. The tick could otherwise open the swing first.
+
+- **Gate:** the swing gate's own operand (`_reach_frame`, 1z-dm) within `attack_reach()`.
+  Out of reach, the follow re-orders the body, and the press is left to it, as retail
+  leaves it.
+- **The pair:** the cast-stop's (R10), not the bare halt. Under our grants the sync copy
+  can sit at a stale zero-lead point; at 37.93 it was 121 u behind the body. A bare 0x0028
+  lands the body there: CANCELWALK-F34's warp. So:
+  - 0x002C at `cast_stop_reckon`'s point, then the 0x0028.
+  - Pin-or-nothing: a refusal sends nothing, and its reason is the `press_stop` row.
+- **Bookkeeping:**
+  - What the cast-stop pin writes: `cast_stop_pin`, plus the server's model parked on the
+    pin.
+  - The held heading grant is dropped, by the stop and click arms' own rule.
+  - The last report is FORGOTTEN, because the pin is a modelled placement
+    (`_forget_client_position`'s rule). Otherwise a later approach's snap guard would
+    advance that report along its heading past the point the body stopped on (1z-dr's
+    estimate), and re-pin it forward.
+
+**Tests:** `test_kbdsync` §29, 243 -> 250:
+- the pin at the reckoned body, then the halt, and the order taken;
+- the forget, the park, the hold dropped and the row;
+- a repeat press with nothing more;
+- a parked body with nothing;
+- out of reach, nothing;
+- the known-bad arm;
+- the call site ahead of `attacking`.
+
+With the call removed from the source, 29a, 29b, 29d and 29g go red.
+
+**RECONSTRUCTION:**
+- The reckoner is a straight line at the census family rate. Its R10 run measured the pin
+  4.1 to 8.2 u from the body.
+- Our 0x002C shuts the client's fence. So after the swing, a still-held key does not
+  drive the body until the next key press (1z-aa), as after every cast-stop. Retail's
+  bare halt may resume a held key by itself; whether it does is not measured.
+
+**UNVERIFIED on the client.** The run asks: *"attack while holding W / Q / E with the enemy
+already close: does the body stand for the swing, and any slide or snap?"*
+
+### 1z-ds.4 Left open: a walk-start from a pin keeps the fence latch shut
+
+The latch clears at a walk-start report, meaning moving after the keyboard latch was
+clear. A press pin does not clear `kbd_moving_at`; it has two writers, the 0x003D and
+0x0047 arms, by AST lock. So the first report of the owner's next walk reads as a
+continuation, and it sits ON the pin, under the 24 u walked-off-pin radius.
+
+That report gets a zero lead. The body walks one report interval untracked by a lead,
+and the 37.93 slide is what that exposure became.
+
+1z-ds removes the slide whatever the lead state, because the reckoner reads the report,
+not the lead. The latch miss is recorded here, not fixed.

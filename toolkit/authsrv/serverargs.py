@@ -759,7 +759,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "walk re-pins (approach snap guard) and kills the lead at the "
                          "bare last report / the lead's own model, every run before "
                          "2026-10-01. By default both use the last 0x003D report "
-                         "advanced along its heading at its family speed (<= 1.25 s).")
+                         "advanced along its heading at its family speed (<= 2.0 s), "
+                         "then the press's own lead kill (<= 0.5 s).")
+    ap.add_argument("--no-press-stop", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds: a press in reach while "
+                         "the body walks under held keys sends nothing and the swing "
+                         "opens on the walking body (the slide), every run before "
+                         "2026-10-01. By default the press pins the reckoned body "
+                         "(0x002C) and halts it (0x0028), the cast-stop's pair -- "
+                         "retail's 0x0028 in the press batch, 39 of 42.")
     ap.add_argument("--no-resurrect-target-gate", action="store_true",
                     help="THE REVERT ARM for RESSIG-T: a resurrection skill pressed "
                          "with target 0 casts its 3 s and stops ([59], E2), every run "

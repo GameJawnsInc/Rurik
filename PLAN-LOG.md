@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds -- 2026-10-01 -- **The owner's "slides during attacks" (`20261001T194258`): an in-reach press on a body walking under held keys sent NOTHING, and the swing opened on the walking body (530 u and 181 u to the next report). Retail stops it, a 0x0028 [me] in the press batch on 39 of 42. Ours now sends the cast-stop's pin pair at the press, ahead of the swing.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.
+- **The census:** `toolkit/authsrv/pressstopjoin.py` (new, read-only).
+- **Flag:** `PRESS_STOPS_BODY`; `--no-press-stop` reverts.
+- **Tests:**
+  - `test_kbdsync` 250: §29, with the call removed from the source reddening 4.
+  - `test_cancelwalk`'s 0x0028 census: 9 sites, 6 naming the player.
+  - Green: `test_castcancel`, `test_approachroute`, `test_daggers`, `test_weapons`,
+    `test_agentlife`, `test_position_trust`, `test_shrinewarp`, `test_d1lead`,
+    `test_agtrack_guard`, `test_router`, `test_keepalive`, `test_planerepair`,
+    `test_srclint`.
+- **Status:** unrun on the client (§8).
+
+### MOVECODE-1z-dr CONFIRMED -- 2026-10-01 -- **`20261001T194258`, round 2 on the client: 19 presses during a keyboard walk, every kill on the estimate, 0 re-pins at a press, 19 of 19 next reports in budget. The owner: "seems to have fixed it."**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-dr.5.
+- **Closes:** the §8 line *"round 2's keyboard/strafe press, unrun on the client"*.
+
 ### MOVECODE-1z-dr round 2 -- 2026-10-01 -- **`20261001T192303`: "still warping. really bad if i use Q or E to strafe then attack". The estimate's 1.25 s cap was shorter than the client's silence under a lead chain (1.33-1.73 s at the warping presses), so the guard fell back to the bare report. Cap raised to the measured 2.0 s (p90 <= 58 u over the day's thirteen tapes), with the press's own lead kill past it. Replayed: 9 of 15 old backward re-pins become 0.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-dr.4.
