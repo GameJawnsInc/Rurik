@@ -19083,6 +19083,20 @@ CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = True   # --no-pause-charge-without-target r
 # 1z-dg's resume (a re-press on the target a move forgot keeps the clock, so it still waits
 # out the period from the previous start -- 55 of 88 say it must).
 SWING_CLOCK_CHARGES_MOVING = False   # True (--swing-clock-charges-moving): 1z-dg's charge.
+# A SWING CANCELLED IN ITS WINDUP HOLDS NO CLOCK (MOVECODE-1z-ds.13). swingclockjoin's 33
+# off-period binding presses, read row by row (scratchpad wf-A census2.py, reproduced cell
+# for cell by an independent join): on retail the clock belongs to the SWING, not the
+# target. A swing that LANDED holds start-to-start at the period whatever follows -- a move,
+# a re-press, a retarget (65 of 65 WAIT rows); a swing CANCELLED before its landing (own
+# [3, me, 0] after the start, or the target dying in the windup) holds nothing, and the next
+# press swings 28-50 ms after it (13 of 13; the rival "restart at the cancel" fits 0 of 13).
+# "Cancelled" against our shipped rule (reset iff retarget): 1 misclassified against 10.
+# The cell ours got wrong is the SAME-target re-press after a move that cancelled the
+# windup: 1z-dg's resume kept the cancelled swing's clock, retail swings at the press (5 of
+# 5; 1.5 / 1.75 / 2.475 s weapons -- no 1.33 s row, so for the sword it is RECONSTRUCTION).
+# Not changed: a retarget after a LANDED swing, where retail waits (5 strong rows) and ours
+# swings at once -- zero exposure in a one-hostile run; recorded, not fixed.
+CANCELLED_SWING_FREES_CLOCK = True   # False (--cancelled-swing-holds-clock): 1z-dg's resume of it.
 
 
 # `_chain_pause_charge` moved to `pressverdict.py` with the rest of the press and
@@ -19852,9 +19866,21 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
         agent["last_hit"] = 0.0
         moved_from = state.get("chain_moved_from")
         state["chain_moved_from"] = None
+        # MOVECODE-1z-ds.13: NOT when that move cancelled the swing in its
+        # windup -- a swing that never landed holds no clock (retail 13 of 13
+        # swing at the press; CANCELLED_SWING_FREES_CLOCK's block).
+        freed = (CANCELLED_SWING_FREES_CLOCK and moved_from is not None
+                 and moved_from.get("target") == target_id
+                 and bool(moved_from.get("cancelled")))
         resumed = (CHAIN_PAUSE_CHARGES_WITHOUT_TARGET and moved_from is not None
-                   and moved_from.get("target") == target_id)
-        if resumed:
+                   and moved_from.get("target") == target_id and not freed)
+        if freed:
+            state["player_last_swing"] = 0.0
+            print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']}) "
+                  f"-- the move cancelled the swing in its windup, and a "
+                  f"cancelled swing holds no clock: swings at once "
+                  f"[MOVECODE-1z-ds.13]", flush=True)
+        elif resumed:
             residual = max(0.0, (state.get("player_last_swing", 0.0)
                                  + ATTACK_INTERVAL) - now)
             print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']}) "
@@ -20128,8 +20154,13 @@ def cancel_on_move(send, state, conn_id, moved=None):
             # START = interval + moving span -- the re-press resumes the
             # chain on the paused clock rather than restarting it.
             # begin_attack reads this; a press on any OTHER target drops it.
+            # `cancelled` (MOVECODE-1z-ds.13): this move caught the swing in its
+            # windup -- the swing never landed, so it holds no clock. The [3]'s
+            # own predicate under the shipped MOVE_KEEPS_CHAIN, without its
+            # legacy disjunct: "never landed" is what retail measured.
             state["chain_moved_from"] = {"target": state["attacking"],
-                                         "t": now}
+                                         "t": now,
+                                         "cancelled": bool(chain_live and pre_landing)}
             state["attacking"] = None
         if MOVE_ENDS_CHAIN:
             # A move command ends OUR follow too -- the client's steering
@@ -46757,6 +46788,13 @@ def main():
               "body's moving time (MOVECODE-1z-dg) -- every build before 1z-ds.11; "
               "retail's swing lands at the period on 55 of 88, at period + span on 0.",
               flush=True)
+    if a.cancelled_swing_holds_clock:
+        global CANCELLED_SWING_FREES_CLOCK
+        CANCELLED_SWING_FREES_CLOCK = False
+        print("[map] --cancelled-swing-holds-clock: a re-press on the target a move "
+              "forgot keeps the clock even when the move cancelled the swing in its "
+              "windup (MOVECODE-1z-dg's resume) -- every build before 1z-ds.13; "
+              "retail swings at the press, 13 of 13.", flush=True)
     if a.no_park_walk_start:
         global PARK_IS_WALK_START
         PARK_IS_WALK_START = False

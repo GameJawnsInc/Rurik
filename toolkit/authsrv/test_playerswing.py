@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=209)   # MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=216)   # MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2084,26 +2084,35 @@ def section_no_target_charge():
         def __init__(self): self.rows = []
         def event(self, kind, **kw): self.rows.append((kind, kw))
 
-    def lifecycle(charges, move_at=2.0, span=1.5, repress_target=10, clock_charge=False):
+    def lifecycle(charges, move_at=2.0, span=1.5, repress_target=10, clock_charge=False,
+                  frees=True):
         """Starts (synthetic clock) of a chain that a real move interrupts:
         the move's report forgets the target, the body moves for `span`,
         the stop clears the latch and the client re-presses `repress_target`
-        40 ms later. Returns (starts, rec rows)."""
+        40 ms later. Returns (starts, rec rows, state); the state also carries
+        `_t_sent` (clock, op, vals, label) and `_t_moved_from`, the move's
+        chain_moved_from read BEFORE the re-press consumes it (1z-ds.13)."""
         sent = []
-        send = lambda op, vals, label="", quiet=False: \
+        timed = []
+
+        def send(op, vals, label="", quiet=False):
             sent.append((op, vals, label))
+            timed.append((clock[0], op, vals, label))
         agent = {"name": "t", "dead": False, "last_hit": 0.0,
                  "max_health": 1e9, "health": 1e9, "pos": (0.0, 0.0)}
         state = {"agents": {10: agent, 11: dict(agent)}, "pos": (0.0, 0.0),
                  "attacking": 10, "player_health": 100.0, "player_dead": False,
                  "last_report": (0.0, 0.0, False, 999.0)}
         rec = _Rec()
-        saved = (authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET, authsrv.SWING_CLOCK_CHARGES_MOVING)
+        saved = (authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET, authsrv.SWING_CLOCK_CHARGES_MOVING,
+                 authsrv.CANCELLED_SWING_FREES_CLOCK)
         saved_time = authsrv.time.time
         clock = [1000.0]
         authsrv.time.time = lambda: clock[0]
         authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = charges
         authsrv.SWING_CLOCK_CHARGES_MOVING = clock_charge
+        authsrv.CANCELLED_SWING_FREES_CLOCK = frees
+        state["_t_sent"] = timed
         try:
             starts = []
             forgot = repressed = False
@@ -2113,6 +2122,7 @@ def section_no_target_charge():
                 if t >= move_at and not forgot:
                     # the arm's own path for a report that MOVED 60 u
                     authsrv.cancel_on_move(send, state, 0, moved=60.0)
+                    state["_t_moved_from"] = dict(state.get("chain_moved_from") or {})
                     forgot = True
                 moving = move_at <= t < move_at + span
                 state["kbd_moving_at"] = clock[0] if moving else None
@@ -2128,7 +2138,8 @@ def section_no_target_charge():
                 agent["health"] = 1e9
             return starts, rec.rows, state
         finally:
-            authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET, authsrv.SWING_CLOCK_CHARGES_MOVING = saved
+            (authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET, authsrv.SWING_CLOCK_CHARGES_MOVING,
+             authsrv.CANCELLED_SWING_FREES_CLOCK) = saved
             authsrv.time.time = saved_time
 
     def gap_across(starts, move_at=2.0):
@@ -2142,12 +2153,18 @@ def section_no_target_charge():
     # at period + span (0 of 88; swingclockjoin.py). The binding case is a SHORT move -- the
     # re-press lands inside the interval -- so span 0.5 s: move 2.0 -> 2.5, re-press 2.54,
     # the previous start at 1.75, the period due at 3.5.
+    # MOVECODE-1z-ds.13 RE-AIMED it once more. That move (2.0) fell 0.25 s into the 1.75-start
+    # swing's 0.775 s windup: a CANCELLED swing, which on retail holds no clock (17b below).
+    # The resume is a move AFTER the landing (2.525): move 2.65 -> 3.05, re-press 3.09, the
+    # period from the 1.75 start due at 3.5 -- retail's 65 of 65 landed-swing WAIT rows.
     interval = authsrv.ATTACK_INTERVAL
-    span = 0.5
-    s_ship, rows_ship, _st = lifecycle(True, span=span)
-    s_reset, rows_reset, _st = lifecycle(False, span=span)
-    s_charge, rows_charge, _st = lifecycle(True, span=span, clock_charge=True)
-    g_ship, g_reset, g_charge = gap_across(s_ship), gap_across(s_reset), gap_across(s_charge)
+    span = 0.4
+    move_at = 2.65
+    s_ship, rows_ship, st_ship = lifecycle(True, move_at=move_at, span=span)
+    s_reset, rows_reset, _st = lifecycle(False, move_at=move_at, span=span)
+    s_charge, rows_charge, _st = lifecycle(True, move_at=move_at, span=span, clock_charge=True)
+    g_ship, g_reset, g_charge = (gap_across(s_ship, move_at), gap_across(s_reset, move_at),
+                                 gap_across(s_charge, move_at))
     check(None not in (g_ship, g_reset, g_charge) and len(s_ship) >= 3,
           "every arm produced starts before and after the move -- the rig is not vacuous",
           f"ship={[(round(t - 1000, 2), a) for t, a in s_ship]} "
@@ -2155,8 +2172,8 @@ def section_no_target_charge():
     if None in (g_ship, g_reset, g_charge):
         return
     check(abs(g_ship - interval) <= 0.051,
-          "SHIPPED: a re-press inside the interval after a move swings ONE PERIOD after the "
-          "previous start -- retail's START-to-START on 55 of 88 binding presses",
+          "SHIPPED: a re-press inside the interval after a POST-LANDING move swings ONE PERIOD "
+          "after the previous start -- retail's START-to-START on 55 of 88 binding presses",
           f"gap {g_ship:.2f} s against the period {interval:.2f}")
     check(g_reset < interval - 0.30,
           "KNOWN-BAD ARM (--no-pause-charge-without-target): the re-press resets the clock "
@@ -2177,13 +2194,13 @@ def section_no_target_charge():
           "the whole span",
           f"shipped {cp_ship[-1] if cp_ship else None}, charge {cp_charge[-1] if cp_charge else None}")
     pv_ship = [kw for k, kw in rows_ship if k == "press_verdict"]
-    check(any(kw.get("reason") == "swing" and 0.85 <= kw.get("age", 0) <= 1.05
+    check(any(kw.get("reason") == "swing" and 0.30 <= kw.get("age", 0) <= 0.50
               for kw in pv_ship),
           "the re-press is ANSWERED by the tick when the period elapses -- its row carries "
-          "the ~0.96 s wait as `age`",
+          "the ~0.40 s wait as `age`",
           f"{[(kw.get('reason'), kw.get('age')) for kw in pv_ship]}")
-    s_new, _rows, _st = lifecycle(True, span=span, repress_target=11)
-    g_new = gap_across(s_new)
+    s_new, _rows, _st = lifecycle(True, move_at=move_at, span=span, repress_target=11)
+    g_new = gap_across(s_new, move_at)
     check(g_new is not None and g_new < interval - 0.30
           and s_new[-1][1] == 11,
           "CONTROL: a press on a DIFFERENT target after the move is a "
@@ -2198,6 +2215,63 @@ def section_no_target_charge():
           "and a STILL report remembers nothing -- it kept the target "
           "(1z-dd), so there is nothing to resume",
           f"moved_from={st.get('chain_moved_from')} attacking={st.get('attacking')}")
+
+    # 17b. MOVECODE-1z-ds.13: A SWING CANCELLED IN ITS WINDUP HOLDS NO CLOCK. The rig 17 used
+    # until now: the move at 2.0 is 0.25 s into the 1.75-start swing's windup (lands 2.525), the
+    # re-press at 2.54. Retail swings at the press on 13 of 13 such presses (5 of 5 on the same
+    # target); 1z-dg's resume made ours wait out the cancelled swing's period.
+    print("\n17b. a re-press after a move that CANCELLED the windup swings at once "
+          "(MOVECODE-1z-ds.13)")
+    P = authsrv.PLAYER_AGENT_ID
+    s_free, rows_free, st_free = lifecycle(True, move_at=2.0, span=0.5)
+    s_hold, _rows, st_hold = lifecycle(True, move_at=2.0, span=0.5, frees=False)
+    g_free, g_hold = gap_across(s_free, 2.0), gap_across(s_hold, 2.0)
+    mf = st_free.get("_t_moved_from") or {}
+    stops = [lab for _c, op, vals, lab in st_free["_t_sent"]
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             and vals[0] == agents.GV_ATTACK_STOPPED and vals[1] == P]
+    check(any("before the swing landed" in lab for lab in stops) and mf.get("cancelled") is True,
+          "17b-a. the move caught the windup: it sent [3, player, 0] 'before the swing landed' "
+          "and the move's record says cancelled -- the operand begin_attack reads",
+          f"stops={stops} moved_from={mf}")
+    press_at = st_free.get("attack_press_at")
+    after = [t for t, _a in s_free if t - 1000.0 >= 2.0]
+    check(g_free is not None and g_free < interval - 0.30 and press_at is not None
+          and after and abs(after[0] - press_at) <= 0.051,
+          "17b-b. SHIPPED: the re-press swings AT the press, not one period after the cancelled "
+          "start -- retail 13 of 13 (28-50 ms after the press)",
+          f"gap {g_free} against the period {interval:.2f}; first start after the move "
+          f"{(after[0] - 1000.0) if after else None}, press {(press_at - 1000.0) if press_at else None}")
+    lands = [c - 1000.0 for c, op, vals, _l in st_free["_t_sent"]
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             and vals[0] == agents.GV_MELEE_ATTACK_FINISHED and vals[1] == P]
+    check(any(c < 1.75 for c in lands) and not any(1.75 <= c < 2.55 for c in lands),
+          "17b-c. and the cancelled swing dealt nothing: the first swing's landing is on the "
+          "wire (the positive control) and the cancelled one's never is",
+          f"landings at {[round(c, 2) for c in lands]}")
+    pv_free = [kw for k, kw in rows_free if k == "press_verdict"]
+    check(any(kw.get("reason") == "swing" and kw.get("age", 1.0) <= 0.06 for kw in pv_free)
+          and not any(kw.get("refused_by") == "interval" for kw in pv_free),
+          "17b-d. its press row is answered `swing` at once, never refused by the interval",
+          f"{[(kw.get('reason'), kw.get('age'), kw.get('refused_by')) for kw in pv_free]}")
+    check(g_hold is not None and abs(g_hold - interval) <= 0.051,
+          "17b-e. KNOWN-BAD ARM (--cancelled-swing-holds-clock): the same re-press waits one "
+          "period from the CANCELLED start -- 1z-dg's resume, which retail shows on 0 of 13",
+          f"gap {g_hold} against the period {interval:.2f}")
+    s_lh, _rows, st_lh = lifecycle(True, move_at=move_at, span=span, frees=False)
+    g_lh = gap_across(s_lh, move_at)
+    check((st_ship.get("_t_moved_from") or {}).get("cancelled") is False
+          and g_lh is not None and abs(g_lh - g_ship) <= 0.051,
+          "17b-f. CONTROL: a POST-landing move's record says not cancelled, and the flag does "
+          "not reach it -- the landed swing waits the period under both arms (65 of 65)",
+          f"moved_from={st_ship.get('_t_moved_from')} gap off {g_lh} shipped {g_ship:.2f}")
+    s_r1, _rows, _st = lifecycle(True, move_at=2.0, span=0.5, repress_target=11)
+    s_r0, _rows, _st = lifecycle(True, move_at=2.0, span=0.5, repress_target=11, frees=False)
+    g_r1, g_r0 = gap_across(s_r1, 2.0), gap_across(s_r0, 2.0)
+    check(None not in (g_r1, g_r0) and g_r1 < interval - 0.30 and g_r0 < interval - 0.30,
+          "17b-g. CONTROL: a pre-landing cancel then a press on ANOTHER target swings at once "
+          "under both arms -- retail's retarget cancel cell, which ours already matched",
+          f"gaps {g_r1} / {g_r0}")
 
 
 def section_reach_frame():

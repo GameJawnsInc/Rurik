@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.13 -- 2026-10-02 -- **A swing cancelled in its windup holds no clock. swingclockjoin's 33 off-period presses read: 18 are its own operand (the 0x0035 modifier, an attack-skill start); on corrected operands "cancelled in the windup" separates WAIT from RESET 13/0 against 1/65, where ours (reset iff retarget) gets 10 wrong. Retail's same-target re-press after a windup cancel swings at the press, 5 of 5; ours waited out the cancelled swing's period.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.13. Census `toolkit/authsrv/swingcanceljoin.py`.
+- **Shipped:** `CANCELLED_SWING_FREES_CLOCK` (`--cancelled-swing-holds-clock` reverts).
+  `test_playerswing` 209 -> 216.
+- **Closes:** §8's "the 33 early swings".
+
 ### MOVECODE-1z-ds.12 -- 2026-10-02 -- **`20261002T141035` CONFIRMS 1z-ds.10 and 1z-ds.11. The owner: "feels good now". Interval-held presses swing at start-to-start 1.330-1.331 s against the 1.33 period (waits 0.20-0.39 s, down from 0.53-1.23), every chain_pause charged 0.0, 11 walk-start re-arms after our parks, 0 movement cancels (5 on the QWE run).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.12.

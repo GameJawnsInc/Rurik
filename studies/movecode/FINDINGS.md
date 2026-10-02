@@ -21100,3 +21100,88 @@ next key report is a walk-start too. Recorded, not fixed.
   - the 33 early-swinging binding presses (1z-ds.11);
   - .5's kbd-drop click;
   - the follow-branch walk-start residual above.
+
+### 1z-ds.13 The 33 off-period presses: a swing CANCELLED in its windup holds no clock (`CANCELLED_SWING_FREES_CLOCK`, `--cancelled-swing-holds-clock` reverts)
+
+**How it was read.** A multi-agent pass over 1z-ds.12's three open items plus a sweep of the
+six owner tapes. Each lane was re-measured by an independent refuter with its own join, and
+a critic read across the lanes. This step carries lane A. Its census is now in the repo:
+`toolkit/authsrv/swingcanceljoin.py` (new, read-only), which reproduces the lane's numbers
+cell for cell.
+
+**The 33 were two things** (OBSERVED):
+- They are 28 EARLY and 5 LATE, not 33 early.
+- 18 are swingclockjoin's operand, not the clock:
+  - 15 carry the 0x0035 modifier 0.67 (0 of the 55 on-period rows do). Its period reads the
+    base only.
+  - 3 sit behind an own attack-skill start `[50, me, T]`. The next auto start is [50] +
+    period, 6 of 6.
+- The rest are swings CANCELLED in their windup.
+
+**On corrected operands** (start = the later of p0 and an own [50]; period = base x
+modifier), moved and binding: 82 rows, 79 scored (WAIT 65, RESET 14).
+
+| Rule | TRUE: RESET / WAIT | FALSE: RESET / WAIT | Wrong |
+|---|---|---|---|
+| Ours: reset iff retarget | 9 / 5 | 5 / 60 | 10 |
+| Reset iff cancelled in the windup (own [3] before any landing, or the target's death) | 13 / 0 | 1 / 65 | **1** |
+
+- The one miss is 20260929T100038 549.18, an IAS stance mid-gap.
+- **The discriminating rows**, where ours and CANCELLED disagree:
+  - **Same target, the previous swing cancelled in its windup by a move.** Retail swings at
+    the press, 5 of 5, 34-50 ms after it. Ours waited out the cancelled swing's period
+    (1z-dg's resume).
+  - **A retarget after a LANDED swing.** Retail waits the period, 6 of 7; 462.19 was
+    pressed only 70 ms before the period ran out. Ours swings at once.
+- The rival "a cancel restarts the clock at the [3]" fits 0 of 13.
+- Unmoved and binding: CANCELLED is 0 wrong of 9, ours 1.
+
+**So the clock belongs to the SWING, not the target.** A landed swing holds start-to-start
+at the period whatever follows: a move, a re-press, a retarget. A swing that never landed
+holds nothing.
+
+**Exposure in the owner runs** (OBSERVED, corrected by the lane's refuter):
+- 39 presses were held by `interval`: 28 after a landed swing, where retail waits too, and
+  11 after a cancel (10 by a move, 1 by a skill press).
+- 4 of the 10 move cancels were on-pin false cancels (20261001T201800 19.012, 20.479,
+  69.804; 20261002T005405 19.398), which 1z-ds.10 already removed. The first pass missed
+  them because those tapes' `press_stop` rows carry no `mode`.
+- **Under the shipped code:**
+  - 0 on 20261002T141035, which had no cancels.
+  - 4 reconstructed on 122114/124708 (11.624, 18.402, 58.174, 66.197), held 0.31-0.99 s
+    where retail swings at once.
+  - 58.174 is 1z-ds.11's own "slowly turn for ~1s" example.
+
+**Shipped:** `CANCELLED_SWING_FREES_CLOCK`.
+- `cancel_on_move` records on `chain_moved_from` whether the move caught the swing in its
+  windup: `chain_live and pre_landing`, the [3]'s own predicate. It leaves out the legacy
+  `not MOVE_KEEPS_CHAIN` disjunct, so `--legacy-move-stops-chain` is unchanged.
+- `begin_attack`'s resume skips such a record, so the same-target re-press swings at once.
+- A post-landing move keeps the resume (65 of 65).
+
+**Not changed, recorded:**
+- **A retarget after a landed swing:** retail waits, ours swings at once. Zero exposure on a
+  one-hostile run.
+- **A skill-press cancel then an attack press** (20261001T194258 47.949, ours waited 0.32 s).
+  Retail cannot discriminate it: the cast outlasts the period on 15 of 16.
+- **IAS mid-gap** (n = 4): retail reads as the backswing fixed at the landing. Ours applies
+  the factor to the running gap.
+- **The decisive cell has no 1.33 s row** (1.5 / 1.75 / 2.475 s weapons; 3 of the 5 rows
+  come from one bow capture). For the owner's sword the reset is a RECONSTRUCTION.
+
+**Tests:** `test_playerswing` §17 re-aimed and §17b added, 209 -> 216.
+- **§17's rig moves to a POST-landing move:** 2.65 s, after the 2.525 landing, which is
+  where the resume belongs. Its checks keep their meaning: shipped one period, the reset and
+  charge arms, their separation, the row, the ~0.40 s press age. Its old move at 2.0 s fell
+  in the windup, so its SHIPPED check had pinned the divergence.
+- **§17b, on the old pre-landing rig:**
+  - a: the [3] went out, and the record says `cancelled` (the operand begin_attack reads);
+  - b: the re-press swings at the press;
+  - c: the cancelled swing never lands, with the first swing's landing as the positive
+    control;
+  - d: its press row reads `swing` at once;
+  - e: the known-bad arm waits one period;
+  - f: CONTROL, a post-landing move's record is not cancelled and the flag does not reach it;
+  - g: CONTROL, a retarget after the cancel swings at once under both arms.
+- **Red:** with the gate out of `begin_attack`, 17b-b and 17b-d go red; with the record's key
+  out, 17b-a, b, d and f.

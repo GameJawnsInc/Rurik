@@ -768,6 +768,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "clock runs start-to-start at the period: retail's swing lands "
                          "there on 55 of 88 presses inside the interval after a move, at "
                          "period + span on 0 (swingclockjoin.py).")
+    ap.add_argument("--cancelled-swing-holds-clock", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.13: a re-press on the target "
+                         "a move forgot keeps the swing clock even when that move "
+                         "cancelled the swing in its windup (1z-dg's resume, every build "
+                         "before it). By default a swing that never landed holds no "
+                         "clock: retail swings at the press 13 of 13, and a landed swing "
+                         "holds the period 65 of 65.")
     ap.add_argument("--no-park-walk-start", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.10: the key report after our "
                          "pin + halt is read as mid-walk -- displacement from the report "

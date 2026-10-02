@@ -26,6 +26,10 @@ MEASURED 2026-10-02 over the live corpus: 153 answered presses with a previous s
 lands within 0.05 s of the PERIOD on 55 and of period + span on 0 (the other 33 come
 EARLY, 0.2-1.6 s inside the period -- a cancelled previous swing or a retarget, open).
 Unmoved and binding: 6 of 10 at the period. 1z-dg's charge is refuted at scale.
+READ 2026-10-02 (MOVECODE-1z-ds.13, swingcanceljoin.py): the 33 are 28 EARLY + 5 LATE, and
+18 of them are this tool's operand, not the clock -- its period reads the 0x0035 BASE only
+(15 carry modifier 0.67, 0 of the 55) and it ignores an own attack-skill start (3). The rest
+are swings CANCELLED in their windup, which hold no clock on retail.
 Read-only; standard library only; refuses non-live captures by construction.
 """
 import argparse
