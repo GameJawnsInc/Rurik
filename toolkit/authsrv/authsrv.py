@@ -19671,6 +19671,29 @@ PRESS_STOP_HOLDS = True  # False (--no-press-stop-hold): the pin and the halt, n
 # for the reason R10 gives); out on both, nothing. A body the stale frame called OUT but
 # that is in reach now gets the stop and its swing at once, instead of an 80 u walk-in.
 PRESS_STOP_ON_BODY = True   # False (--press-stop-on-frame): round 2, the frame decides.
+# ROUND 4, 1z-ds.10 -- AFTER OUR PARK THE NEXT KEY IS A WALK-START (the owner,
+# 20261002T122114: "it feels worse now, attacking is less 'sticky' than retail and
+# quarterstepping is more awkward"). The tape: after each press stop the owner's next key
+# report sat exactly ON the pin, and two things went wrong at it.
+#   (1) ITS DISPLACEMENT was read from the report BEFORE the pin (34-67 u off), so
+#       cancel_on_move called a body that had not moved a mover: 4 of the run's 5
+#       "attack_stopped: the player moves before the swing landed" fired on a report 0 u
+#       from our own pin. RETAIL: of the first key reports after its in-reach stops that
+#       came before the swing's close, 0 of 3 carry [3, me, 0] (pressstopjoin's cell).
+#   (2) ITS LEAD was degraded to the zero-lead point: our 0x002C stamped the fence latch,
+#       and the latch re-arms only at a walk-start "after the keyboard latch was clear" --
+#       which our own halt never clears (kbd_moving_at has two writers, the client's
+#       0x003D and 0x0047; 1z-ds.4). So every such report got ZERO LEAD [fence-shut] and
+#       the body stood on the pin (12.64 -> 14.41: 1.8 s with W held). RETAIL answers the
+#       same report with [8, me, 0] then a REAL lead: 26 of 26 carry one, p50 767 u, 0 zero
+#       leads; 22 in that order. And the client's own fence re-arms there: 1z-aa measured
+#       it re-arming at a moving 0x003D that FOLLOWED A PARK (7 of 8), and our pin + 0x0028
+#       is a park -- 20261001T194258 t=47.761, the report after a cast-stop pin, got a zero
+#       lead and the body walked 181 u under its own keys, which only an open fence allows.
+# So a pin + halt of ours (`cast_stop_pin`, written by the cast-stop pin and the press stop's
+# stop branch -- never by the follow branch, which halts nothing) newer than the last report
+# makes the next moving report a WALK-START: displacement from the pin, the latch re-armed.
+PARK_IS_WALK_START = True   # False (--no-park-walk-start): rounds 1-3 (the false cancels, the dead key).
 
 
 def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
@@ -19712,7 +19735,9 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
           f"PRESS FOLLOW PIN 0x002C at ({est[0]:.0f},{est[1]:.0f}) plane {plane} -- "
           f"{why}: the body is {body:.0f} u out though the frame said {dist:.0f} u; no "
           f"halt, the follow walks it in from here [MOVECODE-1z-ds.7]"))
-    state["cast_stop_pin"] = (now, est)
+    if stop:
+        # The park marker: the pin AND the halt (1z-ds.10 reads it as "the body is parked").
+        state["cast_stop_pin"] = (now, est)
     state["pos"] = (float(est[0]), float(est[1]))
     state["dest"] = None
     # A held heading grant is a walk for a body we just placed -- the stop arm's
@@ -42838,6 +42863,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # compare against -- the first report of a
                             # session cancels as it always did.
                             _prev = state.get("last_report")
+                            # MOVECODE-1z-ds.10: OUR park is newer than the last
+                            # report -> the body stands on the pin; measure from it.
+                            _park = state.get("cast_stop_pin")
+                            if (PARK_IS_WALK_START and _park is not None
+                                    and (_prev is None or _park[0] > float(_prev[3]))):
+                                _prev = (float(_park[1][0]), float(_park[1][1]))
                             _moved = None
                             if _prev is not None and len(values) > 1:
                                 try:
@@ -42966,6 +42997,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                   jump=round(_jump, 1), onto=round(_onto, 1),
                                                   prev_onto=round(_prev_onto, 1))
                         _kbd_was_moving = state.get("kbd_moving_at") is not None
+                        # MOVECODE-1z-ds.10: a body OUR pin + halt parked is not
+                        # moving, whatever the keyboard latch still says.
+                        _park = state.get("cast_stop_pin")
+                        _lr = state.get("last_report")
+                        if (PARK_IS_WALK_START and _park is not None
+                                and (_lr is None or _park[0] > float(_lr[3]))):
+                            _kbd_was_moving = False
                         state["kbd_moving_at"] = time.time() if moving else None
                         # MOVECODE-1z-aa: the fence we shut RE-ARMS at a
                         # keyboard walk-start -- a moving report after the
@@ -46698,6 +46736,12 @@ def main():
         PLAYER_RESURRECTION = False
         print("[party] --no-player-resurrection: the player's own Resurrection Signet "
               "raises nobody -- every run before RESSIG-P (2026-10-01).", flush=True)
+    if a.no_park_walk_start:
+        global PARK_IS_WALK_START
+        PARK_IS_WALK_START = False
+        print("[kbd] --no-park-walk-start: the key report after our pin + halt is a "
+              "mid-walk report -- its displacement from the pre-pin report, its lead "
+              "degraded under the fence latch (MOVECODE-1z-ds rounds 1-3).", flush=True)
     if a.attack_reach_wiki:
         global ATTACK_REACH
         ATTACK_REACH = ATTACK_REACH_WIKI

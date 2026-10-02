@@ -26,8 +26,13 @@ of the press (p50 0.040 s); 24 in the swing's batch, 15 ahead of it (11 of the 1
 swings that waited over 0.1 s); 28 of 28 next reports nearer stop-at-press than
 walk-on. Read-only; standard library only; refuses non-live captures by construction
 (livewire.live_connections).
+
+--after-stop (MOVECODE-1z-ds.10, MEASURED 2026-10-02): the first key report after
+a stopped in-reach press -- 27; answered with a lead 26, p50 767 u, 0 zero leads;
+[8, me, 0] then the lead on 23; 0 of 3 reports before the swing's close cancelled.
 """
 import argparse
+import collections
 import math
 import os
 import statistics
@@ -173,10 +178,81 @@ def census(counts, rows):
     return "\n".join(out)
 
 
+def after_stop():
+    """MOVECODE-1z-ds.10: retail's answer to the FIRST c2s 0x003D after a stopped press.
+
+    For every cell press that carried the stop, the first movement input after it, when it
+    is a 0x003D: the 0x0029 lead to me within 60 ms (its length from the report's own point;
+    under 1 u is a zero lead), [8, me, 0] (the hold's release) and its order against the
+    lead, and [3, me, 0] (attack_stopped) -- split by whether the report came before the
+    swing's close ([1, me] melee finished, or my own 0x00A4 launch)."""
+    rows = []
+    for capdir, gf in livewire.live_connections():
+        conn, merged, _ok = livewire.decode_conn(capdir, gf)
+        me = whose_agent(merged)
+        if me is None:
+            continue
+        for i, (t, d, op, _v) in enumerate(merged):
+            if d != "c2s" or op != PRESS:
+                continue
+            kind, row = join_press(merged, i, me)
+            if kind != "cell" or row["halt"] is None:
+                continue
+            t_sw = t + row["swing"]
+            close = rep = None
+            for j in range(i + 1, len(merged)):
+                tj, dj, opj, vj = merged[j]
+                if tj - t > 6.0:
+                    break
+                if dj == "s2c" and close is None and tj >= t_sw and (
+                        (opj == PINT and len(vj) > 2 and int(vj[1]) == 1 and int(vj[2]) == me)
+                        or (opj == 0x00A4 and len(vj) > 1 and int(vj[1]) == me)):
+                    close = tj
+                if dj == "c2s" and opj in (REPORT, CLICK, STOP_RPT, PRESS, 0x0027, 0x0046):
+                    rep = (j, tj, opj, vj)
+                    break
+            if rep is None or rep[2] != REPORT:
+                continue
+            j, tr, _op, rv = rep
+            lead, order, stopped = None, [], False
+            for k in range(j + 1, len(merged)):
+                tk, dk, opk, vk = merged[k]
+                if tk - tr > 0.06:
+                    break
+                if dk != "s2c" or len(vk) < 2 or not isinstance(vk[1], int):
+                    continue
+                if opk == 0x0029 and int(vk[1]) == me and lead is None:
+                    lead = math.hypot(vk[2][0] - rv[1][0], vk[2][1] - rv[1][1])
+                    order.append("LEAD")
+                if (opk == PINT and len(vk) > 3 and int(vk[1]) == 8 and int(vk[2]) == me
+                        and int(vk[3]) == 0):
+                    order.append("REL")
+                if opk == PINT and len(vk) > 3 and int(vk[1]) == 3 and int(vk[2]) == me:
+                    stopped = True
+            rows.append(dict(pre_landing=(close is None or tr < close), lead=lead,
+                             order=tuple(order), stopped=stopped))
+    leads = sorted(r["lead"] for r in rows if r["lead"] is not None)
+    pre = [r for r in rows if r["pre_landing"]]
+    return "\n".join([
+        f"first 0x003D after a stopped in-reach press: {len(rows)}",
+        f"  answered with a lead: {len(leads)}"
+        + (f", p50 {statistics.median(leads):.0f} u, zero leads (< 1 u): "
+           f"{sum(x < 1.0 for x in leads)}" if leads else ""),
+        f"  order: {collections.Counter(r['order'] for r in rows).most_common(4)}",
+        f"  before the swing's close: {len(pre)}, cancelled ([3, me, 0]): "
+        f"{sum(r['stopped'] for r in pre)}; after it: {len(rows) - len(pre)}, cancelled: "
+        f"{sum(r['stopped'] for r in rows if not r['pre_landing'])}"])
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--rows", action="store_true", help="print every press in the cell")
+    ap.add_argument("--after-stop", action="store_true",
+                    help="retail's answer to the first key report after the stop (1z-ds.10)")
     a = ap.parse_args(argv)
+    if a.after_stop:
+        print(after_stop())
+        return 0
     counts, rows = scan()
     print(census(counts, rows))
     if a.rows:

@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=250)   # MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=255)   # MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2638,6 +2638,82 @@ def main():
           and "--no-press-stop" in ARGS_SRC and "if a.no_press_stop:" in SRC,
           "29g. the stop runs inside begin_attack, AHEAD of `attacking` reaching the "
           "world tick, from one call site; --no-press-stop is wired")
+
+    # 30. MOVECODE-1z-ds.10: after OUR park the next key report is a WALK-START. The owner
+    # (20261002T122114): "attacking is less 'sticky' than retail and quarterstepping is more
+    # awkward". The key report after each press stop sat ON the pin; its displacement was
+    # read from the pre-pin report (4 of 5 cancels on a body that had not moved) and its lead
+    # was degraded under the fence latch our own pin stamped (the body stood 1.8 s with W
+    # held). Retail: [8, me, 0] then a real lead, 26 of 26; 0 of 3 pre-landing cancels.
+    print("\n30. 1z-ds.10: the key report after our pin + halt is a walk-start")
+    MOVE30 = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    STOPPED30 = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+
+    def parked30(on=True, swing=False):
+        """Press-stop a walking body (as section 29), then send its next key report."""
+        t = _t27.time()
+        st, _w, _r = press29()
+        pin = st["cast_stop_pin"][1]
+        st["last_report"] = (0.0, 0.0, False, t - 0.42)      # the report the press followed
+        st["plane"] = 0
+        st["pathmap"] = None                  # the report arm runs meshless (clip_why no-mesh)
+        if swing:
+            st["attacking"] = FOE29
+            st["player_swing"] = {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}
+        saved = authsrv.PARK_IS_WALK_START
+        authsrv.PARK_IS_WALK_START = on
+        try:
+            st2, w2 = drive_heading([1, [float(pin[0]), float(pin[1])], 0, [0.0, -766.0], 1],
+                                    state=st)
+        finally:
+            authsrv.PARK_IS_WALK_START = saved
+        return st2, w2, pin
+
+    st30, w30, pin30 = parked30()
+    grants30 = w30.of(MOVE30)
+    rearm30 = [e for e in st30["_rec"].of("fence") if e.get("act") == "rearm"]
+    check(len(grants30) == 1 and math.hypot(grants30[0][1][1][0] - pin30[0],
+                                            grants30[0][1][1][1] - pin30[1]) > 100.0
+          and "KBD LEAD" in grants30[0][2] and st30.get("fence_shut_at") is None
+          and [e.get("by") for e in rearm30] == ["walk-start"],
+          "30a. a moving report ON the pin re-arms the latch as a walk-start and gets a REAL "
+          "lead down its heading -- retail's 26 of 26, p50 767 u, never a zero lead",
+          f"grants {grants30}, rearm {rearm30}")
+    st30b, w30b, _p = parked30(swing=True)
+    stops30b = [v for op, v, _l in w30b.rows
+                if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+    check(stops30b == [] and st30b.get("player_swing") is not None,
+          "30b. with a swing in its windup, that report cancels NOTHING: 0 u from our pin is "
+          "a body that has not moved (retail: 0 of 3 pre-landing cancels)", f"{stops30b}")
+    st30c, w30c, _p = parked30(on=False, swing=True)
+    g30c = w30c.of(MOVE30)
+    stops30c = [v for op, v, _l in w30c.rows
+                if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+    check(len(stops30c) == 1 and g30c and "ZERO LEAD" in g30c[0][2],
+          "30c. KNOWN-BAD ARM (--no-park-walk-start): the same report cancels the swing and "
+          "its lead is the zero-lead point -- the run's false cancels and the dead key",
+          f"stops {stops30c}, grant {g30c}")
+    # Control: a report 60 u OFF the pin is a body that moved, and still cancels.
+    t30 = _t27.time()
+    st30d, _w, _r = press29()
+    pin30d = st30d["cast_stop_pin"][1]
+    st30d["last_report"] = (0.0, 0.0, False, t30 - 0.42)
+    st30d["plane"] = 0
+    st30d["pathmap"] = None
+    st30d["attacking"] = FOE29
+    st30d["player_swing"] = {"target": FOE29, "armed_at": t30, "lands_at": t30 + 0.5}
+    st30d2, w30d = drive_heading([1, [float(pin30d[0]), float(pin30d[1]) - 60.0], 0,
+                                  [0.0, -766.0], 1], state=st30d)
+    stops30d = [v for op, v, _l in w30d.rows
+                if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+    check(len(stops30d) == 1,
+          "30d. CONTROL: a report 60 u off the pin is movement and cancels the windup as "
+          "before -- the change is the baseline, not the rule", f"{stops30d}")
+    st30e, w30e, _r = press29(foe_at=(2000.0, 0.0), pos=(1990.0, 0.0))
+    check(not st30e.get("cast_stop_pin") and any("PRESS FOLLOW PIN" in l for _o, _v, l in w30e.rows),
+          "30e. the follow branch (pin alone, no halt) writes no park marker -- only a pin "
+          "AND a halt make the next report a walk-start",
+          f"cast_stop_pin {st30e.get('cast_stop_pin')}, {[l[:30] for _o, _v, l in w30e.rows]}")
 
     return LEDGER.verdict()
 

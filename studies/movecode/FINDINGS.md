@@ -20963,3 +20963,57 @@ measurement.
   - `test_kbdsync` §29's target moves to 60 u from the reckoned body, which was 135 u and
     so now out of reach.
 - **`test_weapons`:** two literals now read `ATTACK_REACH`.
+
+### 1z-ds.10 The QWE run (`20261002T122114`): "less sticky", "quarterstepping more awkward" -- our park's next key report
+
+**The owner:** *"it feels worse now, attacking is less 'sticky' than retail and
+quarterstepping is more awkward"*.
+
+**The tape:**
+- 19 presses, 12 swings: 0.63 swings per press, against 0.92 and 0.85 on the two
+  previous runs.
+- 5 swings were cancelled ("the player moves before the swing landed").
+- No swing was dropped for reach. The 128 u reach is not implicated.
+
+**After every press stop, the owner's next key report sat exactly ON the pin.** Two of
+ours went wrong at it:
+
+1. **Its displacement was read from the report BEFORE the pin**, 34–67 u off. So
+   `cancel_on_move` called a body that had not moved a mover: **4 of the 5 cancels** fired
+   on a report 0 u from our own pin.
+2. **Its lead was degraded to the zero-lead point.**
+   - Our 0x002C stamped the fence latch.
+   - The latch re-arms only at a walk-start "after the keyboard latch was clear", and our
+     own halt never clears that (1z-ds.4).
+   - So every such report got `ZERO LEAD [d1-fallback]` (fence-shut), and the body stood on
+     the pin. From 12.64 to 14.41 it stood 1.8 s with W held.
+   - That is the eaten quarterstep tap.
+
+**RETAIL** (OBSERVED, `pressstopjoin.py --after-stop`), the first key report after its own
+in-reach stop:
+- 27 reports. 26 are answered with a lead, p50 767 u, and **0 zero leads**.
+- `[8, me, 0]` comes before the lead on 23.
+- **0 of 3** reports before the swing's close carry `[3, me, 0]`.
+
+**The client's own fence re-arms there too.** 1z-aa measured it re-arming at a moving
+0x003D that follows a park, 7 of 8. Our pin plus 0x0028 is a park. At 20261001T194258
+t=47.761, the report after a cast-stop pin got a zero lead, and the body walked 181 u under
+its own keys, which only an open fence allows.
+
+**Shipped:** `PARK_IS_WALK_START`; `--no-park-walk-start` reverts.
+- A pin plus halt of ours (`cast_stop_pin`) newer than the last report makes the next
+  moving report a WALK-START:
+  - its displacement is measured from the pin;
+  - the fence latch re-arms;
+  - its lead is real.
+- The press stop's follow branch, which halts nothing, no longer writes the marker.
+- This also closes 1z-ds.4's latch miss.
+
+**Tests:** `test_kbdsync` §30, 250 -> 255, through the real 0x003D arm:
+- 30a: a report on the pin re-arms the latch as a walk-start and gets a real lead.
+- 30b: a windup is not cancelled by it.
+- 30c: the known-bad arm reproduces the tape exactly (the zero lead and the cancel).
+- 30d: CONTROL, a report 60 u off the pin still cancels.
+- 30e: the follow branch writes no marker.
+
+Each piece removed from the source reddens its own check (30a, 30b).

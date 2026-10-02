@@ -761,6 +761,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-10-01. By default both use the last 0x003D report "
                          "advanced along its heading at its family speed (<= 2.0 s), "
                          "then the press's own lead kill (<= 0.5 s).")
+    ap.add_argument("--no-park-walk-start", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.10: the key report after our "
+                         "pin + halt is read as mid-walk -- displacement from the report "
+                         "before the pin (a body on the pin 'moved'; the swing is "
+                         "cancelled) and the lead degraded under the fence latch (the "
+                         "key does nothing). By default it is a walk-start: retail "
+                         "answers it with [8, me, 0] and a real lead, 26 of 26, and "
+                         "cancels 0 of 3 swings on it.")
     ap.add_argument("--attack-reach-wiki", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.9: a melee press opens the "
                          "swing from 144 u (the wiki's range), every build before "

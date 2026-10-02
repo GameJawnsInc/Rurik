@@ -28,6 +28,16 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.10 -- 2026-10-02 -- **The QWE run (`20261002T122114`, "less sticky ... quarterstepping more awkward"): the key report after our pin + halt sat ON the pin, but its displacement was read from the pre-pin report (4 of 5 cancels on a body that had not moved) and its lead was degraded under the fence latch our own pin stamped (the tap did nothing). Retail answers that report with [8, me, 0] and a real lead (26 of 26, p50 767 u) and cancels 0 of 3. Our park now makes the next report a walk-start.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.10.
+- **The census:** `pressstopjoin.py --after-stop`.
+- **Flag:** `PARK_IS_WALK_START`; `--no-park-walk-start` reverts.
+- **Tests:** `test_kbdsync` 255: §30, with each piece removed from the source reddening
+  its own check.
+- **Closes:** 1z-ds.4.
+- **Status:** unrun on the client.
+
 ### MOVECODE-1z-ds.9 -- 2026-10-02 -- **ATTACK_REACH 144 -> 128, the midpoint of retail's measured melee edge (119.6, 135.8] (1z-ds.8, reachjoin.py, 0 misclassified over 36 presses); --attack-reach-wiki reverts. The owner: "if you think it brings us closer to stock behavior".**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.9.
