@@ -44,7 +44,7 @@ import time as _time  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=45)   # MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=50)   # MOVECODE-1z-ds.24 +5 (section 8: a skill press stops only a windup, never an instant's); MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -793,6 +793,86 @@ def section_cancel_action_door():
           f"{[(hex(o), v) for o, v in pair3]}")
 
 
+def section_skill_stop_windup():
+    """MOVECODE-1z-ds.24: a skill press sends GV_ATTACK_STOPPED only inside the swing's windup,
+    and an INSTANT skill sends none. Retail (batch-3 lane S, re-measured by its verifier): in
+    the windup attack skills [3] 26 of 26, spells 12 of 13, instants 0 of 19 (all 19 landed);
+    between the swings of a live chain [3] on 4 of 374, races."""
+    import authsrv
+    import time as _t
+
+    print("\n8. MOVECODE-1z-ds.24: a skill press stops only a windup, never an instant's")
+    STOP = authsrv.agents.GV_ATTACK_STOPPED
+
+    def press_in(phase, instant=False, attack=False, needs=True):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+        agent = {"name": "t", "dead": False, "last_hit": 0.0,
+                 "max_health": 100.0, "health": 100.0, "pos": (0.0, 0.0)}
+        state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
+        saved = (authsrv.skill_timing, authsrv._is_instant_skill, authsrv._is_attack_skill,
+                 authsrv.SKILL_STOP_NEEDS_WINDUP)
+        authsrv.skill_timing = lambda sid: ((0.0, 0.0, 8.0) if instant else (1.0, 0.75, 8.0))
+        authsrv._is_instant_skill = lambda sid: instant
+        authsrv._is_attack_skill = lambda sid: attack
+        authsrv.SKILL_STOP_NEEDS_WINDUP = needs
+        try:
+            authsrv.begin_attack(send, state, 10, 0)
+            authsrv.attack_tick(send, state, 0)            # START, arms the swing
+            sw = state["player_swing"]
+            if phase == "between":                         # the swing landed: none in flight
+                sw["lands_at"] -= 5.0
+                authsrv.attack_tick(send, state, 0)
+            sent.clear()
+            _press(authsrv, send, state, skill=42, copy=7, target=(10 if attack else 0))
+            stops = [v for op, v, _l in sent if op == 0x009F and v[0] == STOP]
+            cancel = state.get("player_swing_cancel")
+            landed = None
+            if phase == "windup" and state.get("player_swing") is not None:
+                state["player_swing"]["lands_at"] -= 5.0   # the windup elapses
+                authsrv.attack_tick(send, state, 0)
+                landed = agent["health"] < 100.0
+            return stops, cancel, landed, state
+        finally:
+            (authsrv.skill_timing, authsrv._is_instant_skill, authsrv._is_attack_skill,
+             authsrv.SKILL_STOP_NEEDS_WINDUP) = saved
+
+    s8a, c8a, l8a, _st = press_in("windup", instant=True)
+    check(s8a == [] and c8a is None and l8a is True,
+          "8a. an INSTANT pressed inside the windup sends no [3], asks for no drop, and the "
+          "swing LANDS at its time (retail 0 of 19 stopped, 19 of 19 landed)",
+          f"stops={s8a} cancel={c8a} landed={l8a}")
+    s8b, c8b, l8b, _st = press_in("windup", instant=False)
+    s8b2, c8b2, _l, _st = press_in("windup", attack=True)
+    check(s8b == [[STOP, PLAYER, 0]] and c8b == "skill press" and l8b is False
+          and s8b2 == [[STOP, PLAYER, 0]] and c8b2 == "skill press",
+          "8b. CONTROL: a spell and an attack skill pressed inside the windup still stop it and "
+          "drop the hit, as before (retail 12 of 13 and 26 of 26)",
+          f"spell={s8b}/{c8b}/{l8b} attack={s8b2}/{c8b2}")
+    s8c, c8c, _l, st8c = press_in("between", instant=False)
+    s8c2, c8c2, _l, _st = press_in("between", attack=True)
+    check(s8c == [] and c8c is None and s8c2 == [] and c8c2 is None
+          and st8c.get("attacking") == 10,
+          "8c. a press BETWEEN swings (the last one landed, none in flight) sends no [3] and "
+          "keeps the target -- the cast gate pauses the chain to the E3, as before "
+          "(retail 4 of 374, races)",
+          f"spell={s8c}/{c8c} attack={s8c2}/{c8c2} attacking={st8c.get('attacking')}")
+    s8d, c8d, l8d, _st = press_in("windup", instant=True, needs=False)
+    s8d2, _c, _l, _st = press_in("between", needs=False)
+    check(s8d == [[STOP, PLAYER, 0]] and c8d == "skill press" and l8d is False
+          and s8d2 == [[STOP, PLAYER, 0]],
+          "8d. KNOWN-BAD ARM (--skill-stop-any-chain): the instant drops the hit and the "
+          "between-swing press puts a stop on the wire -- 194258 45.72 and 48.81",
+          f"instant={s8d}/{c8d}/{l8d} between={s8d2}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                encoding="utf-8").read()
+    check(authsrv.SKILL_STOP_NEEDS_WINDUP is True
+          and src.count("    if chain_live and _sk_stops:\n") == 1
+          and "--skill-stop-any-chain" in args and "if a.skill_stop_any_chain:" in src,
+          "8e. the flag ships on, gates the one stop site, and its revert arm is wired")
+
+
 def main():
     # DAGGERS-B4 (2026-09-17): this file presses Power Shot (394, a BOW attack: weapon_req 0x02)
     # with the base fixture's HAMMER in hand, which the weapon gate now
@@ -809,6 +889,7 @@ def main():
     section_chain_half()
     section_landing_split()
     section_cancel_action_door()
+    section_skill_stop_windup()
     return LEDGER.verdict()
 
 

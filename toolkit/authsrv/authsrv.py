@@ -25317,6 +25317,20 @@ def cast_time_word(send, caster, target, skill_id, activation, who):
 ATTACK_TARGET_GATE = True
 
 
+# MOVECODE-1z-ds.24 (batch 3's SK, 2026-10-02): a skill press closes the auto-attack chain
+# with GV_ATTACK_STOPPED only when the player's swing is IN ITS WINDUP and the skill is not an
+# instant. Retail, every own press with a swing in flight (batch-3 lane S, r_skill_in_windup.py,
+# re-measured by its verifier): attack skills [3] 26 of 26, spells 12 of 13 (the 13th a race
+# pressed 11 ms before the landing), INSTANT skills ([48]) 0 of 19 -- and all 19 windups
+# landed -- refused presses 0 of 17. Between the swings of a live chain: [3] on 4 of 374, the
+# inspected ones races with a start in the press's own batch. Ours sent [3] and dropped the
+# swing on EVERY accepted press while a chain was held: an instant (a stance, a signet) pressed
+# mid-windup dropped a hit retail lands, and every press between swings put a stop on the
+# wire retail never sends (194258 45.72 and 48.81). The chain's pause for the cast is
+# attack_tick's cast gate either way; nothing here touches it.
+SKILL_STOP_NEEDS_WINDUP = True   # False (--skill-stop-any-chain): [3] at every press on a held chain.
+
+
 def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -25640,7 +25654,12 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
-    if chain_live:
+    # 1z-ds.24: only a swing still in its windup is stopped, and an instant stops none.
+    _sk_sw = state.get("player_swing")
+    _sk_stops = (not SKILL_STOP_NEEDS_WINDUP
+                 or (_sk_sw is not None and now < float(_sk_sw["lands_at"])
+                     and (is_attack or not _is_instant_skill(skill_id))))
+    if chain_live and _sk_stops:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              f"attack_stopped: skill {skill_id} ends the swing")
@@ -47090,6 +47109,12 @@ def main():
               "the next key report a walk-start (MOVECODE-1z-ds.10); our other placements "
               "leave the fence latch to walked-off-pin -- every build before 1z-ds.17.",
               flush=True)
+    if a.skill_stop_any_chain:
+        global SKILL_STOP_NEEDS_WINDUP
+        SKILL_STOP_NEEDS_WINDUP = False
+        print("[map] --skill-stop-any-chain: every accepted skill press on a held chain "
+              "sends [3] and drops the swing, instants and between-swing presses included "
+              "(every build before MOVECODE-1z-ds.24)", flush=True)
     if a.cancel_stop_first:
         global CANCEL_RELEASES_FIRST
         CANCEL_RELEASES_FIRST = False

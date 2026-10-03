@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.24 -- 2026-10-02 -- **A skill press stops the swing only in its windup, and never for an instant (`SKILL_STOP_NEEDS_WINDUP`, `--skill-stop-any-chain` reverts). Retail [3] 26 of 26 attack skills and 12 of 13 spells in the windup, 0 of 19 instants (all landed), 4 of 374 between swings; ours stopped on every press with a chain held.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.24.
+- **Tests:** `test_castcancel` §8, 45 -> 50.
+
 ### MOVECODE-1z-ds.23 -- 2026-10-02 -- **The router's [1.0] answers re-arm the keyboard family edge and name the declared base as the leg's speed (`ROUTER_REARMS_FAMILY_EDGE`, `--router-keeps-family-edge` reverts). Batch 3's item K-A: a same-family strafe after a router answer got no KBD SPEED-TRUTH (2 of 34 on the wire), and the position model walked the click at the key's speed.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.23.

@@ -21715,3 +21715,33 @@ the critic's; this is its item 1, "K-A". Records: the scratchpad's `wfout4\`.
 
 **Tests:** `test_router` §1e (a-f), floor 136 -> 142. Five source mutations each redden their
 own check.
+
+
+### 1z-ds.24 A skill press stops the swing only in its windup, and never for an instant (`SKILL_STOP_NEEDS_WINDUP`, `--skill-stop-any-chain` reverts)
+
+Batch 3's item SK.
+
+**Retail** (OBSERVED; lane S's `r_skill_in_windup.py` and `r_skill_between.py`, re-measured by its
+verifier with `v_skill.py`):
+
+| Press | Inside the windup: [3] | Between swings: [3] |
+|---|---|---|
+| Attack skill [50] | 26 of 26 | -- |
+| Spell [60] | 12 of 13 (the 13th pressed 11 ms before the landing) | -- |
+| Instant [48] | 0 of 19, and all 19 landed | -- |
+| Refused (0x00E2) | 0 of 17 | -- |
+| Any | -- | 4 of 374; the inspected ones are races with a start in the press's own batch |
+
+After an instant the next start keeps the period (24 of 27). On our own tape the stance's E3 and
+the next [4] share an instant (194258 46.212), so an instant does not hold the chain.
+
+**Ours:** `handle_skill_press` sent [3] and asked attack_tick to drop the swing on EVERY accepted
+press while a chain was held. An instant pressed mid-windup dropped a hit that retail lands, and
+every press between swings put a stop on the wire (194258 45.72 and 48.81; 250 of the corpus's
+551 skill-press [3]s were between swings).
+
+**The fix:** the stop needs a swing in flight that is still short of `lands_at`, and a skill
+that is an attack skill or not an instant. The cast gate's pause of the chain is untouched.
+
+**Tests:** `test_castcancel` §8 (a-e), floor 45 -> 50. Each mutation reddens its own check: the
+windup test out (8c) and the instant test out (8a).
