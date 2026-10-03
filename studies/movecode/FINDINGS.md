@@ -21865,3 +21865,43 @@ retail witness.
 
 **Tests:** `test_playerswing` §22 (a-f), 240 -> 246. The same commit fixes 19g's landing clause
 (1z-ds.27): it read a constant that does not exist, inside a generator that never ran.
+
+
+### 1z-ds.29 A press while our own follow is the leg in force sends nothing, arrived or not (`PRESS_SPARES_OWN_FOLLOW`, `--press-repins-own-follow` reverts)
+
+Batch 3's item N3 (NEW-3).
+
+**Retail** (OBSERVED; lane F's `f3_retail_inflight.py`, reproduced exactly by its verifier):
+- 0 pins in 160 presses made while retail's own 0x002A was the leg in force, by cell:
+
+  | Cell | Presses | What followed |
+  |---|---|---|
+  | Same target, arrived | 65 | nothing 54, swing 7, follow 4 |
+  | Same target, in flight | 58 | nothing 26, re-send 18 (15 on its 0.5 s cadence), swing 13, bare halt 1 |
+  | Another target, in flight | 12 | follow alone 6, swing 5, halt + follow 1 |
+  | Another target, arrived | 25 | nothing 16, swing 6, follow 3 |
+
+- Over 31 captures, 0 of 527 presses are pinned.
+- The rule carries even though 48 of 58 in-flight and 44 of 65 arrived rows come from one capture.
+
+**Ours:**
+- `_press_supersedes` spared only an in-flight follow (`approach` live). approach_tick clears
+  `approach` at an arrival by eta OR by distance, so every arrived follow fell through to PRESS
+  ENDS THE WALK, a 0x002C at the leg's end.
+- That happened on 4 of 4 owner-tape rows: 194336 36.317, 201838 52.530, 122155 16.146 and
+  201011 113.425.
+
+**The fix:** the spare keys on the leg in force:
+- `follow_order_at[0] == click_moving_at == click_leg["t0"]`, all stamped from one `now` by the
+  single writer in `_approach_send` (checked for every caller: the send, the re-path, the pickup
+  and the skill approach);
+- and the same target.
+
+It sends nothing, keeps the latch and the leg, and writes a `press_spared` row. A pickup's marker
+names the item, so a pickup walk is never spared. The spared press's reckon ('click-walk') is now a
+quiet refusal.
+
+**Kept, registered (P1-E):** a press on ANOTHER target during our follow still ends the walk.
+Retail sends a follow alone there (11 of 12, 0 pins).
+
+**Tests:** `test_playerswing` 10k-o, 246 -> 251.

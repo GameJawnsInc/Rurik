@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.29 -- 2026-10-02 -- **A press while our own follow to that target is the leg in force sends nothing, arrived or not (`PRESS_SPARES_OWN_FOLLOW`, `--press-repins-own-follow` reverts). Retail 0 pins in 160 such presses; ours re-pinned 4 of 4 arrived same-target presses (NEW-3).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.29.
+- **Tests:** `test_playerswing` 10k-o, 246 -> 251.
+
 ### MOVECODE-1z-ds.28 -- 2026-10-02 -- **No follow inside the player's own windup; a target that left reach is re-approached at the landing, [1] then the 0x002A (`WINDUP_HOLDS_APPROACH`, `--approach-in-windup` reverts). Retail 0 in 1,654 windups, 18 of 18 re-approaches at or after the landing; ours followed mid-windup (201011 22.774).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.28.

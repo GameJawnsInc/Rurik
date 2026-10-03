@@ -809,6 +809,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "By default only a swing in its windup is stopped, and never by an "
                          "instant skill: retail [3] 26 of 26 attack skills and 12 of 13 spells "
                          "in the windup, 0 of 19 instants (all landed), 4 of 374 between swings.")
+    ap.add_argument("--press-repins-own-follow", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.29: a press on the target our own "
+                         "follow walked to, once that follow has arrived (by eta or by "
+                         "distance), re-pins the body at the leg's end (PRESS ENDS THE WALK). "
+                         "By default the press is spared while our follow is the leg in force: "
+                         "retail 0 pins in 160 such presses.")
     ap.add_argument("--approach-in-windup", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.28: re-approach a target that left "
                          "reach while the swing is still in its windup. By default the swing "

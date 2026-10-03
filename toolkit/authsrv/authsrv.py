@@ -18652,6 +18652,19 @@ ATTACK_APPROACH = True     # False (--no-attack-approach): the 1500 u arm.
 # copies on its point and zeroes m_timeStopMovement, p5-resync-disarm
 # sec.1), and the tick then swings (in reach) or follows (out of reach).
 PRESS_SUPERSEDES_LEG = True   # False (--press-waits-for-leg): sec.37's wait.
+# MOVECODE-1z-ds.29 (batch 3's N3, NEW-3, 2026-10-02): a press on the target OUR OWN follow
+# walks to is never pinned, arrived or not. The spare is keyed on the leg in force -- the
+# follow marker, the click latch and the leg record all stamped by the same _approach_send
+# (`follow_order_at[0] == click_moving_at == click_leg["t0"]`, its single writer) -- and the
+# same target, NOT on `approach`, which approach_tick clears at an arrival by eta OR by
+# distance, so every arrived follow fell through to PRESS ENDS THE WALK. Retail: 0 pins in 160
+# presses made while its own follow was the leg in force -- same target arrived 65 (54
+# nothing, 7 swing, 4 follow), in flight 58, another target 37 (batch-3 lane F's
+# f3_retail_inflight.py, reproduced by its verifier). Ours pinned 4 of 4 arrived same-target
+# presses on the owner tapes (194336 36.317, 201838 52.530, 122155 16.146, 201011 113.425). A
+# press on ANOTHER target keeps PRESS ENDS THE WALK (P1-E, registered: retail sends a follow
+# alone); a pickup's marker names the item, so a pickup walk is never spared.
+PRESS_SPARES_OWN_FOLLOW = True   # False (--press-repins-own-follow): ENDS at our follow's leg.
 # ANIMREF-RE 41 (2026-09-03): THE PRESS SUPERSEDES THE KEYBOARD BELIEF TOO.
 # The operator's "couldn't resume attacking after some point" (RUN-FEEL): the
 # point was the session's first 0x003D. Five keyboard reports arrived
@@ -19910,7 +19923,7 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
         if rec is not None:
             rec.event("press_stop", fired=False, why=why, target=target_id,
                       dist=round(dist, 1))
-        if why not in ("parked", "pinned-parked", "no-report"):
+        if why not in ("parked", "pinned-parked", "no-report", "click-walk"):
             print(f"[c{conn_id}] press-stop SUPPRESSED: reckon refused ({why}) -- "
                   f"pin-or-nothing, the swing may open on a moving body "
                   f"[MOVECODE-1z-ds]", flush=True)
@@ -21482,6 +21495,17 @@ def _press_supersedes(send, state, conn_id, target_id, rec=None):
     if ap is not None and ap.get("target") == target_id \
             and ap.get("t0") == state.get("click_moving_at"):
         return                      # our follow to this target: keep it
+    # 1z-ds.29: ...and so is one it has ARRIVED on, by eta or by distance: the leg in force is
+    # our follow to this target whatever `approach` still holds.
+    _fol, _leg = state.get("follow_order_at"), state.get("click_leg")
+    if (PRESS_SPARES_OWN_FOLLOW and _fol is not None and _leg is not None
+            and _fol[1] == target_id
+            and _fol[0] == state.get("click_moving_at") == _leg.get("t0")):
+        if rec is not None:
+            rec.event("press_spared", by="own-follow", target=target_id,
+                      age=round(time.time() - float(_fol[0]), 3),
+                      arrived=time.time() >= float(_leg.get("eta") or 0.0))
+        return
     now = time.time()
     model = _click_leg_start(state, now, silent=True)
     state["click_moving_at"] = None
@@ -47202,6 +47226,12 @@ def main():
         print("[map] --skill-stop-any-chain: every accepted skill press on a held chain "
               "sends [3] and drops the swing, instants and between-swing presses included "
               "(every build before MOVECODE-1z-ds.24)", flush=True)
+    if a.press_repins_own_follow:
+        global PRESS_SPARES_OWN_FOLLOW
+        PRESS_SPARES_OWN_FOLLOW = False
+        print("[map] --press-repins-own-follow: a press after our own follow arrived re-pins the "
+              "body at the leg's end with PRESS ENDS THE WALK (every build before "
+              "MOVECODE-1z-ds.29)", flush=True)
     if a.approach_in_windup:
         global WINDUP_HOLDS_APPROACH
         WINDUP_HOLDS_APPROACH = False

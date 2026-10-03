@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=246)   # MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=251)   # MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1615,6 +1615,84 @@ def section_press_supersedes_and_move_ends():
           "order, adjacent (and since ANIMREF-RE 41 hands the recorder over, "
           "so the order's press_verdict row can be written)",
           f"offsets {i}, {j}")
+
+    # 10k-o. MOVECODE-1z-ds.29: a press while OUR follow to that target is the leg in force is
+    # spared whatever `approach` holds -- arrived by eta or by distance (retail 0 pins in 160).
+    def own_follow():
+        st = _state()
+        st["agents"][10]["pos"] = (900.0, 0.0)
+        st["pos"] = (0.0, 0.0)
+        st["client_pos"] = (0.0, 0.0)
+        st["plane"] = 0
+        authsrv.begin_attack(send, st, 10, 0)
+        authsrv.attack_tick(send, st, 0)        # the follow: marker, latch and leg, one instant
+        return st
+
+    def repress(st, on=True, target=10):
+        rec = _Rec()
+        saved_sp = authsrv.PRESS_SPARES_OWN_FOLLOW
+        authsrv.PRESS_SPARES_OWN_FOLLOW = on
+        sent.clear()
+        try:
+            authsrv._press_supersedes(send, st, 0, target, rec=rec)
+        finally:
+            authsrv.PRESS_SPARES_OWN_FOLLOW = saved_sp
+        return [v for op, v, _l in sent if op == UP], rec.events
+
+    st = own_follow()
+    fol, latch = st["follow_order_at"], st["click_moving_at"]
+    st["approach"] = None                                  # approach_tick's arrival
+    st["click_leg"]["eta"] = _t.time() - 0.05              # by its eta
+    pins, rows = repress(st)
+    spared = [r for r in rows if r["kind"] == "press_spared"]
+    check(pins == [] and st.get("click_moving_at") == latch and st.get("click_leg") is not None
+          and st.get("follow_order_at") == fol
+          and len(spared) == 1 and spared[0]["arrived"] is True,
+          "10k. a press after OUR follow arrived (by its eta; `approach` already cleared) sends "
+          "NO 0x002C and keeps the latch, the leg and the marker -- retail 0 pins in 65 such "
+          "presses (122155 16.146, 201011 113.425 were pinned)",
+          f"pins {pins}, latch kept {st.get('click_moving_at') == latch}, rows {spared}")
+    st = own_follow()
+    st["approach"] = None                                  # arrived by distance...
+    st["click_leg"]["eta"] = _t.time() + 0.6               # ...before its eta
+    pins, rows = repress(st)
+    check(pins == [] and authsrv._player_body_moving(st)
+          and [r["arrived"] for r in rows if r["kind"] == "press_spared"] == [False],
+          "10l. arrived BY DISTANCE before the eta: spared too, and the body still reads as "
+          "walking until the leg's eta -- retail's walk-in gate, not a pin and a swing at once",
+          f"pins {pins}, moving {authsrv._player_body_moving(st)}")
+    st = own_follow()
+    st["approach"] = None
+    st["click_leg"]["eta"] = _t.time() - 0.05
+    pins, _rows = repress(st, on=False)
+    check(len(pins) == 1 and st.get("click_moving_at") is None,
+          "10m. KNOWN-BAD ARM (--press-repins-own-follow): the same press puts one PRESS ENDS "
+          "THE WALK 0x002C on the wire and ends the leg -- the shape of 122155 16.146",
+          f"pins {pins}")
+    st = own_follow()
+    st["approach"] = None
+    st["agents"][11] = dict(_fresh_agent(), pos=(0.0, 400.0))
+    pins_o, _r = repress(st, target=11)
+    st = own_follow()
+    st["approach"] = None
+    st["click_moving_at"] = _t.time()                      # a 0x003E click since our follow
+    pins_c, _r = repress(st)
+    st = own_follow()
+    st["approach"] = None
+    st["follow_order_at"] = (st["follow_order_at"][0], 777, st["follow_order_at"][2])  # a pickup's
+    pins_p, _r = repress(st)
+    check(len(pins_o) == 1 and len(pins_c) == 1 and len(pins_p) == 1,
+          "10n. CONTROLS: a press on ANOTHER target, a press after a click re-stamped the latch, "
+          "and a press during a PICKUP walk (its marker names the item) still end the walk",
+          f"other {pins_o}, click {pins_c}, pickup {pins_p}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                encoding="utf-8").read()
+    check(authsrv.PRESS_SPARES_OWN_FOLLOW is True
+          and src.count('if why not in ("parked", "pinned-parked", "no-report", "click-walk"):') == 1
+          and "--press-repins-own-follow" in args and "if a.press_repins_own_follow:" in src,
+          "10o. the flag ships on, the spared press's reckon ('click-walk') is a quiet refusal, "
+          "and the revert arm is wired")
 
 
 class _Rec:
