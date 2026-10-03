@@ -91,7 +91,7 @@ import checks  # noqa: E402
 # the arm's syntax-tree check with a control, and the pre-launch pass over
 # --actions. Still deterministic, still the total. The commit message lists
 # which sabotage reddened which.
-LEDGER = checks.Ledger("harness", floor=218)   # 2026-09-25 (later): +2, the Play step's window wait; 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values; 2026-09-25: +20, drag and double_click; +15, the review
+LEDGER = checks.Ledger("harness", floor=223)   # 2026-10-03: +5, the chord verb; 2026-09-25 (later): +2, the Play step's window wait; 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values; 2026-09-25: +20, drag and double_click; +15, the review
 check = checks.adopt_named(LEDGER)
 
 
@@ -1416,6 +1416,37 @@ def section_hold_key():
         LEDGER.ok(held == 0.0 and not fake.events,
                   "a client that does not own the foreground gets no key at all",
                   f"{len(fake.events)} event(s) -- never send blind")
+
+        # 2026-10-03, the chord verb (MOVECODE-1z-ds P1-F): the press lands INSIDE the hold.
+        fake = FakeUser32(scan=0x1F)
+        dc.user32 = fake
+        t0 = time.time()
+        held, pressed = dc.hold_key_press(1, 4321, ord("S"), 0.25, 0x20, 0.1)
+        order = [(vk, bool(fl & dc.KEYEVENTF_KEYUP)) for vk, _sc, fl in fake.events]
+        LEDGER.ok(order == [(ord("S"), False), (0x20, False), (0x20, True), (ord("S"), True)]
+                  and pressed is not None and pressed - t0 >= 0.1 and 0.25 <= held < 0.9
+                  and all(e[1] != 0 for e in fake.events),
+                  "hold_key_press: S down, SPACE down, SPACE up, S up -- the press AT 0.1 s "
+                  "into the 0.25 s hold, both keys with scan codes, the press instant returned",
+                  f"order {order}, pressed +{(pressed or t0) - t0:.3f}s, held {held:.2f}s")
+        fake = FakeUser32(scan=0x1F)
+        fake.raise_on_nth = 2                   # blow up ON the press's keydown
+        dc.user32 = fake
+        try:
+            dc.hold_key_press(1, 4321, ord("S"), 0.25, 0x20, 0.1)
+            blew = False
+        except RuntimeError:
+            blew = True
+        ups = [vk for vk, _sc, fl in fake.events if fl & dc.KEYEVENTF_KEYUP]
+        LEDGER.ok(blew and ups == [0x20, ord("S")],
+                  "an exception at the press still releases BOTH keys, press first",
+                  f"raised={blew}, ups {ups}")
+        fake = FakeUser32(owner=1111, scan=0x1F)
+        dc.user32 = fake
+        got = dc.hold_key_press(1, 4321, ord("S"), 0.25, 0x20, 0.1)
+        LEDGER.ok(got == (0.0, None) and not fake.events,
+                  "and a client that does not own the foreground gets neither key",
+                  f"returned {got}, {len(fake.events)} event(s)")
     finally:
         dc.user32, dc._force_foreground = real_u32, real_fg
 
@@ -1538,6 +1569,20 @@ def section_hold_key():
               "key and a non-number; and the executor exists",
               "a steer that parsed to nothing would run as a plain hold and "
               "the run would look like the control arm")
+    LEDGER.ok(session.parse_walk("chord:S,0.32,space,0.24 chord:w,0.21,SPACE,0.13")
+              == [("chord", "S,space,0.24", 0.32), ("chord", "W,space,0.13", 0.21)],
+              "the 2026-10-03 chord verb parses: KEY held for HOLD s, PRESS tapped AT s into "
+              "it -- keys normalised, the hold the step's value",
+              "MOVECODE-1z-ds P1-F: a hold's keyup sends the client's 0x0047 before the next "
+              "step, so no other plan presses on a walking body")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("chord:S,0.32,space", "chord:S,0.2,space,0.24",
+                              "chord:S,0.32,space,0", "chord:SS,0.32,space,0.24",
+                              "chord:S,x,space,0.24", "chord:S,11,space,0.24",
+                              "chord:S,inf,space,0.24"))
+              and callable(getattr(dc, "hold_key_press", None)),
+              "chord refuses three fields, AT >= HOLD, AT 0, a two-letter key, a "
+              "non-number, a hold past 10 s and inf; and the executor exists")
     LEDGER.ok(session.parse_walk("click:0.411,0.561")
               == [("click", "0.411,0.561", 1.0)],
               "the click verb parses: a window-relative point, no duration",

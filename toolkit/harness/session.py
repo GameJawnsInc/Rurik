@@ -445,6 +445,11 @@ def parse_walk(text):
                     for 38s, clicking nothing -- a HUD tooltip is the only
                     readable surface for some state, and this is how a probe
                     run reads one unattended
+        chord:S,0.32,space,0.24   hold S for 0.32 s and tap Space 0.24 s into the
+                    hold, S still down -- a press on a WALKING body, which no
+                    sequence of steps can make: each hold's keyup sends the
+                    client's stop before the next step starts (MOVECODE-1z-ds
+                    P1-F); the row carries pressed_unix, the press instant
         steer:W,300,3          hold W for 3 s WHILE right-dragging the view 300 px
                     (positive = right) in quarter-second slices -- the
                     operator's own regime, a body that keeps moving while its
@@ -518,6 +523,28 @@ def parse_walk(text):
             except ValueError:
                 raise SystemExit(f"walk step {spec!r}: skill wants ID[,TARGET]")
             steps.append(("skill", f"{sid},{tgt}", 0.0))
+            continue
+        if head == "chord":
+            parts = arg.split(",")
+            if len(parts) != 4:
+                raise SystemExit(f"walk step {spec!r}: chord wants KEY,HOLD,PRESS,AT")
+            names = []
+            for k in (parts[0], parts[2]):
+                if k.lower() in dc.NAMED_KEYS:
+                    names.append(k.lower())
+                elif len(k) == 1:
+                    names.append(k.upper())
+                else:
+                    raise SystemExit(f"walk step {spec!r}: {k!r} is not a key")
+            try:
+                hold, at = float(parts[1]), float(parts[3])
+            except ValueError:
+                raise SystemExit(f"walk step {spec!r}: chord wants numbers")
+            # FINITE, ORDERED and CAPPED: the press must land inside the hold, and a
+            # hold is a stuck key for the whole desktop if anything goes wrong.
+            if not (math.isfinite(hold) and math.isfinite(at) and 0 < at < hold <= 10):
+                raise SystemExit(f"walk step {spec!r}: chord wants 0 < AT < HOLD <= 10")
+            steps.append(("chord", f"{names[0]},{names[1]},{at:g}", hold))
             continue
         if head == "steer":
             parts = arg.split(",")
@@ -626,7 +653,7 @@ def parse_walk(text):
             raise SystemExit(f"walk step {spec!r}: {head!r} is not a key, "
                              f"a named key ({', '.join(sorted(dc.NAMED_KEYS))}), "
                              f"zoom, pitch, yaw, shot, wait, hover, click, "
-                             f"dclick, drag or steer")
+                             f"dclick, drag, chord or steer")
     return steps
 
 
@@ -876,6 +903,14 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
             k, px = key.split(",")
             vk = dc.NAMED_KEYS.get(k) if k in dc.NAMED_KEYS else ord(k)
             did = steer(hwnd, proc.pid, vk, float(px), value)
+        elif kind == "chord":
+            # A press INSIDE a hold (dc.hold_key_press): the row carries the press's
+            # own keydown instant for the scorer's join to the client's 0x0026.
+            k, p, at = key.split(",")
+            vk = dc.NAMED_KEYS.get(k) if k in dc.NAMED_KEYS else ord(k)
+            pvk = dc.NAMED_KEYS.get(p) if p in dc.NAMED_KEYS else ord(p)
+            did, pressed = dc.hold_key_press(hwnd, proc.pid, vk, value, pvk, float(at))
+            extra = {"pressed_unix": pressed, "press_at": float(at)}
         elif kind == "click":
             # A UI click at a FIXED window fraction -- a panel button, not a
             # world target. dc.click verifies the client owns the foreground

@@ -1380,6 +1380,71 @@ def hold_key(hwnd, pid, vk, seconds, check_every=0.5):
         user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
 
 
+def hold_key_press(hwnd, pid, vk, seconds, press, at, check_every=0.05):
+    """Hold `vk` for `seconds` and tap `press` `at` seconds after its keydown, `vk` still down.
+
+    A PRESS ON A WALKING BODY. Every other verb runs one after another, and a hold's keyup
+    makes the client send its 0x0047 stop -- 625 of 711 scripted key legs over 129 harness
+    runs, p50 26 ms after the keyup (batch 4's lane R, MOVECODE-1z-ds P1-F) -- while the next
+    step starts at least 0.205 s later (3,811 step gaps). So a plan of `S:0.3 space:0.1`
+    always presses on a STOPPED body, and the server's walking-press branches (the press
+    stop, the follow pin) are unreachable by construction. Here the press lands inside the
+    hold, from the same thread, timed from the real keydown.
+
+    Both keys carry the layout's scan code (hold_key's scar), focus is re-checked through
+    the hold, and BOTH keyups are in `finally` blocks: an unpaired keydown is a stuck key
+    for the whole desktop. `pressed_unix` is stamped at the press's own keydown, not before
+    a focus call that may sleep (the lane's verifier: _force_foreground sleeps 0.25 s).
+
+    Returns (held_seconds, pressed_unix or None). None means the press never went down:
+    focus was lost first, or the press key has no scan code on this layout.
+    """
+    if not (0.0 < at < seconds <= 10.0):
+        raise ValueError(f"hold_key_press wants 0 < at < seconds <= 10, got at={at} "
+                         f"seconds={seconds}")
+    if not _force_foreground(hwnd):
+        return 0.0, None
+    fg = user32.GetForegroundWindow()
+    owner = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+    if owner.value != pid:
+        return 0.0, None
+    scan = user32.MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)
+    pscan = user32.MapVirtualKeyW(press, MAPVK_VK_TO_VSC)
+    pressed = None
+    started = time.perf_counter()
+
+    def focused():
+        user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(owner))
+        return owner.value == pid
+
+    try:
+        user32.keybd_event(vk, scan, 0, 0)
+        while True:                                   # up to the press, in 2 ms steps
+            held = time.perf_counter() - started
+            if held >= at:
+                break
+            time.sleep(min(0.002, at - held))
+            if not focused():
+                return time.perf_counter() - started, None
+        if pscan:
+            try:
+                user32.keybd_event(press, pscan, 0, 0)
+                pressed = time.time()
+                time.sleep(0.06)
+            finally:
+                user32.keybd_event(press, pscan, KEYEVENTF_KEYUP, 0)
+        while True:
+            held = time.perf_counter() - started
+            if held >= seconds:
+                return held, pressed
+            time.sleep(min(check_every, seconds - held))
+            if not focused():
+                return time.perf_counter() - started, pressed
+    finally:
+        user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
+
+
 def press_enter(hwnd, pid):
     """Send Enter to the client, and ONLY ever to the client.
 
