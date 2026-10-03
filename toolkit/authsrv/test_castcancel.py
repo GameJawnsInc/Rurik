@@ -451,9 +451,10 @@ def section_chain_half():
     # CAST set the flag, which is the case castmech 3c actually witnessed.
     # What changed is what reaches it. Both arms of the flag agree here,
     # which is why this check is not part of the revert either way.
-    check(holds == [],
-          "and no hold release rides the move -- the auto swing never set "
-          "one. A cast still does, and this same door still releases that",
+    # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31): the start holds again, so the door releases it.
+    check(holds == [[authsrv.agents.GV_DISABLED, PLAYER, 0]],
+          "and the move releases the start's hold -- [8 -> 0], the door's own release "
+          "(retail: the next input ends 68 % of attack-hold episodes, a move 116 of 347)",
           f"holds={holds}")
     state["attacking"] = None
     state["player_swing"] = None
@@ -745,14 +746,15 @@ def section_cancel_action_door():
     # on. When a cast holds, this door still emits both, in this order.
     expect_stop = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                    [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])
-    check(pair == [expect_stop]
+    expect_rel0 = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                   [authsrv.agents.GV_DISABLED, PLAYER, 0])
+    check(pair == [expect_rel0, expect_stop]
           and state.get("attacking") is None
           and state.get("player_swing_cancel") == "cancel action",
-          "a live chain closes with the STOP -- and with no [8 -> 0] beside "
-          "it, because an auto swing no longer sets the hold to release. "
-          "The ORDER at this door (the release FIRST, Esc t=119.425 and W "
-          "t=114.641 by stream index -- re-read 2026-10-02, MOVECODE-1z-ds.21) "
-          "applies whenever a hold rides. And the attack order is "
+          "a live chain closes with the release and then the STOP -- RE-AIMED "
+          "2026-10-02 (MOVECODE-1z-ds.31): the auto swing holds again, so the "
+          "door's release-first ORDER (Esc t=119.425 and W t=114.641 by stream "
+          "index, MOVECODE-1z-ds.21) is the common case. And the attack order is "
           "forgotten: Esc means stop",
           f"{[(hex(o), v) for o, v in pair]}, "
           f"attacking={state.get('attacking')}")

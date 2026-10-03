@@ -1225,6 +1225,11 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             # Silence is still what an out-of-range interact gets on the wire in
             # the sense that matters: no refusal message is invented. What goes
             # out is the destination the player asked for by clicking.
+            # MOVECODE-1z-ds.31: our walk to the NPC goes out with the hold released (retail: 0
+            # of 458 own 0x002A arrive with the hold up) -- both doors, the router and --interact-walk.
+            if ATTACK_START_HOLDS and (state.get("approach_hold") or state.get("press_hold")):
+                action_hold(send, state, 0, f"the interact walk to agent {agent_id} "
+                            f"[MOVECODE-1z-ds.31]")
             if INTERACT_WALK:
                 _order_walk(send, state, conn_id, agent_id, spot)
             state["pending_interact"] = (agent_id, interact_byte)
@@ -19277,6 +19282,29 @@ LANDING_HOLD_RELEASE = True   # False (--no-landing-hold-release)
 # auto swings, because transition-only elides a release of a flag already clear.
 SWING_HOLDS_WALK_GATE = False  # True (--swing-holds-walk-gate): the old shape
 
+# MOVECODE-1z-ds.31 (batch 3's H -- P2, 2026-10-02): EVERY own attack start leaves the action
+# hold [8, me, 1] up, to the next input. CORRECTED, the block above: its 83 of 1,332 counts
+# TRANSITIONS of a transition-only property. The STATE at start + 0.1 s is held on 1,647 of 1,654
+# retail own starts (99.6 %; the 7 unheld released by an input within 0.1 s), 1,775 of 1,782
+# with the attack-skill starts -- melee 1,480 of 1,487, ranged 167 of 167, walk-ins 75 of 75
+# (batch-3 lane H's h_retail_class.py, re-measured by its verifier's own classifier). Where the
+# hold is down before a start it is raised in THAT start's batch, directly behind the [4]: 210
+# of 210, none ahead of it. Ours raised it only at the in-reach walking press (PRESS_STOP_HOLDS)
+# and the ranged approach (RANGERPRE-S16): 201011 held 13 of 37 starts, the seven owner tapes
+# 46 of 127, walk-ins 0 of 44. What releases it is unchanged and already retail's order at
+# every site (lane H's 347 episodes: the next input 68 %, the target's death 17 %, a
+# re-approach 11 %, a landing 0.9 %): the move (release first, 1z-ds.16), the click, the skill
+# press, Esc, the re-approach's own release in _approach_send, the target-gone tick. The mark
+# rides `press_hold`, whose consumers are exactly those exemptions: the landing's and the
+# launch's release keep a held start, and the re-approach releases it. ANIMREF-RE 35's freeze
+# was a held gate meeting a ZERO-lead answer (RECONSTRUCTION: on its one tape every moving
+# report got a zero lead, held or not); since 1z-ds.10/.17 a released hold's report is answered
+# with a real lead (201011 replayed: 14 of 14). Recorded, not changed: retail releases at a
+# target's death on the chain's NEXT scheduled event, with [3] for a swing in flight (20 of
+# 20), where ours releases on the next tick; retail pulses '8:0 8:1' on 8 of 27 retargets with
+# no swing in flight. Both have 0 owner exposure (no hostile died on the seven tapes).
+ATTACK_START_HOLDS = True   # False (--no-attack-start-hold): the hold only at the press stop and the ranged approach.
+
 # ANIMREF-RE 37 (2026-09-01): THE CLICK-WALK LATCH IS BOUNDED BY THE LEG'S OWN
 # TRAVEL TIME, not by a constant. 34 bounded it at GRANT_LOCAL_WINDOW (3.0 s)
 # because a sibling reader used that number, and 36 admitted the bound was
@@ -22116,7 +22144,12 @@ def attack_tick(send, state, conn_id, rec=None):
     # also measured: the ranger's chain sets it once per release, not once
     # per swing. NOT SENT AT ALL since ANIMREF-RE 35 unless the flag
     # is on: retail holds on 6.2% of attack starts, we held on 100%.
-    if SWING_HOLDS_WALK_GATE:
+    if ATTACK_START_HOLDS:
+        # 1z-ds.31: every start holds, directly behind its [4] (retail 1,647 of 1,654).
+        action_hold(send, state, 1, f"the swing at {target_id} holds to the next input "
+                    f"[MOVECODE-1z-ds.31]")
+        state["press_hold"] = True
+    elif SWING_HOLDS_WALK_GATE:
         action_hold(send, state, 1, f"the swing at {target_id}")
     _chain_pause_flush(state, rec, conn_id)
     state["player_swing"] = {"target": target_id,
@@ -47121,6 +47154,12 @@ def main():
         print("[map] --move-keeps-chain: no-op, LAW A is the default again "
               "since ANIMREF-RE §31 shipped its decoded complement.",
               flush=True)
+    if a.no_attack_start_hold:
+        global ATTACK_START_HOLDS
+        ATTACK_START_HOLDS = False
+        print("[map] --no-attack-start-hold: the action hold rides only the in-reach walking "
+              "press and the ranged approach (every build before MOVECODE-1z-ds.31); "
+              "--swing-holds-walk-gate keeps its old meaning only with this flag", flush=True)
     if a.swing_holds_walk_gate:
         global SWING_HOLDS_WALK_GATE
         SWING_HOLDS_WALK_GATE = True

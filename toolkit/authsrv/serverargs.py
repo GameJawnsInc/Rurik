@@ -678,6 +678,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "active re-pin would then yank. Shipped default "
                          "2026-09-01, reverted the same day; turn it on "
                          "ALONE to convict or clear it (FINDINGS 29).")
+    ap.add_argument("--no-attack-start-hold", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.31: the action hold [8, me, 1] rides "
+                         "only the in-reach walking press and the ranged approach. By default "
+                         "every own attack start leaves it up to the next input -- retail holds "
+                         "1,647 of 1,654 own starts at start + 0.1 s. --swing-holds-walk-gate has "
+                         "its old meaning only together with this flag.")
     ap.add_argument("--swing-holds-walk-gate", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 35: send the "
                          "property-8 action hold on every auto swing "

@@ -21939,3 +21939,72 @@ that reading for the long chases.
   after the change.
 
 **Tests:** `test_playerswing` 20g-j, 251 -> 255.
+
+
+### 1z-ds.31 Every own attack start leaves the action hold up, to the next input (`ATTACK_START_HOLDS`, `--no-attack-start-hold` reverts)
+
+Batch 3's item H, P2 of the previous round. Its prerequisites have all shipped: the release-first
+cancel batch (1z-ds.16), placements park (1z-ds.17), the click after our order (1z-ds.18), and
+this batch's W, SK, E, I and B2a.
+
+**Retail** (OBSERVED; lane H's `h_retail_class.py`, re-measured by its verifier with its own
+classifier over 122 connections):
+- 1,647 of 1,654 own [4] starts are held at start + 0.1 s (99.6 %). The 7 unheld rows were
+  released by an input within 0.1 s.
+- Including the attack-skill starts it is 1,775 of 1,782. Melee 1,480 of 1,487, ranged 167 of
+  167, melee walk-ins 75 of 75.
+- Where the hold was down before a start, it is raised in THAT start's batch, directly behind the
+  [4]: 210 of 210, never ahead of it. Discriminating subset (starts where ours sent nothing):
+  180 of 180 raised.
+
+**The reading this corrects:** ANIMREF-RE 35's "83 of 1,332" counted TRANSITIONS of a
+transition-only property, not the held state. The block above `SWING_HOLDS_WALK_GATE` now says so.
+
+**Ours:** the hold rode only the in-reach walking press (PRESS_STOP_HOLDS) and the ranged approach
+(RANGERPRE-S16). 201011 held 13 of 37 starts; the seven owner tapes held 46 of 127 starts and 0 of
+44 walk-ins.
+
+**What ends retail's hold**, 347 attack-hold episodes:
+
+| Cause | Share |
+|---|---|
+| The next input | 68 % (a move 116, a skill press 95, a press on another target 16, Esc 4) |
+| The target's death | 17 % |
+| A re-approach | 11 % |
+| A landing | 0.9 % |
+
+Every one of our release sites already has retail's order: the move (release first), the click
+(released before the router answers), the skill press (E4, then [8, 0], then [3]: 128 of 128),
+Esc, the re-approach ([8, 0] directly before the 0x002A, 39 of 39), and the target-gone tick.
+
+**The fix:**
+- attack_tick raises the hold right behind the [4] (after `_press_answered`, before the
+  chain-pause flush) and marks `press_hold`. The existing exemptions then keep it through the
+  landing and the launch, and the re-approach releases it.
+- Melee gets no 0x0028; ranged keeps RANGERPRE-S16's halt.
+- One release added: the live interact walk (`_handle_interact`'s out-of-range branch, both the
+  router and --interact-walk doors). Retail: 0 of 458 own 0x002A arrive held. The lane had put it
+  in `_order_walk`; the verifier showed that function is on a dead path (INTERACT_WALK off).
+
+**ANIMREF-RE 35's freeze** was a held gate meeting a ZERO-lead answer. That is a RECONSTRUCTION:
+on its one tape, every moving report got a zero lead, held or not. Since 1z-ds.10/.17 a released
+hold's report gets a real lead (201011 replayed: 14 of 14), and `test_kbdsync` 30s pins that through
+the real 0x003D arm.
+
+**Recorded, not changed (0 owner exposure: no hostile died on the seven tapes):**
+- A target's death: retail releases at the chain's NEXT scheduled event, with [3] for a swing in
+  flight (20 of 20); ours releases on the next tick.
+- A retarget with no swing in flight: retail pulses '8:0 8:1' on 8 of 27.
+- A press on a corpse leaves the hold up until the next input.
+
+**Run risks, registered:**
+- Stopping short at a walk-in start (the SET path zeroes +0x100) is UNVERIFIED. The critic's M1
+  put its exposure at 0 of 11 starts on 201011.
+- ABORT if a zero lead ever answers a report that releases a hold.
+
+**Tests:**
+- `test_playerswing` §21 (a-k) plus section 6's new shipped arm, 255 -> 267. 16 checks re-aimed
+  (sections 1, 3, 5, 6, 7 and 9l-d), exactly the set the verifier predicted.
+- `test_kbdsync` 30s/30t, 268 -> 270.
+- `test_castcancel` and `test_approachroute`: re-aims.
+- Mutations: the site out reddens 17 checks, the mark out 6, the interact release out 21j.

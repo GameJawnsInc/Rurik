@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=255)   # MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=267)   # MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -88,12 +88,16 @@ def section_two_phases():
     # occurred. It was read as a RATE over the STARTS, so this server sent
     # one on every swing: 52 of 52 (100%) against retail's 83 of 1,332
     # (6.2%). ANIMREF-RE 35 sends none on an auto swing.
+    # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31): that denominator counted TRANSITIONS of a
+    # transition-only property; the STATE at start + 0.1 s is held on 1,647 of 1,654 retail
+    # own starts, raised in the start's own batch directly behind the [4] (210 of 210).
     ops = [op for op, _, _ in sent]
-    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET]
-          and sent[0][1] == [authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0],
-          "the first tick sends ATTACK_STARTED and NOTHING ELSE -- no hold, "
-          "no damage. The hold used to ride behind it here; see above for "
-          "the denominator that put it there",
+    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
+          and sent[0][1] == [authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0]
+          and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1],
+          "the first tick sends ATTACK_STARTED and then the hold [8, me, 1] -- no damage "
+          "(MOVECODE-1z-ds.31: retail holds 1,647 of 1,654 own starts, raised behind the [4])",
           f"sent={[(hex(o), v) for o, v, _ in sent]}")
     swing = state.get("player_swing")
     expect = authsrv.swing_windup(authsrv.ATTACK_INTERVAL)
@@ -107,8 +111,8 @@ def section_two_phases():
           f"lands in {swing['lands_at'] - _t.time():.3f}s" if swing else "none")
 
     authsrv.attack_tick(send, state, 0)
-    check(len(sent) == 1, "an undue swing does not land early",
-          f"{len(sent)} sends")
+    check(len(sent) == 2, "an undue swing does not land early (the start and its hold, "
+          "nothing more)", f"{len(sent)} sends")
 
     _rewind(state, expect + 0.01)
     authsrv.attack_tick(send, state, 0)
@@ -121,8 +125,10 @@ def section_two_phases():
     _int = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
     _gain = authsrv.AGENT_ADRENALINE_GAIN
     _word = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
-    check(ops == ([_int_t, _int, _gain, _word] if authsrv.HIT_FINISH_FIRST
-                  else [_int_t, _gain, _word, _int]),
+    _held = [v for op, v, _l in sent[2:] if op == _int and v[0] == authsrv.agents.GV_DISABLED]
+    check(ops[:2] == [_int_t, _int] and _held == []
+          and ops[2:] == ([_int, _gain, _word] if authsrv.HIT_FINISH_FIRST
+                          else [_gain, _word, _int]),
           "the landing is FINISHED, gain, damage (ANIMREF-RE 43; gain, damage, "
           "FINISHED under --hit-finish-last) -- and no second STARTED "
           "and NO property 8 in either direction. This check has moved "
@@ -217,10 +223,15 @@ def section_lost_target():
             # since ANIMREF-RE 35 an auto swing sets no hold, so
             # `action_hold` is transition-only and there is nothing to
             # release.
+            # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31): the start holds again, so the
+            # target-gone tick releases it -- the one live target-death close above.
             check(state["player_swing"] is None
-                  and [(op, v) for op, v, _ in sent] == [],
+                  and [(op, v) for op, v, _ in sent]
+                  == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                       [authsrv.agents.GV_DISABLED, PLAYER, 0])],
                   f"target {name}: the swing whiffs -- ArenaNet's own "
-                  f"truncation (the Lakeside 7th swing, 0.24 s in)",
+                  f"truncation (the Lakeside 7th swing, 0.24 s in) -- and the "
+                  f"start's hold is released, nothing else",
                   f"swing={state['player_swing']}, sent={sent!r}")
     # THE REVERT ARM (--no-late-hit): the walk-out drops silently, the
     # pre-F21 rule this section pinned as retail's until 2026-09-12.
@@ -320,12 +331,15 @@ def section_press_stops_swing():
         # with the STOPPED alone. The corpus order (release PRECEDES stop,
         # necro t=18.511, ranger t=21.543, 2 of 2) is re-checked below on a
         # state where a hold IS riding, which is what those instants were.
-        check(ops[:2] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+        check(ops[:3] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                           authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
-              and sent[1][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
-              "the press burst carries GV_ATTACK_STOPPED [3, agent, 0] "
-              "immediately after E4, with no [8 -> 0] ahead of it -- the "
-              "auto swing never held",
+              and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0]
+              and sent[2][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
+              "the press burst is E4, then the start's hold released, then "
+              "GV_ATTACK_STOPPED [3, agent, 0] -- RE-AIMED 2026-10-02 "
+              "(MOVECODE-1z-ds.31: the auto swing holds again; retail's skill-press "
+              "release follows the E4 on 128 of 128)",
               f"ops={[hex(o) for o in ops]}, "
               f"second={sent[1][1] if len(sent) > 1 else None}")
         # The measured ORDER, on a body that IS holding (as a cast leaves it).
@@ -437,12 +451,13 @@ def section_retarget():
           "the retarget sends one STOPPED -- the corpus's candidate cancel "
           "(17c): two target-selects, then the standalone stop 57-90 ms "
           "later, no damage for the opened swing", f"{stops}")
-    check([(op, v) for op, v, _ in sent[:1]] ==
-          [(0x009F, [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
-          "and the stop rides ALONE now -- the auto swing set no hold, so "
-          "the [8 -> 0] half elides. The corpus PAIR was [8 -> 0] before "
-          "the [3, agent, 0] -- the t=16.578 retarget's own adjacency "
-          "(castmech 3c)",
+    check([(op, v) for op, v, _ in sent[:2]] ==
+          [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+           (0x009F, [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
+          "and the stop rides behind the release -- the corpus PAIR, [8 -> 0] "
+          "before the [3, agent, 0], the t=16.578 retarget's own adjacency "
+          "(castmech 3c; retail 7 of 7 in flight). RE-AIMED 2026-10-02: the "
+          "auto swing holds again (MOVECODE-1z-ds.31)",
           f"{[(hex(op), v) for op, v, _ in sent[:2]]}")
     sent.clear()
     authsrv.attack_tick(send, state, 0)
@@ -577,15 +592,18 @@ def section_landing_hold_release():
 
     print("\n6. ANIMREF-RE 35: an auto swing holds no walk gate")
 
-    def swing_cycle(hold, release):
-        """One swing through the real attack_tick; return (open, landing)."""
+    def swing_cycle(hold, release, start=False):
+        """One swing through the real attack_tick; return (open, landing).
+        `start` is MOVECODE-1z-ds.31's ATTACK_START_HOLDS; the ANIMREF-RE 35 arms run off."""
         sent = []
         send = lambda op, vals, label="", quiet=False: sent.append(
             (op, vals, label))
         state = _state()
         sh, lr = authsrv.SWING_HOLDS_WALK_GATE, authsrv.LANDING_HOLD_RELEASE
+        sa = authsrv.ATTACK_START_HOLDS
         authsrv.SWING_HOLDS_WALK_GATE = hold
         authsrv.LANDING_HOLD_RELEASE = release
+        authsrv.ATTACK_START_HOLDS = start
         try:
             authsrv.begin_attack(send, state, 10, 0)
             authsrv.attack_tick(send, state, 0)
@@ -602,15 +620,25 @@ def section_landing_hold_release():
         finally:
             authsrv.SWING_HOLDS_WALK_GATE = sh
             authsrv.LANDING_HOLD_RELEASE = lr
+            authsrv.ATTACK_START_HOLDS = sa
 
-    # ARM 1 -- SHIPPED. No hold anywhere in the swing.
+    # ARM 1 -- ANIMREF-RE 35's shape (--no-attack-start-hold): no hold anywhere in the swing.
+    # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31): no longer the shipped arm. The freeze it removed
+    # was a held gate meeting a ZERO-lead answer (RECONSTRUCTION); since 1z-ds.10/.17 the
+    # released hold's report gets a real lead.
     opened, landed, st = swing_cycle(False, True)
     check(opened == [] and landed == [] and not st.get("action_hold"),
-          "SHIPPED ARM: the swing sends NO property 8, at the open or the "
-          "landing. The client's walk gate is never shut by an auto attack, "
-          "so a pre-landing movement press meets a clear gate -- the 25-of-32 "
-          "refusals the operator felt as a warp cannot occur",
+          "ANIMREF-RE 35 ARM (--no-attack-start-hold): the swing sends NO property 8, at the "
+          "open or the landing",
           f"open={opened}, landing={landed}, hold={st.get('action_hold')}")
+    # ARM 0 -- SHIPPED since MOVECODE-1z-ds.31: the start holds and the landing keeps it.
+    opened0, landed0, st0 = swing_cycle(False, True, start=True)
+    check(opened0 == [[authsrv.agents.GV_DISABLED, PLAYER, 1]] and landed0 == []
+          and st0.get("action_hold") == 1 and st0.get("press_hold") is True,
+          "SHIPPED ARM (MOVECODE-1z-ds.31): the start raises [8, me, 1] and the landing keeps it "
+          "to the next input -- retail 1,647 of 1,654 own starts held at start + 0.1 s, the "
+          "landing ending 3 of 347 hold episodes",
+          f"open={opened0}, landing={landed0}, hold={st0.get('action_hold')}")
 
     # ARM 2 -- the revert, with 33 F1 still on: hold set, released at landing.
     opened2, landed2, st2 = swing_cycle(True, True)
@@ -632,10 +660,10 @@ def section_landing_hold_release():
           "0.601/0.869/1.015 s movement stall over 104 hold windows",
           f"open={opened3}, landing={landed3}, hold={st3.get('action_hold')}")
 
-    check(st.get("action_hold", 0) == 0 and st3.get("action_hold") == 1,
-          "and the shipped and known-bad arms SEPARATE on the one number "
-          "that matters -- the gate's state while the player is swinging",
-          f"shipped={st.get('action_hold', 0)}, legacy={st3.get('action_hold')}")
+    check(st.get("action_hold", 0) == 0 and st0.get("action_hold") == 1,
+          "and the shipped and ANIMREF-RE 35 arms SEPARATE on the one number that "
+          "matters -- the gate's state while the player is swinging",
+          f"35={st.get('action_hold', 0)}, shipped={st0.get('action_hold')}")
 
     # THE CAST PATH IS UNTOUCHED, and that is the boundary of this change.
     sentc = []
@@ -3035,6 +3063,142 @@ def section_windup_holds_approach():
           "22f. the flag ships on and its revert arm is wired")
 
 
+def section_attack_start_holds():
+    """MOVECODE-1z-ds.31: every own attack start leaves the action hold [8, me, 1] up, to the
+    next input. Retail: 1,647 of 1,654 own starts held at start + 0.1 s, raised in the start's
+    own batch directly behind the [4] when it was down (210 of 210); the next input ends 68 % of
+    hold episodes, a landing 0.9 % (batch-3 lane H, re-measured by its verifier)."""
+    import time
+    import authsrv
+
+    print("\n21. 1z-ds.31: every attack start holds, to the next input")
+    INT, START = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    DEST, HALT = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION, authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    PIN = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
+    GV8 = authsrv.agents.GV_DISABLED
+    FIN = authsrv.agents.GV_MELEE_ATTACK_FINISHED
+
+    def shape(sent):
+        return [("8:%d" % v[2]) if op == INT and v[0] == GV8 else
+                ("4" if op == START else ("1" if op == INT and v[0] == FIN else op))
+                for op, v, _l in sent]
+
+    def walk_in(on=True):
+        """A parked body, the target 300 u out: press, follow, the leg ends, the start."""
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        st = _state()
+        st["agents"][10]["pos"] = (300.0, 0.0)
+        st.update({"pos": (0.0, 0.0), "client_pos": (0.0, 0.0), "plane": 0})
+        saved = authsrv.ATTACK_START_HOLDS
+        authsrv.ATTACK_START_HOLDS = on
+        try:
+            authsrv.begin_attack(send, st, 10, 0)
+            authsrv.attack_tick(send, st, 0)                      # the follow
+            st["pos"] = st["dest"]
+            st["dest"] = None
+            st["click_leg"]["eta"] = time.time() - 0.01
+            st["approach"]["eta"] = st["click_leg"]["eta"]
+            sent.clear()
+            authsrv.attack_tick(send, st, 0)                      # arrival: the start
+            start = list(sent)
+            sent.clear()
+            _rewind(st, 5.0)
+            authsrv.attack_tick(send, st, 0)                      # the landing
+            landing = list(sent)
+            sent.clear()
+            st["player_last_swing"] = time.time() - 10.0
+            authsrv.attack_tick(send, st, 0)                      # the chain's next start
+            nxt = list(sent)
+        finally:
+            authsrv.ATTACK_START_HOLDS = saved
+        return st, start, landing, nxt
+
+    st21, start21, land21, next21 = walk_in()
+    check(shape(start21) == ["4", "8:1"] and st21.get("press_hold") is True
+          and st21.get("action_hold") == 1,
+          "21a. a melee WALK-IN's start batch is [4], [8, me, 1] -- no 0x0028, no pin -- and the "
+          "start marks the hold (retail walk-ins held 75 of 75; ours held 0 of 44)",
+          f"{shape(start21)}")
+    check("8:0" not in shape(land21) and "1" in shape(land21) and st21.get("action_hold") == 1,
+          "21b. that swing's landing releases NOTHING -- the mark keeps the hold (retail: a "
+          "landing ends 3 of 347 hold episodes)", f"{shape(land21)}")
+    check(shape(next21) == ["4"] and st21.get("action_hold") == 1,
+          "21c. the chain's next start is [4] alone and the hold stays up (transition-only; "
+          "retail CONT 1,310 of 1,315 held)", f"{shape(next21)}")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+    authsrv.cancel_on_move(send, st21, 0, moved=50.0)
+    sh21d = shape(sent)
+    check(sh21d[:1] == ["8:0"] and "press_hold" not in st21 and st21.get("action_hold") == 0,
+          "21d. the next movement input releases it first ([8, me, 0] ahead of anything else; "
+          "retail before the lead 116 of 116), and the mark goes with it", f"{sh21d}")
+    _st, s0, l0, _n = walk_in(on=False)
+    check(shape(s0) == ["4"] and "8:0" not in shape(l0) and not _st.get("action_hold"),
+          "21e. KNOWN-BAD ARM (--no-attack-start-hold): the walk-in starts [4] alone, unheld -- "
+          "every build before 1z-ds.31 (201011: 24 of 37 starts unheld)", f"{shape(s0)}")
+    st = _state()
+    st["agents"][10]["pos"] = (100.0, 0.0)
+    st.update({"pos": (0.0, 0.0), "client_pos": (0.0, 0.0), "plane": 0,
+               "last_report": (0.0, 0.0, True, time.time() - 2.0)})
+    sent.clear()
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)
+    check(shape(sent) == ["4", "8:1"],
+          "21f. a PARKED in-reach press opens [4], [8, me, 1] -- no pin, no halt (retail "
+          "IMM-parked 79 of 79 raised in the start's batch)", f"{shape(sent)}")
+    sent.clear()
+    st["agents"][10]["pos"] = (400.0, 0.0)                         # it steps out mid-windup
+    _rewind(st, 5.0)
+    authsrv.attack_tick(send, st, 0)
+    sh21g = shape(sent)
+    check("1" in sh21g and "8:0" in sh21g and DEST in sh21g
+          and sh21g.index("1") < sh21g.index("8:0") < sh21g.index(DEST),
+          "21g. a target that left reach: the landing, then [8, me, 0] directly ahead of the "
+          "re-approach's 0x002A (1z-ds.28; retail '[1], [8, 0], 0x002A' 12 of 13, release "
+          "before the 0x002A 39 of 39)", f"{sh21g}")
+    st["agents"][10]["pos"] = (200.0, 0.0)
+    st["pos"] = st["dest"]
+    st["dest"] = None
+    st["click_leg"]["eta"] = time.time() - 0.01
+    st["approach"]["eta"] = st["click_leg"]["eta"]
+    st["player_last_swing"] = time.time() - 10.0
+    sent.clear()
+    authsrv.attack_tick(send, st, 0)
+    check(shape(sent) == ["4", "8:1"],
+          "21h. that re-approach's own start re-raises it in its batch (retail CONT re-raises "
+          "16 of 16)", f"{shape(sent)}")
+    st["agents"][10]["dead"] = True
+    sent.clear()
+    authsrv.attack_tick(send, st, 0)
+    check(shape(sent) == ["8:0"] and st.get("action_hold") == 0,
+          "21i. the target's death releases it on the target-gone tick (recorded: retail waits "
+          "for the chain's next scheduled event, 50 of 59)", f"{shape(sent)}")
+    # the live interact walk (the router door): our walk goes out with the hold released
+    st = _state()
+    st.update({"pos": (0.0, 0.0), "plane": 0, "action_hold": 1, "press_hold": True,
+               "agent_pos": {77: (2000.0, 0.0)}})
+    sent.clear()
+    authsrv._handle_interact(send, st, 0, 77)
+    sh21j = shape(sent)
+    check(sh21j[:1] == ["8:0"] and st.get("action_hold") == 0,
+          "21j. an interact walk to a far NPC releases a start's hold first (retail: 0 of 458 own "
+          "0x002A arrive held) -- on the live door, not --interact-walk's", f"{sh21j}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                encoding="utf-8").read()
+    i_ans = src.find('    _press_answered(state, rec, conn_id, "swing")\n')
+    i_site = src.find("    if ATTACK_START_HOLDS:\n", i_ans)
+    i_flush = src.find("    _chain_pause_flush(state, rec, conn_id)\n", i_ans)
+    check(authsrv.ATTACK_START_HOLDS is True and 0 < i_ans < i_site < i_flush
+          and src.count(" if SWING_HOLDS_WALK_GATE:\n") == 3
+          and src.count("    elif SWING_HOLDS_WALK_GATE:\n") == 1
+          and "--no-attack-start-hold" in args and "if a.no_attack_start_hold:" in src,
+          "21k. the hold rides the one start site, after the press is answered and before the "
+          "chain-pause flush; hit_enemy's three unarmed sites keep SWING_HOLDS_WALK_GATE; the "
+          "revert arm is wired", f"offsets {i_ans} {i_site} {i_flush}")
+
+
 def section_placement_frame():
     """MOVECODE-1z-ds.20: our placement is the standing frame, and the press ends the click's
     destination. Found by the 1z-ds.13-.19 review's integration drive (pre-existing): after
@@ -3244,10 +3408,15 @@ def section_press_stop_hold():
 
     st2, send2, sent2 = walking()
     st2.pop("press_hold", None)          # not a subscript: a mutation must FAIL here, not abort
-    authsrv.attack_tick(send2, st2, 0)
-    sent2.clear()
-    _rewind(st2, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
-    authsrv.attack_tick(send2, st2, 0)
+    _sa9 = authsrv.ATTACK_START_HOLDS
+    authsrv.ATTACK_START_HOLDS = False   # 1z-ds.31's start re-marks it; this is the exemption's control
+    try:
+        authsrv.attack_tick(send2, st2, 0)
+        sent2.clear()
+        _rewind(st2, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
+        authsrv.attack_tick(send2, st2, 0)
+    finally:
+        authsrv.ATTACK_START_HOLDS = _sa9
     check(holds(sent2) == [0],
           "9l-d. CONTROL: the same landing with the mark gone releases the hold -- the "
           "exemption, not the landing path, is what keeps it", f"{holds(sent2)}")
@@ -3328,6 +3497,7 @@ def main():
     section_press_stop_hold()
     section_dead_press()
     section_windup_holds_approach()
+    section_attack_start_holds()
     section_placement_frame()
     section_still_streak()
     section_no_target_charge()

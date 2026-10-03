@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.31 -- 2026-10-02 -- **Every own attack start leaves the action hold [8, me, 1] up, to the next input (`ATTACK_START_HOLDS`, `--no-attack-start-hold` reverts). Retail 1,647 of 1,654 own starts held, raised behind the [4] 210 of 210; ours held 0 of 44 walk-ins. The interact walk releases it. P2, closed.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.31.
+- **Tests:** `test_playerswing` §21, 255 -> 267, 16 checks re-aimed; `test_kbdsync` 30s/30t, 268 ->
+  270; `test_castcancel` and `test_approachroute` re-aimed.
+
 ### MOVECODE-1z-ds.30 -- 2026-10-02 -- **A new follow's leg starts at the keyboard body estimate, not the world-0 mirror (`FOLLOW_LEG_FROM_BODY`, `--follow-leg-from-frame` reverts). The body-start lerp sat nearer the next mid-walk report on 16 of 17 discriminating rows (median 4.9 u against 31.4 u). The approach row logs both origins.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.30.

@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=268)   # MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=270)   # MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2825,6 +2825,38 @@ def main():
           and "--walk-start-is-still" in ARGS_SRC and "if a.walk_start_is_still:" in SRC,
           "30j. the walk-start feeds the arm's one `_moved` (the streak and the cancel read "
           "the same number, one call each); --walk-start-is-still is wired")
+
+    # MOVECODE-1z-ds.31: every start now leaves the hold up, so the first key report after a
+    # walk-in (no pin, a standing 0x0047) meets a HELD gate. Through the real 0x003D arm: the
+    # release first, the windup's stop, then a REAL lead -- retail's census 1 (29 of 32
+    # cancelled, [8, 0] + [3] + lead) -- never ANIMREF-RE 35's zero lead.
+    def held30(hold):
+        t = _t27.time()
+        st, _w, _r = press29(kbd_moving_at=None)          # parked: no pin, no marker
+        st.update({"last_report": (0.0, 0.0, True, t - 1.2), "plane": 0, "pathmap": None,
+                   "attacking": FOE29,
+                   "player_swing": {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}})
+        if hold:
+            st.update({"action_hold": 1, "press_hold": True})
+        st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, -766.0], 1], state=st)
+        seq = [("8:%d" % v[2]) if v[0] == authsrv.agents.GV_DISABLED else "3"
+               for op, v, _l in w2.rows if op == STOPPED30
+               and v[0] in (authsrv.agents.GV_DISABLED, authsrv.agents.GV_ATTACK_STOPPED)
+               and v[1] == authsrv.PLAYER_AGENT_ID]
+        return st2, seq, w2.of(MOVE30)
+
+    st30s, seq30s, g30s = held30(True)
+    check(seq30s == ["8:0", "3"] and len(g30s) == 1 and "KBD LEAD" in g30s[0][2]
+          and math.hypot(g30s[0][1][1][0], g30s[0][1][1][1]) > 100.0
+          and st30s.get("action_hold") == 0,
+          "30s. a key report inside a HELD walk-in windup: [8, me, 0], then [3], then a REAL "
+          "lead down the heading -- retail's 29 of 32 -- and the hold is down",
+          f"seq {seq30s}, grants {g30s}")
+    _st, seq30t, g30t = held30(False)
+    check(seq30t == ["3"] and len(g30t) == 1 and g30s and g30t[0][1][1] == g30s[0][1][1],
+          "30t. the same report with no hold up (--no-attack-start-hold) gets the SAME lead -- "
+          "the hold changes the batch's release and nothing about the answer",
+          f"seq {seq30t}, grants {g30t}")
 
     # MOVECODE-1z-ds.17: EVERY MODELLED PLACEMENT PARKS. 20261002T141035 43.766: after a
     # follow-branch press (the pin alone) the next key report sat ON the pin with the keyboard

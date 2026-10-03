@@ -95,7 +95,7 @@ MELEE = ("20260929T150923", "53756", 9)
 
 SAVED = ("PLAYER_WEAPON", "PLAYER_OFFHAND")
 SAVED_A = ("ATTACK_INTERVAL", "WEAPON_ATTACK_SPEED", "PLAYER_SWING_DAMAGE",
-           "APPROACH_START_HALTS", "LANDING_HOLD_RELEASE")
+           "APPROACH_START_HALTS", "LANDING_HOLD_RELEASE", "ATTACK_START_HOLDS")
 
 
 class Globals:
@@ -281,25 +281,32 @@ def section_server():
 
         # 1k: the known-bad arm
         authsrv.APPROACH_START_HALTS = False
+        authsrv.ATTACK_START_HOLDS = False   # 1z-ds.31's start hold off too: the old build
         st_b, _send_b, bad, _p = approach("starter_bow")
         batches["bad"] = list(bad)
         check(bad == [(OP_START, [4, PLAYER, FOE, 0])] and not st_b.get("approach_hold")
               and "approach_closed" not in st_b,
-              "1k. KNOWN-BAD, --no-approach-start-halt: [4] alone, no hold, no halt -- this "
-              "server until today, which retail's 12 of 12 refute", show(bad))
+              "1k. KNOWN-BAD, --no-approach-start-halt --no-attack-start-hold: [4] alone, no "
+              "hold, no halt -- this server before RANGERPRE-S16, which retail's 12 of 12 refute",
+              show(bad))
         authsrv.APPROACH_START_HALTS = True
+        authsrv.ATTACK_START_HOLDS = True
 
         # 1l-1n: the controls
         _st, _s, sword, sword_press = approach("starter_sword")
-        check(ops(sword_press) == [OP_FOLLOW] and sword == [(OP_START, [4, PLAYER, FOE, 0])],
-              "1l. CONTROL, melee: a sword's approach arrives and its start is [4] alone -- "
-              "retail's melee starts are mixed (:53756, 1 of 4) and are left as they were",
+        check(ops(sword_press) == [OP_FOLLOW]
+              and sword == [(OP_START, [4, PLAYER, FOE, 0]), (OP_INT, [8, PLAYER, 1])]
+              and not _st.get("approach_hold") and _st.get("press_hold") is True,
+              "1l. CONTROL, melee: a sword's approach arrives and its start is [4], [8, me, 1] "
+              "with NO 0x0028 and no approach hold -- RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31: "
+              "retail's melee walk-ins are held 75 of 75; the 'mixed' read counted transitions)",
               show(sword))
         st_n, _s, near, near_press = approach("starter_bow", distance=800.0)
-        check(near_press == [(OP_START, [4, PLAYER, FOE, 0])] and near == []
-              and not st_n.get("approach_hold"),
-              "1m. CONTROL, at rest: a bow press already in range opens [4] alone -- no "
-              "approach, no halt (retail's at-rest starts: 37 of 37 carry neither)",
+        check(near_press == [(OP_START, [4, PLAYER, FOE, 0]), (OP_INT, [8, PLAYER, 1])]
+              and near == [] and not st_n.get("approach_hold"),
+              "1m. CONTROL, at rest: a bow press already in range opens [4], [8, me, 1] -- no "
+              "approach, no halt. RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31): '37 of 37 carry "
+              "neither' counted transitions; the state is held on every one",
               show(near_press))
         authsrv.apply_party_character({"player_weapon": "starter_bow"})
         st_o = world(800.0)
@@ -307,9 +314,10 @@ def section_server():
         o_sent, o_send = collect()
         authsrv.begin_attack(o_send, st_o, FOE, 1)
         authsrv.attack_tick(o_send, st_o, 1)
-        check(o_sent == [(OP_START, [4, PLAYER, FOE, 0])] and "approach_closed" not in st_o,
-              "1n. an arrival marker naming ANOTHER target halts nothing, and the start "
-              "consumes it anyway", show(o_sent))
+        check(o_sent == [(OP_START, [4, PLAYER, FOE, 0]), (OP_INT, [8, PLAYER, 1])]
+              and "approach_closed" not in st_o and not st_o.get("approach_hold"),
+              "1n. an arrival marker naming ANOTHER target halts nothing (the start's own hold, "
+              "no 0x0028, no approach hold), and the start consumes it anyway", show(o_sent))
         gone = {"approach": None, "approach_closed": FOE}
         authsrv._approach_abandon(gone)
         check("approach_closed" not in gone and gone["approach"] is None,
