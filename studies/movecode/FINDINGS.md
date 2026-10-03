@@ -22130,3 +22130,58 @@ check when removed (11 mutations).
 
 **Tests:** `test_castcancel` 8f-i, 54 -> 58; `test_playerswing` 19k, 21l-n, 20k-l and 10p, 267 ->
 274; `test_router` re-aims and 1f-g, 148 -> 149.
+
+
+### 1z-ds.34 On the client: `20261003T130816` CONFIRMS the hold at every start, the live-key click, the instant and the post-landing Esc -- "better or perhaps the same, definitely not worse"
+
+The owner drove DSBATCH3-run-registered by hand on the 1z-ds.23-.33 tree (52348a3a). There are
+three connections: c1 on map 148, a gateway re-zone (c2 on 148, then c3 on the boss map 168). The
+harness verdict "FAIL (client died during the hold)" is its retraction for an owner close: exit 0
+with no error dialog. The owner reported a "warp" after the run and then corrected it: it was the
+gateway re-zone, and they saw no movement warp. The scorer missed the re-zone at first because it
+read only the first tape, so every connection is now scored.
+
+**The owner's eye** (asked literally):
+
+| Question | Answer |
+|---|---|
+| Walk-ins: a key tap during or just after the first swing -- does it move you at once; stop short, or a beat before the swing? | *"both during and after the swing moved me at once"* |
+| Repeat presses after a walk-up | *"didn't test this"* |
+| Holding W and clicking to the side or behind: any warp, did you go where you clicked? | no movement warp |
+| The stance while running and mid-swing | *"yes and yes"* |
+| Compared with the last run | *"either better or perhaps the same, definitely not worse"* |
+
+**The wire** (`score_ds3.py`, c1 and c3):
+- **H (1z-ds.31):**
+  - Own starts held at start + 0.1 s: c3 21 of 21. c1 shows 7 of 8; the eighth is a start a key
+    report released inside the 0.1 s window.
+  - Walk-in starts: 14, all held, none with a melee 0x0028.
+  - 16 key reports released a start's hold, and 0 got a zero lead (H-W3, the abort clause).
+  - 0 releases at a landing.
+  - Clicks under a hold: 0. That floor is NOT met.
+- **K-B (1z-ds.32):**
+  - 27 live-key answers: c1 22, including a rapid side and behind series at 34.9-38.6 with W
+    held; c3 5. 0 kbd-drop rows at the click door.
+  - Every key report that re-asserted after an answer was re-led within 1-2 ms.
+  - After the clicks where the key was let go, the body reached the click point exactly (c3: the
+    18.79 click, the 20.80 report on it).
+  - No client report jumps more than its walk, anywhere.
+  - The one c1 drop is the INTERACT door (an NPC click during a key walk), kept by design since
+    1z-ds.33.
+- **K-A (1z-ds.23):** non-run key reports after a router [1.0]: 2 of 2 carry KBD SPEED-TRUTH.
+- **SK/I (1z-ds.24/.25):** Frenzy while running sent no pin, halt or [8] (c3 30.79,
+  `pin:instant`); Frenzy mid-windup sent no [3], and the swing landed 14 ms later (c3 40.99).
+- **E (1z-ds.26):** 4 post-landing Escs sent [8, 0] only, and the mid-windup Esc sent [8, 0] then
+  [3].
+- **B2a (1z-ds.30):** every approach row carries `frame_origin`; |origin - frame| 0-41 u.
+- **Not exercised:**
+  - N3 (no repeat press during or after our own follow).
+  - W (no target left reach mid-windup).
+  - D (both player deaths came after the swing landed).
+  - Clicks under a hold.
+
+**What looked like warps on the server side, and is not:**
+- The AgTrack guard's `gate1-red` / `budget-red` rows during key walks: its async estimate is the
+  stale report, so they are ceilings, not measurements.
+- 1z-di's arrival re-grant chains just after a walk-start: present on every owner tape since
+  2026-10-01, PRE-EXISTING.

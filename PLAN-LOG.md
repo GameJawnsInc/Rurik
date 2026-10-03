@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.34 -- 2026-10-03 -- **`20261003T130816` CONFIRMS 1z-ds.31 (every start held: walk-in key taps "moved me at once" during and after the swing; 16 held reports released with 0 zero leads), 1z-ds.32 (27 clicks into a live key walk answered, no movement warp), 1z-ds.24/.25 (Frenzy "yes and yes") and 1z-ds.26. The owner: "either better or perhaps the same, definitely not worse". Not exercised: N3, W, the mid-windup death, clicks under a hold.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.34.
+- **Closes:** §8's batch-3 line; the unexercised items stay open in the new one.
+
 ### MOVECODE-1z-ds.33 -- 2026-10-03 -- **The batch-3 review's fixes: the landing no longer releases a cast's hold (the overdue-window press, the review's one medium); an instant no longer blinds the stop doors (stance then attack skill now stops the windup); one [3] per windup; the router's [1.0] re-arms the edge to family 1; the live-key answer is ground clicks only; B2a is attack follows only; our walks release an unmarked hold; the pickup timer and the interrupt's re-take keep a start's hold.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.33 (and what it left open).
