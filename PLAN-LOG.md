@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.26 -- 2026-10-02 -- **Esc after a landed swing releases the hold and ends the order, with no stop (`ESC_STOP_NEEDS_WINDUP`, `--esc-stops-landed` reverts). Retail 3 of 3 post-landing Escs [8, me, 0] only (low confidence, two captures); ours sent [3] on every held chain.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.26.
+- **Tests:** `test_castcancel` 6b, 50 -> 54.
+
 ### MOVECODE-1z-ds.25 -- 2026-10-02 -- **An instant skill leaves the body and the action hold alone (`INSTANT_LEAVES_BODY`, `--instant-cast-stop` reverts). Retail: 0 of 37 instants on a walking body stopped it, 105 of 121 carry no property-8 change. Ours pinned and halted a running stance (194258 46.158) and toggled the hold four times, popping a press-stop hold's mark.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.25.

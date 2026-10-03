@@ -20137,6 +20137,18 @@ KBD_STILL_STREAK_MIN = 2
 # release first, as retail does 33 of 33 (cancel_on_move's own site).
 CANCEL_RELEASES_FIRST = True   # False (--cancel-stop-first): the [3] ahead of the [8, me, 0].
 
+# MOVECODE-1z-ds.26 (batch 3's E, 2026-10-02): Esc (c2s 0x0028) after a LANDED swing sends the
+# hold release, when one rides, and no GV_ATTACK_STOPPED -- the movement door's own split
+# (`pre_landing or not MOVE_KEEPS_CHAIN` in cancel_on_move). Retail: 3 of 3 post-landing Escs
+# sent [8, me, 0] only, and the chain ended (0 own starts before the next input); 2 of 2
+# mid-windup Escs sent [8, me, 0] then [3] (batch-3 lane S's r_esc.py, re-measured: all six
+# of retail's Escs are in two captures, so LOW confidence). Ours sent [3] on every Esc with a
+# held chain (141035 57.298, the one owner Esc). The order still ends either way. RESIDUAL,
+# named: an Esc between `lands_at` and the landing tick clears `attacking`, and the next
+# tick's no-target branch then drops the overdue swing with no [1] (the move door has the
+# same window).
+ESC_STOP_NEEDS_WINDUP = True   # False (--esc-stops-landed): [3] at every Esc on a held chain.
+
 
 def _kbd_report_still(state, moved):
     """Count consecutive keyboard reports that moved nothing (1z-df).
@@ -20685,12 +20697,17 @@ def cancel_action(send, state, conn_id):
     # its own release, and `action_hold` is transition-only, so a run that cancels
     # both a swing and a cast emits one 8 -> 0, here.
     if chain_live:
+        # 1z-ds.26: the stop goes out only for a swing still in its windup.
+        _esc_sw = state.get("player_swing")
+        _esc_stops = (not ESC_STOP_NEEDS_WINDUP
+                      or (_esc_sw is not None and now < float(_esc_sw["lands_at"])))
         if CANCEL_RELEASES_FIRST:
             action_hold(send, state, 0, "cancel action")
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
-             "attack_stopped: cancel action")
-        state["player_swing_cancel"] = "cancel action"
+        if _esc_stops:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+                 "attack_stopped: cancel action")
+            state["player_swing_cancel"] = "cancel action"
         if not CANCEL_RELEASES_FIRST:
             action_hold(send, state, 0, "cancel action")
     for cast in state.get("pending_casts") or ():
@@ -47145,6 +47162,11 @@ def main():
         print("[map] --skill-stop-any-chain: every accepted skill press on a held chain "
               "sends [3] and drops the swing, instants and between-swing presses included "
               "(every build before MOVECODE-1z-ds.24)", flush=True)
+    if a.esc_stops_landed:
+        global ESC_STOP_NEEDS_WINDUP
+        ESC_STOP_NEEDS_WINDUP = False
+        print("[map] --esc-stops-landed: Esc sends GV_ATTACK_STOPPED on every held chain, a "
+              "landed swing's included (every build before MOVECODE-1z-ds.26)", flush=True)
     if a.cancel_stop_first:
         global CANCEL_RELEASES_FIRST
         CANCEL_RELEASES_FIRST = False

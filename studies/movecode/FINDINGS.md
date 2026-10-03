@@ -21779,3 +21779,27 @@ instant. Retail has no usable row for that cell.
 - `test_cancelwalk` §8 (a-f), 124 -> 130. Each of the five gates, removed, reddens its own check
   (8e is driven under --e3-release too).
 - `test_instantannounce`: two press checks re-aimed. Its b50da5c8 arm reverts the new flag too.
+
+
+### 1z-ds.26 Esc after a landed swing releases the hold and ends the order, with no stop (`ESC_STOP_NEEDS_WINDUP`, `--esc-stops-landed` reverts)
+
+Batch 3's item E. LOW confidence: all of retail's evidence comes from two captures.
+
+**Retail** (OBSERVED; lane S's `r_esc.py`, re-measured by its verifier):
+- After a landed swing: 3 of 3 Escs sent [8, me, 0] only, and the chain ended (0 own starts
+  before the next input). All three are in 20260919T103604: 289.38 after a melee landing, and
+  527.62 and 586.22 after ranged launches.
+- Mid-windup: 2 of 2 Escs sent [8, me, 0] then [3].
+- No hold up after a landing: n = 0.
+
+**Ours:** `cancel_action` sent [3] on every Esc while a chain was held (141035 57.298, the one
+owner Esc). That is the movement door's split (`pre_landing or not MOVE_KEEPS_CHAIN`) missing
+from the Esc door.
+
+**The fix:** the stop and the swing drop go out only for a swing still short of `lands_at`. The
+release and the order end are unchanged.
+
+**Residual, named:** an Esc between `lands_at` and the landing tick clears `attacking`, so the next
+tick's no-target branch drops the overdue swing with no [1]. The movement door has the same window.
+
+**Tests:** `test_castcancel` 6b (a-d), 50 -> 54.

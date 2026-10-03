@@ -44,7 +44,7 @@ import time as _time  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=50)   # MOVECODE-1z-ds.24 +5 (section 8: a skill press stops only a windup, never an instant's); MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=54)   # MOVECODE-1z-ds.26 +4 (6b: Esc after a landing sends no stop); MOVECODE-1z-ds.24 +5 (section 8: a skill press stops only a windup, never an instant's); MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -791,6 +791,41 @@ def section_cancel_action_door():
     check(pair3 == [expect_stop, expect_rel],
           "KNOWN-BAD ARM (--cancel-stop-first): the Esc door's old stop-first order",
           f"{[(hex(o), v) for o, v in pair3]}")
+
+    # 6b. MOVECODE-1z-ds.26: Esc after a LANDED swing sends the release (when a hold rides) and
+    # no stop; the order still ends. Retail 3 of 3 post-landing Escs [8, me, 0] only (r_esc.py).
+    def esc_landed(hold, needs=True):
+        st = {"agents": {10: dict(agent)}, "pos": (0.0, 0.0), "attacking": 10,
+              "player_swing": None, "player_swing_cancel": None}
+        if hold:
+            st["action_hold"], st["press_hold"] = 1, True
+        out = []
+        snd = lambda op, vals, label="", quiet=False: out.append((op, vals))
+        saved_e = authsrv.ESC_STOP_NEEDS_WINDUP
+        authsrv.ESC_STOP_NEEDS_WINDUP = needs
+        try:
+            authsrv.cancel_action(snd, st, 0)
+        finally:
+            authsrv.ESC_STOP_NEEDS_WINDUP = saved_e
+        return out, st
+    e6a, st6a = esc_landed(False)
+    check(e6a == [] and st6a.get("attacking") is None and not st6a.get("player_swing_cancel"),
+          "6b-a. Esc on a chain whose swing LANDED, no hold up: nothing on the wire, and the "
+          "order is forgotten", f"{e6a} attacking={st6a.get('attacking')}")
+    e6b, st6b = esc_landed(True)
+    check(e6b == [expect_rel] and st6b.get("attacking") is None,
+          "6b-b. the same with a hold riding: [8 -> 0] alone, no [3] (retail 3 of 3)",
+          f"{e6b}")
+    e6c, _st = esc_landed(True, needs=False)
+    check(e6c == [expect_rel, expect_stop],
+          "6b-c. KNOWN-BAD ARM (--esc-stops-landed): the release and a stop for a swing that "
+          "already landed -- 141035 57.298", f"{e6c}")
+    _src = open(authsrv.__file__, encoding="utf-8").read()
+    _args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                 encoding="utf-8").read()
+    check(authsrv.ESC_STOP_NEEDS_WINDUP is True and "--esc-stops-landed" in _args
+          and "if a.esc_stops_landed:" in _src and _src.count("        if _esc_stops:\n") == 1,
+          "6b-d. the flag ships on, gates the Esc door's one stop, and its revert is wired")
 
 
 def section_skill_stop_windup():
