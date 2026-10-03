@@ -2366,6 +2366,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "convicted (a body parked 7 s at a bridge deck's "
                          "edge, then a 2,021 u teleport). Diagnostic arm "
                          "only; RUN-1zBB's known-bad arm.")
+    ap.add_argument("--router-keeps-family-edge", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.23: the router's "
+                         "AGENT_UPDATE_SPEED(1.0) answers re-arm the keyboard "
+                         "family edge only under D1_LEAD and leave dest_speed "
+                         "at the last key family's, so a same-family strafe or "
+                         "backpedal after a router answer gets no KBD "
+                         "SPEED-TRUTH (2 of 34 on the wire) and the position "
+                         "model walks the click at the key's speed.")
     ap.add_argument("--agtrack-gate2-exact", action="store_true",
                     help="MOVECODE-1z-bf OFF: the AgTrack guard's gate 2 goes "
                          "back to EXACT trapezoid containment of the modelled "

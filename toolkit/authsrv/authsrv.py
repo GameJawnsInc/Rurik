@@ -10774,6 +10774,24 @@ ROUTER_ORIGIN_PLANE = True    # False (--router-report-plane): start plane = rep
 # `--router-blind-clip` is the revert arm and the known-bad arm of RUN-1zBB.
 ROUTER_SEAM_CLIP = True       # False (--router-blind-clip): plane-blind rays.
 
+# (d) ROUTER_REARMS_FAMILY_EDGE (MOVECODE-1z-ds.23, 2026-10-02). The router's
+# answers put AGENT_UPDATE_SPEED(1.0) on the wire, which overwrites the sync
+# copy's moveSpeed; the keyboard family edge (`a2_family_sent`, read by
+# _a2_family_rate for KBD SPEED-TRUTH) was re-armed there only under D1_LEAD,
+# which is OFF -- so a strafe or backpedal key walk of the SAME family after a
+# router answer got no 0x002B and the copy walked a 0.66 / 0.75 leg at 1.0. On
+# the wire: 2 of 34 router [1.0]s followed by a KBD-LEAD-answered non-run
+# 0x003D carried no speed truth (20260909T221342 104.467 at +0.214 s, mt 4;
+# 20260913T190815 122.774), batch-3 lane K's k3_family.py, re-measured by its
+# verifier. The same answers also left `dest_speed` at the last key family's
+# speed, so the 20 Hz integrator walked state["pos"] (the NPC follow's and the
+# reach gate's operand) to the click at 190 or 216 u/s instead of the 1.0 the
+# answer declared. Both now follow the answer's own 0x002B: the edge re-arms at
+# the two speed-sending answers (the reset lines' count is unchanged, so
+# test_d1lead's seven-site lock still reads true and its message becomes so),
+# and every router leg names the declared base as its speed.
+ROUTER_REARMS_FAMILY_EDGE = True  # False (--router-keeps-family-edge): D1-gated.
+
 # THE TOUR CAP (ROUTER-B4, verification run 2, 20260826T194505): a route is
 # refused as a route when its length exceeds CAP x the direct distance plus
 # SLACK. Plane-blind endpoint selection plus mesh connectivity produced two
@@ -10924,6 +10942,9 @@ def router_chain_tick(send, state, conn_id, rec, now=None):
         pf = chain["click_plane"] if terminal else nxt_plane
         ps, _matched = a2_matched_field4(pf, chain["carry"])
         state["dest"], state["clipped"] = (nxt[0], nxt[1]), False
+        if ROUTER_REARMS_FAMILY_EDGE:
+            state["dest_speed"] = float(state.get("declared_speed_base")
+                                        or DEFAULT_RUN_SPEED)
         # (a) the body now walks THIS leg from the waypoint it reached.
         _router_rearm_leg(state, nxt, now, p0=chain["cur"])
         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
@@ -11135,12 +11156,16 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             state["grant_pending"] = None
             state["dest"], state["clipped"] = (float(stop[0]),
                                                float(stop[1])), False
+            if ROUTER_REARMS_FAMILY_EDGE:
+                state["dest_speed"] = float(state.get("declared_speed_base")
+                                            or DEFAULT_RUN_SPEED)
             # (a) the body walks the clipped leg, not the raw chord.
             _router_rearm_leg(state, (float(stop[0]), float(stop[1])), now)
             pf = _router_plane(pm, stop, cur_plane)
             ps, _m = a2_matched_field4(pf, cur_plane)
-            if D1_LEAD:
+            if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:
                 state["a2_family_sent"] = None
+            if D1_LEAD:
                 state["a2_click_answered_at"] = now
             send(GAME_SMSG_AGENT_UPDATE_SPEED,
                  agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
@@ -11190,8 +11215,9 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     legs = [legs[i] for i in _keep]
     leg_planes = [leg_planes[i] for i in _keep]
     state["grant_pending"] = None
-    if D1_LEAD:
+    if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:
         state["a2_family_sent"] = None
+    if D1_LEAD:
         state["a2_click_answered_at"] = now
     if len(legs) <= 1:
         # One leg suffices: the verbatim echo, retail's own dominant
@@ -11206,6 +11232,9 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         if D1_LEAD:
             ps, _m = a2_matched_field4(pf, ps)
         state["dest"], state["clipped"] = (dx, dy), False
+        if ROUTER_REARMS_FAMILY_EDGE:
+            state["dest_speed"] = float(state.get("declared_speed_base")
+                                        or DEFAULT_RUN_SPEED)
         send(GAME_SMSG_AGENT_UPDATE_SPEED,
              agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
              "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
@@ -11227,6 +11256,9 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     pf = leg_planes[0]
     ps, _m = a2_matched_field4(pf, cur_plane)
     state["dest"], state["clipped"] = first_wp, False
+    if ROUTER_REARMS_FAMILY_EDGE:
+        state["dest_speed"] = float(state.get("declared_speed_base")
+                                    or DEFAULT_RUN_SPEED)
     # (a) the record now describes the leg the body walks: waypoint 1.
     _router_rearm_leg(state, first_wp, now)
     send(GAME_SMSG_AGENT_UPDATE_SPEED,
@@ -48333,12 +48365,18 @@ def main():
               "as a P-3 failure when it is a protocol violation; the c2s "
               "census (zero 0x003E) is the definitive guard.")
     global ROUTER, ROUTER_LEG_REARM, ROUTER_SYNC_PLANE, ROUTER_ORIGIN_PLANE
-    global ROUTER_SEAM_CLIP
+    global ROUTER_SEAM_CLIP, ROUTER_REARMS_FAMILY_EDGE
     ROUTER = not a.no_router
     ROUTER_LEG_REARM = ROUTER and not a.router_raw_leg
     ROUTER_SYNC_PLANE = ROUTER and not a.router_report_plane
     ROUTER_ORIGIN_PLANE = ROUTER and not a.router_report_plane
     ROUTER_SEAM_CLIP = ROUTER and not a.router_blind_clip
+    if a.router_keeps_family_edge:
+        ROUTER_REARMS_FAMILY_EDGE = False
+        print("[router] --router-keeps-family-edge: the router's [1.0] answers "
+              "re-arm the keyboard family edge only under D1_LEAD and leave "
+              "dest_speed at the last key family's (every build before "
+              "MOVECODE-1z-ds.23)", flush=True)
     # route()'s own pull and gate read the same switch (1z-bb): one flag,
     # both rays. A missing mesh module means no router either, so the
     # failure to set it is not this flag's to report.

@@ -64,7 +64,9 @@ import authsrv                                                 # noqa: E402
 # is OURS rather than retail's -- review sec.1.7). 126 on the green run.
 # +8 MOVECODE-1z-ds.18 (section 1d: the drop stands down after OUR order). 134 on the green run.
 # +2 MOVECODE-1z-ds.21 (1d-i/j: the follow marker carries the press behind it). 136.
-LEDGER = checks.Ledger("router wiring", floor=136)
+# +6 MOVECODE-1z-ds.23 (section 1e: the router's [1.0] re-arms the family edge and names
+# its leg's speed). 142.
+LEDGER = checks.Ledger("router wiring", floor=142)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -447,6 +449,59 @@ def main():
           "is wired",
           _src.count('state["follow_order_at"] = (') == 1
           and "--press-keeps-kbd-drop" in _args and "if a.press_keeps_kbd_drop:" in _src)
+
+    # 1e. MOVECODE-1z-ds.23: the router's AGENT_UPDATE_SPEED(1.0) overwrites the sync copy's
+    # moveSpeed, so the keyboard family edge must re-arm (else a same-family strafe after the
+    # answer gets no KBD SPEED-TRUTH: 20260909T221342 104.467, 2 of 34 on the wire), and the
+    # integrator must walk the answered leg at the declared base, not the last key family's.
+    def walked_strafe(st):
+        st["a2_family_sent"] = 4                 # a strafe's 0x002B was the last edge
+        st["dest_speed"] = 190.08                # and its 0.66 x 288 leg speed
+        return st
+
+    st1ea = walked_strafe(base_state())
+    h1ea, s1ea, _r = answer(st1ea, (50.0, 50.0))
+    check("1e-a. the verbatim answer after a strafe re-arms the family edge and walks the "
+          "click at 288, the speed its own 0x002B declared",
+          h1ea and [op for op, _p, _l in s1ea] == [SPEED_OP, MOVE_OP]
+          and st1ea["a2_family_sent"] is None and st1ea["dest_speed"] == 288.0)
+    st1eb = walked_strafe(base_state())
+    answer(st1eb, (300.0, 0.0))                  # across the stub wall: a 3-leg chain
+    _first = (st1eb.get("a2_family_sent"), st1eb.get("dest_speed"))
+    st1eb["dest_speed"] = 190.08                 # a key walk in between would have
+    authsrv.router_chain_tick(FakeSend(), st1eb, 1, FakeRec(), now=time.time() + 999.0)
+    check("1e-b. a routed chain: its first leg re-arms and names 288, and each chain leg "
+          "re-names it (the first leg's 0x002B persists across the chain)",
+          st1eb.get("router_chain") is not None and _first == (None, 288.0)
+          and st1eb["dest_speed"] == 288.0)
+    st1ec = walked_strafe(base_state(StubPM(route_result=None)))
+    h1ec, s1ec, r1ec = answer(st1ec, (300.0, 0.0))
+    check("1e-c. the clip-fallback answer does the same",
+          h1ec and any(r["kind"] == "router_route" and r["verdict"] == "clip-fallback"
+                       for r in r1ec)
+          and st1ec["a2_family_sent"] is None and st1ec["dest_speed"] == 288.0)
+    st1ed = walked_strafe(base_state())
+    st1ed["declared_speed_base"] = 331.2         # a 15 % speed boost's declared base
+    answer(st1ed, (50.0, 50.0))
+    check("1e-d. the leg speed is the DECLARED base (SLICE-F48), not the 288 literal",
+          abs(st1ed["dest_speed"] - 331.2) < 1e-9)
+    _saved_rre = authsrv.ROUTER_REARMS_FAMILY_EDGE
+    try:
+        authsrv.ROUTER_REARMS_FAMILY_EDGE = False
+        st1ee = walked_strafe(base_state())
+        answer(st1ee, (50.0, 50.0))
+    finally:
+        authsrv.ROUTER_REARMS_FAMILY_EDGE = _saved_rre
+    check("1e-e. KNOWN-BAD ARM (--router-keeps-family-edge): the edge stays on the strafe and "
+          "the click is walked at 190 u/s -- every build before 1z-ds.23",
+          st1ee["a2_family_sent"] == 4 and st1ee["dest_speed"] == 190.08
+          and authsrv.ROUTER_REARMS_FAMILY_EDGE is True)
+    check("1e-f. the reset lines are not multiplied (test_d1lead's seven-site lock), and "
+          "--router-keeps-family-edge is wired",
+          _src.count('state["a2_family_sent"] = None') == 7
+          and _src.count("if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:") == 2
+          and "--router-keeps-family-edge" in _args
+          and "if a.router_keeps_family_edge:" in _src)
 
     # refused: origin off-mesh (the P-17 wall-press door, CLOSED).
     st = base_state(pos=(150.0, 0.0))

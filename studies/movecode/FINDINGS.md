@@ -21681,3 +21681,37 @@ counts as a pass.
 - **NEW-3, the arrived-follow re-pin.** Retail sends no 0x002C on 168 of 168.
 - **R1-B1's live-keyboard click drop** (retail answers 16 of 16).
 - **The recorded leftovers of 1z-ds.21.**
+
+
+### 1z-ds.23 The router's [1.0] re-arms the keyboard family edge and names its leg's speed (`ROUTER_REARMS_FAMILY_EDGE`, `--router-keeps-family-edge` reverts)
+
+**Batch 3** (a read-only workflow at `0cbe7ca9`): four lanes, each with an adversarial verifier,
+then a critic that applied every SHIP edit to pinned copies alone and together (22 test files, no
+cross-lane red) and drove the combined wire shapes through the real functions. The ship order is
+the critic's; this is its item 1, "K-A". Records: the scratchpad's `wfout4\`.
+
+**The defect** (OBSERVED, lane K's `k3_family.py`, re-measured by its verifier):
+- Every router answer puts AGENT_UPDATE_SPEED(1.0) on the wire, which overwrites the client
+  sync copy's moveSpeed.
+- The keyboard family edge (`a2_family_sent`, which `_a2_family_rate` reads to send KBD
+  SPEED-TRUTH) was re-armed at those answers only under `D1_LEAD`, which is OFF.
+- So a strafe or backpedal key walk of the SAME family after a router answer got no 0x002B,
+  and the copy walked a 0.66 / 0.75 leg at 1.0. On the wire: 2 of 34 router [1.0]s followed
+  by a KBD-LEAD-answered non-run 0x003D (20260909T221342 104.467 at +0.214 s, mt 4;
+  20260913T190815 122.774).
+- The same answers set `dest` but never `dest_speed` (its writers were the 0x003D arm and
+  `_approach_send`). After a non-run key walk, the 20 Hz integrator walked `state["pos"]` --
+  the NPC follow's and the reach gate's operand -- to the click at 190 or 216 u/s.
+
+**The fix:**
+- The edge re-arms at the router's two speed-sending answers, the clip-fallback and the
+  routed/verbatim block. The reset lines' count is unchanged (7), so test_d1lead's lock still
+  reads true, and its message ("the router's two speed-sending answers ARE re-arm sites")
+  becomes true under the shipped default.
+- Every router leg (verbatim, the chain's first leg, each chain tick, the clip-fallback)
+  writes the declared base as `dest_speed`.
+- Not covered: the legacy grant-verdict click paths (11866, 45016), which run only with the
+  router off.
+
+**Tests:** `test_router` §1e (a-f), floor 136 -> 142. Five source mutations each redden their
+own check.

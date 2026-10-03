@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.23 -- 2026-10-02 -- **The router's [1.0] answers re-arm the keyboard family edge and name the declared base as the leg's speed (`ROUTER_REARMS_FAMILY_EDGE`, `--router-keeps-family-edge` reverts). Batch 3's item K-A: a same-family strafe after a router answer got no KBD SPEED-TRUTH (2 of 34 on the wire), and the position model walked the click at the key's speed.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.23.
+- **Tests:** `test_router` §1e, 136 -> 142.
+
 ### MOVECODE-1z-ds.22 -- 2026-10-02 -- **`20261002T200929` CONFIRMS 1z-ds.13-.21. The owner: "feels very much like stock now"; windup cancel + re-press "yes and yes", no pull-back, no warp on stand -> click -> attack. The wire: 0 interval-held re-presses after a cancel (9 at once, 3 walk-ins on arrival), 0 release-after-stop, 0 follows after a walk-start, 0 fence-shut zero leads (12 on the QWE run), 14 of 14 follow_swing rows.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.22.
