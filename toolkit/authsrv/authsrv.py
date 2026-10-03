@@ -11003,7 +11003,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             _fol = state.get("follow_order_at")
             if _pin is not None and float(_pin[0]) > kbd_at:
                 _ended = ("pin", float(_pin[0]))
-            elif _fol is not None and float(_fol[0]) > kbd_at:
+            elif (_fol is not None
+                  and float(_fol[2] if len(_fol) > 2 else _fol[0]) > kbd_at):
                 _ended = ("follow", float(_fol[0]))
         if _ended is not None:
             if rec is not None:
@@ -19967,6 +19968,7 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
                  f"attack_stopped: retarget to agent {target_id}")
             state["player_swing_cancel"] = "retarget"
         state["attacking"] = target_id
+        _follow_superseded(state, rec, conn_id, target_id)     # MOVECODE-1z-ds.21: rows only
         # Swing immediately on the first click, then let the tick keep time.
         # Waiting a full interval makes the click feel ignored. Both timers:
         # last_hit gates the attack-skill path, player_last_swing gates the
@@ -19988,7 +19990,11 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
         # swing at the press; CANCELLED_SWING_FREES_CLOCK's block).
         freed = (CANCELLED_SWING_FREES_CLOCK and moved_from is not None
                  and moved_from.get("target") == target_id
-                 and bool(moved_from.get("cancelled")))
+                 and bool(moved_from.get("cancelled"))
+                 # MOVECODE-1z-ds.21: unless that very swing LANDED after all -- the
+                 # tick landed it while the move's thread was inside a send (the
+                 # review's race: two hits 0.83 s apart on a 1.75 s period).
+                 and moved_from.get("armed_at") != state.get("player_landed_armed_at"))
         resumed = (CHAIN_PAUSE_CHARGES_WITHOUT_TARGET and moved_from is not None
                    and moved_from.get("target") == target_id and not freed)
         if freed:
@@ -20285,9 +20291,13 @@ def cancel_on_move(send, state, conn_id, moved=None):
             # windup -- the swing never landed, so it holds no clock. The [3]'s
             # own predicate under the shipped MOVE_KEEPS_CHAIN, without its
             # legacy disjunct: "never landed" is what retail measured.
+            # `armed_at` names WHICH swing (MOVECODE-1z-ds.21): the world tick can land
+            # it while this thread is inside a send above, and a swing that landed
+            # holds its clock whatever this record says (begin_attack checks).
             state["chain_moved_from"] = {"target": state["attacking"],
                                          "t": now,
-                                         "cancelled": bool(chain_live and pre_landing)}
+                                         "cancelled": bool(chain_live and pre_landing),
+                                         "armed_at": (swing or {}).get("armed_at")}
             state["attacking"] = None
         if MOVE_ENDS_CHAIN:
             # A move command ends OUR follow too -- the client's steering
@@ -20615,16 +20625,23 @@ def cancel_action(send, state, conn_id):
                     for c in state.get("pending_casts") or ())
     dropped = _mark_cancelled(state, "cancel action", now,
                               spare_mid_attack=False)
-    # SAME PAIR, SAME ORDER as the movement door, and measured at THIS one:
-    # the live Esc mid-windup (t=119.425) is [3, then 8 -> 0]. The cast burst
-    # below carries its own release, and `action_hold` is transition-only, so
-    # a run that cancels both a swing and a cast emits one 8 -> 0, here.
+    # SAME PAIR, SAME ORDER as the movement door, and measured at THIS one --
+    # CORRECTED 2026-10-02 (MOVECODE-1z-ds.21): this said the live Esc mid-windup
+    # (t=119.425) is "[3, then 8 -> 0]". The decode's stream order is the other way
+    # at both instants it cited (20260824T074002 :55771, Esc 119.4255 indices
+    # 1330/1331, W 114.6413 1278/1279): the release FIRST, as at every held cancel
+    # in the corpus (33 of 33 movement, 2 of 2 Esc). The cast burst below carries
+    # its own release, and `action_hold` is transition-only, so a run that cancels
+    # both a swing and a cast emits one 8 -> 0, here.
     if chain_live:
+        if CANCEL_RELEASES_FIRST:
+            action_hold(send, state, 0, "cancel action")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: cancel action")
         state["player_swing_cancel"] = "cancel action"
-        action_hold(send, state, 0, "cancel action")
+        if not CANCEL_RELEASES_FIRST:
+            action_hold(send, state, 0, "cancel action")
     for cast in state.get("pending_casts") or ():
         if cast.get("cancelled") == "cancel action" and not cast.get("released"):
             release_cancelled_cast(send, state, cast, "cancel action", conn_id)
@@ -21305,8 +21322,13 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     leg = _leg_record((px, py), stop_point, now, speed)
     state["click_leg"] = leg
     # MOVECODE-1z-ds.18: OUR movement order for the body, on every send (re-paths too) --
-    # the router reads it against the keyboard latch (PRESS_ENDS_KBD_DROP).
-    state["follow_order_at"] = (now, target_id)
+    # the router reads it against the keyboard latch (PRESS_ENDS_KBD_DROP). The third
+    # field is the INPUT behind it (MOVECODE-1z-ds.21, the review): an attack follow is the
+    # press's, so a re-issue by the tick after a held key's still report carries the old
+    # press and keeps the drop; a pickup or a skill's approach is sent at its own press.
+    state["follow_order_at"] = (now, target_id,
+                                (state.get("attack_press_at") or now)
+                                if into == "approach" else now)
     # And the server's own copy walks there: the world tick's integrator
     # advances state["pos"] toward `dest` at the leg's own speed (1z-cu:
     # this leg's, written beside it) and clears it on arrival -- the same
@@ -21490,7 +21512,7 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
 import pressverdict  # noqa: E402
 from pressverdict import (  # noqa: F401,E402
     _press_row, _chain_pause_note, _swing_dropped, _press_refused,
-    _press_answered,
+    _press_answered, _follow_superseded,
 )
 
 
@@ -21509,6 +21531,8 @@ def _land_player_swing(send, state, conn_id, swing):
     the out-of-reach one are the same event, because retail judges reach at
     the start and not at the hit (7 of 7, 33 of 34)."""
     state["player_swing"] = None
+    # MOVECODE-1z-ds.21: which swing landed, for begin_attack's cancelled-clock rule.
+    state["player_landed_armed_at"] = swing.get("armed_at")
     _how = player_ranged(state)                       # WEAPONS-W2e: the preparation's arrow
     if _how is not None:
         # WEAPONS-W2a: the windup RELEASES; projectile_tick lands the hit a
@@ -25888,6 +25912,11 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
             state["attacking"] = target
             _ag["last_hit"] = 0.0
             state["player_last_swing"] = 0.0
+            # MOVECODE-1z-ds.21 (the review): a record of the move that forgot ANOTHER
+            # order would otherwise be read by a later re-press on this target, and the
+            # followed press this replaces closes as superseded (rows only).
+            state["chain_moved_from"] = None
+            _follow_superseded(state, rec, conn_id, target)
         _approach_send(send, state, conn_id, target, _ag, now, rec=rec)
 
     state.setdefault("pending_casts", []).append({
@@ -43075,9 +43104,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # MOVECODE-1z-ds.17's in-flight guard, read BEFORE
                         # cancel_on_move can abandon the follow: OUR 0x002A is
                         # still walking the body (REALFIX 0.11 stage 2).
-                        _ap_live = state.get("approach")
-                        _follow_walking = (_ap_live is not None
-                                           and time.time() < float(_ap_live.get("eta") or 0.0))
+                        # A pickup walk is the same 0x002A from the same _approach_send,
+                        # published under its own record (1z-ds.21, the review).
+                        _follow_walking = any(
+                            _r is not None and time.time() < float(_r.get("eta") or 0.0)
+                            for _r in (state.get("approach"), state.get("pickup")))
                         if moving:
                             # Keyboard movement cancels the same things a
                             # click does. Guarded on the enum being set even

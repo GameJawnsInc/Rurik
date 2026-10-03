@@ -44,7 +44,7 @@ import time as _time  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=44)   # 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=45)   # MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -748,11 +748,11 @@ def section_cancel_action_door():
     check(pair == [expect_stop]
           and state.get("attacking") is None
           and state.get("player_swing_cancel") == "cancel action",
-          "a live chain closes with the STOP -- and with no [8 -> 0] behind "
+          "a live chain closes with the STOP -- and with no [8 -> 0] beside "
           "it, because an auto swing no longer sets the hold to release. "
-          "The ORDER measured at this door ([3] then [8 -> 0], Esc "
-          "t=119.425 and W t=114.641, 2 of 2) is unchanged and still "
-          "applies whenever a cast is what holds. And the attack order is "
+          "The ORDER at this door (the release FIRST, Esc t=119.425 and W "
+          "t=114.641 by stream index -- re-read 2026-10-02, MOVECODE-1z-ds.21) "
+          "applies whenever a hold rides. And the attack order is "
           "forgotten: Esc means stop",
           f"{[(hex(o), v) for o, v in pair]}, "
           f"attacking={state.get('attacking')}")
@@ -767,13 +767,30 @@ def section_cancel_action_door():
     sent.clear()
     authsrv.cancel_action(send, state, 0)
     pair2 = [(op, v) for op, v, _ in sent]
-    check(pair2 == [expect_stop,
-                    (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                     [authsrv.agents.GV_DISABLED, PLAYER, 0])],
+    expect_rel = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                  [authsrv.agents.GV_DISABLED, PLAYER, 0])
+    check(pair2 == [expect_rel, expect_stop],
           "with a hold riding (as a cast leaves), the door emits BOTH in "
-          "the measured order -- [3] then [8 -> 0]. The corpus fact "
-          "survives ANIMREF-RE 35; only its trigger narrowed",
+          "the measured order -- [8 -> 0] then [3]. RE-READ 2026-10-02 "
+          "(MOVECODE-1z-ds.21): this check asserted [3] first, but the decode's "
+          "stream order at both cited instants is release-first (indices "
+          "1330/1331 and 1278/1279), as at 33 of 33 held movement cancels",
           f"{[(hex(o), v) for o, v in pair2]}")
+    state["attacking"] = 10
+    state["player_swing"] = {"target": 10, "lands_at": time.time() + 9.0}
+    state["player_swing_cancel"] = None
+    state["action_hold"] = 1
+    sent.clear()
+    _saved_crf = authsrv.CANCEL_RELEASES_FIRST
+    authsrv.CANCEL_RELEASES_FIRST = False
+    try:
+        authsrv.cancel_action(send, state, 0)
+    finally:
+        authsrv.CANCEL_RELEASES_FIRST = _saved_crf
+    pair3 = [(op, v) for op, v, _ in sent]
+    check(pair3 == [expect_stop, expect_rel],
+          "KNOWN-BAD ARM (--cancel-stop-first): the Esc door's old stop-first order",
+          f"{[(hex(o), v) for o, v in pair3]}")
 
 
 def main():

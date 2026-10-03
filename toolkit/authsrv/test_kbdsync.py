@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=267)   # MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=268)   # MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2699,22 +2699,31 @@ def main():
           "30c. KNOWN-BAD ARM (--no-park-walk-start): the same report cancels the swing and "
           "its lead is the zero-lead point -- the run's false cancels and the dead key",
           f"stops {stops30c}, grant {g30c}")
-    # Control: a report 60 u OFF the pin is a body that moved, and still cancels.
-    t30 = _t27.time()
-    st30d, _w, _r = press29()
-    pin30d = st30d["cast_stop_pin"][1]
-    st30d["last_report"] = (0.0, 0.0, False, t30 - 0.42)
-    st30d["plane"] = 0
-    st30d["pathmap"] = None
-    st30d["attacking"] = FOE29
-    st30d["player_swing"] = {"target": FOE29, "armed_at": t30, "lands_at": t30 + 0.5}
-    st30d2, w30d = drive_heading([1, [float(pin30d[0]), float(pin30d[1]) - 60.0], 0,
-                                  [0.0, -766.0], 1], state=st30d)
-    stops30d = [v for op, v, _l in w30d.rows
-                if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
-    check(len(stops30d) == 1,
-          "30d. CONTROL: a report 60 u off the pin is movement and cancels the windup as "
-          "before -- the change is the baseline, not the rule", f"{stops30d}")
+    # Control: a MID-WALK report (the client spoke after the pin, so no walk-start) 60 u
+    # off it is a body that moved, and cancels -- the displacement rule, not the walk-start.
+    # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.21, the review): with the last report OLDER than
+    # the pin this report is a walk-start, which cancels under 1z-ds.14 at any distance, so
+    # the 60 u could no longer be what decided it. Its 0 u twin must NOT cancel.
+    def midwalk30(off):
+        t30 = _t27.time()
+        st30d, _w, _r = press29()
+        pin30d = st30d["cast_stop_pin"][1]
+        st30d["last_report"] = (float(pin30d[0]), float(pin30d[1]), False, t30 + 0.01)
+        st30d["plane"] = 0
+        st30d["pathmap"] = None
+        st30d["attacking"] = FOE29
+        st30d["player_swing"] = {"target": FOE29, "armed_at": t30, "lands_at": t30 + 0.5}
+        _st2, w30d = drive_heading([1, [float(pin30d[0]), float(pin30d[1]) - off], 0,
+                                    [0.0, -766.0], 1], state=st30d)
+        return ([v for op, v, _l in w30d.rows
+                 if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED],
+                _st2["_rec"].of("walk_start"))
+    stops30d, ws30d = midwalk30(60.0)
+    stops30d0, ws30d0 = midwalk30(0.0)
+    check(len(stops30d) == 1 and stops30d0 == [] and ws30d == [] and ws30d0 == [],
+          "30d. CONTROL: a mid-walk report (not a walk-start) 60 u on cancels the windup by its "
+          "displacement, and its 0 u twin is 1z-db's still report and cancels nothing",
+          f"60 u {stops30d}, 0 u {stops30d0}")
     st30e, w30e, _r = press29(foe_at=(2000.0, 0.0), pos=(1990.0, 0.0))
     _pin30e = [v for op, v, _l in w30e.rows if op == PIN29]
     check(isinstance(st30e.get("cast_stop_pin"), tuple) and len(_pin30e) == 1
@@ -2909,6 +2918,14 @@ def main():
           "30p. the in-flight guard: while our own follow's eta has not passed, the marker "
           "forces no walk-start -- the client's walk-start applier may not run under a server "
           "order; walked-off-pin still lifts it", f"rearm {re30p}")
+    # 30r. The same guard for a PICKUP walk (the review): the same 0x002A from the same
+    # _approach_send, published under state["pickup"].
+    st30r, pin30r = follow_press()
+    t30r = _t27.time()
+    st30r["pickup"] = {"agent": 99, "t0": t30r, "eta": t30r + 1.0, "dest": (2000.0, 0.0)}
+    st30r, g30r, re30r = report_on(st30r, pin30r)
+    check(re30r == [] and st30r.get("fence_shut_at") is not None,
+          "30r. the in-flight guard covers a pickup walk too", f"rearm {re30r}")
     _fcp = SRC[SRC.index("def _forget_client_position("):]
     _fcp = _fcp[:_fcp.index("\ndef ")]
     check(_fcp.count('state["cast_stop_pin"] = (') == 1

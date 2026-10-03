@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.21 -- 2026-10-02 -- **The adversarial review's fixes to 1z-ds.13-.19: a swing that landed despite a "cancelled" record keeps its clock (a send-time race, double hit), the follow_swing row's closes, the Esc door releases first too (CASTMECH-P9's "opposite order" REFUTED by stream index), the in-flight guard covers pickups, the router's follow marker carries the press behind it (a held key into a wall re-opened R1-B1's class).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.21; `studies/castmech/FINDINGS.md` (P9).
+- **Tests:** `test_playerswing` 232 -> 236, `test_kbdsync` 267 -> 268 (30d re-aimed),
+  `test_router` 134 -> 136, `test_castcancel` 44 -> 45.
+
 ### MOVECODE-1z-ds.20 -- 2026-10-02 -- **Two PRE-EXISTING warp sources the 1z-ds.13-.19 review found: after one of our placements the reach frame was the 0x0047 from before it (swings from 288 u, phantom follows, re-pins on the phantom line up to 1,282 u in the owner's captures), and PRESS ENDS THE WALK left the abandoned click's dest armed (the model walked on, the next placement warped 108-217 u).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.20.

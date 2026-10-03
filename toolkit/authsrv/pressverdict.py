@@ -199,6 +199,15 @@ def _follow_close(state, rec, conn_id, fired, reason):
               f"{pf['held']} [MOVECODE-1z-ds.19]", flush=True)
 
 
+def _follow_superseded(state, rec, conn_id, target_id):
+    """The attack order moved to ANOTHER target (a retarget press, an attack skill's
+    approach): the followed press it replaced closes as `superseded` (MOVECODE-1z-ds.21,
+    the review's two-hostile mislabels)."""
+    pf = state.get("press_followed")
+    if pf is not None and pf.get("target") != target_id:
+        _follow_close(state, rec, conn_id, False, "superseded")
+
+
 def _press_refused(state, rec, conn_id, branch, **detail):
     """attack_tick found a PENDING press and did not open its swing this
     tick. The FIRST refusal writes the row and prints -- the R11 rule, "a
@@ -250,8 +259,12 @@ def _press_answered(state, rec, conn_id, how, **detail):
         # answering a NEWER press supersedes it (MOVECODE-1z-ds.19). A re-path of the same
         # follow (no press pending) leaves it open.
         if how == "swing":
-            _follow_close(state, rec, conn_id, not _fresh,
-                          "superseded" if _fresh else "swing")
+            # Fired only when the swing is on the followed press's own target
+            # (MOVECODE-1z-ds.21: a chain retargeted by an attack skill's approach
+            # used to close X's row fired=True on Y's swing).
+            _own = (not _fresh and state.get("attacking")
+                    == state["press_followed"].get("target"))
+            _follow_close(state, rec, conn_id, _own, "swing" if _own else "superseded")
         elif how == "follow" and _fresh:
             _follow_close(state, rec, conn_id, False, "superseded")
     if pend is None or pend.get("answered") is not None:

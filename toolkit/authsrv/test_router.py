@@ -63,7 +63,8 @@ import authsrv                                                 # noqa: E402
 # `--answer-kbd-click` now reaches router_answer_click, and the drop it reverts
 # is OURS rather than retail's -- review sec.1.7). 126 on the green run.
 # +8 MOVECODE-1z-ds.18 (section 1d: the drop stands down after OUR order). 134 on the green run.
-LEDGER = checks.Ledger("router wiring", floor=134)
+# +2 MOVECODE-1z-ds.21 (1d-i/j: the follow marker carries the press behind it). 136.
+LEDGER = checks.Ledger("router wiring", floor=136)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -368,13 +369,15 @@ def main():
         st["kbd_moving_at"] = now - marks.pop("kbd_age")
         for k, age in marks.items():
             if k == "follow":
-                st["follow_order_at"] = (now - age, 10)
+                st["follow_order_at"] = (now - age, 10, now - age)
+            elif k == "refollow":                  # (sent age, the press behind it age)
+                st["follow_order_at"] = (now - age[0], 10, now - age[1])
             elif k == "pin":
                 st["cast_stop_pin"] = (now - age, (0.0, 0.0))
             elif k == "press":
                 st["attack_press_at"] = now - age
             elif k == "follow_at_latch":
-                st["follow_order_at"] = (st["kbd_moving_at"], 10)
+                st["follow_order_at"] = (st["kbd_moving_at"], 10, st["kbd_moving_at"])
         saved = authsrv.PRESS_ENDS_KBD_DROP
         authsrv.PRESS_ENDS_KBD_DROP = on
         try:
@@ -426,6 +429,20 @@ def main():
     _src = open(authsrv.__file__, encoding="utf-8").read()
     _args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
                  encoding="utf-8").read()
+    _st, _h, s1di, v1di = kbd_click(kbd_age=0.2, refollow=(0.1, 1.0))
+    check("1d-i. MOVECODE-1z-ds.21 (the review): a follow the TICK re-sent after a held key's "
+          "still report carries the press behind it, which is older than the report -- the "
+          "keyboard is live, so the click is dropped (R1-B1's class kept)",
+          s1di == [] and [v[0] for v in v1di] == ["kbd-drop"])
+    st1dj = base_state()
+    st1dj["kbd_moving_at"] = authsrv.time.time() - 0.5
+    st1dj["attack_press_at"] = authsrv.time.time() - 2.0
+    authsrv._approach_send(FakeSend(), st1dj, 1, 77, {"pos": (1000.0, 0.0), "name": "hatcher"},
+                           authsrv.time.time(), rec=FakeRec())
+    fo1dj = st1dj.get("follow_order_at")
+    check("1d-j. the real _approach_send stamps the attack follow with its PRESS's instant, "
+          "not the send's", fo1dj is not None and len(fo1dj) == 3
+          and abs(fo1dj[2] - st1dj["attack_press_at"]) < 1e-6 and fo1dj[0] > fo1dj[2])
     check("1d-h. the marker has one writer (beside the follow's leg); --press-keeps-kbd-drop "
           "is wired",
           _src.count('state["follow_order_at"] = (') == 1

@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=232)   # MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=236)   # MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1924,11 +1924,22 @@ def section_press_ends_kbd_latch():
           "the 0x0026 arm all pass the recorder, so no press path can be silent "
           "by omission",
           "source pin")
+    # MOVECODE-1z-ds.21 widened the reader set by ONE, named: _approach_send stamps the
+    # router's follow marker with the press behind it. Each read must sit in one of the two.
+    def _fn_of(i):
+        j = src.rfind("\ndef ", 0, i)
+        return src[j + 5:src.index("(", j + 5)] if j >= 0 else None
+    _reads = []
+    _k = src.find('state.get("attack_press_at")')
+    while _k >= 0:
+        _reads.append(_fn_of(_k))
+        _k = src.find('state.get("attack_press_at")', _k + 1)
     check(src.count('state["attack_press_at"] = now') == 1
-          and src.count('state.get("attack_press_at")') == 1,
-          "the press stamp has ONE writer (begin_attack) and ONE reader "
-          "(_player_body_moving) -- rule 1 and the cast-stop never see it",
-          "source pin")
+          and sorted(_reads) == ["_approach_send", "_player_body_moving"],
+          "the press stamp has ONE writer (begin_attack) and TWO readers -- "
+          "_player_body_moving and _approach_send's follow marker (1z-ds.21) -- so rule 1 "
+          "and the cast-stop still never see it",
+          f"readers {_reads}")
     import ast as _ast
     n_kbd_writes = sum(
         1 for node in _ast.walk(_ast.parse(src))
@@ -2310,6 +2321,76 @@ def section_no_target_charge():
           and _walked(fs_wf[0]["held"]) >= 1 and "interval" not in fs_wf[0]["held"],
           "17b-j. CONTROL: when the walk outlasts the clock the row names the walk alone -- "
           "the interval is not counted on every tick", f"follow_swing {fs_wf}")
+
+    # 17b-k. MOVECODE-1z-ds.21 (the review's race): the world tick LANDED the swing while the
+    # move's thread was inside a send, so the move's record says cancelled but that very swing
+    # hit. It holds its clock: the re-press resumes, it is not freed.
+    def repress_after(record, landed):
+        st = _state()
+        st.update({"player_health": 100.0, "player_dead": False,
+                   "player_last_swing": 1001.75, "chain_moved_from": record,
+                   "player_landed_armed_at": landed})
+        authsrv.begin_attack(lambda *a, **k: None, st, 10, 0)
+        return st.get("player_last_swing")
+    rec_k = {"target": 10, "t": 1002.0, "cancelled": True, "armed_at": 1001.75}
+    lk_race = repress_after(dict(rec_k), 1001.75)
+    lk_free = repress_after(dict(rec_k), 1000.0)
+    check(lk_race == 1001.75 and lk_free == 0.0,
+          "17b-k. a 'cancelled' record whose swing LANDED anyway (the tick won the race inside "
+          "the move's send) keeps the clock; one whose swing never landed frees it",
+          f"race {lk_race}, free {lk_free}")
+
+    # 17b-l/m. The follow_swing row's other closes (the review: no test asserted fired False).
+    def followed_then(action):
+        rows = []
+
+        class _R:
+            def event(self, kind, **kw):
+                rows.append((kind, kw))
+        st = _state()
+        st["agents"][10]["pos"] = (300.0, 0.0)
+        st["agents"][11] = dict(_fresh_agent(), pos=(50.0, 0.0))
+        st.update({"player_health": 100.0, "player_dead": False, "player_last_swing": 0.0})
+        snd = lambda *a, **k: None  # noqa: E731
+        authsrv.begin_attack(snd, st, 10, 0, rec=_R())
+        authsrv.attack_tick(snd, st, 0, rec=_R())          # the follow answers the press
+        if action == "dies":
+            st["player_dead"] = True
+            authsrv.attack_tick(snd, st, 0, rec=_R())
+        else:
+            authsrv.begin_attack(snd, st, 11, 0, rec=_R())  # retarget to an in-reach foe
+            authsrv.attack_tick(snd, st, 0, rec=_R())
+        return [kw for k, kw in rows if k == "follow_swing"]
+    fs_l = followed_then("dies")
+    fs_m = followed_then("retarget")
+    check(len(fs_l) == 1 and fs_l[0]["fired"] is False and fs_l[0]["reason"] == "dead-player"
+          and fs_l[0]["target"] == 10,
+          "17b-l. the player dies on the walk: the followed press closes fired=False, "
+          "'dead-player'", f"{fs_l}")
+    check(len(fs_m) == 1 and fs_m[0]["fired"] is False and fs_m[0]["reason"] == "superseded"
+          and fs_m[0]["target"] == 10,
+          "17b-m. a retarget during the walk closes the followed press as 'superseded', never "
+          "fired on the new target's swing", f"{fs_m}")
+    rows_n = []
+
+    class _Rn:
+        def event(self, kind, **kw):
+            rows_n.append((kind, kw))
+    st_n = _state()
+    st_n["agents"][10]["pos"] = (300.0, 0.0)
+    st_n["agents"][11] = dict(_fresh_agent(), pos=(50.0, 0.0))
+    st_n.update({"player_health": 100.0, "player_dead": False, "player_last_swing": 0.0})
+    _snd = lambda *a, **k: None  # noqa: E731
+    authsrv.begin_attack(_snd, st_n, 10, 0, rec=_Rn())
+    authsrv.attack_tick(_snd, st_n, 0, rec=_Rn())            # followed press on 10
+    # The chain moved with NO press pending -- the attack skill's path, whose _press_supersedes
+    # has already ended our leg -- and the next tick swings on 11.
+    st_n.update({"attacking": 11, "click_moving_at": None, "click_leg": None, "approach": None})
+    authsrv.attack_tick(_snd, st_n, 0, rec=_Rn())            # the swing on 11
+    fs_n = [kw for k, kw in rows_n if k == "follow_swing"]
+    check(len(fs_n) == 1 and fs_n[0]["fired"] is False and fs_n[0]["reason"] == "superseded",
+          "17b-n. a swing on ANOTHER target with no press pending (the attack skill's approach "
+          "rewrote the chain) closes the followed press 'superseded', not fired", f"{fs_n}")
 
 
 def section_reach_frame():

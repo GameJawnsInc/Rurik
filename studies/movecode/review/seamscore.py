@@ -280,7 +280,10 @@ def main():
                                      "" if in_window else "   <-- NOT inside the run's window; joins below are suspect"))
 
     moves = [(i, r) for i, r in enumerate(R) if r.get("kind") == "decoded" and r.get("name") == "MOVE_TO_COORD"]
-    routes = [(i, r) for i, r in enumerate(R) if r.get("kind") == "router_route"]
+    # A pass-through row (verdict 'kbd-answered': --answer-kbd-click, and since MOVECODE-1z-ds.18
+    # the default 'press-ended' stand-down) precedes the click's REAL verdict row; skip it.
+    routes = [(i, r) for i, r in enumerate(R) if r.get("kind") == "router_route"
+              and not r.get("pass_through")]
     results = []
     for k, w in enumerate(clicks):
         fx, fy = (float(v) for v in w["key"].split(","))

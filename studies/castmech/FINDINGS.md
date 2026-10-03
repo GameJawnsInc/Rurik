@@ -501,6 +501,20 @@ t=114.641 and Esc mid-windup t=119.425, 2 of 2 —
 t=16.578 retarget). Both orders are measured at their own door and **neither
 is tidied to match the other**.
 
+**REFUTED 2026-10-02 (MOVECODE-1z-ds.21, re-read from the decode).** The stream order
+at both instants is the release first:
+- **20260824T074002, conn :55771, me = 25:**
+  - the W 0x003D at 114.6091 is answered by `[8, me, 0]` (stream index 1278), then
+    `[3, me, 0]` (1279), both at 114.6413;
+  - the Esc 0x0028 at 119.3802 is answered by `[8, me, 0]` (1330), then `[3, me, 0]`
+    (1331), at 119.4255.
+- **There is one order, not two.** Every held cancel in the live corpus releases first: 33 of
+  33 movement (`toolkit/authsrv/walkstartjoin.py` census 3), and 2 of 2 Esc.
+- **What changed:** `cancel_action` and `cancel_on_move` now send the release first under
+  `CANCEL_RELEASES_FIRST` (`--cancel-stop-first` reverts both).
+- The block above is kept as written, because a misread order is evidence of how this went
+  wrong.
+
 **CASTMECH-P10, free:** the completion control re-witnesses §3c's E5 burst on
 a different account and build — E4/60/`8→1` … E5/58/`8→0`/`8→1` … E3/`8→0` …
 E6. One correction falls out of it: §3c said "the corpus's E3 instants never

@@ -21555,3 +21555,63 @@ the parts the round's critic re-ran carry a second witness):
 - e: CONTROL, a newer 0x0047 out-ranks the placement;
 - f: the wiring.
 - **Red:** with the frame branch out, 20a and 20d go red; with the dest clear out, 20c.
+
+### 1z-ds.21 The review's fixes to 1z-ds.13-.19, and what it left open
+
+**The review:** four lanes, each with a refuter that re-ran every finding through the real
+code. The integration drive found 0 violations of this arc's invariants over 82 pattern runs.
+Each fix below is one the refuter reproduced.
+
+**Fixed (each with its known-bad arm or mutation reddening its own check):**
+1. **A swing that landed despite a "cancelled" record holds its clock** (1z-ds.13).
+   - A moving report 1-2 ms before `lands_at` could have the world tick land the swing
+     while `cancel_on_move` was inside a send. The record then said `cancelled`, and the
+     freed re-press landed a second hit 0.83 s after the first on a 1.75 s period. The
+     refuter reproduced this 8 of 8 with real threads.
+   - Now the record carries the swing's `armed_at`, `_land_player_swing` notes which swing
+     landed, and `freed` requires that they differ.
+   - `test_playerswing` 17b-k.
+2. **The `follow_swing` row's closes** (1z-ds.19).
+   - The bug: a chain moved to another target by an attack skill's approach closed X's row
+     `fired=True` on Y's swing, and a retarget left X's record open.
+   - The fix: `fired` now requires the swing to be on the followed target. A retarget and
+     the skill path close it as `superseded` (`_follow_superseded`); the skill path also
+     drops a stale `chain_moved_from`.
+   - The coverage gap: no test asserted `fired=False`. The refuter's mutants M1-M3 and M5
+     all passed.
+   - 17b-l (death on the walk), 17b-m (retarget), 17b-n (the skill-path shape).
+3. **The Esc door releases first too** (1z-ds.16). `cancel_action` sent the stop first.
+   Re-read from the decode, the two instants its comment and `test_castcancel` cited were
+   release-first by stream index: Esc 119.4255 at 1330/1331, W 114.6413 at 1278/1279.
+   CASTMECH-P9's "OPPOSITE order" is REFUTED, recorded in `studies/castmech/FINDINGS.md`.
+   `cancel_action` now follows `CANCEL_RELEASES_FIRST`, and `test_castcancel`'s order
+   check is re-aimed with a known-bad arm.
+4. **The in-flight guard covers a pickup walk** (1z-ds.17). It is the same 0x002A from the
+   same `_approach_send`, published under `state["pickup"]`. `test_kbdsync` 30r.
+5. **The router's follow marker carries the press behind it** (1z-ds.18).
+   - The bug: with a key held into a wall and the target out of reach, the tick re-sent
+     the follow after each still report and re-stamped the marker. A click into that live
+     keyboard was then answered for about 90 % of every report cycle.
+   - The fix: the marker is `(t, target, input_at)`, where `input_at` is the attack press
+     for an attack follow. The router compares `input_at`.
+   - `test_router` 1d-i and 1d-j. The press stamp's one-reader lock now names its two
+     readers.
+6. **Test and scorer repairs:**
+   - `test_kbdsync` 30d could no longer fail for its stated reason under 1z-ds.14, so it is
+     re-aimed at a mid-walk report, with a 0 u twin.
+   - `studies/movecode/review/seamscore.py` now skips pass-through router rows, which 1z-ds.18
+     made common.
+
+**Left open, recorded (low or zero owner exposure):**
+- **SLICE-F25's sync-model stop on 0x0028/0x002D is unreachable from the production `send()`**
+  (PRE-EXISTING). Its filter admits only 0x0029/0x002A/0x002C, and `test_effects` 6a calls
+  the hook by hand. It matters mainly for the ranged approach halt.
+- **Esc after a LANDED swing, then a re-press, resets the clock** (PRE-EXISTING, about zero
+  exposure). Retail's Esc-after-landing cell has no measured row.
+- **A click or follow leg in flight at a death survives an in-place rise** (PRE-EXISTING).
+  The first press after the rise re-pins the body at the stale leg's end: 1,262 u in a
+  rig, 1 harmless corpus row.
+- **A skill press cancels the windup, then a move, then a re-press resumes the cancelled
+  swing's clock.** The retail side is RECONSTRUCTION.
+- **Not established:** a death mid-follow sends nothing to end the follow. Retail's death
+  batch has the same shape, and there were 0 corpus exposures.
