@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=267)   # MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=274)   # MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1721,6 +1721,14 @@ def section_press_supersedes_and_move_ends():
           and "--press-repins-own-follow" in args and "if a.press_repins_own_follow:" in src,
           "10o. the flag ships on, the spared press's reckon ('click-walk') is a quiet refusal, "
           "and the revert arm is wired")
+    st = own_follow()
+    st["approach"] = None
+    st["follow_order_at"] = (st["follow_order_at"][0], 777, st["follow_order_at"][2])  # a pickup's
+    pins_sp, rows_sp = repress(st, target=777)
+    check(pins_sp == [] and [r["kind"] for r in rows_sp] == ["press_spared"],
+          "10p. a same-ITEM pickup re-press is spared too (the banner corrected, 1z-ds.33): no "
+          "0x002C onto a pile behind the disc that halted the walk (RANGERLOOP-F10)",
+          f"pins {pins_sp}")
 
 
 class _Rec:
@@ -2989,6 +2997,19 @@ def section_dead_press():
     check(authsrv.DEATH_STOPS_WINDUP is True and "--death-keeps-windup" in args_src
           and "if a.death_keeps_windup:" in src,
           "19j. the flag ships on and its revert arm is wired")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+    st = _state()
+    st.update({"player_health": 0.0, "player_dead": False})
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)
+    sent.clear()
+    authsrv.cancel_action(send, st, 0)                    # Esc: its [3] goes out
+    authsrv.kill_player(send, st, 0, "test")              # a bleed-out before the tick
+    stops = [v for op, v, _l in sent if op == INT and v == STOP]
+    check(len(stops) == 1,
+          "19k. MOVECODE-1z-ds.33: Esc in the windup, then a death before the tick: ONE [3] -- the "
+          "death sees the drop already requested", f"stops {stops}")
 
 
 def section_windup_holds_approach():
@@ -3184,6 +3205,37 @@ def section_attack_start_holds():
     check(sh21j[:1] == ["8:0"] and st.get("action_hold") == 0,
           "21j. an interact walk to a far NPC releases a start's hold first (retail: 0 of 458 own "
           "0x002A arrive held) -- on the live door, not --interact-walk's", f"{sh21j}")
+    # 21l-n. MOVECODE-1z-ds.33 (the batch-3 review).
+    st = _state()
+    st["agents"][10]["pos"] = (100.0, 0.0)
+    st.update({"pos": (0.0, 0.0), "client_pos": (0.0, 0.0), "plane": 0,
+               "last_report": (0.0, 0.0, True, time.time() - 2.0),
+               "action_hold": 1, "pickup_release_at": time.time() + 0.3})   # a pickup's timer
+    sent.clear()
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)                       # the start takes the hold over
+    st["pickup_release_at_seen"] = st.get("pickup_release_at")
+    authsrv.pickup_tick(send, st, 0, now=time.time() + 1.0)
+    check(st["pickup_release_at_seen"] is None and st.get("action_hold") == 1
+          and st.get("press_hold") is True and "8:0" not in shape(sent),
+          "21l. a start inside a pickup's 1.0 s hold takes it over: the pickup's timer no longer "
+          "releases the start's hold mid-windup", f"{shape(sent)}")
+    sent.clear()
+    _ir = authsrv.interrupt_player(send, st, 0, 230, 99, mode="action")
+    check(_ir == "swing" and st.get("action_hold") == 1 and st.get("press_hold") is True,
+          "21m. an interrupt of the held chain re-takes the hold WITH the start's mark, so the "
+          "re-approach releases it (before 1z-ds.33 a 0x002A went out held)",
+          f"{shape(sent)} hold {st.get('action_hold')} mark {st.get('press_hold')}")
+    st = _state()
+    st["agents"][10]["pos"] = (600.0, 0.0)
+    st.update({"pos": (0.0, 0.0), "client_pos": (0.0, 0.0), "plane": 0, "action_hold": 1})
+    sent.clear()
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)                       # a follow, a cast's unmarked hold up
+    sh21n = shape(sent)
+    check(sh21n[:2] == ["8:0", DEST],
+          "21n. a follow after a COMPLETED cast (its hold up, unmarked) releases it first -- "
+          "retail sends 0 of 458 own 0x002A held", f"{sh21n}")
     src = open(authsrv.__file__, encoding="utf-8").read()
     args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
                 encoding="utf-8").read()
@@ -3333,6 +3385,30 @@ def section_placement_frame():
     check(leg_r is not None and abs(leg_r["p0"][0] - 320.0) < 1.0,
           "20j. a RE-PATH keeps the frame (the mirror models the avoidance halts our leg does "
           "not)", f"{leg_r and leg_r['p0']}")
+    check(row.get("dist_frame") == 320.0 and row.get("frame_vs_model") == 64.0,
+          "20k. MOVECODE-1z-ds.33: the row's 1z-dm columns still measure the FRAME (320 u, and 64 "
+          "u from the model), beside the leg's own origin",
+          f"dist_frame {row.get('dist_frame')} frame_vs_model {row.get('frame_vs_model')}")
+    sent20, rec20 = [], _Rw()
+    send20 = lambda op, vals, label="", quiet=False: sent20.append((op, vals, label))  # noqa: E731
+    now20 = time.time()
+    st20 = _state()
+    at20 = now20 - 0.5
+    st20.update({"plane": 0, "client_pos": (400.0, 0.0), "client_pos_at": at20,
+                 "pos": (256.0, 0.0), "client_heading": (-766.0, 0.0, 1, at20),
+                 "last_report": (400.0, 0.0, False, at20)})
+    _sv20 = authsrv._npc_mirror_pos
+    authsrv._npc_mirror_pos = lambda s, n: (320.0, 0.0)
+    try:
+        authsrv._approach_send(send20, st20, 0, 500, {"pos": (0.0, 0.0)}, now20, rec=rec20,
+                               stop_at=0.0, into="pickup")
+    finally:
+        authsrv._npc_mirror_pos = _sv20
+    leg20 = st20.get("click_leg")
+    check(leg20 is not None and abs(leg20["p0"][0] - 320.0) < 1.0,
+          "20l. a PICKUP walk keeps the frame-started leg: its arrival 0x0028 hands the body to the "
+          "mirror, so a body-started eta would serve it short (1z-ds.33, the review)",
+          f"p0 {leg20 and leg20['p0']}")
 
 
 def section_press_stop_hold():

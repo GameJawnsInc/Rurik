@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.33 -- 2026-10-03 -- **The batch-3 review's fixes: the landing no longer releases a cast's hold (the overdue-window press, the review's one medium); an instant no longer blinds the stop doors (stance then attack skill now stops the windup); one [3] per windup; the router's [1.0] re-arms the edge to family 1; the live-key answer is ground clicks only; B2a is attack follows only; our walks release an unmarked hold; the pickup timer and the interrupt's re-take keep a start's hold.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.33 (and what it left open).
+- **Tests:** `test_castcancel` 8f-i, 54 -> 58; `test_playerswing` +7, 267 -> 274; `test_router` 1f-g,
+  148 -> 149.
+
 ### MOVECODE-1z-ds.32 -- 2026-10-02 -- **A click straight into a live key walk is answered (`LIVE_KEY_CLICK_ANSWERED`, `--live-key-click-drop` reverts), guarded on the key's next report being re-led at once. Retail 34 of 34; R1-B1's warp needed a refused re-lead, never refused at this build (132 of 132). A run experiment: exposure manufactured, refuted by a 299 u displacement within 2.5 s.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.32.

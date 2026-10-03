@@ -1130,7 +1130,7 @@ def interact_route(send, state, conn_id, agent_id, spot):
     _click_leg_arm(state, dest, now, silent=prev is not None,
                    start=state.pop("kbd_kill_point", None) if _ik else None)
     routed = router_answer_click(send, state, conn_id, None, dest, dest_plane,
-                                 cur_plane, dest_plane, cur_plane)
+                                 cur_plane, dest_plane, cur_plane, door="interact")
     if routed:
         print(f"[c{conn_id}] INTERACT-WALK: routed the player to "
               f"({dest[0]:.0f}, {dest[1]:.0f}), {interact_stop():.0f} u short of "
@@ -1227,7 +1227,9 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             # out is the destination the player asked for by clicking.
             # MOVECODE-1z-ds.31: our walk to the NPC goes out with the hold released (retail: 0
             # of 458 own 0x002A arrive with the hold up) -- both doors, the router and --interact-walk.
-            if ATTACK_START_HOLDS and (state.get("approach_hold") or state.get("press_hold")):
+            if ATTACK_START_HOLDS and (state.get("approach_hold") or state.get("press_hold")
+                                       or (state.get("action_hold", 0) == 1
+                                           and not _cast_holds(state, time.time()))):
                 action_hold(send, state, 0, f"the interact walk to agent {agent_id} "
                             f"[MOVECODE-1z-ds.31]")
             if INTERACT_WALK:
@@ -11011,7 +11013,7 @@ def router_chain_tick(send, state, conn_id, rec, now=None):
 
 
 def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
-                        cur_plane, plane_first, plane_second):
+                        cur_plane, plane_first, plane_second, door="click"):
     """Answer one click the way retail does: route, grant the first leg.
 
     Returns True when the click was handled here (fired, dropped or
@@ -11072,9 +11074,12 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
                   and float(_fol[2] if len(_fol) > 2 else _fol[0]) > kbd_at):
                 _ended = ("follow", float(_fol[0]))
         # 1z-ds.32: a live key walk's click is answered when the key's next report will be
-        # re-led at once -- the term whose absence was R1-B1's warp.
-        _relead_ok = (ZERO_LEAD and KBD_GRANT_FLOOR <= 0.0
-                      and (GRANT_DURING_HOLD or state.get("action_hold", 0) == 0))
+        # re-led at once -- the term whose absence was R1-B1's warp. 1z-ds.33 (the review):
+        # GROUND CLICKS ONLY -- interact_route's NPC walk under a live latch keeps the drop (on an
+        # NPC click the client issues no movement order of its own, 0 of 46, so the re-assert
+        # premise is unmeasured there); and no hold term -- the click arm's cancel_on_move has
+        # released any hold before this line runs, so it could never be false.
+        _relead_ok = ZERO_LEAD and KBD_GRANT_FLOOR <= 0.0 and door == "click"
         if _ended is not None:
             if rec is not None:
                 rec.event("router_route", verdict="kbd-answered",
@@ -11222,8 +11227,12 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             _router_rearm_leg(state, (float(stop[0]), float(stop[1])), now)
             pf = _router_plane(pm, stop, cur_plane)
             ps, _m = a2_matched_field4(pf, cur_plane)
-            if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:
+            if D1_LEAD:
                 state["a2_family_sent"] = None
+            elif ROUTER_REARMS_FAMILY_EDGE:
+                # 1z-ds.33: the [1.0] below IS a family-1 (forward) speed truth -- a forward key
+                # walk after it would only re-send the same bytes (the review, lane 3).
+                state["a2_family_sent"] = 1
             if D1_LEAD:
                 state["a2_click_answered_at"] = now
             send(GAME_SMSG_AGENT_UPDATE_SPEED,
@@ -11274,8 +11283,10 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     legs = [legs[i] for i in _keep]
     leg_planes = [leg_planes[i] for i in _keep]
     state["grant_pending"] = None
-    if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:
+    if D1_LEAD:
         state["a2_family_sent"] = None
+    elif ROUTER_REARMS_FAMILY_EDGE:
+        state["a2_family_sent"] = 1      # 1z-ds.33: the router's [1.0] is family 1's truth
     if D1_LEAD:
         state["a2_click_answered_at"] = now
     if len(legs) <= 1:
@@ -19727,6 +19738,7 @@ def action_hold(send, state, value, why):
     if not value:
         state.pop("approach_hold", None)
         state.pop("press_hold", None)          # MOVECODE-1z-ds.6: the press stop's, too
+        state.pop("pickup_release_at", None)   # MOVECODE-1z-ds.33: released; the timer is moot
     if state.get("action_hold", 0) == value:
         return
     state["action_hold"] = value
@@ -20315,6 +20327,7 @@ def cancel_on_move(send, state, conn_id, moved=None):
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
+    chain_live = chain_live or _windup_open(state, now)      # 1z-ds.33: an instant's windup
     # ANIMREF-R7a: MOVEMENT DOES NOT CLOSE THE CHAIN. The old rule -- every
     # movement message sends [3, agent, 0] and forgets the target -- came
     # from the wiki's sentence ("moving cancels auto-attacking") plus a
@@ -20403,7 +20416,8 @@ def cancel_on_move(send, state, conn_id, moved=None):
     # walk-start in the windup after a press stop, which carries the hold.
     if CANCEL_RELEASES_FIRST:
         action_hold(send, state, 0, "the player moves")
-    if chain_live and not still and (pre_landing or not MOVE_KEEPS_CHAIN):
+    if (chain_live and not still and (pre_landing or not MOVE_KEEPS_CHAIN)
+            and not state.get("player_swing_cancel")):        # 1z-ds.33: one [3] per windup
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: the player moves"
@@ -20788,6 +20802,7 @@ def cancel_action(send, state, conn_id):
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
+    chain_live = chain_live or _windup_open(state, now)      # 1z-ds.33: an instant's windup
     dropped = _mark_cancelled(state, "cancel action", now,
                               spare_mid_attack=False)
     # SAME PAIR, SAME ORDER as the movement door, and measured at THIS one --
@@ -20801,8 +20816,9 @@ def cancel_action(send, state, conn_id):
     if chain_live:
         # 1z-ds.26: the stop goes out only for a swing still in its windup.
         _esc_sw = state.get("player_swing")
-        _esc_stops = (not ESC_STOP_NEEDS_WINDUP
-                      or (_esc_sw is not None and now < float(_esc_sw["lands_at"])))
+        _esc_stops = ((not ESC_STOP_NEEDS_WINDUP
+                       or (_esc_sw is not None and now < float(_esc_sw["lands_at"])))
+                      and not state.get("player_swing_cancel"))   # 1z-ds.33: one [3] per windup
         if CANCEL_RELEASES_FIRST:
             action_hold(send, state, 0, "cancel action")
         if _esc_stops:
@@ -21374,7 +21390,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                 _est = _kbd_kill_fresh(state, now)
             if _est is not None:
                 model, src = _est, "estimate"
-        if src == "estimate":
+        if src == "estimate" and into == "approach":   # 1z-ds.33: not a pickup's walk
             _body = (float(model[0]), float(model[1]))
         sync = _sync_position(state, now) or state.get("pos")
         if model is not None and sync is not None:
@@ -21477,13 +21493,15 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                       frame_origin=[round(_frame_origin[0], 1), round(_frame_origin[1], 1)],
                       to=[round(stop_point[0], 1), round(stop_point[1], 1)],
                       run=round(run, 1), chord_cut=cut,
-                      dist_frame=round(dist, 1),
+                      dist_frame=round(math.hypot(tx - _frame_origin[0],
+                                                  ty - _frame_origin[1]), 1),
                       dist_model=round(math.hypot(tx - mx, ty - my), 1),
                       dist_report=(None if lr is None else
                                    round(math.hypot(tx - float(lr[0]),
                                                     ty - float(lr[1])), 1)),
                       report_age=(None if lr is None else round(now - float(lr[3]), 3)),
-                      frame_vs_model=round(math.hypot(px - mx, py - my), 1),
+                      frame_vs_model=round(math.hypot(_frame_origin[0] - mx,
+                                                      _frame_origin[1] - my), 1),
                       stop=round(stop, 1),
                       **({"leg": "pickup"} if into == "pickup" else {}))
         except Exception:                              # noqa: BLE001
@@ -21492,7 +21510,11 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # (the target walked out of range mid-chain) releases it first, adjacent to
     # the 0x002A -- retail's re-approach, :55934 337.5687: [8, 31, 0] then
     # 0x002A [31, ..., 45]. A re-path is the same follow and releases nothing.
-    if not repath and (state.get("approach_hold") or state.get("press_hold")):
+    # MOVECODE-1z-ds.33 (the review): and any hold no cast still owns -- a cast's E5 pulse, an
+    # interrupt's re-take and a completed cast leave an UNMARKED hold up, and retail sends 0 of
+    # 458 own 0x002A with the hold up (39 of 39 re-approaches release first).
+    if not repath and (state.get("approach_hold") or state.get("press_hold")
+                       or (state.get("action_hold", 0) == 1 and not _cast_holds(state, now))):
         action_hold(send, state, 0, f"the re-approach to agent {target_id} "
                     f"[RANGERPRE-S16, MOVECODE-1z-ds.6]")
     # The dest is the TARGET'S OWN position, not the stop point: that is the
@@ -21728,6 +21750,25 @@ def _chain_pause_flush(state, rec, conn_id):
                                            float(ATTACK_INTERVAL))
 
 
+def _windup_open(state, now):
+    """MOVECODE-1z-ds.33: the player's swing is armed, short of its landing, and no door has
+    already asked for its drop this tick. Since 1z-ds.24 an instant leaves the windup armed while
+    its pending entry is short of its E3, which every door's `chain_live` reads as "a cast already
+    paused this chain" -- so a stance followed by an attack skill, an Esc or a move inside one tick
+    lost the [3] (the review's lane 1, OBSERVED). And `player_swing_cancel` set means a door's [3]
+    is already on the wire: a second door in the same tick sent a second one (Esc then move, a
+    move then a death -- the review, pre-existing for three of the four doors)."""
+    sw = state.get("player_swing")
+    return (sw is not None and not state.get("player_swing_cancel")
+            and now < float(sw["lands_at"]))
+
+
+def _cast_holds(state, now):
+    """MOVECODE-1z-ds.33: a begun, uncancelled cast short of its E3 owns the action hold."""
+    return any(not c.get("cancelled") and not c["e3_sent"] and c["begin_at"] <= now
+               for c in state.get("pending_casts") or ())
+
+
 def _land_player_swing(send, state, conn_id, swing):
     """The player's armed swing lands on the target it OPENED on -- hit_enemy
     re-reads it and refuses a corpse -- and the hold ends at the landing
@@ -21750,7 +21791,7 @@ def _land_player_swing(send, state, conn_id, swing):
         # keyboard move, a re-approach, a skill press or the target's death
         # (the census at APPROACH_START_HALTS).
         if (LANDING_HOLD_RELEASE and not state.get("approach_hold")
-                and not state.get("press_hold")):
+                and not state.get("press_hold") and not _cast_holds(state, time.time())):
             action_hold(send, state, 0,
                         "the shot is away -- movement is legal now")
         return
@@ -21767,7 +21808,10 @@ def _land_player_swing(send, state, conn_id, swing):
                                          "at": second_strike_due(state, time.time())}
     # MOVECODE-1z-ds.6: NOT the press stop's hold -- retail ends it at the next
     # input, after the close on 35 of 36 (the flag's block).
-    if LANDING_HOLD_RELEASE and not state.get("press_hold"):
+    # MOVECODE-1z-ds.33: nor a CAST's -- a skill pressed between `lands_at` and the landing tick
+    # (1z-ds.24 lets that swing land) popped the start's mark and raised the cast's own hold.
+    if (LANDING_HOLD_RELEASE and not state.get("press_hold")
+            and not _cast_holds(state, time.time())):
         action_hold(send, state, 0,
                     "the swing landed -- movement is legal now")
 
@@ -22184,6 +22228,7 @@ def attack_tick(send, state, conn_id, rec=None):
         action_hold(send, state, 1, f"the swing at {target_id} holds to the next input "
                     f"[MOVECODE-1z-ds.31]")
         state["press_hold"] = True
+        state.pop("pickup_release_at", None)   # 1z-ds.33: the start owns the hold now
     elif SWING_HOLDS_WALK_GATE:
         action_hold(send, state, 1, f"the swing at {target_id}")
     _chain_pause_flush(state, rec, conn_id)
@@ -23630,6 +23675,7 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         return "cast"
     if _player_chain_running(state) and mode in ("action", "attacking"):
         held = state.get("action_hold", 0) == 1
+        _marked = state.get("press_hold")       # 1z-ds.33: the re-take keeps the start's mark
         if held:
             action_hold(send, state, 0, f"skill {by_skill} interrupts the attack")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -23640,6 +23686,8 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
              f"interrupted: the stagger (skill {by_skill})")
         if held:
             action_hold(send, state, 1, "the chain re-takes the hold after the interrupt")
+            if _marked:
+                state["press_hold"] = True
         if state.get("player_swing"):
             state["player_swing_cancel"] = "interrupted"
         print(f"[c{conn_id}] INTERRUPTED: agent {by_agent}'s skill {by_skill} "
@@ -25838,11 +25886,13 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
+    chain_live = chain_live or _windup_open(state, now)      # 1z-ds.33: an instant's windup
     # 1z-ds.24: only a swing still in its windup is stopped, and an instant stops none.
     _sk_sw = state.get("player_swing")
-    _sk_stops = (not SKILL_STOP_NEEDS_WINDUP
-                 or (_sk_sw is not None and now < float(_sk_sw["lands_at"])
-                     and (is_attack or not _is_instant_skill(skill_id))))
+    _sk_stops = ((not SKILL_STOP_NEEDS_WINDUP
+                  or (_sk_sw is not None and now < float(_sk_sw["lands_at"])
+                      and (is_attack or not _is_instant_skill(skill_id))))
+                 and not state.get("player_swing_cancel"))     # 1z-ds.33: one [3] per windup
     if chain_live and _sk_stops:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
@@ -28276,7 +28326,8 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # MOVECODE-1z-ds.27: the corpse's swing in flight is stopped first, right behind the
     # status -- retail's index 1 on 27 of 30 open-windup deaths. (Its place against
     # DAGGERS-F18's chain zeros on one death is unmeasured: n = 0.)
-    if DEATH_STOPS_WINDUP and state.get("player_swing") is not None:
+    if (DEATH_STOPS_WINDUP and state.get("player_swing") is not None
+            and not state.get("player_swing_cancel")):        # 1z-ds.33: a door already stopped it
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: the player died in the windup [MOVECODE-1z-ds.27]")
@@ -47188,6 +47239,11 @@ def main():
     elif a.move_keeps_chain:
         print("[map] --move-keeps-chain: no-op, LAW A is the default again "
               "since ANIMREF-RE §31 shipped its decoded complement.",
+              flush=True)
+    if (a.no_kbd_lead or a.zero_lead is False) and not a.no_attack_start_hold:
+        print("[map] WARNING (MOVECODE-1z-ds.33): --no-kbd-lead / --no-zero-lead with the hold at "
+              "every start answers a held report with a zero or no lead -- ANIMREF-RE 35's freeze. "
+              "Pair it with --no-attack-start-hold unless that is what the run measures.",
               flush=True)
     if a.no_attack_start_hold:
         global ATTACK_START_HOLDS

@@ -22059,3 +22059,74 @@ integrator also kept walking `state["pos"]` down a phantom key leg (201011 117.2
 - REFUTED IF any displacement of 299 u or more follows a live-key answer within 2.5 s.
 
 **Tests:** `test_router` §1f, 142 -> 148; `test_kbdsync` §31, 270 -> 273.
+
+
+### 1z-ds.33 The batch-3 review's fixes to 1z-ds.23-.32, and what it left open
+
+**The review:** four lanes, each with a refuter that re-ran every finding through the real code.
+One lane drove the owner's play patterns end to end with the shipped defaults. The refuters
+confirmed one medium and 19 low findings and refuted one. About half are pre-existing, and the
+others are compositions of this batch's changes with older code. Every fix below reddens its own
+check when removed (11 mutations).
+
+**Fixed:**
+1. **A skill pressed in the overdue window kept the swing armed, and the landing then released the
+   CAST's hold mid-activation.** The window is between `lands_at` and the landing tick, about
+   1-35 ms. 1z-ds.24 sends no [3] there. The press's [8, 0] popped the start's mark, so the landing
+   released the hold while the spell or strike was short of its E5. This was the medium finding.
+   `_land_player_swing` now releases nothing while a begun cast short of its E3 owns the hold.
+   (castcancel 8i.)
+2. **An instant blinded the stop doors.** Its pending entry (short of E3) reads as "a cast paused
+   this chain" at all three doors, while 1z-ds.24 left the windup armed. A stance followed by an
+   attack skill in the same tick sent no [3], and the auto swing landed inside the strike. That
+   order matches the owner's bar (317 then 320). A stance followed by Esc sent nothing at all. The
+   doors now also read `_windup_open` (armed, pre-landing, no drop yet requested). (castcancel
+   8f, 8g.)
+3. **One [3] per windup.** Esc then a move, or a door then a death before the tick, sent a second
+   [3]. `player_swing_cancel` set means a door's [3] is already on the wire, so the move door, Esc,
+   the skill door and the death batch now check it. Three of the four doors were pre-existing.
+   (castcancel 8h, playerswing 19k.)
+4. **K-A sent a byte-identical 0x002B on the next forward key report.** The router's [1.0] already
+   carries FACING_FORWARD, so the edge is re-armed to family 1, not None. A strafe or backpedal
+   still re-sends its rate. The reset-line count stays 7. (router 1e re-aimed.)
+5. **K-B also answered the INTERACT door's NPC walk under a live key.** That premise is unmeasured:
+   on an NPC click the client issues no movement order of its own (0 of 46). `router_answer_click`
+   takes a `door`, and only ground clicks are answered. The hold term is dropped, because the click
+   arm's cancel_on_move has released any hold before the router reads it, so the term could never
+   be false. (router 1f-f, 1f-g.)
+6. **B2a also moved PICKUP walks.** A pickup's arrival 0x0028 hands the body to the mirror, so a
+   body-started eta served it up to the mirror's lag short. Pickups keep the frame-started leg. The
+   approach row's `dist_frame` and `frame_vs_model` measure the frame again. (playerswing 20l, 20k.)
+7. **Our own walks went out with an unmarked hold up.** That happened after a cast's E5 pulse, a
+   completed cast, or an interrupt's re-take. Retail sends 0 of 458 own 0x002A held. `_approach_send`
+   (on a new follow) and the interact walk now release any hold that no cast still owns.
+   (playerswing 21n.)
+8. **The pickup's 1.0 s timer released a start's hold mid-windup.** A start now takes the timer
+   over, and any release ends it. (playerswing 21l.)
+9. **An interrupt's re-take dropped the start's mark,** so the re-approach went out held. The mark
+   is now kept. (playerswing 21m.)
+10. **A diagnostic-arm warning.** --no-kbd-lead or --no-zero-lead together with the hold at every
+    start rebuilds ANIMREF-RE 35's held gate + zero lead. main() now says so.
+11. **The N3 banner is corrected:** a same-ITEM pickup re-press is spared too. That is the better
+    arm, because re-pinning would place the body on a pile behind the disc that halted it
+    (RANGERLOOP-F10). (playerswing 10p.)
+
+**Left open, recorded:**
+- A click the router REFUSES under a held start keeps its latch and leg. 0 of 256 refusals are on
+  the owner tapes.
+- An interact walk mid-fight keeps the attack order, which then re-follows the foe and the
+  interact is never served. PRE-EXISTING.
+- A pickup pressed mid-windup sends no [3]. PRE-EXISTING; retail n = 0.
+- Esc after a landing then a re-press swings at once (the critic's L2, MEASURE MORE).
+- B2a: an eta arrival while the frame is still outside reach sends a second 0x002A to a standing
+  target. There is no timing loss against the revert arm.
+- --e3-release: queued_next counts completed entries. The flag is off by default.
+- A recv/tick race at the start's [4] can leave a movement input behind a raised gate. PRE-EXISTING
+  class, the same as 1z-ds.21's landed race.
+- Test gaps:
+  - 21j cannot see the interact release's order against the walk (no mesh in its rig).
+  - No test drives a held report into a fence shut by a keep-site 0x002C (AGTRACK_REPIN ships off).
+- Refuted: a knockdown mid-chain stranding the hold (base behaves the same).
+
+**Tests:** `test_castcancel` 8f-i, 54 -> 58; `test_playerswing` 19k, 21l-n, 20k-l and 10p, 267 ->
+274; `test_router` re-aims and 1f-g, 148 -> 149.

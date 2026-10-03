@@ -44,7 +44,7 @@ import time as _time  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=54)   # MOVECODE-1z-ds.26 +4 (6b: Esc after a landing sends no stop); MOVECODE-1z-ds.24 +5 (section 8: a skill press stops only a windup, never an instant's); MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=58)   # MOVECODE-1z-ds.33 +4 (8f-i: the doors after an instant, the overdue press, one [3] per windup); MOVECODE-1z-ds.26 +4 (6b: Esc after a landing sends no stop); MOVECODE-1z-ds.24 +5 (section 8: a skill press stops only a windup, never an instant's); MOVECODE-1z-ds.21 +1 (the Esc door's known-bad stop-first arm; its order re-read release-first); 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -908,6 +908,72 @@ def section_skill_stop_windup():
           and src.count("    if chain_live and _sk_stops:\n") == 1
           and "--skill-stop-any-chain" in args and "if a.skill_stop_any_chain:" in src,
           "8e. the flag ships on, gates the one stop site, and its revert arm is wired")
+
+    # 8f-i. MOVECODE-1z-ds.33 (the batch-3 review).
+    def armed(target=10):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+        agent = {"name": "t", "dead": False, "last_hit": 0.0,
+                 "max_health": 100.0, "health": 100.0, "pos": (0.0, 0.0)}
+        state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
+        authsrv.begin_attack(send, state, 10, 0)
+        authsrv.attack_tick(send, state, 0)
+        sent.clear()
+        return state, send, sent, agent
+
+    HOLD = authsrv.agents.GV_DISABLED
+    saved = (authsrv.skill_timing, authsrv._is_instant_skill, authsrv._is_attack_skill)
+    try:
+        # 8f: a stance, then an ATTACK SKILL in the same tick, mid-windup (the owner's bar door)
+        authsrv._is_attack_skill = lambda sid: sid == 394
+        authsrv._is_instant_skill = lambda sid: sid == 42
+        authsrv.skill_timing = lambda sid: ((0.0, 0.0, 8.0) if sid == 42 else (0.5, 0.0, 8.0))
+        st, send, sent, agent = armed()
+        _press(authsrv, send, st, skill=42)
+        assert st.get("pending_casts"), "the instant must be accepted for 8f to mean anything"
+        _press(authsrv, send, st, skill=394, target=10)
+        stops = [v for op, v, _l in sent if op == 0x009F and v[0] == STOP]
+        authsrv.attack_tick(send, st, 0)
+        check(stops == [[STOP, PLAYER, 0]] and st.get("player_swing") is None
+              and agent["health"] == 100.0,
+              "8f. a stance then an attack skill inside one tick, mid-windup: the attack skill "
+              "still stops the swing (retail 26 of 26) -- the instant's pending entry no longer "
+              "blinds the door -- and the auto swing never lands inside the strike",
+              f"stops={stops} health={agent['health']}")
+        # 8g: a stance, then Esc in the same tick: release + [3], the swing dropped
+        st, send, sent, agent = armed()
+        _press(authsrv, send, st, skill=42)
+        authsrv.cancel_action(send, st, 0)
+        seq = [("8:%d" % v[2]) if v[0] == HOLD else "3" for op, v, _l in sent
+               if op == 0x009F and v[0] in (HOLD, STOP)]
+        check(seq == ["8:0", "3"] and st.get("player_swing_cancel") == "cancel action",
+              "8g. a stance then Esc mid-windup: [8, 0] then [3] (retail's mid-windup Esc), "
+              "not silence", f"{seq}")
+        # 8h: Esc then a move in the same tick: ONE [3]
+        st, send, sent, agent = armed()
+        authsrv.cancel_action(send, st, 0)
+        authsrv.cancel_on_move(send, st, 0, moved=40.0)
+        stops = [v for op, v, _l in sent if op == 0x009F and v[0] == STOP]
+        check(len(stops) == 1,
+              "8h. Esc then a move inside one windup's tick: one [3] -- the second door sees the "
+              "drop already requested", f"{stops}")
+        # 8i: the OVERDUE window: lands_at passed, the landing tick not yet run, a spell pressed
+        authsrv._is_instant_skill = lambda sid: False
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+        st, send, sent, agent = armed()
+        st["player_swing"]["lands_at"] = _t.time() - 0.005
+        _press(authsrv, send, st)
+        authsrv.attack_tick(send, st, 0)                   # the swing lands
+        rel = [l for op, v, l in sent if op == 0x009F and v[0] == HOLD and v[2] == 0
+               and "swing landed" in l]
+        check(rel == [] and st.get("action_hold") == 1 and agent["health"] < 100.0,
+              "8i. a spell pressed between lands_at and the landing tick: the swing lands, and the "
+              "landing releases NOTHING -- the hold is the cast's until its E5 (before 1z-ds.33 "
+              "the landing opened the walk gate mid-activation)",
+              f"landing releases {rel} hold {st.get('action_hold')}")
+    finally:
+        (authsrv.skill_timing, authsrv._is_instant_skill, authsrv._is_attack_skill) = saved
 
 
 def main():

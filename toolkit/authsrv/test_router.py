@@ -67,7 +67,8 @@ import authsrv                                                 # noqa: E402
 # +6 MOVECODE-1z-ds.23 (section 1e: the router's [1.0] re-arms the family edge and names
 # its leg's speed). 142.
 # +6 MOVECODE-1z-ds.32 (section 1f: a click into a live key walk is answered). 148.
-LEDGER = checks.Ledger("router wiring", floor=148)
+# +1 MOVECODE-1z-ds.33 (1f-g: the interact door keeps the drop). 149.
+LEDGER = checks.Ledger("router wiring", floor=149)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -462,10 +463,11 @@ def main():
 
     st1ea = walked_strafe(base_state())
     h1ea, s1ea, _r = answer(st1ea, (50.0, 50.0))
-    check("1e-a. the verbatim answer after a strafe re-arms the family edge and walks the "
-          "click at 288, the speed its own 0x002B declared",
+    check("1e-a. the verbatim answer after a strafe re-arms the family edge -- to family 1, the "
+          "forward truth its own 0x002B carries (1z-ds.33: a forward key walk after it re-sends "
+          "nothing) -- and walks the click at 288, the speed that 0x002B declared",
           h1ea and [op for op, _p, _l in s1ea] == [SPEED_OP, MOVE_OP]
-          and st1ea["a2_family_sent"] is None and st1ea["dest_speed"] == 288.0)
+          and st1ea["a2_family_sent"] == 1 and st1ea["dest_speed"] == 288.0)
     st1eb = walked_strafe(base_state())
     answer(st1eb, (300.0, 0.0))                  # across the stub wall: a 3-leg chain
     _first = (st1eb.get("a2_family_sent"), st1eb.get("dest_speed"))
@@ -473,14 +475,14 @@ def main():
     authsrv.router_chain_tick(FakeSend(), st1eb, 1, FakeRec(), now=time.time() + 999.0)
     check("1e-b. a routed chain: its first leg re-arms and names 288, and each chain leg "
           "re-names it (the first leg's 0x002B persists across the chain)",
-          st1eb.get("router_chain") is not None and _first == (None, 288.0)
+          st1eb.get("router_chain") is not None and _first == (1, 288.0)
           and st1eb["dest_speed"] == 288.0)
     st1ec = walked_strafe(base_state(StubPM(route_result=None)))
     h1ec, s1ec, r1ec = answer(st1ec, (300.0, 0.0))
     check("1e-c. the clip-fallback answer does the same",
           h1ec and any(r["kind"] == "router_route" and r["verdict"] == "clip-fallback"
                        for r in r1ec)
-          and st1ec["a2_family_sent"] is None and st1ec["dest_speed"] == 288.0)
+          and st1ec["a2_family_sent"] == 1 and st1ec["dest_speed"] == 288.0)
     st1ed = walked_strafe(base_state())
     st1ed["declared_speed_base"] = 331.2         # a 15 % speed boost's declared base
     answer(st1ed, (50.0, 50.0))
@@ -500,7 +502,7 @@ def main():
     check("1e-f. the reset lines are not multiplied (test_d1lead's seven-site lock), and "
           "--router-keeps-family-edge is wired",
           _src.count('state["a2_family_sent"] = None') == 7
-          and _src.count("if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:") == 2
+          and _src.count("elif ROUTER_REARMS_FAMILY_EDGE:") == 2
           and "--router-keeps-family-edge" in _args
           and "if a.router_keeps_family_edge:" in _src)
 
@@ -532,7 +534,7 @@ def main():
           h1fa and [op for op, _p, _l in s1fa] == [SPEED_OP, MOVE_OP]
           and s1fa[1][1][1] == [50.0, 50.0]
           and v1fa == [("kbd-answered", "live-key"), ("verbatim", None)]
-          and st1fa["dest"] == (50.0, 50.0) and st1fa["a2_family_sent"] is None)
+          and st1fa["dest"] == (50.0, 50.0) and st1fa["a2_family_sent"] == 1)
     st1fb, _h, _s, v1fb = live_click(dest=(300.0, 0.0))
     check("1f-b. inside the latch a click across the wall is ROUTED like any other: a chain",
           st1fb.get("router_chain") is not None and v1fb[0] == ("kbd-answered", "live-key"))
@@ -554,11 +556,28 @@ def main():
     check("1f-e. THE GUARD: under a 0.5 s keyboard floor (R1-B1's configuration: the re-lead "
           "refused heading-rate) or with zero-lead off, the drop comes back by itself",
           s1fe == [] and v1fe == [("kbd-drop", None)] and s1fe2 == [] and v1fe2 == [("kbd-drop", None)])
-    check("1f-f. the flag ships on, its guard is spelled without test_d1lead's R11 literal, and "
-          "--live-key-click-drop is wired",
+    check("1f-f. the flag ships on, its guard names the door and no hold term (1z-ds.33: the "
+          "click arm released any hold before the router reads it), and --live-key-click-drop is "
+          "wired",
           authsrv.LIVE_KEY_CLICK_ANSWERED is True
-          and _src.count('state.get("action_hold", 0) == 0') >= 1
+          and _src.count('_relead_ok = ZERO_LEAD and KBD_GRANT_FLOOR <= 0.0 and door == "click"') == 1
+          and _src.count('door="interact")') == 1
           and "--live-key-click-drop" in _args and "if a.live_key_click_drop:" in _src)
+    st1fg = base_state()
+    st1fg["kbd_moving_at"] = authsrv.time.time() - 0.4
+    _sv = (authsrv.ZERO_LEAD, authsrv.KBD_GRANT_FLOOR)
+    authsrv.ZERO_LEAD, authsrv.KBD_GRANT_FLOOR = True, 0.0
+    try:
+        _sg, _rg = FakeSend(), FakeRec()
+        h1fg = authsrv.router_answer_click(_sg, st1fg, 1, _rg, (50.0, 50.0), 3, 3, 3, 3,
+                                           door="interact")
+    finally:
+        authsrv.ZERO_LEAD, authsrv.KBD_GRANT_FLOOR = _sv
+    check("1f-g. MOVECODE-1z-ds.33: the INTERACT door (an NPC walk under a live key latch) keeps "
+          "the drop -- the re-assert premise is a ground click's; on an NPC click the client "
+          "issues no movement order of its own (0 of 46)",
+          h1fg and _sg.sent == []
+          and [x["verdict"] for x in _rg.rows if x["kind"] == "router_route"] == ["kbd-drop"])
 
     # refused: origin off-mesh (the P-17 wall-press door, CLOSED).
     st = base_state(pos=(150.0, 0.0))
