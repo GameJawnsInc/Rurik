@@ -21615,3 +21615,69 @@ Each fix below is one the refuter reproduced.
   swing's clock.** The retail side is RECONSTRUCTION.
 - **Not established:** a death mid-follow sends nothing to end the follow. Retail's death
   batch has the same shape, and there were 0 corpus exposures.
+
+### 1z-ds.22 On the client: `20261002T200929` CONFIRMS 1z-ds.13-.21 -- "feels very much like stock now"
+
+The owner drove Q/W/E and quarterstepping, walk-in presses, clicks after presses, and stand
+-> click near the foe -> attack. The harness verdict "FAIL (client died during the hold)" is
+its retraction for an owner close: exit code 0 with no error dialog, which the registration
+counts as a pass.
+
+**The owner's eye** (DSBATCH-run-registered, asked literally; every prediction held):
+
+| Question | Answer |
+|---|---|
+| A tap during the windup: does the swing stop, and does the re-press swing at once? | *"yes and yes"* |
+| Walking away after a swing: pulled back toward the enemy? | *"no"* |
+| Stand, click near the enemy, attack: any warp or snap? | *"no"* |
+| Compared with the last run? | *"feels very much like stock now"* |
+
+**The wire** (`score_dsbatch.py`):
+- **DS-Q0:** clean. **DS-Q4:** 0 `Pending skill`.
+- **DS-Q1, exposure:** 13 windup cancels followed by a re-press, 14 follow-answered presses,
+  8 clicks within 3 s of a press. Every floor was met.
+- **DS-Q2a, 1z-ds.13:** 0 of 12 re-presses after a windup cancel were refused by the
+  interval. 9 swung within 0.1 s. The other 3 (14.88, 15.80, 36.85) were walk-ins answered
+  by a follow; each swung on arrival (+0.31, +0.31, +0.57 s), as retail does and as 17b-h
+  pins.
+  - The registered "within 0.1 s" clause, as written, missed those 3: it was framed for
+    in-reach re-presses. Recorded as written.
+- **DS-Q2b, 1z-ds.16:** 0 of 13 cancels sent the release after the stop.
+- **DS-Q2c, 1z-ds.14:** 26 walk-starts (9 after a 0x0047, 17 after our park); 0 followed by
+  a follow before the next press.
+- **DS-Q2d, 1z-ds.17:** 0 fence-shut zero leads. The QWE run had 12.
+- **DS-Q2e, 1z-ds.18:** 11 clicks answered verbatim, 1 kbd-drop.
+  - The drop (116.883) came 0.90 s into a key walk that began after the previous answered
+    click. No order of ours was newer than it, so it is R1-B1's class and dropped by design.
+  - Retail answers that class (C1, 16 of 16), so it stays OPEN.
+- **DS-Q2f, 1z-ds.19:** 14 follow-answered presses, 14 `follow_swing` rows.
+- **DS-Q2g, 1z-ds.20:** the check as registered (consecutive placements more than 50 u
+  apart with no report between) flagged 5.
+  - Every one has the body walking between them: 1-3 answered ground clicks (68.3-75.0), or
+    our own follow plus its re-path (112.6 -> 113.4, NEW-3's arrived-follow re-pin at the
+    leg end).
+  - Every approach after a PRESS ENDS THE WALK started AT that pin, not at a stale 0x0047.
+    That is 1z-ds.20's operand doing its job.
+  - The check was too coarse; it needs "no movement order between". The owner saw no warp.
+
+**Shipped and confirmed** (the 1z-ds.13-.21 arc closes on the owner's word):
+- **The swing clock:** a swing cancelled in its windup holds no clock (.13); a swing that
+  landed during the cancel's send keeps it (.21).
+- **The walk-start:** it is a move (.14); the cancel batch releases first (.16, at both
+  doors in .21).
+- **The dead press:** refused (.15).
+- **Placements:** every modelled placement parks, with the in-flight guard (.17, pickup in
+  .21), and is the standing frame (.20).
+- **The click:** the router answers a click after our order (.18, with the press behind it
+  in .21).
+- **The follow_swing row:** added (.19, with its closes in .21).
+- **The abandoned click's dest:** the press ends it (.20).
+
+**Open, for the next step:**
+- **The FOLLOW PIN** (P1-F). Retail pins 0 of 527 presses, and our pinned follows lag on
+  the client 2-3 of 9.
+- **The hold at every attack start** (P2). Retail holds 1,647 of 1,654; ours holds 0 of 24
+  walk-ins.
+- **NEW-3, the arrived-follow re-pin.** Retail sends no 0x002C on 168 of 168.
+- **R1-B1's live-keyboard click drop** (retail answers 16 of 16).
+- **The recorded leftovers of 1z-ds.21.**

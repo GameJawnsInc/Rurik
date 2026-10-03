@@ -28,6 +28,13 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.22 -- 2026-10-02 -- **`20261002T200929` CONFIRMS 1z-ds.13-.21. The owner: "feels very much like stock now"; windup cancel + re-press "yes and yes", no pull-back, no warp on stand -> click -> attack. The wire: 0 interval-held re-presses after a cancel (9 at once, 3 walk-ins on arrival), 0 release-after-stop, 0 follows after a walk-start, 0 fence-shut zero leads (12 on the QWE run), 14 of 14 follow_swing rows.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.22.
+- **Closes:** §8's 1z-ds.13-.20 line.
+- **Still open in §8:** the follow pin (P1-F), the hold at every start (P2), NEW-3's
+  arrived-follow re-pin, R1-B1's live-keyboard click drop.
+
 ### MOVECODE-1z-ds.21 -- 2026-10-02 -- **The adversarial review's fixes to 1z-ds.13-.19: a swing that landed despite a "cancelled" record keeps its clock (a send-time race, double hit), the follow_swing row's closes, the Esc door releases first too (CASTMECH-P9's "opposite order" REFUTED by stream index), the in-flight guard covers pickups, the router's follow marker carries the press behind it (a held key into a wall re-opened R1-B1's class).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.21; `studies/castmech/FINDINGS.md` (P9).

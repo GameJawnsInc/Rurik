@@ -2311,7 +2311,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **MOVECODE-1z-ds.13-.20**: swing clock, walk-start, dead press, batch order, parks, click, frame, unrun; open -- follow pin, walk-in hold.
+* **MOVECODE-1z-ds.22** (CONFIRMED, 'like stock'): open -- follow pin, hold at every start, arrived-follow re-pin, kbd-drop C1.
 * **SHRINEWARP 1z-dp.4:** a mid-leg death raised in place keeps the stale leg.
 * **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
