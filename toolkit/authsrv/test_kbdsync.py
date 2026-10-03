@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=273)   # MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=276)   # MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -3032,6 +3032,72 @@ def main():
           "30q. the marker is written once inside _forget_client_position, whose four callers "
           "are the modelled placements; --park-marker-stop-only is wired",
           f"{SRC.count('_forget_client_position(') - 1} call sites")
+
+    # 32. MOVECODE-1z-ds.37: the press_stop and approach rows carry BOTH world-0 models -- the
+    # AgTrack mirror (the frame's) and the legacy sync model (the snap guard's). No behaviour.
+    print("\n32. 1z-ds.37: the world-0 diagnostic rows")
+    import copy
+
+    class _PM32:
+        def walkable(self, x, y): return True
+        def clip(self, x0, y0, x1, y1, step=None, plane=None): return (x1, y1)
+        def plane_at(self, x, y, prefer=None): return prefer
+        def containing(self, x, y): return []
+
+    def walking32(age=0.5, heading_rec=True):
+        """A body walking AWAY (+x) under held keys, its last report 100 u from the target."""
+        t = _t27.time()
+        st = {"agents": {10: {"name": "target", "dead": False, "last_hit": 0.0,
+                              "max_health": 100.0, "health": 100.0, "pos": (0.0, 0.0)}},
+              "pos": (0.0, 0.0), "plane": 0, "client_pos": (100.0, 0.0), "client_pos_at": t - age,
+              "client_plane": 0, "kbd_moving_at": t - age, "heading": (766.0, 0.0),
+              "heading_mt": 1, "pathmap": _PM32()}
+        if heading_rec:
+            st["client_heading"] = (766.0, 0.0, 1, t - age)
+            st["last_report"] = (100.0, 0.0, False, t - age)
+        return st
+
+    def with_mirror(p, fn, *args, **kw):
+        saved = authsrv._npc_mirror_pos
+        authsrv._npc_mirror_pos = lambda s, n: p
+        try:
+            return fn(*args, **kw)
+        finally:
+            authsrv._npc_mirror_pos = saved
+
+    # 32a: the press row's w0 is read BEFORE the 0x002C re-seeds the legacy model on the pin.
+    st = walking32(heading_rec=False)
+    st["sync_from"], st["sync_to"], st["sync_at"] = (60.0, 0.0), None, _t27.time()
+    w, r = Sent(st), FakeRec()
+    with_mirror((110.0, 0.0), authsrv.begin_attack, w, st, 10, 0, rec=r)
+    rows = [x for x in r.of("press_stop") if x.get("fired")]
+    w0 = rows[0].get("w0") if rows else None
+    pinned = bool(w.of(authsrv.GAME_SMSG_AGENT_UPDATE_POSITION))
+    check(pinned and w0 == {"mirror": [110.0, 0.0], "legacy": [60.0, 0.0]}
+          and authsrv._sync_position(st, _t27.time()) != (60.0, 0.0),
+          "32a. the press_stop row carries BOTH world-0 models as they were BEFORE its 0x002C "
+          "(the legacy model sits on the pin after it)", f"w0 {w0} pinned {pinned}")
+    # 32b: the approach row carries what the snap guard read.
+    st = walking32(age=0.47)
+    w, r = Sent(st), FakeRec()
+    with_mirror((300.0, 0.0), authsrv.begin_attack, w, st, 10, 0, rec=r)
+    with_mirror((300.0, 0.0), authsrv.attack_tick, w, st, 0, rec=r)
+    ap = r.of("approach")
+    g = ap[0].get("guard") if ap else None
+    check(g is not None and g.get("src") == "estimate" and g.get("legacy") is None
+          and g.get("mirror") == [300.0, 0.0] and g.get("sep_mirror") is not None
+          and set(g) >= {"src", "model", "legacy", "mirror", "sep_guard", "sep_mirror"},
+          "32b. every new follow's approach row carries the guard's source, its model, both "
+          "world-0 models, the separation the guard acted on and the mirror's (legacy None = "
+          "unseeded: the guard read pos)", f"{g}")
+    # 32c: _w0_models is a pure read.
+    st = walking32()
+    st["sync_from"], st["sync_to"], st["sync_at"] = (60.0, 0.0), None, _t27.time()
+    before = copy.deepcopy({k: v for k, v in st.items() if k != "pathmap"})
+    out = authsrv._w0_models(st, _t27.time())
+    after = {k: v for k, v in st.items() if k != "pathmap"}
+    check(out is not None and out.get("legacy") == [60.0, 0.0] and before == after,
+          "32c. the diagnostic read is pure: it writes no state key", f"{out}")
 
     return LEDGER.verdict()
 

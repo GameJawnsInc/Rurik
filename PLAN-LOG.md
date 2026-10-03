@@ -28,6 +28,10 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.37 -- 2026-10-03 -- **Both world-0 models (the AgTrack mirror and the legacy sync model) on the press_stop row (before its 0x002C) and on every new follow's approach row (what the snap guard read, and whether it re-pinned). Diagnostic only; the follow-pin run's guard-model question reads them.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.37.
+
 ### MOVECODE-1z-ds.36 -- 2026-10-03 -- **No swing opens in the tick its own follow is sent (`FOLLOW_TICK_HOLDS_SWING`, `--swing-on-follow-tick` reverts): attack_tick re-reads the moving latch after approach_tick sends. 1 of 106 owner follows swung in their own tick (131011-c3 79.492, walk 0.0); retail 0 of 458.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.36.

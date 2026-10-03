@@ -19987,6 +19987,18 @@ WALK_START_IS_MOVE = True   # False (--walk-start-is-still): round 5's still wal
 PLACEMENT_PARKS = True   # False (--park-marker-stop-only): round 5's two writers.
 
 
+def _w0_models(state, now):
+    """MOVECODE-1z-ds.37: BOTH server models of the client's world-0 copy of the player, for
+    the rows -- the AgTrack mirror (the frame's) and the legacy sync model (the snap guard's).
+    Batch 4's lanes could not replay either from a tape (42 of 66, 43 of 69 within 5 u), and
+    on a melee walk-in they part by 67-78 u: the legacy model walks a 0x002A onto the
+    target's own point, the mirror halts at the disc. A pure read."""
+    m = _npc_mirror_pos(state, now)
+    lg = _sync_position(state, now)
+    return {"mirror": None if m is None else [round(float(m[0]), 1), round(float(m[1]), 1)],
+            "legacy": None if lg is None else [round(float(lg[0]), 1), round(float(lg[1]), 1)]}
+
+
 def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
     """(1z-ds) An accepted press while the body walks: pin it -- and, when the BODY is in
     reach, hold and halt it (1z-ds.7: reach is judged on the reckoned body).
@@ -20019,6 +20031,7 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
     if not body_in and not frame_in:
         return False                    # out on both: the follow answers, as before
     stop = body_in
+    _w0 = _w0_models(state, now)          # 1z-ds.37: read BEFORE the 0x002C moves both
     send(GAME_SMSG_AGENT_UPDATE_POSITION,
          [PLAYER_AGENT_ID, [float(est[0]), float(est[1])], plane],
          (f"PRESS STOP PIN 0x002C at ({est[0]:.0f},{est[1]:.0f}) plane {plane} -- "
@@ -20047,7 +20060,7 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
         rec.event("press_stop", fired=True, why=why, target=target_id,
                   dist=round(dist, 1), body=round(body, 1),
                   mode=("stop" if stop else "follow"),
-                  point=[float(est[0]), float(est[1])], plane=plane)
+                  point=[float(est[0]), float(est[1])], plane=plane, w0=_w0)
     print(f"[c{conn_id}] press {'stops' if stop else 'places'} the body at "
           f"({est[0]:.0f},{est[1]:.0f}) -- {body:.0f} u from agent {target_id} "
           f"(frame {dist:.0f} u, reach {reach:.0f}), walking ({why}) "
@@ -21364,6 +21377,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     router_abandon(state, rec, "approach", now)
     tx, ty = float(agent["pos"][0]), float(agent["pos"][1])
     _body = None                         # 1z-ds.30: the guard's body estimate, when it made one
+    _g = {}                              # 1z-ds.37: what the snap guard read, for the row
     if not repath:
         # THE SNAP GUARD, derived rather than tuned. After a click-walk this
         # server's copy of the player (and the client's SYNC copy, which
@@ -21403,9 +21417,19 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                 model, src = _est, "estimate"
         if src == "estimate" and into == "approach":   # 1z-ds.33: not a pickup's walk
             _body = (float(model[0]), float(model[1]))
-        sync = _sync_position(state, now) or state.get("pos")
+        _sync_leg = _sync_position(state, now)
+        sync = _sync_leg or state.get("pos")
+        _g_m = _npc_mirror_pos(state, now)   # 1z-ds.37: the frame's world-0 model, for the row
         if model is not None and sync is not None:
             sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
+            _g.update(src=src, model=[round(float(model[0]), 1), round(float(model[1]), 1)],
+                      legacy=(None if _sync_leg is None else
+                              [round(float(_sync_leg[0]), 1), round(float(_sync_leg[1]), 1)]),
+                      mirror=(None if _g_m is None else
+                              [round(float(_g_m[0]), 1), round(float(_g_m[1]), 1)]),
+                      sep_guard=round(sep, 1),        # legacy, or pos when unseeded
+                      sep_mirror=(None if _g_m is None else round(math.hypot(
+                          model[0] - _g_m[0], model[1] - _g_m[1]), 1)))
             if sep > reprieve:
                 send(GAME_SMSG_AGENT_UPDATE_POSITION,
                      [PLAYER_AGENT_ID, [float(model[0]), float(model[1])],
@@ -21414,6 +21438,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                      f"{model[1]:.0f}) plane {plane}: the server's copy sat "
                      f"{sep:.0f} u from the modelled click-leg end, past the "
                      f"client's {reprieve:.0f} u reprieve [ANIMREF-RE 38]")
+                _g["repin"] = True
                 state["pos"] = (float(model[0]), float(model[1]))
                 # AND THE REPORT IS NOW KNOWN-WRONG -- when the point was
                 # OURS. `_forget_client_position`'s asymmetry applied to the
@@ -21513,7 +21538,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                       report_age=(None if lr is None else round(now - float(lr[3]), 3)),
                       frame_vs_model=round(math.hypot(_frame_origin[0] - mx,
                                                       _frame_origin[1] - my), 1),
-                      stop=round(stop, 1),
+                      stop=round(stop, 1), guard=(_g or None),
                       **({"leg": "pickup"} if into == "pickup" else {}))
         except Exception:                              # noqa: BLE001
             pass

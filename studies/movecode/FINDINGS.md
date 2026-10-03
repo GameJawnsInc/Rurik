@@ -22278,3 +22278,28 @@ comes at about the follow's eta (lane M's band: +0.10, -0.02, +0.10, +0.04 and +
   sends a follow (the target 400 u out), which is now a moving tick. The critic found this red;
   the lanes missed it because their own runs stopped short of the floor.
 - The other 25 files the critic ran are unchanged.
+
+
+### 1z-ds.37 Both world-0 models on the press and approach rows (diagnostic, no behaviour change)
+
+**Why** (batch 4's critic, item B): the follow pin's next step is a taped run, and the question
+it turns on is which server model of the client's world-0 copy is right at a follow.
+- The frame reads the AgTrack mirror (`_npc_mirror_pos`); the snap guard reads the legacy sync
+  model (`_sync_position`, or `pos` while unseeded).
+- RECONSTRUCTION: `_note_wire_move` walks the legacy model to a 0x002A's own point, which for a
+  melee follow is the TARGET, with no disc stop. The mirror halts at the disc (MIRROR_AVOID).
+- On the F8/F10 walk-ins the tap's world-0 stood at 66.7 and 78.0 u from the target (n=2), and the
+  live mirror halted at 79.4 and 80.0 u. So the legacy model ends 67-78 u off after a melee
+  walk-in, and the mirror 2-13 u.
+- Neither model could be replayed from a tape (batch-4 lanes: 42 of 66, 43 of 69 within 5 u).
+  So the rows log both, at the two places that act on them.
+
+**Shipped** (no flag; no behaviour change):
+- `_w0_models(state, now)` returns both models, rounded. It is a pure read.
+- The press_stop row gains `w0`, read BEFORE the press's 0x002C re-seeds the legacy model.
+- Every new follow's approach row gains `guard`: `src`, `model`, `legacy` (None = unseeded),
+  `mirror`, `sep_guard` (the separation the guard acted on: legacy, or `pos` when unseeded),
+  `sep_mirror`, and `repin` when it sent an APPROACH RE-PIN.
+
+**Tests:** `test_kbdsync` section 32 (32a-c), floor 273 -> 276. Reading `w0` after the pin
+reddens 32a, the row without `guard` 32b, a state write in the helper 32c.
