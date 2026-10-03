@@ -19447,6 +19447,17 @@ LATE_HIT = True
 # branch, and approach_tick has no dead check of its own. The cast door's twin (a follow
 # inside a cast: ours 10 of 784, retail 0 of 170) is not this edit.
 WINDUP_HOLDS_APPROACH = True   # False (--approach-in-windup): the tick re-approaches mid-windup.
+# MOVECODE-1z-ds.36: NO SWING OPENS IN THE TICK ITS OWN FOLLOW IS SENT. attack_tick reads
+# _player_body_moving at the TOP of the tick, before approach_tick may send the follow, and
+# the reach gate below reads the frame AFTER the send (the mirror's sync copy). So a follow
+# sent from a stop report out of reach, whose mirror read in reach, opened the swing in the
+# same tick with a walk of 0.0: 20261003T131011-c3 79.492, 1 of 106 new follows on the
+# eleven owner connections (0 of 28 re-paths). RETAIL: 0 of 458 own follows carry the
+# player's own attack start within 25 ms (122 observer connections, the batch-4 critic's
+# c_retail_sametick.py). The re-read lets the 'moving' refusal see the follow's own latch,
+# so the swing waits for the leg's eta. Identity is the send test: follow_order_at's single
+# writer (_approach_send) builds a new tuple on every send.
+FOLLOW_TICK_HOLDS_SWING = True   # False (--swing-on-follow-tick): the top-of-tick read decides.
 
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
@@ -21944,8 +21955,11 @@ def attack_tick(send, state, conn_id, rec=None):
         # follow leg holds the chain through the click latch it arms; a
         # re-pin here may move the model, so the position is re-read).
         # 1z-ds.28: never inside our own windup -- the landing below re-approaches.
+        _fol_pre = state.get("follow_order_at")
         approach_tick(send, state, conn_id, target_id, agent, time.time(),
                       rec=rec)
+        if FOLLOW_TICK_HOLDS_SWING and state.get("follow_order_at") is not _fol_pre:
+            _moving_now = _player_body_moving(state)    # 1z-ds.36: the follow just sent
         # A follow that started since the press IS its answer (retail:
         # the 0x002A at 26-123 ms, sec.37.3).
         pend = state.get("press_pending")
@@ -47396,6 +47410,11 @@ def main():
         print("[map] --press-repins-own-follow: a press after our own follow arrived re-pins the "
               "body at the leg's end with PRESS ENDS THE WALK (every build before "
               "MOVECODE-1z-ds.29)", flush=True)
+    if a.swing_on_follow_tick:
+        global FOLLOW_TICK_HOLDS_SWING
+        FOLLOW_TICK_HOLDS_SWING = False
+        print("[map] --swing-on-follow-tick: a swing may open in the tick its own follow "
+              "is sent (every build before MOVECODE-1z-ds.36)", flush=True)
     if a.approach_in_windup:
         global WINDUP_HOLDS_APPROACH
         WINDUP_HOLDS_APPROACH = False

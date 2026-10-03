@@ -22238,3 +22238,43 @@ retraction for an owner close: exit 0, no error dialog. No assert, 0 "Pending sk
     24.44), so it never stepped away from a swing in progress.
   - D (a player death mid-windup).
   - Both stay open, and each needs a scripted exposure, not a hand-driven one.
+
+
+### 1z-ds.36 No swing opens in the tick its own follow is sent (`FOLLOW_TICK_HOLDS_SWING`, `--swing-on-follow-tick` reverts)
+
+**Batch 4** (a read-only workflow at `4342807c`, the follow pin, P1-F): three lanes, each with an
+adversarial verifier, then a critic that composed the designs in pinned trees and ran 26 test
+files against each. This is its item A, the one general defect the follow-pin work turned up.
+Records: the scratchpad's `wfout6\` and `wf5-critic\`.
+
+**The defect** (OBSERVED, lane P's census, reproduced by its verifier):
+- attack_tick reads `_player_body_moving` at the TOP of the tick, before `approach_tick` may send
+  the follow. The reach gate below it reads the frame AFTER the send, which is the mirror's sync
+  copy.
+- So a press whose report put the body out of reach, while the mirror read it in reach, got the
+  follow and the start in ONE tick, with a walk of 0.0.
+- On the owner tapes: 1 of 106 new follows, 20261003T131011-c3 79.492. The frame was the 0x0047
+  at 144.5 u, the mirror 112.7 u, and the start went out 0.3 ms after the 0x002A. 0 of 28 re-paths.
+- The follow-pin path never shows it today, because the pin makes `approach_tick` read out of
+  reach. Removing the pin without this fix brings it back: the batch-4 rig swung in the follow's
+  own tick in 5 of 6 geometries (lane P's D2 arm) and in 5 of 7 runs (the critic's C-without-A).
+
+**RETAIL** (OBSERVED, the critic's `c_retail_sametick.py`, 122 observer connections): 0 of 458
+own follows carry the player's own attack start within 25 ms, before or after. Retail's swing
+comes at about the follow's eta (lane M's band: +0.10, -0.02, +0.10, +0.04 and +0.13 s).
+
+**The fix:**
+- attack_tick keeps the follow marker from before `approach_tick`. When the call sent a new
+  follow (`follow_order_at` has one writer, which builds a new tuple per send), it re-reads
+  `_player_body_moving`.
+- The 'moving' refusal then sees the follow's own click latch, and the swing waits for the leg's
+  eta.
+- A side effect: the send tick now counts as a moving tick in the chain-pause stats (left at
+  reach, charged 0.0). The pause charges from the next tick, as before.
+
+**Tests:** `test_playerswing` section 23 (23a-e), floor 274 -> 279.
+- Removing the re-read reddens 23a, 23d and 23e; the flag default off reddens 23d.
+- RE-AIMED: section 15's STILL-tick CONTROL now runs with the approach off. Its fixture's tick
+  sends a follow (the target 400 u out), which is now a moving tick. The critic found this red;
+  the lanes missed it because their own runs stopped short of the floor.
+- The other 25 files the critic ran are unchanged.

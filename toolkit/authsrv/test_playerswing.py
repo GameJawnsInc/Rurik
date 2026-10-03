@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=274)   # MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=279)   # MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -3084,6 +3084,118 @@ def section_windup_holds_approach():
           "22f. the flag ships on and its revert arm is wired")
 
 
+def section_follow_tick_holds_swing():
+    """MOVECODE-1z-ds.36: no swing opens in the tick its own follow is sent. attack_tick read
+    _player_body_moving before approach_tick sent the follow, and the gate read the frame after
+    it, so a standing body whose report was out of reach but whose mirror read in reach got the
+    follow and the start in one tick (20261003T131011-c3 79.492, walk 0.0). Retail: 0 of 458 own
+    follows carry the player's own start within 25 ms."""
+    import time
+    import authsrv
+
+    print("\n23. 1z-ds.36: the follow's own tick opens no swing")
+    DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    START = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+
+    class _PM:
+        def walkable(self, x, y): return True
+        def clip(self, x0, y0, x1, y1, step=None, plane=None): return (x1, y1)
+        def plane_at(self, x, y, prefer=None): return prefer
+        def containing(self, x, y): return []
+
+    def ops(sent):
+        return [op for op, _v, _l in sent]
+
+    def tick(st, frame, fn, *args):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        saved = authsrv._npc_mirror_pos
+        authsrv._npc_mirror_pos = lambda s, n: frame
+        try:
+            fn(send, st, *args)
+        finally:
+            authsrv._npc_mirror_pos = saved
+        return ops(sent)
+
+    def standing(report, mirror, on=True):
+        """A standing body: its stop report `report` u out, the mirror's sync copy `mirror`."""
+        t0 = time.time()
+        st = {"agents": {10: _fresh_agent()}, "pos": (report, 0.0), "plane": 0,
+              "client_pos": (report, 0.0), "client_pos_at": t0 - 0.076, "client_plane": 0,
+              "last_report": (report, 0.0, True, t0 - 0.076), "pathmap": _PM()}
+        saved = authsrv.FOLLOW_TICK_HOLDS_SWING
+        authsrv.FOLLOW_TICK_HOLDS_SWING = on
+        later = []
+        try:
+            tick(st, (mirror, 0.0), authsrv.begin_attack, 10, 0)
+            first = tick(st, (mirror, 0.0), authsrv.attack_tick, 0)
+            leg = st.get("click_leg")
+            if leg is not None:                      # the leg's eta has passed
+                leg["eta"] = time.time() - 0.01
+                if st.get("approach") is not None:
+                    st["approach"]["eta"] = leg["eta"]
+                st["pos"] = st.get("dest") or st["pos"]
+                st["dest"] = None
+                later = tick(st, (60.0, 0.0), authsrv.attack_tick, 0)
+        finally:
+            authsrv.FOLLOW_TICK_HOLDS_SWING = saved
+        return first, later
+
+    k, later = standing(144.5, 112.7)
+    check(DEST in k and START not in k and START in later,
+          "23a. the 131011 79.492 shape: a standing body whose stop report is 144.5 u out and "
+          "whose mirror is 112.7 u in -- the tick sends the follow and NO start; the start comes "
+          "at the leg's eta", f"tick {k} later {later}")
+    k0, _l = standing(144.5, 112.7, on=False)
+    check(DEST in k0 and START in k0,
+          "23b. KNOWN-BAD ARM (--swing-on-follow-tick): the follow and the start in one tick, "
+          "walk 0.0 -- 131011 79.492", f"tick {k0}")
+    kc, _l = standing(100.0, 100.0)
+    check(START in kc and DEST not in kc,
+          "23c. CONTROL: an in-reach press on a standing body sends no follow, so the re-read "
+          "never runs and the start opens in the first tick", f"tick {kc}")
+
+    class _R:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def follow_tick(on):
+        st = _state()
+        st["agents"][10]["pos"] = (400.0, 0.0)
+        st["attacking"] = 10
+        st["player_health"] = 100.0
+        st["player_dead"] = False
+        saved = (authsrv.FOLLOW_TICK_HOLDS_SWING, authsrv.ATTACK_APPROACH)
+        authsrv.FOLLOW_TICK_HOLDS_SWING, authsrv.ATTACK_APPROACH = on, True
+        sent = []
+        try:
+            authsrv.attack_tick(lambda op, v, label="", quiet=False: sent.append(op), st, 0,
+                                rec=_R())
+        finally:
+            authsrv.FOLLOW_TICK_HOLDS_SWING, authsrv.ATTACK_APPROACH = saved
+        return st.get("chain_pause_stats"), sent
+
+    s1, sent1 = follow_tick(True)
+    s0, _s = follow_tick(False)
+    check(DEST in sent1 and s1 is not None and s1.get("ticks_moving") == 1
+          and s1.get("left") == {"reach": 1} and s1.get("charged") == 0.0 and s0 is None,
+          "23e. the tick that SENDS the follow is a moving tick (left at reach, charged 0.0 -- "
+          "the pause charges from the next tick, as before); the revert arm counts nothing",
+          f"on={s1} off={s0}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    i_at = src.find("def attack_tick(")
+    i_ap = src.find("        approach_tick(send, state, conn_id, target_id, agent, time.time(),",
+                    i_at)
+    i_rr = src.find("            _moving_now = _player_body_moving(state)", i_ap)
+    i_row = src.find("        # A follow that started since the press IS its answer", i_ap)
+    check(authsrv.FOLLOW_TICK_HOLDS_SWING is True and 0 < i_at < i_ap < i_rr < i_row
+          and "--swing-on-follow-tick" in args_src and "if a.swing_on_follow_tick:" in src,
+          "23d. the flag ships on; the re-read sits between approach_tick and the press row "
+          "inside attack_tick; the revert arm is wired", f"{i_at} {i_ap} {i_rr} {i_row}")
+
+
 def section_attack_start_holds():
     """MOVECODE-1z-ds.31: every own attack start leaves the action hold [8, me, 1] up, to the
     next input. Retail: 1,647 of 1,654 own starts held at start + 0.1 s, raised in the start's
@@ -3573,6 +3685,7 @@ def main():
     section_press_stop_hold()
     section_dead_press()
     section_windup_holds_approach()
+    section_follow_tick_holds_swing()
     section_attack_start_holds()
     section_placement_frame()
     section_still_streak()
@@ -3943,11 +4056,18 @@ def main():
               f"{stats} -- four branches return above the accumulator and the "
               f"row separates them")
 
-        # A tick that is NOT moving counts nothing at all.
+        # A tick that is NOT moving counts nothing at all. MOVECODE-1z-ds.36: with the
+        # approach on, this fixture's tick SENDS a follow (the target 400 u out), and that
+        # tick is now a moving one (23e) -- so the still tick is run with the approach off.
         rec = _R()
         st = _st_moving(400.0)
         st["kbd_moving_at"] = None
-        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        _saved_ap = authsrv.ATTACK_APPROACH
+        authsrv.ATTACK_APPROACH = False
+        try:
+            authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        finally:
+            authsrv.ATTACK_APPROACH = _saved_ap
         check(st.get("chain_pause_stats") is None,
               "CONTROL: a STILL tick counts nothing -- the row is about the "
               "pause, not about the tick",

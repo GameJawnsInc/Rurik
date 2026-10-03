@@ -833,6 +833,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "distance), re-pins the body at the leg's end (PRESS ENDS THE WALK). "
                          "By default the press is spared while our follow is the leg in force: "
                          "retail 0 pins in 160 such presses.")
+    ap.add_argument("--swing-on-follow-tick", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.36: the tick's top-of-tick "
+                         "moving read decides, so a follow whose frame reads in reach "
+                         "opens the swing in its own tick (131011 79.492; retail 0 of 458).")
     ap.add_argument("--approach-in-windup", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.28: re-approach a target that left "
                          "reach while the swing is still in its windup. By default the swing "

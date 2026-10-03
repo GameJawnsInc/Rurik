@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.36 -- 2026-10-03 -- **No swing opens in the tick its own follow is sent (`FOLLOW_TICK_HOLDS_SWING`, `--swing-on-follow-tick` reverts): attack_tick re-reads the moving latch after approach_tick sends. 1 of 106 owner follows swung in their own tick (131011-c3 79.492, walk 0.0); retail 0 of 458.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.36.
+- **Batch 4** (the follow pin): item A of three; the follow pin itself (item C) stays open in §8.
+
 ### MOVECODE-1z-ds.35 -- 2026-10-03 -- **`20261003T164555` CONFIRMS N3 (1z-ds.29: 8 repeat presses on our own follow's target, 0 PRESS ENDS THE WALK, 6 `press_spared` rows after a swing; "no" hitch, step or snap) and the click under a start's hold (1z-ds.31: 3 of 3 answered in ~1 ms, the release first; "yes", it walked at once). "Anything else off": "no". Still unexercised: W and the mid-windup death.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.35.
