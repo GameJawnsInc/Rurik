@@ -21803,3 +21803,32 @@ release and the order end are unchanged.
 tick's no-target branch drops the overdue swing with no [1]. The movement door has the same window.
 
 **Tests:** `test_castcancel` 6b (a-d), 50 -> 54.
+
+
+### 1z-ds.27 A death inside the player's own windup carries [3, me, 0] (`DEATH_STOPS_WINDUP`, `--death-keeps-windup` reverts)
+
+Batch 3's item D, the player half.
+
+**Retail** (OBSERVED; lane S's `r_death_any.py` and `r_death_order.py`; its verifier re-measured with
+its own 0x00F1 dead-bit join, 185 deaths):
+- Every death with the dier's windup open carries GV_ATTACK_STOPPED [3, A, 0] after the
+  dead-bit status: 30 of 30. That is 29 other agents plus the observer (20260929T100038
+  667.896, 58 ms into its windup).
+- It sits at index 1 of the dier-named messages on 27 of 30.
+- Deaths with no windup open: 0 of 155.
+
+**Ours:** `kill_player` never sent it (124708 71.079 and 201011 78.198: 2 of 11 owner-tape player
+deaths). attack_tick's dead branch dropped the swing with no [1] and no [3], so the corpse was
+never told its swing had ended. The client effect (an attack animation playing on into the death)
+is a RECONSTRUCTION.
+
+**The fix:** the stop goes right behind the KILL status, for any armed entry (the dead branch drops
+it unlanded whatever its `lands_at` says).
+
+**Not covered:**
+- The NPC twin in `kill_agent` (22 to 27 of 36 owner-tape NPC deaths were in an open windup)
+  belongs to the NPC lane.
+- Where the stop sits relative to DAGGERS-F18's chain zeros on a single death is unmeasured
+  (n = 0).
+
+**Tests:** `test_playerswing` 19g-j, 236 -> 240.

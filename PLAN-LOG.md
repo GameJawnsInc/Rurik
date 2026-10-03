@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.27 -- 2026-10-02 -- **A death inside the player's own windup carries [3, me, 0] right behind the KILL status (`DEATH_STOPS_WINDUP`, `--death-keeps-windup` reverts). Retail 30 of 30 open-windup deaths, 0 of 155 without; ours sent none (2 of 11 owner-tape deaths).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.27.
+- **Tests:** `test_playerswing` 19g-j, 236 -> 240.
+
 ### MOVECODE-1z-ds.26 -- 2026-10-02 -- **Esc after a landed swing releases the hold and ends the order, with no stop (`ESC_STOP_NEEDS_WINDUP`, `--esc-stops-landed` reverts). Retail 3 of 3 post-landing Escs [8, me, 0] only (low confidence, two captures); ours sent [3] on every held chain.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.26.

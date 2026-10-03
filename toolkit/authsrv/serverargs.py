@@ -818,6 +818,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "releases the hold and stops the chain sends the stop [3, me, 0] "
                          "first, every build before it. By default the release [8, me, 0] "
                          "goes first: retail, 33 of 33 (walkstartjoin.py).")
+    ap.add_argument("--death-keeps-windup", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.27: a player death with a swing in "
+                         "flight sends no GV_ATTACK_STOPPED; the swing drops silently. By "
+                         "default the death batch carries [3, me, 0] after the KILL status "
+                         "(retail 30 of 30 open-windup deaths, 0 of 155 without).")
     ap.add_argument("--press-allows-dead-player", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.15: an attack press from a dead "
                          "player is taken (the corpse pinned and halted, the order kept "

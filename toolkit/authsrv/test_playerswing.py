@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=236)   # MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=240)   # MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2831,6 +2831,58 @@ def section_dead_press():
                     encoding="utf-8").read()
     check("--press-allows-dead-player" in args_src and "if a.press_allows_dead_player:" in src,
           "19f. --press-allows-dead-player is wired")
+
+    # 19g-j. MOVECODE-1z-ds.27: a death with the player's swing in flight carries [3, me, 0]
+    # right after the KILL status (retail 30 of 30 open-windup deaths, 0 of 155 without).
+    STATUS, INT = authsrv.GAME_SMSG_AGENT_UPDATE_STATUS, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+    STOP = [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]
+
+    def die(on=True, phase="windup"):
+        sent, rec = [], _Rec()
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        st = _state()
+        st.update({"player_health": 0.0, "player_dead": False})
+        authsrv.begin_attack(send, st, 10, 0)
+        authsrv.attack_tick(send, st, 0)                  # START: a swing in its windup
+        if phase == "landed":
+            _rewind(st, 5.0)
+            authsrv.attack_tick(send, st, 0)              # it lands; none in flight
+        elif phase == "overdue":
+            st["player_swing"]["lands_at"] -= 5.0         # due, the landing tick not yet run
+        sent.clear()
+        saved = authsrv.DEATH_STOPS_WINDUP
+        authsrv.DEATH_STOPS_WINDUP = on
+        try:
+            authsrv.kill_player(send, st, 0, "test")
+            batch = [(op, v) for op, v, _l in sent]
+            sent.clear()
+            authsrv.attack_tick(send, st, 0, rec=rec)
+        finally:
+            authsrv.DEATH_STOPS_WINDUP = saved
+        stops = [i for i, (op, v) in enumerate(batch) if op == INT and v == STOP]
+        status = [i for i, (op, _v) in enumerate(batch) if op == STATUS]
+        return batch, stops, status, st, sent
+
+    b19g, s19g, k19g, st19g, after19g = die()
+    check(k19g[:1] == [0] and s19g == [1] and st19g.get("player_swing") is None
+          and not any(op == INT and v[0] == authsrv.agents.GV_ATTACK_FINISHED
+                      for op, v, _l in after19g),
+          "19g. a death inside the windup: the KILL status, then [3, me, 0] at index 1 (retail "
+          "27 of 30 there), and the next tick drops the swing unlanded as before",
+          f"batch {[hex(op) for op, _v in b19g]} stops {s19g}")
+    _b, s19h, _k, _st, _a = die(on=False)
+    check(s19h == [],
+          "19h. KNOWN-BAD ARM (--death-keeps-windup): no [3] -- the corpse is never told its "
+          "swing ended (201011 78.198, 124708 71.079)", f"stops {s19h}")
+    _b, s19i, _k, _st, _a = die(phase="landed")
+    _b, s19i2, _k, _st, _a = die(phase="overdue")
+    check(s19i == [] and s19i2 == [1],
+          "19i. CONTROL: a death after the swing LANDED sends no [3] (retail 0 of 155); an "
+          "overdue swing the tick had not yet landed is in flight and gets one -- the dead branch "
+          "drops it with no [1]", f"landed {s19i}, overdue {s19i2}")
+    check(authsrv.DEATH_STOPS_WINDUP is True and "--death-keeps-windup" in args_src
+          and "if a.death_keeps_windup:" in src,
+          "19j. the flag ships on and its revert arm is wired")
 
 
 def section_placement_frame():

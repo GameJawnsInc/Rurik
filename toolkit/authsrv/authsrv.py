@@ -19956,6 +19956,18 @@ def _press_stops_body(send, state, conn_id, target_id, agent, now, rec=None):
 # order set across the kill (the press runs on the connection thread, the kill on the tick).
 PRESS_REFUSES_DEAD_PLAYER = True   # False (--press-allows-dead-player): every build before it.
 
+# MOVECODE-1z-ds.27 (batch 3's D, 2026-10-02): a death with the player's swing in flight
+# carries GV_ATTACK_STOPPED [3, me, 0] right after the KILL status. Retail: every death with
+# the dier's windup open carries [3, A, 0] after the dead-bit status (30 of 30 -- 29 other
+# agents and the observer, 20260929T100038 667.896, 58 ms into its windup; at index 1 of the
+# dier-named messages on 27), against 0 of 155 deaths with no windup open (batch-3 lane S's
+# r_death_any.py, re-measured by its verifier with its own join: 30/30 and 0/155). Ours never
+# sent it (124708 71.079, 201011 78.198: 2 of 11 owner-tape player deaths): attack_tick's
+# dead branch dropped the swing with no [1] and no [3], so the corpse was never told its
+# swing ended. The predicate is any armed entry: the dead branch drops it unlanded whatever
+# its `lands_at` says. The player half only -- the NPC twin (kill_agent) is the NPC lane's.
+DEATH_STOPS_WINDUP = True   # False (--death-keeps-windup): the corpse's swing drops silently.
+
 
 def begin_attack(send, state, target_id, conn_id, rec=None):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -28125,6 +28137,13 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
          [PLAYER_AGENT_ID, _word], f"KILL the player ({why})")
     if STATUS_WORD:
         state.setdefault("status_word", {})[PLAYER_AGENT_ID] = _word
+    # MOVECODE-1z-ds.27: the corpse's swing in flight is stopped first, right behind the
+    # status -- retail's index 1 on 27 of 30 open-windup deaths. (Its place against
+    # DAGGERS-F18's chain zeros on one death is unmeasured: n = 0.)
+    if DEATH_STOPS_WINDUP and state.get("player_swing") is not None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             "attack_stopped: the player died in the windup [MOVECODE-1z-ds.27]")
     # DAGGERS-F18: the chain icons the corpse held go out HERE, between the
     # death bit and the morale tick -- retail, 3 of 3 (RUN-DAGGERS-2,
     # 20260917T224104 at 367.057 / 408.587 / 446.688: the killing word,
@@ -47173,6 +47192,11 @@ def main():
         print("[map] --cancel-stop-first: a movement cancel sends [3, me, 0] ahead of the "
               "hold's [8, me, 0] -- every build before MOVECODE-1z-ds.16; retail sends the "
               "release first, 33 of 33.", flush=True)
+    if a.death_keeps_windup:
+        global DEATH_STOPS_WINDUP
+        DEATH_STOPS_WINDUP = False
+        print("[map] --death-keeps-windup: a death mid-windup sends no GV_ATTACK_STOPPED; the "
+              "swing drops silently (every build before MOVECODE-1z-ds.27)", flush=True)
     if a.press_allows_dead_player:
         global PRESS_REFUSES_DEAD_PLAYER
         PRESS_REFUSES_DEAD_PLAYER = False
