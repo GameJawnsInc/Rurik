@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=240)   # MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=246)   # MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2865,7 +2865,7 @@ def section_dead_press():
 
     b19g, s19g, k19g, st19g, after19g = die()
     check(k19g[:1] == [0] and s19g == [1] and st19g.get("player_swing") is None
-          and not any(op == INT and v[0] == authsrv.agents.GV_ATTACK_FINISHED
+          and not any(op == INT and v[0] == authsrv.agents.GV_MELEE_ATTACK_FINISHED
                       for op, v, _l in after19g),
           "19g. a death inside the windup: the KILL status, then [3, me, 0] at index 1 (retail "
           "27 of 30 there), and the next tick drops the swing unlanded as before",
@@ -2883,6 +2883,78 @@ def section_dead_press():
     check(authsrv.DEATH_STOPS_WINDUP is True and "--death-keeps-windup" in args_src
           and "if a.death_keeps_windup:" in src,
           "19j. the flag ships on and its revert arm is wired")
+
+
+def section_windup_holds_approach():
+    """MOVECODE-1z-ds.28: no follow inside the player's own windup; a target that left reach
+    mid-swing is re-approached at the landing, [1] then the 0x002A in one tick. Retail: 0 in
+    1,654 windups (86 with the target moving), 18 of 18 re-approaches at or after the landing
+    (batch-3 lane S's r_windup_follow.py)."""
+    import time
+    import authsrv
+
+    print("\n22. 1z-ds.28: the swing finishes in place; the re-approach rides its landing")
+    DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+
+    def walked_off(on=True, kill=False, swing=True):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        st = _state()
+        saved = (authsrv.WINDUP_HOLDS_APPROACH, authsrv.ATTACK_APPROACH)
+        authsrv.WINDUP_HOLDS_APPROACH, authsrv.ATTACK_APPROACH = on, True
+        windup, after = [], []
+        try:
+            authsrv.begin_attack(send, st, 10, 0)
+            if swing:
+                authsrv.attack_tick(send, st, 0)                  # START, in reach
+            st["agents"][10]["pos"] = (200.0, 0.0)               # it steps out of reach
+            if kill:
+                st["agents"][10]["health"] = 0.5
+            sent.clear()
+            if swing:
+                for _ in range(3):                                # ticks inside the windup
+                    authsrv.attack_tick(send, st, 0)
+                windup = list(sent)
+                sent.clear()
+                _rewind(st, 5.0)                                  # the landing is due
+            authsrv.attack_tick(send, st, 0)
+            after = list(sent)
+        finally:
+            authsrv.WINDUP_HOLDS_APPROACH, authsrv.ATTACK_APPROACH = saved
+        return windup, after, st
+
+    fol = lambda sent: [i for i, (op, _v, _l) in enumerate(sent) if op == DEST]
+    fin = lambda sent: [i for i, (op, v, _l) in enumerate(sent)
+                        if op == INT and v[0] == authsrv.agents.GV_MELEE_ATTACK_FINISHED]
+    w1, a1, st1 = walked_off()
+    check(fol(w1) == [],
+          "22a. the target steps out of reach inside the windup: no follow on any windup tick "
+          "(retail 0 in 1,654; 201011 22.774 sent one at +0.155 s)",
+          f"windup ops {[hex(op) for op, _v, _l in w1]}")
+    check(len(fin(a1)) == 1 and len(fol(a1)) == 1 and fin(a1)[0] < fol(a1)[0]
+          and st1["agents"][10]["health"] < 100.0,
+          "22b. the landing tick lands the hit and THEN sends the follow, one tick -- retail's "
+          "[1] ... 0x002A batch (13 of 18 at +0.00 s)",
+          f"landing ops {[hex(op) for op, _v, _l in a1]}")
+    w0, _a0, _st = walked_off(on=False)
+    check(len(fol(w0)) >= 1,
+          "22c. KNOWN-BAD ARM (--approach-in-windup): the follow goes out mid-windup, the "
+          "body walking while the attack is latched", f"windup ops {[hex(op) for op, _v, _l in w0]}")
+    _w, a2, _st = walked_off(swing=False)
+    check(len(fol(a2)) == 1,
+          "22d. CONTROL: out of reach with NO swing in flight the follow goes out on that tick "
+          "-- the gate is the swing, not reach", f"ops {[hex(op) for op, _v, _l in a2]}")
+    _w, a3, st3 = walked_off(kill=True)
+    check(st3["agents"][10]["dead"] and fol(a3) == [],
+          "22e. a landing that KILLS the out-of-reach target sends no follow at the corpse",
+          f"dead={st3['agents'][10]['dead']} ops {[hex(op) for op, _v, _l in a3]}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    check(authsrv.WINDUP_HOLDS_APPROACH is True and "--approach-in-windup" in args_src
+          and "if a.approach_in_windup:" in src,
+          "22f. the flag ships on and its revert arm is wired")
 
 
 def section_placement_frame():
@@ -3124,6 +3196,7 @@ def main():
     section_press_ends_kbd_latch()
     section_press_stop_hold()
     section_dead_press()
+    section_windup_holds_approach()
     section_placement_frame()
     section_still_streak()
     section_no_target_charge()

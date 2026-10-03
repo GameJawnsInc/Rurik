@@ -19347,6 +19347,20 @@ ATTACK_SKILL_ROOT = True
 # gates. False = --no-late-hit: all three drops back, the pre-F21 arm.
 LATE_HIT = True
 
+# MOVECODE-1z-ds.28 (batch 3's W, 2026-10-02): no follow goes out inside the player's own
+# windup; a target that left reach mid-swing is re-approached at the LANDING. Retail: 0
+# server 0x002A [me] between an own [4] and its landing or cancel over 1,654 starts -- 86 of
+# them with the target moving inside the windup -- and 18 of 18 re-approaches at or after the
+# landing, 13 in the landing's own batch ([1], [8, 0], 0x002A on 12 of 13); 40 same-target
+# re-presses inside a windup, none answered with a follow before the landing (batch-3 lane S's
+# r_windup_follow.py, re-measured by its verifier). Ours ran approach_tick on every tick:
+# 201011 22.774, a follow at +0.155 s with the swing landing on a walking body 0.41 s later --
+# the slide in an attack pose. The landing call is guarded on a live, still-ordered target: a
+# late hit that KILLS the target leaves `attacking` set until the next tick's target-gone
+# branch, and approach_tick has no dead check of its own. The cast door's twin (a follow
+# inside a cast: ours 10 of 784, retail 0 of 170) is not this edit.
+WINDUP_HOLDS_APPROACH = True   # False (--approach-in-windup): the tick re-approaches mid-windup.
+
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
 # 16 reads it out of the client's own s_skill record (+0x78 caster, +0x7c
@@ -21770,10 +21784,12 @@ def attack_tick(send, state, conn_id, rec=None):
         _approach_abandon(state)
         _press_refused(state, rec, conn_id, "target-gone", terminal=True)
         return
-    if ATTACK_APPROACH:
+    if ATTACK_APPROACH and not (WINDUP_HOLDS_APPROACH
+                                and state.get("player_swing") is not None):
         # ANIMREF-RE 38: out of reach, the server walks the body in (the
         # follow leg holds the chain through the click latch it arms; a
         # re-pin here may move the model, so the position is re-read).
+        # 1z-ds.28: never inside our own windup -- the landing below re-approaches.
         approach_tick(send, state, conn_id, target_id, agent, time.time(),
                       rec=rec)
         # A follow that started since the press IS its answer (retail:
@@ -21828,6 +21844,11 @@ def attack_tick(send, state, conn_id, rec=None):
         if LATE_HIT and _swing is not None:
             if time.time() >= _swing["lands_at"]:
                 _land_player_swing(send, state, conn_id, _swing)
+                # 1z-ds.28: the re-approach rides the landing, [1] then the 0x002A.
+                if (WINDUP_HOLDS_APPROACH and ATTACK_APPROACH and not agent.get("dead")
+                        and state.get("attacking") == target_id):
+                    approach_tick(send, state, conn_id, target_id, agent, time.time(),
+                                  rec=rec)
             _press_refused(state, rec, conn_id, "reach",
                            dist=round(math.hypot(ax - px, ay - py), 1),
                            reach=attack_reach(), swing_in_flight=True)
@@ -47181,6 +47202,12 @@ def main():
         print("[map] --skill-stop-any-chain: every accepted skill press on a held chain "
               "sends [3] and drops the swing, instants and between-swing presses included "
               "(every build before MOVECODE-1z-ds.24)", flush=True)
+    if a.approach_in_windup:
+        global WINDUP_HOLDS_APPROACH
+        WINDUP_HOLDS_APPROACH = False
+        print("[map] --approach-in-windup: the tick re-approaches a target that left reach "
+              "while the swing is still in its windup (every build before MOVECODE-1z-ds.28)",
+              flush=True)
     if a.esc_stops_landed:
         global ESC_STOP_NEEDS_WINDUP
         ESC_STOP_NEEDS_WINDUP = False

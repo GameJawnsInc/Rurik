@@ -21832,3 +21832,36 @@ it unlanded whatever its `lands_at` says).
   (n = 0).
 
 **Tests:** `test_playerswing` 19g-j, 236 -> 240.
+
+
+### 1z-ds.28 No follow inside our own windup; the re-approach rides the landing (`WINDUP_HOLDS_APPROACH`, `--approach-in-windup` reverts)
+
+Batch 3's item W.
+
+**Retail** (OBSERVED; lane S's `r_windup_follow.py`, re-measured by its verifier):
+- 0 server 0x002A [me] fall between an own [4] and its landing or cancel, over 1,654 starts.
+  The target moved inside 86 of those windups, and 76 of the 86 landed.
+- Re-approaches after the target left reach: 18 of 18 at or after the landing. 13 came in the
+  landing's own batch ([1], [8, 0], 0x002A on 12 of the 13); 5 came 0.54-0.77 s later.
+- 40 same-target re-presses inside a windup: none answered with a follow before the landing.
+
+So reach is judged at the START, the swing finishes in place (SLICE-F21), and only then is the body
+walked.
+
+**Ours:** attack_tick ran approach_tick on every tick, swing in flight or not. At 201011 22.774 a
+follow went out 0.155 s into the windup, and the swing landed 0.41 s later on a walking body: the
+slide in an attack pose. Corpus: 24 of 4,396 own starts.
+
+**The fix:**
+- approach_tick is skipped while `player_swing` is armed.
+- The out-of-reach branch, after it lands the swing, runs approach_tick in the same tick. It is
+  guarded on a live, still-ordered target: a late hit that KILLS the target leaves `attacking` set
+  until the next tick's target-gone branch, and approach_tick has no dead check of its own. The
+  verifier found that hole in the lane's design.
+
+**Not this edit:** the cast door's twin (a follow inside a cast: ours 10 of 784, retail 0 of 170)
+needs SLICE-C2's approaching entries exempted. The ranged half (a follow at the launch) has no
+retail witness.
+
+**Tests:** `test_playerswing` §22 (a-f), 240 -> 246. The same commit fixes 19g's landing clause
+(1z-ds.27): it read a constant that does not exist, inside a generator that never ran.

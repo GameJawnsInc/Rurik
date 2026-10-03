@@ -809,6 +809,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "By default only a swing in its windup is stopped, and never by an "
                          "instant skill: retail [3] 26 of 26 attack skills and 12 of 13 spells "
                          "in the windup, 0 of 19 instants (all landed), 4 of 374 between swings.")
+    ap.add_argument("--approach-in-windup", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.28: re-approach a target that left "
+                         "reach while the swing is still in its windup. By default the swing "
+                         "finishes in place and the follow rides its landing: retail 0 follows "
+                         "in 1,654 windups, 18 of 18 re-approaches at or after the landing.")
     ap.add_argument("--esc-stops-landed", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.26: Esc sends GV_ATTACK_STOPPED on "
                          "every held chain. By default a landed swing's Esc sends only the hold "

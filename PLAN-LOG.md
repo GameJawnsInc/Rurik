@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.28 -- 2026-10-02 -- **No follow inside the player's own windup; a target that left reach is re-approached at the landing, [1] then the 0x002A (`WINDUP_HOLDS_APPROACH`, `--approach-in-windup` reverts). Retail 0 in 1,654 windups, 18 of 18 re-approaches at or after the landing; ours followed mid-windup (201011 22.774).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.28.
+- **Tests:** `test_playerswing` §22, 240 -> 246.
+
 ### MOVECODE-1z-ds.27 -- 2026-10-02 -- **A death inside the player's own windup carries [3, me, 0] right behind the KILL status (`DEATH_STOPS_WINDUP`, `--death-keeps-windup` reverts). Retail 30 of 30 open-windup deaths, 0 of 155 without; ours sent none (2 of 11 owner-tape deaths).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.27.
