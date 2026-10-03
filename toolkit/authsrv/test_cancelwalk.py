@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
 # the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
 # 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=124)
+LEDGER = checks.Ledger("cancelwalk arms", floor=130)   # +6 MOVECODE-1z-ds.25 (section 8)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -1051,6 +1051,112 @@ def section_cast_stop():
           "verdict does not run")
 
 
+def section_instant_leaves_body():
+    """MOVECODE-1z-ds.25: an instant skill leaves the body and the action hold alone. Retail:
+    0 of 37 instants on a key-walking body drew a 0x0028 or 0x002C [me]; 105 of 121 instant
+    presses carry no property-8 change within 0.6 s (batch-3 lane S + the critic's M4)."""
+    import agents
+    import authsrv
+    import contextlib
+    import io
+    import time as _time
+
+    print("8. MOVECODE-1z-ds.25: an instant leaves the body and the hold alone")
+
+    class _PM:
+        def walkable(self, x, y):
+            return True
+
+        def clip(self, x0, y0, x1, y1, step=None):
+            return (x1, y1)
+
+        def plane_at(self, x, y, prefer=None):
+            return prefer
+
+    def press(instant, flag=True, seed=None, ticks=True):
+        saved = (authsrv.skill_timing, authsrv._is_attack_skill, authsrv._is_instant_skill,
+                 authsrv.CAST_STOP, authsrv.INSTANT_LEAVES_BODY)
+        authsrv.skill_timing = lambda sid: ((0.0, 0.0, 8.0) if instant else (2.0, 0.75, 8.0))
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv._is_instant_skill = lambda sid: instant
+        authsrv.CAST_STOP = "pin"
+        authsrv.INSTANT_LEAVES_BODY = flag
+        st = {"agents": {}, "client_pos": (1000.0, -500.0),
+              "client_pos_at": _time.time() - 1.0, "client_plane": 0,
+              "kbd_moving_at": _time.time() - 1.0, "heading": (766.0, 0.0),
+              "heading_mt": 1, "pathmap": _PM(), "pos": (700.0, -500.0),
+              "dest": (9999.0, -500.0)}
+        st.update(seed or {})
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                authsrv.handle_skill_press([0, 42, 7, 0], send, st, 0,
+                                           authsrv.GAME_CMSG_USE_SKILL)
+                n_press = len(sent)
+                if ticks:                              # E5, then E3 (activation 0: the next ticks)
+                    for _ in range(3):
+                        for c in st.get("pending_casts", ()):
+                            for k in ("e5_at", "e3_at", "e6_at", "begin_at"):
+                                c[k] -= 10.0
+                        authsrv.cast_tick(send, st, 0)
+        finally:
+            (authsrv.skill_timing, authsrv._is_attack_skill, authsrv._is_instant_skill,
+             authsrv.CAST_STOP, authsrv.INSTANT_LEAVES_BODY) = saved
+        st["_console"] = buf.getvalue()
+        return sent, n_press, st
+
+    MOVE = (authsrv.GAME_SMSG_AGENT_UPDATE_POSITION, authsrv.GAME_SMSG_AGENT_STOP_MOVING)
+    body = lambda sent: [op for op, _v, _l in sent if op in MOVE]
+    holds = lambda sent: [v[2] for op, v, _l in sent
+                          if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                          and v[0] == agents.GV_DISABLED]
+    s8a, n8a, st8a = press(True)
+    check(body(s8a) == [] and st8a.get("cast_stop_pin") is None
+          and st8a["pos"] == (700.0, -500.0) and st8a["dest"] == (9999.0, -500.0)
+          and "[cancelwalk pin:instant]" in st8a["_console"],
+          "8a. an INSTANT pressed on a key-walking body sends no 0x002C and no 0x0028, writes no "
+          "pin, leaves the model walking -- the body runs on (retail 0 of 37)",
+          f"body={body(s8a)} pin={st8a.get('cast_stop_pin')} pos={st8a['pos']}")
+    check(holds(s8a) == [] and any(op == authsrv.GAME_SMSG_SKILL_ACTIVATED for op, _v, _l in s8a),
+          "8b. and it touches no property 8 at the press, its E5 or its E3 -- while the cast "
+          "itself completes (retail 105 of 121 with no change)",
+          f"holds={holds(s8a)} ops={[hex(op) for op, _v, _l in s8a]}")
+    s8c, n8c, _st = press(False, ticks=False)
+    check(body(s8c) == [authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                        authsrv.GAME_SMSG_AGENT_STOP_MOVING] and holds(s8c) == [1],
+          "8c. CONTROL: a spell with the same seed still gets R10's pin + halt and its [8, 1]",
+          f"body={body(s8c)} holds={holds(s8c)}")
+    s8d, n8d, st8d = press(True, flag=False)
+    check(body(s8d[:n8d]) == [authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                              authsrv.GAME_SMSG_AGENT_STOP_MOVING]
+          and holds(s8d)[:1] == [1] and len(holds(s8d)) >= 3,
+          "8d. KNOWN-BAD ARM (--instant-cast-stop): the instant pins and halts the running body "
+          "(194258 46.158) and toggles the hold at its press and completion",
+          f"body={body(s8d)} holds={holds(s8d)}")
+    _saved_e3 = authsrv.ANIMREF_E3_RELEASE
+    authsrv.ANIMREF_E3_RELEASE = True          # --e3-release: its door must spare an instant too
+    try:
+        s8e, _n, st8e = press(True, seed={"action_hold": 1, "press_hold": True,
+                                          "kbd_moving_at": None})
+    finally:
+        authsrv.ANIMREF_E3_RELEASE = _saved_e3
+    check(holds(s8e) == [] and st8e.get("action_hold") == 1 and st8e.get("press_hold") is True,
+          "8e. a hold already up (a press stop's) survives the instant whole, mark included -- "
+          "so the swing's landing does not release what retail keeps (the critic's S4)",
+          f"holds={holds(s8e)} hold={st8e.get('action_hold')} mark={st8e.get('press_hold')}")
+    src = _authsrv_src()
+    args = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                encoding="utf-8").read()
+    check(authsrv.INSTANT_LEAVES_BODY is True
+          and src.count("_instant_leaves_body(") == 6
+          and "--instant-cast-stop" in args and "if a.instant_cast_stop:" in src,
+          "8f. the flag ships on, the helper gates the press's two hold sends, the cast-stop, the "
+          "E5 pulse and the E3 release (one def + five calls), and its revert arm is wired",
+          f"calls={src.count('_instant_leaves_body(')}")
+
+
 def main():
     section_parse()
     section_lead_formula()
@@ -1059,6 +1165,7 @@ def main():
     section_handler_wiring()
     section_stop_answer()
     section_cast_stop()
+    section_instant_leaves_body()
     return LEDGER.verdict()
 
 

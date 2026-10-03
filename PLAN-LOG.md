@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.25 -- 2026-10-02 -- **An instant skill leaves the body and the action hold alone (`INSTANT_LEAVES_BODY`, `--instant-cast-stop` reverts). Retail: 0 of 37 instants on a walking body stopped it, 105 of 121 carry no property-8 change. Ours pinned and halted a running stance (194258 46.158) and toggled the hold four times, popping a press-stop hold's mark.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.25.
+- **Tests:** `test_cancelwalk` §8, 124 -> 130; `test_instantannounce` re-aimed.
+
 ### MOVECODE-1z-ds.24 -- 2026-10-02 -- **A skill press stops the swing only in its windup, and never for an instant (`SKILL_STOP_NEEDS_WINDUP`, `--skill-stop-any-chain` reverts). Retail [3] 26 of 26 attack skills and 12 of 13 spells in the windup, 0 of 19 instants (all landed), 4 of 374 between swings; ours stopped on every press with a chain held.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.24.

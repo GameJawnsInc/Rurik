@@ -797,6 +797,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "re-pin and the wipe leave the fence latch shut until the body "
                          "walks 24 u off. By default every modelled placement parks: "
                          "retail answers that report with a real lead, 23 of 25.")
+    ap.add_argument("--instant-cast-stop", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.25: an instant skill runs the "
+                         "cast-stop (the R10 pin + halt on a walking body) and toggles the "
+                         "action hold at its press, E5 and E3. By default it leaves both alone: "
+                         "retail 0 of 37 instants on a walking body stopped it, 105 of 121 "
+                         "carry no property-8 change.")
     ap.add_argument("--skill-stop-any-chain", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.24: every accepted skill press on "
                          "a held auto-attack chain sends GV_ATTACK_STOPPED and drops the swing. "

@@ -6081,6 +6081,25 @@ PARTY_WIDE_SHOUTS = True
 # landing -- a self-kind stance's rides 0x009F -- unless --self-cast-names-target
 # is passed too; SELF_CAST_FORM's banner.)
 INSTANT_ANNOUNCE = True
+
+# MOVECODE-1z-ds.25 (batch 3's I, 2026-10-02): an INSTANT skill (a stance, a shout, a signet
+# with no activation) leaves the body and the action hold where they are. Retail: 0 of 37
+# instant presses on a key-walking body drew a 0x0028 or a 0x002C [me] (attack skills 5 of 9,
+# spells 4 of 8; batch-3 lane S's r_skill_walking.py, re-measured by its verifier), and 105 of
+# 121 instant presses carry no property-8 change within 0.6 s -- 34 of 37 on key-walking
+# bodies, the 6 unexplained changes all 0.18 s or more after the press (the critic's
+# c_instant_hold.py). Ours ran the cast-stop for every press: the R10 pin + halt held a
+# running body on a stance (194258 46.158: the next report 0.8 s later sat exactly on the pin),
+# and sent FOUR hold transitions per instant -- the press's [8, 0], the burst's [8, 1], the
+# E5 pulse and the E3 release -- the first of which pops a press-stop hold's mark, so the
+# swing's landing then released a hold retail keeps. Left as they were, named: the router
+# abandon at a cast's begin still ends a click route for an instant (no usable retail row).
+INSTANT_LEAVES_BODY = True   # False (--instant-cast-stop): an instant pins, halts and toggles [8].
+
+
+def _instant_leaves_body(skill_id, is_attack):
+    """MOVECODE-1z-ds.25: True when this press is an instant non-attack skill under the flag."""
+    return INSTANT_LEAVES_BODY and not is_attack and _is_instant_skill(skill_id)
 # ...and the BATCH ORDER of a party-wide shout (56.7's other divergence): retail
 # sends every 0x0042 (each with its own cure and status word), and only then
 # every 0x0027 -- each run in ASCENDING AGENT ID. OBSERVED 43 of 43 batches with
@@ -25649,7 +25668,7 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # already bought) must therefore stay silent, or this server sends a
     # close retail does not. Evaluated BEFORE this press appends its own
     # pending entry, or every press would read as mid-cast.
-    if not queued:
+    if not queued and not _instant_leaves_body(skill_id, is_attack):
         action_hold(send, state, 0, f"the press of skill {skill_id}")
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
@@ -25840,7 +25859,10 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
             # but not a warp. The label normally rides the 0x0028; with
             # the 0x0028 suppressed, this print IS the scorable record.
             _cs_click = state.get("click_moving_at")
-            if _cs_click is not None:
+            if _instant_leaves_body(skill_id, is_attack):
+                print(f"[c{conn_id}] cast-stop SKIPPED: skill {skill_id} is an instant -- "
+                      f"the body runs on, retail 0 of 37 [cancelwalk pin:instant]", flush=True)
+            elif _cs_click is not None:
                 print(f"[c{conn_id}] cast-stop SUPPRESSED: click-walk in "
                       f"flight ({time.time() - _cs_click:.1f}s since the "
                       f"click; the client paths it silently, so no belief "
@@ -25937,7 +25959,8 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         # the batch, 3 of 3 live bursts (castmech 3b/3c). (An instant skill
         # on retail carries NO property 8 at all, 0 of 62 -- the hold is the
         # cast cycle's and is left where it is; a named residual, 56.9.)
-        action_hold(send, state, 1, f"the cast of skill {skill_id}")
+        if not _instant_leaves_body(skill_id, is_attack):
+            action_hold(send, state, 1, f"the cast of skill {skill_id}")
 
     if approaching is not None:
         # SLICE-C2: the follow closes the press batch, after the E4 and the
@@ -26774,7 +26797,7 @@ def cast_tick(send, state, conn_id):
             # gates it. The flag is 1 here for any begun cast (the press
             # or the previous pulse set it), so transition-only emits both
             # halves.
-            if not cast["attack"]:
+            if not cast["attack"] and not _instant_leaves_body(cast["skill_id"], False):
                 action_hold(send, state, 0,
                             f"skill {cast['skill_id']} completes")
                 action_hold(send, state, 1,
@@ -26824,7 +26847,8 @@ def cast_tick(send, state, conn_id):
             queued_next = any(c is not cast and not c.get("cancelled")
                               and c["begin_at"] <= now + 0.001
                               for c in pending)
-            if ANIMREF_E3_RELEASE and not queued_next:
+            if (ANIMREF_E3_RELEASE and not queued_next
+                    and not _instant_leaves_body(cast["skill_id"], cast["attack"])):
                 action_hold(send, state, 0,
                             f"E3 frees the caster (skill {cast['skill_id']})")
             # SLICE-F20: a key HELD through an attack skill's windup is freed
@@ -47109,6 +47133,12 @@ def main():
               "the next key report a walk-start (MOVECODE-1z-ds.10); our other placements "
               "leave the fence latch to walked-off-pin -- every build before 1z-ds.17.",
               flush=True)
+    if a.instant_cast_stop:
+        global INSTANT_LEAVES_BODY
+        INSTANT_LEAVES_BODY = False
+        print("[map] --instant-cast-stop: an instant skill runs the cast-stop (pin + halt on a "
+              "walking body) and toggles the action hold at its press, E5 and E3 (every build "
+              "before MOVECODE-1z-ds.25)", flush=True)
     if a.skill_stop_any_chain:
         global SKILL_STOP_NEEDS_WINDUP
         SKILL_STOP_NEEDS_WINDUP = False

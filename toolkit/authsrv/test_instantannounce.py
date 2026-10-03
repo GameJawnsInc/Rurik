@@ -106,7 +106,11 @@ FLAGS = ("INSTANT_ANNOUNCE", "PER_WEARER_BATCH_ORDER", "PARTY_WIDE_SHOUTS", "EFF
          # known-bad arm below reverts it too (--self-cast-names-target): a stance's
          # [60] under --no-instant-announce lands on its caster and would otherwise
          # ride 0x009F, not b50da5c8's 0x00A0 naming the target.
-         "SELF_CAST_FORM")
+         "SELF_CAST_FORM",
+         # MOVECODE-1z-ds.25: an instant leaves the action hold alone (retail 0 of 62 observer
+         # instants carry property 8); b50da5c8's press carried an [8 -> 1], so the known-bad arm
+         # reverts it too (--instant-cast-stop).
+         "INSTANT_LEAVES_BODY")
 
 
 def _arm(**kw):
@@ -306,10 +310,12 @@ def section_player():
     try:
         # THE STANCE.
         press, tick = _player_cast(FRENZY)
-        check([o for o, _v in press] == [E4, 0x00A2, INT] and press[2][1] == [8, P, 1]
-              and not _props(press, 60),
-              "the stance's press is E4, the energy debit, [8 -> 1] -- NO property 60 "
-              "(retail: 0 of 62 observer instant casts carry a 60)", f"{_fmt(press)}")
+        check([o for o, _v in press] == [E4, 0x00A2]
+              and not _props(press, 60) and not _props(press, 8),
+              "the stance's press is E4 and the energy debit -- NO property 60 (retail: 0 of 62 "
+              "observer instant casts carry a 60) and, since MOVECODE-1z-ds.25, no [8 -> 1] "
+              "either (0 of 62 carry property 8: the residual 56.9 the cast burst named)",
+              f"{_fmt(press)}")
         check(tick[:4] == [(E5, [P, FRENZY, 7, 4]), (INT, [48, P, FRENZY]),
                            (INT, [21, P, VIS[FRENZY]]),
                            (APPLY, tick[3][1])] and tick[3][1][:2] == [P, FRENZY],
@@ -326,8 +332,10 @@ def section_player():
 
         # THE SHOUT, with a hero at 500 u and a henchman at 300 u in earshot.
         press, tick = _player_cast(CHARGE)
-        check([o for o, _v in press] == [E4, 0x00A2, INT] and not _props(press, 60),
-              "the shout's press: E4, the debit, [8 -> 1], no property 60", f"{_fmt(press)}")
+        check([o for o, _v in press] == [E4, 0x00A2] and not _props(press, 60)
+              and not _props(press, 8),
+              "the shout's press: E4, the debit, no property 60 and no [8 -> 1] "
+              "(MOVECODE-1z-ds.25)", f"{_fmt(press)}")
         check(tick[:4] == [(E5, [P, CHARGE, 7, 20]), (INT, [48, P, CHARGE]),
                            (INT, [21, P, VIS[CHARGE]]), (SPEECH, [P, chr(WORD[CHARGE])])],
               "the completion opens E5 [1, 364, 7, 20], [48, 1, 364], [21, 1, 622], then "
@@ -617,7 +625,8 @@ def section_flags():
         LEDGER.skip("section 4's driven half (14 checks): no skills rows", why)
         return
     # BOTH FLAGS FLIPPED = the server until 2026-09-25, byte for byte.
-    saved = _arm(INSTANT_ANNOUNCE=False, PER_WEARER_BATCH_ORDER=True, SELF_CAST_FORM=False)
+    saved = _arm(INSTANT_ANNOUNCE=False, PER_WEARER_BATCH_ORDER=True, SELF_CAST_FORM=False,
+                 INSTANT_LEAVES_BODY=False)
     try:
         press, tick = _player_cast(CHARGE)
         check(press == B50["player_364"]["press"],

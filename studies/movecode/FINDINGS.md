@@ -21745,3 +21745,37 @@ that is an attack skill or not an instant. The cast gate's pause of the chain is
 
 **Tests:** `test_castcancel` §8 (a-e), floor 45 -> 50. Each mutation reddens its own check: the
 windup test out (8c) and the instant test out (8a).
+
+
+### 1z-ds.25 An instant skill leaves the body and the action hold alone (`INSTANT_LEAVES_BODY`, `--instant-cast-stop` reverts)
+
+Batch 3's item I.
+
+**Retail** (OBSERVED):
+- 0 of 37 instant presses on a key-walking body drew a 0x0028 or 0x002C [me]. Attack skills drew
+  one on 5 of 9, spells on 4 of 8. (Lane S's `r_skill_walking.py`, re-measured by its verifier.)
+- 105 of 121 instant presses carry no property-8 change within 0.6 s, 34 of 37 on key-walking
+  bodies. The 6 unexplained changes all come 0.18 s or more after the press (the critic's
+  `c_instant_hold.py`).
+
+**Ours, before:**
+- The cast-stop ran for every press. Its R10 pin + halt held a running body on a stance: at
+  194258 46.158 the next report, 0.8 s later, sat exactly on the pin. The lane counted 0 owner
+  exposures; its verifier found this one.
+- An instant sent four hold transitions: the press's [8, 0], the burst's [8, 1], the E5 pulse and
+  (under --e3-release) the E3 release.
+- The press's [8, 0] pops a press-stop hold's mark, so the swing's landing then released a hold
+  retail keeps. This is the critic's M5 S4, found by composing this item with the hold at every
+  start.
+
+**The fix:** `_instant_leaves_body(skill_id, is_attack)` gates five sites: the cast-stop (a new
+first branch that sends nothing and prints `pin:instant`), the press's [8, 0], the burst's
+[8, 1], the E5 pulse and the E3 release.
+
+**Left as it was, named:** the router abandon at a cast's begin still ends a click route for an
+instant. Retail has no usable row for that cell.
+
+**Tests:**
+- `test_cancelwalk` §8 (a-f), 124 -> 130. Each of the five gates, removed, reddens its own check
+  (8e is driven under --e3-release too).
+- `test_instantannounce`: two press checks re-aimed. Its b50da5c8 arm reverts the new flag too.
