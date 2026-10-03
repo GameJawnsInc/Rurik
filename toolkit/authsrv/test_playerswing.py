@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=251)   # MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=255)   # MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -3116,6 +3116,59 @@ def section_placement_frame():
     check("--frame-ignores-placement" in args_src and "if a.frame_ignores_placement:" in src
           and "--press-keeps-click-dest" in args_src and "if a.press_keeps_click_dest:" in src,
           "20f. --frame-ignores-placement and --press-keeps-click-dest are wired")
+
+    # 20g-j. MOVECODE-1z-ds.30: a NEW follow's leg starts at the keyboard body estimate the snap
+    # guard reckoned, not the world-0 mirror (the critic's M3: the body-start lerp nearer 16 of 17).
+    class _Rw:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def follow_from(on=True, walking=True, repath=False):
+        sent, rec = [], _Rw()
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        now = time.time()
+        st = _state()
+        agent = st["agents"][10]
+        agent["pos"] = (0.0, 0.0)
+        at = now - 0.5
+        st.update({"plane": 0, "client_pos": (400.0, 0.0), "client_pos_at": at,
+                   "pos": (256.0, 0.0)})
+        if walking:                                   # a W walk toward the foe, 0.5 s old
+            st["client_heading"] = (-766.0, 0.0, 1, at)
+            st["last_report"] = (400.0, 0.0, False, at)
+        else:                                         # standing: the 0x0047 is the frame
+            st["last_report"] = (400.0, 0.0, True, at)
+        saved = (authsrv.FOLLOW_LEG_FROM_BODY, authsrv._npc_mirror_pos)
+        authsrv.FOLLOW_LEG_FROM_BODY = on
+        authsrv._npc_mirror_pos = lambda s, n: (320.0, 0.0)   # the mirror, 64 u behind the body
+        try:
+            authsrv._approach_send(send, st, 0, 10, agent, now, repath=repath, rec=rec)
+        finally:
+            authsrv.FOLLOW_LEG_FROM_BODY, authsrv._npc_mirror_pos = saved
+        row = [kw for k, kw in rec.rows if k == "approach"]
+        return st.get("click_leg"), (row[0] if row else {}), sent
+
+    leg, row, _s = follow_from()
+    check(leg is not None and abs(leg["p0"][0] - 256.0) < 1.0 and abs(leg["dist"] - 176.0) < 1.0
+          and row.get("origin") == [256.0, 0.0] and row.get("frame_origin") == [320.0, 0.0],
+          "20g. a follow from a key-walking body starts its leg at the estimate (the report "
+          "advanced 0.5 s at 288 u/s: (256, 0)), 176 u to the disc, and the row names both origins",
+          f"leg {leg and (leg['p0'], round(leg['dist'], 1))}, row {row.get('origin')} / "
+          f"{row.get('frame_origin')}")
+    leg0, _r, _s = follow_from(on=False)
+    check(leg0 is not None and abs(leg0["p0"][0] - 320.0) < 1.0,
+          "20h. KNOWN-BAD ARM (--follow-leg-from-frame): the leg starts at the mirror, 64 u off "
+          "the body, its eta 0.22 s late -- B2", f"p0 {leg0 and leg0['p0']}")
+    leg_s1, _r, _s = follow_from(walking=False)
+    leg_s0, _r, _s = follow_from(on=False, walking=False)
+    check(leg_s1 is not None and leg_s0 is not None and abs(leg_s1["p0"][0] - 400.0) < 1.0
+          and leg_s1["p0"] == leg_s0["p0"],
+          "20i. CONTROL: a standing body (the 0x0047 last, no heading) starts at the report under "
+          "both arms", f"{leg_s1 and leg_s1['p0']} / {leg_s0 and leg_s0['p0']}")
+    leg_r, _r, _s = follow_from(repath=True)
+    check(leg_r is not None and abs(leg_r["p0"][0] - 320.0) < 1.0,
+          "20j. a RE-PATH keeps the frame (the mirror models the avoidance halts our leg does "
+          "not)", f"{leg_r and leg_r['p0']}")
 
 
 def section_press_stop_hold():

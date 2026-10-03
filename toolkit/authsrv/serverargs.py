@@ -809,6 +809,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "By default only a swing in its windup is stopped, and never by an "
                          "instant skill: retail [3] 26 of 26 attack skills and 12 of 13 spells "
                          "in the windup, 0 of 19 instants (all landed), 4 of 374 between swings.")
+    ap.add_argument("--follow-leg-from-frame", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.30: a new follow's leg (origin, eta, "
+                         "stop point) starts at the reach frame -- the world-0 mirror while the "
+                         "body walks -- instead of the keyboard body estimate the snap guard "
+                         "reckoned. The body-start lerp was nearer the next report on 16 of 17 "
+                         "discriminating rows.")
     ap.add_argument("--press-repins-own-follow", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.29: a press on the target our own "
                          "follow walked to, once that follow has arrived (by eta or by "

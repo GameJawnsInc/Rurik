@@ -21905,3 +21905,37 @@ quiet refusal.
 Retail sends a follow alone there (11 of 12, 0 pins).
 
 **Tests:** `test_playerswing` 10k-o, 246 -> 251.
+
+
+### 1z-ds.30 A new follow's leg starts at the keyboard body estimate (`FOLLOW_LEG_FROM_BODY`, `--follow-leg-from-frame` reverts)
+
+Batch 3's item B2a.
+
+**The defect (B2):** `_approach_send` took the leg's origin, length, eta and stop point from
+`_reach_frame`. While the body walks, that is the world-0 MIRROR, so the eta that holds the walk-in
+swing (the `moving` gate) inherited |mirror - body|. Since 1z-ds.20, every follow after one of our
+placements already starts at the body (0.0-0.1 u on 201011). Two cases remained:
+- kill-no-pin follows, the out-of-reach press on a key-walking body;
+- re-paths.
+
+**The evidence that the body starts at the estimate** (OBSERVED, the critic's `c_b2disc.py`, run in
+a form the client can refute):
+- Rows: 28 kill-no-pin sends whose two origins were 20 u or more apart. On 17 of them the next
+  client report caught the body mid-walk.
+- On 16 of those 17 the body-start lerp sat nearer the report than the mirror-start lerp. The one
+  exception is a junk row.
+- Median error: 4.9 u from the body start against 31.4 u from the mirror.
+- 201011 has 2 such rows, 6.171 and 9.509: the two late long-chase starts (+0.217 s and +0.167 s).
+
+The lane's verifier had found 0 short kill-no-pin walk-ins late at the current build. M3 reverses
+that reading for the long chases.
+
+**The fix:**
+- On a NEW send, when the snap guard reckoned an estimate (src 'estimate': the last 0x003D
+  advanced along its heading, or a fresh lead kill), the leg starts there. That is the same point
+  the guard already re-pins to above R_MATCH.
+- Re-paths keep the frame: the mirror models the F14 avoidance halts and our leg does not.
+- The approach row now carries `frame_origin` beside `origin`, so the check stays computable
+  after the change.
+
+**Tests:** `test_playerswing` 20g-j, 251 -> 255.

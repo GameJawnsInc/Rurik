@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.30 -- 2026-10-02 -- **A new follow's leg starts at the keyboard body estimate, not the world-0 mirror (`FOLLOW_LEG_FROM_BODY`, `--follow-leg-from-frame` reverts). The body-start lerp sat nearer the next mid-walk report on 16 of 17 discriminating rows (median 4.9 u against 31.4 u). The approach row logs both origins.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.30.
+- **Tests:** `test_playerswing` 20g-j, 251 -> 255.
+
 ### MOVECODE-1z-ds.29 -- 2026-10-02 -- **A press while our own follow to that target is the leg in force sends nothing, arrived or not (`PRESS_SPARES_OWN_FOLLOW`, `--press-repins-own-follow` reverts). Retail 0 pins in 160 such presses; ours re-pinned 4 of 4 arrived same-target presses (NEW-3).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.29.

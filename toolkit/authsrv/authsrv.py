@@ -21229,6 +21229,22 @@ def _approach_abandon(state):
     state["dest"] = None
 
 
+# MOVECODE-1z-ds.30 (batch 3's B2a, 2026-10-02): a NEW follow's leg starts at the body
+# estimate when the snap guard reckoned one (src 'estimate': the last 0x003D advanced along its
+# heading, or a fresh lead kill's point) -- the same point the guard already re-pins to above
+# R_MATCH, so the leg starts at the body whether or not the guard fires. Before, the leg (its
+# origin, length, eta and stop point) started at _reach_frame, the world-0 MIRROR while the body
+# walks, and the eta that holds the walk-in swing (the `moving` gate) inherited |mirror - body|.
+# The drawn body walks a follow from where it is (prior lane B, 12:1, RECONSTRUCTION); the
+# critic's M3 put it on the wire: on 17 mid-walk reports after a kill-no-pin follow whose two
+# origins were 20 u or more apart, the body-start lerp was nearer 16 of 17 (median error 4.9 u
+# against the mirror origin's 31.4 u; 201011 6.171 and 9.509, the two late long chases). Re-paths
+# keep the frame (the mirror models the F14 avoidance halts and our leg does not). The approach
+# row now carries both origins (`origin` the leg's, `frame_origin` the frame's), so the check
+# stays computable after the change.
+FOLLOW_LEG_FROM_BODY = True   # False (--follow-leg-from-frame): the leg starts at the reach frame.
+
+
 def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                    rec=None, stop_at=None, into="approach"):
     """Send the follow and arm the leg it starts. See approach_tick.
@@ -21257,6 +21273,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # follow the same way the press closes it).
     router_abandon(state, rec, "approach", now)
     tx, ty = float(agent["pos"][0]), float(agent["pos"][1])
+    _body = None                         # 1z-ds.30: the guard's body estimate, when it made one
     if not repath:
         # THE SNAP GUARD, derived rather than tuned. After a click-walk this
         # server's copy of the player (and the client's SYNC copy, which
@@ -21294,6 +21311,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                 _est = _kbd_kill_fresh(state, now)
             if _est is not None:
                 model, src = _est, "estimate"
+        if src == "estimate":
+            _body = (float(model[0]), float(model[1]))
         sync = _sync_position(state, now) or state.get("pos")
         if model is not None and sync is not None:
             sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
@@ -21347,6 +21366,9 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     mx, my = float(mx), float(my)
     px, py = _reach_frame(state, now)
     px, py = float(px), float(py)
+    _frame_origin = (px, py)
+    if FOLLOW_LEG_FROM_BODY and _body is not None:
+        px, py = _body                   # 1z-ds.30: the leg starts at the body
     dist = math.hypot(tx - px, ty - py)
     stop = (approach_stop(agent) if stop_at is None   # WEAPONS-W2b: the range for a bow
             else float(stop_at))                      # RANGERPRE-S15: a pickup, 0.0
@@ -21389,6 +21411,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                       target=target_id, repath=bool(repath),
                       at=[round(tx, 1), round(ty, 1)],
                       origin=[round(px, 1), round(py, 1)],
+                      frame_origin=[round(_frame_origin[0], 1), round(_frame_origin[1], 1)],
                       to=[round(stop_point[0], 1), round(stop_point[1], 1)],
                       run=round(run, 1), chord_cut=cut,
                       dist_frame=round(dist, 1),
@@ -47226,6 +47249,12 @@ def main():
         print("[map] --skill-stop-any-chain: every accepted skill press on a held chain "
               "sends [3] and drops the swing, instants and between-swing presses included "
               "(every build before MOVECODE-1z-ds.24)", flush=True)
+    if a.follow_leg_from_frame:
+        global FOLLOW_LEG_FROM_BODY
+        FOLLOW_LEG_FROM_BODY = False
+        print("[map] --follow-leg-from-frame: a new follow's leg starts at the reach frame (the "
+              "world-0 mirror while the body walks), not the body estimate (every build before "
+              "MOVECODE-1z-ds.30)", flush=True)
     if a.press_repins_own_follow:
         global PRESS_SPARES_OWN_FOLLOW
         PRESS_SPARES_OWN_FOLLOW = False
