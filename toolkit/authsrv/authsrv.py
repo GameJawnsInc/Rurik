@@ -2826,6 +2826,26 @@ ANSWER_KBD_CLICK = False
 # 201800's "slight warp" -- the next press's PRESS ENDS THE WALK is built from click_leg,
 # which a verbatim answer does not touch.
 PRESS_ENDS_KBD_DROP = True   # False (--press-keeps-kbd-drop): the drop after our order too.
+# MOVECODE-1z-ds.32 (batch 3's K-B -- R1-B1's C1, 2026-10-02): a click straight into a LIVE
+# key walk -- no order of ours newer than the keyboard latch -- is ANSWERED like any other click.
+# Retail answers every click inside our latch, 34 of 34 (kbdclickjoin.py), this class 16 of 16.
+# WHY R1-B1 WARPED and why it does not recur here (batch-3 lane K, re-measured by its verifier
+# on the r1b1 tape authsrv-20260828T105948): each of its four click grants was followed, 0.11-
+# 0.17 s later, by the key's re-asserting 0x003D -- REFUSED heading-rate under the then 0.5 s
+# floor, the next keyboard grant coming +1.93 / +1.97 / +1.97 / +3.05 s later, exactly the
+# displacement instants; in that window the sync copy walked to the click from a zero-lead
+# report while the body walked the key. At this build that re-lead is never refused
+# (KBD_GRANT_FLOOR 0.0 since 1z-cw: the re-asserting report re-led within 15 ms on 132 of 132
+# drops, and on 9 of 9 answered-then-re-asserted clicks; the 0.5 s floor era 0 of 7, the
+# positive control), the click arm's lead kill leaves no keyboard sender alive (kbd_leg popped,
+# heading_hold cleared), and the copy starts on the body (real leads + the kill). The answer is
+# GUARDED on exactly that term: ZERO_LEAD, KBD_GRANT_FLOOR <= 0 and grants under a hold
+# (GRANT_DURING_HOLD) -- without them the drop returns by itself (--kbd-grant-floor 0.5 is the
+# 1q configuration). The drop's own harm: the router left world-0 parked on the body estimate
+# while the client walked the click on its own pathing (agenttap, kill era: 27 of 29 moved
+# drops, |async - sync| p50 338 u). RETAIL'S CAVEAT, stated: 14 of its 16 C1 clicks lie within
+# 13 degrees ahead of the key heading; side and reverse clicks with a key held are n = 2.
+LIVE_KEY_CLICK_ANSWERED = True   # False (--live-key-click-drop): the drop (every build before it).
 
 # --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
 # been run. The module global defaults False and main()'s argparse layer flips
@@ -11051,6 +11071,10 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             elif (_fol is not None
                   and float(_fol[2] if len(_fol) > 2 else _fol[0]) > kbd_at):
                 _ended = ("follow", float(_fol[0]))
+        # 1z-ds.32: a live key walk's click is answered when the key's next report will be
+        # re-led at once -- the term whose absence was R1-B1's warp.
+        _relead_ok = (ZERO_LEAD and KBD_GRANT_FLOOR <= 0.0
+                      and (GRANT_DURING_HOLD or state.get("action_hold", 0) == 0))
         if _ended is not None:
             if rec is not None:
                 rec.event("router_route", verdict="kbd-answered",
@@ -11060,7 +11084,7 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}) {kage:.2f}s after the "
                   f"last key report, but OUR {_ended[0]} came after it: answered, not "
                   f"dropped [MOVECODE-1z-ds.18]", flush=True)
-        elif not ANSWER_KBD_CLICK:
+        elif not ANSWER_KBD_CLICK and not (LIVE_KEY_CLICK_ANSWERED and _relead_ok):
             state["grant_pending"] = None
             if rec is not None:
                 rec.event("router_route", verdict="kbd-drop",
@@ -11070,9 +11094,20 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
                   f"player is driving with the keyboard -- dropped. OURS, "
                   f"not retail's (review sec.1.7: retail answered 7 of 7 "
                   f"single mid-keyboard clicks); kept on R1-B1's "
-                  f"displacement outcome. Revert: --answer-kbd-click",
+                  f"displacement outcome (--live-key-click-drop, or a re-lead "
+                  f"this build could refuse). Revert: --answer-kbd-click",
                   flush=True)
             return True
+        elif not ANSWER_KBD_CLICK:
+            # 1z-ds.32: the live key walk's click, answered. The family edge re-arms at the
+            # answer's own 0x002B (1z-ds.23), so a held strafe re-sends its rate.
+            if rec is not None:
+                rec.event("router_route", verdict="kbd-answered",
+                          arm="live-key", pass_through=True,
+                          dest=[dx, dy], keyboard_age=round(kage, 3))
+            print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}) {kage:.2f}s into a "
+                  f"live key walk: answered (retail 34 of 34; the key's next report is "
+                  f"re-led at once) [MOVECODE-1z-ds.32]", flush=True)
         # --answer-kbd-click, wired to the router 2026-09-05 (MOVECODE-1z-bh,
         # review sec.1.7). The flag has existed since 2026-08-28 but was read
         # ONLY by `_grant_verdict`, the legacy path this handler bypasses, so
@@ -47263,6 +47298,11 @@ def main():
         print("[map] --press-keeps-click-dest: PRESS ENDS THE WALK leaves the abandoned "
               "click's dest armed -- the model walks on to it (every build before "
               "MOVECODE-1z-ds.20).", flush=True)
+    if a.live_key_click_drop:
+        global LIVE_KEY_CLICK_ANSWERED
+        LIVE_KEY_CLICK_ANSWERED = False
+        print("[router] --live-key-click-drop: a click inside the keyboard latch with no order "
+              "of ours newer is dropped (every build before MOVECODE-1z-ds.32)", flush=True)
     if a.press_keeps_kbd_drop:
         global PRESS_ENDS_KBD_DROP
         PRESS_ENDS_KBD_DROP = False

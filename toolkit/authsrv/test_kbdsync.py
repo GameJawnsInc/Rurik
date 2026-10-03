@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=270)   # MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=273)   # MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2857,6 +2857,72 @@ def main():
           "30t. the same report with no hold up (--no-attack-start-hold) gets the SAME lead -- "
           "the hold changes the batch's release and nothing about the answer",
           f"seq {seq30t}, grants {g30t}")
+
+    # 31. MOVECODE-1z-ds.32: a click straight into a LIVE strafe walk is answered, and the key's
+    # re-asserting report 0.13 s later is re-led at once WITH its speed truth -- the two terms
+    # R1-B1's warp lacked (r1b1: the re-lead refused heading-rate, the next grant +1.97 s).
+    print("\n31. 1z-ds.32: a click into a live key walk, and the key's re-lead")
+
+    class _PM31:
+        def walkable(self, x, y):
+            return True
+
+        def nearest_walkable(self, x, y, radius):
+            return (x, y, 0.0)
+
+        def containing(self, x, y):
+            import types
+            return [types.SimpleNamespace(plane=0)]
+
+        def plane_at(self, x, y, prefer=None):
+            return 0
+
+        def clip(self, x0, y0, x1, y1, step=16.0, plane=None):
+            return (x1, y1)
+
+        def seam_clip(self, x0, y0, x1, y1, plane, step=2.0):
+            return (x1, y1)
+
+        def route(self, x0, y0, x1, y1, start_plane=None, goal_plane=None, with_planes=False):
+            pts = [(x0, y0), (x1, y1)]
+            return (pts, [0, 0]) if with_planes else pts
+
+    def click_then_key(on=True):
+        t = _t27.time()
+        st = {"pos": (0.0, 0.0), "plane": 0, "pos_seen": 0.0, "pathmap": _PM31(),
+              "kbd_moving_at": t - 0.9, "a2_family_sent": 4,       # a strafe's edge was sent
+              "client_pos": (0.0, 0.0), "client_pos_at": t - 0.9}
+        w = Sent(st)
+        saved = (authsrv.ZERO_LEAD, authsrv.LIVE_KEY_CLICK_ANSWERED)
+        authsrv.ZERO_LEAD, authsrv.LIVE_KEY_CLICK_ANSWERED = True, on
+        try:
+            authsrv.router_answer_click(w, st, 0, FakeRec(), (-400.0, 300.0), 0, 0, 0, 0)
+        finally:
+            authsrv.ZERO_LEAD, authsrv.LIVE_KEY_CLICK_ANSWERED = saved
+        answered = [r for r in w.rows if r[0] == MOVE30]
+        st["pathmap"] = None
+        st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, 766.0], 4], state=st, since=0.13)
+        return st, answered, w2
+
+    st31, ans31, w31 = click_then_key()
+    leads31 = [r for r in w31.rows if r[0] == MOVE30 and "KBD LEAD" in r[2]]
+    truth31 = [r for r in w31.rows if r[0] == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+               and "KBD SPEED-TRUTH" in r[2]]
+    check(len(ans31) == 1 and ans31[0][1][1] == [-400.0, 300.0],
+          "31a. a click 0.9 s into a live strafe walk is ANSWERED verbatim (retail 34 of 34)",
+          f"{ans31}")
+    check(len(leads31) == 1 and len(truth31) == 1 and truth31[0][1][2] == 4,
+          "31b. the key's re-asserting report 0.13 s later is re-led at once AND re-sends its "
+          "strafe rate -- the router's [1.0] re-armed the family edge (1z-ds.23), so the copy does "
+          "not walk a 0.75 leg at 1.0 (the 20260909T221342 104.467 shape)",
+          f"leads {leads31}, truth {truth31}")
+    _st, ans31c, _w = click_then_key(on=False)
+    i_kill = SRC.find('_ck = _kbd_lead_kill(send, state, conn_id, rec, "click")')
+    i_route = SRC.find("if ROUTER and router_answer_click(", i_kill)
+    check(ans31c == [] and 0 < i_kill < i_route,
+          "31c. KNOWN-BAD ARM (--live-key-click-drop) answers nothing; and in the click arm the "
+          "lead kill comes BEFORE the router, so no keyboard sender survives the answer",
+          f"known-bad {ans31c}; kill {i_kill} < router {i_route}")
 
     # MOVECODE-1z-ds.17: EVERY MODELLED PLACEMENT PARKS. 20261002T141035 43.766: after a
     # follow-branch press (the pin alone) the next key report sat ON the pin with the keyboard

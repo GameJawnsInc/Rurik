@@ -790,6 +790,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="THE REVERT ARM for MOVECODE-1z-ds.20: PRESS ENDS THE WALK leaves the "
                          "abandoned click's destination armed, so the server's model walks on "
                          "to it -- every build before it.")
+    ap.add_argument("--live-key-click-drop", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.32: the router drops a click that "
+                         "lands inside the keyboard latch when no order of ours is newer (every "
+                         "build before it; R1-B1's class). By default it is answered, as retail "
+                         "answers 34 of 34, whenever the key's next report would be re-led at "
+                         "once (zero-lead on, the 0.0 s keyboard floor, grants under a hold).")
     ap.add_argument("--press-keeps-kbd-drop", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.18: the router drops a click "
                          "inside the keyboard latch even when our own stop pin or follow "

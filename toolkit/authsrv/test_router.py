@@ -66,7 +66,8 @@ import authsrv                                                 # noqa: E402
 # +2 MOVECODE-1z-ds.21 (1d-i/j: the follow marker carries the press behind it). 136.
 # +6 MOVECODE-1z-ds.23 (section 1e: the router's [1.0] re-arms the family edge and names
 # its leg's speed). 142.
-LEDGER = checks.Ledger("router wiring", floor=142)
+# +6 MOVECODE-1z-ds.32 (section 1f: a click into a live key walk is answered). 148.
+LEDGER = checks.Ledger("router wiring", floor=148)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -502,6 +503,62 @@ def main():
           and _src.count("if D1_LEAD or ROUTER_REARMS_FAMILY_EDGE:") == 2
           and "--router-keeps-family-edge" in _args
           and "if a.router_keeps_family_edge:" in _src)
+
+    # 1f. MOVECODE-1z-ds.32: a click straight into a LIVE key walk (no order of ours newer than
+    # the latch) is answered, as retail answers 34 of 34 -- guarded on the key's next report
+    # being re-led at once (ZERO_LEAD, the 0.0 s keyboard floor, grants under a hold). Section
+    # 1's drop above stays green because ZERO_LEAD is False at import: the guard holds it.
+    def live_click(dest=(50.0, 50.0), on=True, zl=True, floor=0.0, **marks):
+        st = base_state()
+        now = authsrv.time.time()
+        st["kbd_moving_at"] = now - 0.904             # 201011 116.883's shape
+        st["a2_family_sent"] = 4
+        for k, age in marks.items():
+            if k == "follow":
+                st["follow_order_at"] = (now - age, 10, now - age)
+        saved = (authsrv.LIVE_KEY_CLICK_ANSWERED, authsrv.ZERO_LEAD, authsrv.KBD_GRANT_FLOOR)
+        authsrv.LIVE_KEY_CLICK_ANSWERED, authsrv.ZERO_LEAD, authsrv.KBD_GRANT_FLOOR = on, zl, floor
+        try:
+            handled, sent, rows = answer(st, dest)
+        finally:
+            (authsrv.LIVE_KEY_CLICK_ANSWERED, authsrv.ZERO_LEAD, authsrv.KBD_GRANT_FLOOR) = saved
+        verdicts = [(r["verdict"], r.get("arm")) for r in rows if r["kind"] == "router_route"]
+        return st, handled, sent, verdicts
+
+    st1fa, h1fa, s1fa, v1fa = live_click()
+    check("1f-a. the 201011 116.883 shape: a click 0.90 s into a live key walk is ANSWERED "
+          "verbatim, its pass-through row naming the live-key arm, the integrator walking it and "
+          "the family edge re-armed",
+          h1fa and [op for op, _p, _l in s1fa] == [SPEED_OP, MOVE_OP]
+          and s1fa[1][1][1] == [50.0, 50.0]
+          and v1fa == [("kbd-answered", "live-key"), ("verbatim", None)]
+          and st1fa["dest"] == (50.0, 50.0) and st1fa["a2_family_sent"] is None)
+    st1fb, _h, _s, v1fb = live_click(dest=(300.0, 0.0))
+    check("1f-b. inside the latch a click across the wall is ROUTED like any other: a chain",
+          st1fb.get("router_chain") is not None and v1fb[0] == ("kbd-answered", "live-key"))
+    _st, _h, s1fc, v1fc = live_click(on=False)
+    check("1f-c. KNOWN-BAD ARM (--live-key-click-drop): dropped, nothing sent -- 0cbe7ca9",
+          s1fc == [] and v1fc == [("kbd-drop", None)])
+    _st, _h, _s, v1fd = live_click(follow=0.5)
+    saved_akc = authsrv.ANSWER_KBD_CLICK
+    authsrv.ANSWER_KBD_CLICK = True
+    try:
+        _st, _h, _s, v1fd2 = live_click()
+    finally:
+        authsrv.ANSWER_KBD_CLICK = saved_akc
+    check("1f-d. PRECEDENCE: our newer follow still answers as press-ended (1z-ds.18), and the "
+          "--answer-kbd-click diagnostic arm keeps its own label",
+          v1fd[0] == ("kbd-answered", "press-ended") and v1fd2[0] == ("kbd-answered", "answer-kbd-click"))
+    _st, _h, s1fe, v1fe = live_click(floor=0.5)
+    _st, _h, s1fe2, v1fe2 = live_click(zl=False)
+    check("1f-e. THE GUARD: under a 0.5 s keyboard floor (R1-B1's configuration: the re-lead "
+          "refused heading-rate) or with zero-lead off, the drop comes back by itself",
+          s1fe == [] and v1fe == [("kbd-drop", None)] and s1fe2 == [] and v1fe2 == [("kbd-drop", None)])
+    check("1f-f. the flag ships on, its guard is spelled without test_d1lead's R11 literal, and "
+          "--live-key-click-drop is wired",
+          authsrv.LIVE_KEY_CLICK_ANSWERED is True
+          and _src.count('state.get("action_hold", 0) == 0') >= 1
+          and "--live-key-click-drop" in _args and "if a.live_key_click_drop:" in _src)
 
     # refused: origin off-mesh (the P-17 wall-press door, CLOSED).
     st = base_state(pos=(150.0, 0.0))

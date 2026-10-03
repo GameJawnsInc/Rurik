@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.32 -- 2026-10-02 -- **A click straight into a live key walk is answered (`LIVE_KEY_CLICK_ANSWERED`, `--live-key-click-drop` reverts), guarded on the key's next report being re-led at once. Retail 34 of 34; R1-B1's warp needed a refused re-lead, never refused at this build (132 of 132). A run experiment: exposure manufactured, refuted by a 299 u displacement within 2.5 s.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.32.
+- **Tests:** `test_router` §1f, 142 -> 148; `test_kbdsync` §31, 270 -> 273.
+- **Closes:** §8's 1z-ds.22 line, now the batch-3 line.
+
 ### MOVECODE-1z-ds.31 -- 2026-10-02 -- **Every own attack start leaves the action hold [8, me, 1] up, to the next input (`ATTACK_START_HOLDS`, `--no-attack-start-hold` reverts). Retail 1,647 of 1,654 own starts held, raised behind the [4] 210 of 210; ours held 0 of 44 walk-ins. The interact walk releases it. P2, closed.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.31.

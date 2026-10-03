@@ -22008,3 +22008,54 @@ the real 0x003D arm.
 - `test_kbdsync` 30s/30t, 268 -> 270.
 - `test_castcancel` and `test_approachroute`: re-aims.
 - Mutations: the site out reddens 17 checks, the mark out 6, the interact release out 21j.
+
+
+### 1z-ds.32 A click straight into a live key walk is answered (`LIVE_KEY_CLICK_ANSWERED`, `--live-key-click-drop` reverts)
+
+Batch 3's item K-B, R1-B1's C1. It ships as a run experiment, and the exposure has to be scripted.
+
+**Retail** (OBSERVED; lane K's `k1_census.py`, reproduced by its verifier over 122 connections and
+160 clicks):
+- Every click inside our latch is answered: 34 of 34, p50 0.041 s, 21 of them verbatim. This
+  class (no order of ours newer) is 16 of 16.
+- No keyboard grant goes out between the answer and the next input, 34 of 34.
+- When the key re-asserts, retail answers that 0x003D like any key report, about 30 ms later.
+- The caveat, stated: 14 of the 16 C1 clicks lie within 13 degrees ahead of the key heading. Side
+  and reverse clicks with a key held are n = 2.
+
+**Why R1-B1 (2026-08-28, §1q) warped** (OBSERVED on its own tape, re-read by the verifier):
+- Each of its four click grants was followed 0.11-0.17 s later by the key's re-asserting 0x003D,
+  REFUSED heading-rate under the then 0.5 s floor.
+- The next keyboard grant came +1.93, +1.97, +1.97 and +3.05 s later. Those are §1q's displacement
+  instants.
+- In that window the sync copy walked to the click from a zero-lead report while the body walked
+  the key.
+
+**Why it does not recur at this build:**
+- The floor is 0.0 s (1z-cw). The re-asserting report was re-led within 15 ms on 132 of 132
+  current-era drops, and on 9 of 9 answered-then-re-asserted clicks. The positive control is the
+  0.5 s era: 0 of 7, with one client-reseed fence and a 116 u jump.
+- The click arm's lead kill leaves no keyboard sender alive: kbd_leg is popped and heading_hold is
+  cleared.
+- The copy starts on the body (real leads plus the kill).
+
+**The drop's own harm:** world-0 stayed parked on the body estimate while the client walked the
+click on its own pathing. agenttap, kill era: 27 of 29 moved drops, |async - sync| p50 338 u. The
+integrator also kept walking `state["pos"]` down a phantom key leg (201011 117.211).
+
+**The fix:**
+- The router answers a live-key click, with a `kbd-answered arm=live-key` pass-through row.
+- It is GUARDED on the term whose absence caused 1q: ZERO_LEAD, KBD_GRANT_FLOOR <= 0, and grants
+  under a hold. Without them the drop returns by itself; --kbd-grant-floor 0.5 is the 1q
+  configuration.
+- The guard is spelled without test_d1lead R11's literal, the collision the critic found.
+- The family edge re-arm is 1z-ds.23's, so this adds no reset line.
+
+**Run registration:**
+- Manufacture the exposure: W held, clicks to the side and behind, a strafe held, a release then a
+  click.
+- Floor: 3 live-key answers, at least 1 where the key re-asserts within 0.3 s and 1 where it does
+  not.
+- REFUTED IF any displacement of 299 u or more follows a live-key answer within 2.5 s.
+
+**Tests:** `test_router` §1f, 142 -> 148; `test_kbdsync` §31, 270 -> 273.
