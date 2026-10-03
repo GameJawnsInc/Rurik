@@ -22185,3 +22185,56 @@ read only the first tape, so every connection is now scored.
   stale report, so they are ceilings, not measurements.
 - 1z-di's arrival re-grant chains just after a walk-start: present on every owner tape since
   2026-10-01, PRE-EXISTING.
+
+
+### 1z-ds.35 On the client: `20261003T164555` CONFIRMS N3 (a repeat press on our own follow's target is spared) and the click under a start's hold -- "no", "yes", "no"
+
+The owner drove DSBATCH3B-run-registered by hand on 456e5d30, the tree 1z-ds.34 confirmed, to
+measure the two items that run left unexercised. There is one connection, c1 on the boss map 168
+(`authsrv-20261003T164631-c1`). The harness verdict "FAIL (client died during the hold)" is its
+retraction for an owner close: exit 0, no error dialog. No assert, 0 "Pending skill".
+
+**The owner's eye** (asked literally):
+
+| Question | Answer |
+|---|---|
+| Pressing attack again on the same boss after walking up (and while still walking up): any hitch, step or snap? | *"no"* |
+| Clicking the ground right after a swing started: did your character walk there at once? | *"yes"* |
+| Anything else feel off compared with the last run? | *"no"* |
+
+**The wire** (`score_ds3.py` and `score_ds3b.py`):
+- **N3 (1z-ds.29):**
+  - 8 presses on the target of our own last follow, with no movement input in between: 2 while
+    still walking up (11.48, 16.07) and 6 after a swing. PRESS ENDS THE WALK on 0 of 8, and no
+    0x002C.
+  - The 6 after a swing each wrote a `press_spared` row (`arrived` true, age 0.39-2.13 s). That
+    meets the registered floor of 3.
+  - The 2 walking-up presses wrote no row, and that is correct. While the approach is still live,
+    the OLDER spare above 1z-ds.29's branch catches the press, and that spare is silent. The
+    registration's "≥ 1 in flight" row named the wrong arm. The wire is what scores those 2: no
+    pin, no stop, and the swing came 0.505 s and 0.227 s later.
+  - Each next swing came on the attack clock. One came 2.1 s later because the owner's click at
+    29.08 stopped that windup in between.
+- **PRESS ENDS THE WALK:** it was sent 5 times (22.91, 23.57, 24.25, 28.13, 30.36), each on a
+  press that followed an owner click (0x003E), never our follow. That is ANIMREF-RE 39's designed
+  answer to a press that abandons a click leg.
+- **H-W4 (1z-ds.31):**
+  - 3 clicks under a start's hold, 0.12-0.47 s after the start. All 3 were answered with the
+    release 0.1-0.2 ms after the click, then the windup's [3], then 0x002B and the router's 0x0029,
+    0.9-1.3 ms after it.
+  - Release first in all 3. The floor (2) is met.
+- **H again:** own starts held at +0.1 s, 11 of 11. 0 zero leads among the hold-releasing key
+  reports. 0 releases at a landing. 0 own follows inside a windup.
+- **K-A:** 1 of 1 non-run key report after a router [1.0] carries KBD SPEED-TRUTH. B2a: every
+  approach row carries `frame_origin`.
+- **No client report jumps:** none of the 114 0x003D/0x0047 reports steps beyond a run-speed
+  walk (+25 %, +30 u).
+- **What this cannot measure:** the 5 pins' residual against the body. The client sends no
+  position report during a click walk; the nearest reports are 1.4-9 s away. The owner's "no"
+  covers the presses N3 is about; the pins after clicks are the pre-existing ANIMREF-RE 39 path.
+- **Not exercised:**
+  - W (a target leaving reach mid-windup), again. The owner: *"it's hard to be adjacent when he
+    loses leashing"*. The boss broke off to follow party agent 201 (FOLLOW rows at 23.42 and
+    24.44), so it never stepped away from a swing in progress.
+  - D (a player death mid-windup).
+  - Both stay open, and each needs a scripted exposure, not a hand-driven one.

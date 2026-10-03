@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.35 -- 2026-10-03 -- **`20261003T164555` CONFIRMS N3 (1z-ds.29: 8 repeat presses on our own follow's target, 0 PRESS ENDS THE WALK, 6 `press_spared` rows after a swing; "no" hitch, step or snap) and the click under a start's hold (1z-ds.31: 3 of 3 answered in ~1 ms, the release first; "yes", it walked at once). "Anything else off": "no". Still unexercised: W and the mid-windup death.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.35.
+- **Closes:** N3 and the held click on §8's batch-3 line.
+
 ### MOVECODE-1z-ds.34 -- 2026-10-03 -- **`20261003T130816` CONFIRMS 1z-ds.31 (every start held: walk-in key taps "moved me at once" during and after the swing; 16 held reports released with 0 zero leads), 1z-ds.32 (27 clicks into a live key walk answered, no movement warp), 1z-ds.24/.25 (Frenzy "yes and yes") and 1z-ds.26. The owner: "either better or perhaps the same, definitely not worse". Not exercised: N3, W, the mid-windup death, clicks under a hold.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.34.
