@@ -22546,3 +22546,102 @@ UNVERIFIED):
 **Owner feel run** (registered, optional): back away with S, press Space while still holding S, and
 let the character run back, five times. Does it run back at normal speed? Does the swing start on
 arrival?
+
+
+### 1z-ds.42 A press the follow answers retires the keyboard lead -- no zero-lead kill (`PRESS_FOLLOW_RETIRES_LEAD`, `--press-follow-kills-lead` reverts)
+
+**Batch 6** (a read-only workflow at `edc2803b`, the follow hop of 1z-ds.41): three lanes (the mechanism
+over every tapped follow, retail and a wire signature, a design with a rig and a run), each with an
+adversarial verifier, then a critic that re-measured the mechanism with its own join, composed the
+fix in a pinned tree across 39 test files and drove a decoded-client rig. Records: the scratchpad's
+`wfout8\` and `wf7-critic\`.
+
+**The hop, measured** (OBSERVED; the H-mech lane, its verifier, and the critic's `c_census.py` agree):
+- The population: 118 new follows on the six GUARDW0 launches plus the pilot's 5.
+- Clocks: world-0's clock is a per-run constant plus the 0x001E tick deltas (460 of 460 joined
+  rows), so the zero-lead's application instant is known exactly. Every kill landed exactly one
+  tick before its follow (122 of 122).
+- The 4 hops (65.7, 63.1, 39.8, 73.7 u) and only they carry the BY-TIME signature on the drawn
+  copy's first re-settle. Its stop equals world-0's to the millisecond, and its point is world-0's
+  path evaluated at the drawn clock's number.
+- The relocation lands when the drawn body's own path first stands more than 25 u from every
+  history point: 25.1-29.8 u at the hops, at most 24.6 u on every other follow.
+- **The discriminator:** the press's zero-lead 0x0029 landed within 1.0 u of the client's world-0
+  copy, and the drawn copy stood BEHIND that point along the follow:
+  - static and behind: 4 of 4 hopped;
+  - static and ahead: 0 of 4;
+  - not static: 0 of 67;
+  - re-pinned rows that were static and behind: 3, and 0 of them hopped (Fisher p = 0.029 against
+    the unpinned 4 of 4).
+- The press-to-follow gap is a shadow, not the cause: G3o2 114.581 hopped at 14 ms, and every hop is
+  static and behind. Forward presses never hop (0 of 29).
+- **Correction to 1z-ds.41:** T2 73.996 was a strafe press (Q), not a backpedal.
+
+**The client rule** (RECONSTRUCTION, a static decode of the pristine 38797 image; H-mech's M2,
+confirmed where its verifier read):
+- After a press the local player's AgTrack record is disarmed (ANIMREF 37.2), and the AgTrack loop
+  (0x00604880) runs a by-time query (0x00604ED0) for the drawn body every frame.
+- A grant within 1 u of the copy makes the bake write v = 0 (0x005FEA85), so the zero-lead leaves a
+  STATIC history node. A static node offers its own position and NO destination.
+- Ties go to the OLDER node. So a drawn body behind the kill point is held on a no-op while its key
+  bake carries it on, until no node lies within 25 u (best = 625).
+- The query's default then relocates the drawn body onto world-0's path at the drawn clock: the hop.
+- A 0x002C re-pin clears the record first, which is why 0 re-pinned follows hop.
+- Sensitivity (the critic's rig): without the press-time Clear the decoded rule gives 0 hops at
+  HEAD, so the observed hops imply the Clear.
+
+**RETAIL** (OBSERVED, the H-retail lane, 122 observer connections):
+- Of 527 presses, 131 came during a live key walk, and 46 of those were answered by a follow.
+  Between press and follow retail sends:
+  - nothing on 30;
+  - only the adjacent 0x002B [1.0, 1] on 10;
+  - on 6, an own 0x0029 or 0x0028 that is not an answer to the press: the in-flight lead of a
+    0x003D the client sent up to 33 ms before it (4), a far path grant (1), and an in-reach stop (1).
+- 0 own 0x002C in the window, and 0 grants at the press point.
+- Its follow comes p50 36 ms after the press, the frame that reads it.
+- Its last lead is unmatured at the press on 45 of 46, so its world-0 is still walking beside the
+  body at the follow (RECONSTRUCTION: p50 10.8 u).
+
+**The fix:**
+- `_press_follow_due` is a pure predicate. The press will be answered by a NEW follow when the
+  target is alive, the approach is on, the player is not knocked down, no windup holds the
+  approach, and the target is out of reach on the frame AND on the reckoned body. That is
+  `_press_stops_body`'s out-on-both branch, the one that sends nothing.
+- When it holds, `_press_retires_lead` consumes the keyboard leg and stamps `kbd_kill_point` /
+  `kbd_kill_at` exactly as the kill does (`_kbd_kill_fresh` and the click leg read them). It sends
+  NO 0x0029 and does not advance `zl_last_grant_plane`, and it writes a `kbd_leg` row with
+  act='retire'.
+- The follow's 0x002A, behind 1z-ds.39's reset, re-aims world-0 from where its lead had it, which is
+  retail's batch.
+- THE SAFETY NET: `_kbd_retire_settle` runs after attack_tick at both call sites. A retired lead
+  that no world-0 order and no client report answered by the end of the next tick gets today's
+  kill then, labelled 'late'.
+- A matured lead, and in-reach, follow-pin and refused presses, keep the kill. So do the click,
+  interact, death and skill-press sites. The skill press is the same mechanism, unmeasured, and is a
+  registered leftover.
+- UNVERIFIED: the client's answer to a follow with no zero-lead before it, because no tapped follow
+  lacks the kill (118 of 118). The decode predicts the follow's node alone hands the drawn copy over.
+  On the corpus the drawn copy stood within 21.7 u of that node's segment on 122 of 122 follows,
+  against the query's 25 u radius.
+- The critic's rig: 0 hops over 30 u in 306 phases against HEAD's 38. The boundary: a world-0 25 u
+  or more off the drawn copy at the press still hops (RECONSTRUCTION); the corpus operand is at most
+  21.7 u.
+
+**Not shipped:**
+- (a) `LIVE_KEY_FOLLOW_REPINS`, always re-pinning a live-key press's follow: it would put a
+  non-retail 0x002C on about 61 % of owner follows. It is the fallback.
+- (c) the follow in the press's own batch, (d) aiming the kill ahead, and (e) a pin at the press.
+- `--no-kbd-lead-kill` as an arm: it disables lead arming session-wide.
+
+**Owner exposure** (H-mech M3): 43 of 106 owner new follows are in the exposure class (a kill, no
+re-pin, and a walk away or across). 36 of them are running away with the camera turned. The hop
+itself cannot be flagged on the wire per event: no client report comes within 1 s of the press on
+118 of 118.
+
+**Tests:** `test_kbdsync` section 34 (34a-k), floor 285 -> 296.
+- 27d is re-aimed: the kill point now has two named writers. Section 11 gains the late kill as a
+  sixth caller.
+- Seven mutations each redden their own checks: always kill (34a/e/f/g), no body reckon (34c), no
+  safety net (34e), a net deaf to reports (34f), a net inside the tick (34e), no point stamp
+  (27d/34a/34h), and a plane write (34a).
+- The 38 other affected files are green.

@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.42 -- 2026-10-04 -- **A press the follow answers retires the keyboard lead: no zero-lead KBD LEAD KILLED 0x0029 when the press will be answered by a new follow (`PRESS_FOLLOW_RETIRES_LEAD`, `--press-follow-kills-lead` reverts; a late kill if nothing answers by the next tick). The follow hop was a static zero-lead node with the drawn body behind it: 4 of 4 hopped, 0 of 71 others, 0 of 3 re-pinned. Retail sends nothing between such a press and its follow (30 of 46; 10 the reset alone).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.42.
+- **Batch 6** (the follow hop): one item; the registered LEADRETIRE run confirms it.
+
 ### MOVECODE-1z-ds.41 -- 2026-10-04 -- **GUARDW0 (6 scripted launches, agenttap): 1z-ds.39 CONFIRMED -- 64 of 64 follows sent with a slow pair in force got the reset and walked at moveSpeed 1.00 / 288 u/s (today's code: 0 of 42, walked at 190 or 216). 1z-ds.40 back to DARK (`--guard-both-world0` arms it): with no re-pin, 2 of 6 presses made after a long backpedal hopped the drawn body 63-66 u at the follow; re-pinned follows hopped 0 of 44, unpinned 4 of 74 (a pre-existing class, registered).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.41.

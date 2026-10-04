@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=285)   # MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=296)   # MOVECODE-1z-ds.42 +11 (34a-k: a press the follow answers retires the keyboard lead); MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -558,7 +558,11 @@ def main():
     check(SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "press")') == 2
           and SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "click")') == 1
           and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "interact")') == 1
-          and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "death")') == 1,
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "death")') == 1
+          # MOVECODE-1z-ds.42: a sixth caller, named -- the retire's safety net kills a retired
+          # lead a tick late when no follow answered its press (the same opinion, deferred).
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, rec, '
+                        '"press (late: no follow answered it)")') == 1,
           "the press arm and the click arm each kill once -- and since the "
           "SLICE arc three more sites do, by the same rule (an event that "
           "ends the body's walk ends the lead): the attack skill from out of "
@@ -2511,11 +2515,21 @@ def main():
           "27c. KNOWN-BAD ARM (no start): the leg starts at the stale report and the "
           "press models the body >2,000 u from where it is -- the warp",
           f"model {model27b}")
+    # MOVECODE-1z-ds.42 RE-AIMED: the press retire is the kill's one named twin -- it stamps the
+    # same point without the grant. Two writers, each in its own function, and no third.
+    def _writers27(src):
+        out, k = [], src.find('state["kbd_kill_point"] = (float(x), float(y))')
+        while k >= 0:
+            j = src.rfind("\ndef ", 0, k)
+            out.append(src[j + 5:src.index("(", j + 5)])
+            k = src.find('state["kbd_kill_point"] = (float(x), float(y))', k + 1)
+        return out
     check(SRC.count('start=(state.pop("kbd_kill_point", None)') == 1
           and 'start=state.pop("kbd_kill_point", None) if _ik else None' in SRC
-          and SRC.count('state["kbd_kill_point"] = (float(x), float(y))') == 1,
+          and _writers27(SRC) == ["_kbd_lead_kill", "_press_retires_lead"],
           "27d. the click arm and the interact walk both hand the kill's point to "
-          "their leg, and only the kill writes it")
+          "their leg, and only the kill -- and its press retire, 1z-ds.42 -- writes it",
+          f"writers {_writers27(SRC)}")
 
     # 28. MOVECODE-1z-dr: the kill grants the BODY. 128.40 on 20261001T185315: the
     # 1z-di re-grant chain had moved the lead's origin with the COPY (four 520 u
@@ -3217,6 +3231,225 @@ def main():
     check("--follow-keeps-rate" in ARGS_SRC and "if a.follow_keeps_rate:" in SRC
           and SRC.count("FOLLOW_RESETS_RATE = True") == 1,
           "33i. FOLLOW_RESETS_RATE ships True and --follow-keeps-rate is wired")
+
+    # 34. MOVECODE-1z-ds.42: PRESS_FOLLOW_RETIRES_LEAD -- a 0x0026 the world tick will answer with a
+    # follow RETIRES the keyboard lead (consumed, the point stamped, no 0x0029); the safety net
+    # sends today's kill a tick late when nothing answered the press.
+    print("\n34. 1z-ds.42: a press the follow answers retires the keyboard lead (PRESS_FOLLOW_RETIRES_LEAD)")
+    import ast as _ast34
+    import time as _t34
+    WP34 = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    DEST34 = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    PIN34 = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
+    ME34 = authsrv.PLAYER_AGENT_ID
+
+    def press_arm34():
+        """The SHIPPED 0x0026 arm (`elif opcode in (GAME_CMSG_ATTACK_AGENT, ...)`) as a callable --
+        receive_arm's method for an `in` test. Fails loudly rather than hand back an empty body."""
+        tree = _ast34.parse(SRC)
+        node = None
+        for n in _ast34.walk(tree):
+            if (isinstance(n, _ast34.If) and isinstance(n.test, _ast34.Compare)
+                    and isinstance(n.test.left, _ast34.Name) and n.test.left.id == "opcode"
+                    and len(n.test.ops) == 1 and isinstance(n.test.ops[0], _ast34.In)
+                    and isinstance(n.test.comparators[0], _ast34.Tuple)
+                    and any(isinstance(e, _ast34.Name) and e.id == "GAME_CMSG_ATTACK_AGENT"
+                            for e in n.test.comparators[0].elts)):
+                node = n
+        assert node is not None, "no 0x0026 arm in authsrv.py"
+        args = _ast34.arguments(posonlyargs=[], args=[_ast34.arg(p) for p in
+                                                      ("values", "state", "rec", "send", "conn_id")],
+                                vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
+        fn = _ast34.FunctionDef(name="_arm26", args=args, body=node.body, decorator_list=[],
+                                returns=None, type_params=[])
+        mod = _ast34.Module(body=[fn], type_ignores=[])
+        _ast34.fix_missing_locations(mod)
+        ns = {}
+        exec(compile(mod, authsrv.__file__, "exec"), authsrv.__dict__, ns)   # noqa: S102
+        return ns["_arm26"]
+
+    ARM26 = press_arm34()
+    # a tree without the settle (the base) runs every check and reddens, rather than crash
+    _settle34 = getattr(authsrv, "_kbd_retire_settle", lambda *a, **k: False)
+
+    def flag34(on):
+        sv = getattr(authsrv, "PRESS_FOLLOW_RETIRES_LEAD", None)
+        if sv is not None:
+            authsrv.PRESS_FOLLOW_RETIRES_LEAD = on
+        return sv
+
+    def walking34(age=0.2, target=(0.0, 0.0), dest=(620.0, 0.0)):
+        """walking32's body (walking AWAY, +x, report at (100, 0)) with its keyboard lead in flight
+        and the legacy model seeded on that lead (so the snap guard stays quiet: the hop class)."""
+        st = walking32(age=age)
+        st["agents"][10]["pos"] = target
+        t = st["client_pos_at"]
+        st["kbd_leg"] = authsrv.a2_leg_note((100.0, 0.0), dest, 0, 1, t)
+        st["sync_from"], st["sync_to"], st["sync_at"] = (100.0, 0.0), dest, t
+        return st
+
+    def press34(st, on=True, mirror=(300.0, 0.0), tick=True, before_tick=None):
+        """The real 0x0026 arm, then (tick) the world tick's attack_tick + the settle, as the loop
+        calls them. Returns (sent, recorder, the press's own rows, tick_at)."""
+        w, r = Sent33(st), FakeRec()
+        sv = flag34(on)
+        t_atk = None
+        try:
+            with_mirror(mirror, ARM26, [38, 10, 0], st, r, w, 0)
+            press_rows = list(w.rows)
+            if before_tick is not None:
+                before_tick(st)
+            if tick:
+                t_atk = _t34.time() + 1e-6
+                with_mirror(mirror, authsrv.attack_tick, w, st, 0, rec=r)
+                with_mirror(mirror, _settle34, w, st, 0, r, t_atk)
+        finally:
+            if sv is not None:
+                authsrv.PRESS_FOLLOW_RETIRES_LEAD = sv
+        return w, r, press_rows, t_atk
+
+    def player(rows, op):
+        return [(v, l) for o, v, l in rows if o == op and v and v[0] == ME34]
+
+    def ops(rows):
+        return [(o, (l or "").split(" ")[0]) for o, v, l in rows if v and v[0] == ME34]
+
+    # 34a: the hop class -- a press out of reach on the frame and the body while the key walks away.
+    st = walking34()
+    w, r, prs, _ta = press34(st)
+    kr = [x for x in r.of("kbd_leg")]
+    kp = st.get("kbd_kill_point")
+    dests = player(w.rows, DEST34)
+    check(player(prs, WP34) == [] and player(w.rows, WP34) == [] and st.get("kbd_leg") is None
+          and kp is not None and abs(kp[0] - 157.6) < 0.6 and abs(kp[1]) < 0.01
+          and st.get("kbd_kill_at") is not None and "zl_last_grant_plane" not in st
+          and kr and kr[0].get("act") == "retire" and kr[0].get("why") == "press"
+          and len(dests) == 1 and "APPROACH" in dests[0][1]
+          and not [l for _v, l in player(w.rows, PIN34) if "APPROACH RE-PIN" in l]
+          and st.get("kbd_retired") is None,
+          "34a. a press the follow answers -- out of reach on the frame (300 u) and on the "
+          "reckoned body (157.6 u), the key walking away -- sends NO 0x0029: the lead is consumed, "
+          "its point stamped where the kill would have granted, its row says retire, the "
+          "grant-plane slot is untouched, and the next tick's 0x002A is the only player order "
+          "(retail: 0 of 46 walking-press follows carry a press-triggered body grant)",
+          f"press {ops(prs)} all {ops(w.rows)} point {kp} rows {kr[:1]} retired {st.get('kbd_retired')}")
+    # 34b: the known-bad arm.
+    st = walking34()
+    w, r, prs, _ta = press34(st, on=False)
+    kills = player(prs, WP34)
+    check(len(kills) == 1 and "KBD LEAD KILLED on press" in kills[0][1]
+          and abs(kills[0][0][1][0] - 157.6) < 0.6 and len(player(w.rows, DEST34)) == 1
+          and st.get("kbd_retired") is None,
+          "34b. KNOWN-BAD ARM (--press-follow-kills-lead): the zero-lead kill at the press, then the "
+          "follow -- GUARDW0's wire; a static kill node there is the hop (4 of 4 static and behind)",
+          f"press {ops(prs)}")
+    # 34c: CONTROL -- an in-reach press keeps today's wire exactly (kill, then the PRESS STOP PIN).
+    outs = []
+    for mirror in ((300.0, 0.0), (400.0, 0.0)):        # frame in reach / frame out, body in reach
+        seqs = []
+        for on in (True, False):
+            st = walking34(target=(200.0, 0.0))
+            w, r, prs, _ta = press34(st, on=on, mirror=mirror, tick=False)
+            seqs.append(ops(prs))
+        outs.append((seqs[0] == seqs[1], seqs[0]))
+    check(all(o[0] for o in outs) and all(o[1][:2] == [(WP34, "KBD"), (PIN34, "PRESS")] for o in outs),
+          "34c. CONTROL: an in-reach press -- the frame in reach, and the frame out with the "
+          "reckoned body in -- keeps today's batch on both arms: the kill, then the PRESS STOP PIN",
+          f"{outs}")
+    # 34d: CONTROL -- a refused press (a dead target) keeps today's kill.
+    st = walking34()
+    st["agents"][10]["dead"] = True
+    w, r, prs, _ta = press34(st, tick=False)
+    check([l for _v, l in player(prs, WP34) if "KBD LEAD KILLED on press" in l] != []
+          and st.get("kbd_retired") is None,
+          "34d. CONTROL: a press begin_attack refuses (a corpse) is no follow's -- today's kill",
+          f"press {ops(prs)}")
+    # 34e: THE SAFETY NET -- retired, then nothing answers: the target dies before the tick.
+    st = walking34()
+
+    def _dies(s):
+        s["agents"][10]["dead"] = True
+    sv = flag34(True)
+    try:
+        w0, r0 = Sent33(st), FakeRec()
+        with_mirror((300.0, 0.0), ARM26, [38, 10, 0], st, r0, w0, 0)
+        ret = st.get("kbd_retired")
+        early = _settle34(w0, st, 0, r0, (ret or {}).get("t", 0.0) - 0.01)
+        kept = st.get("kbd_retired") is not None
+    finally:
+        if sv is not None:
+            authsrv.PRESS_FOLLOW_RETIRES_LEAD = sv
+    st2 = walking34()
+    w, r, prs, _ta = press34(st2, before_tick=_dies)
+    late = [l for _v, l in player(w.rows, WP34)]
+    check(ret is not None and early is False and kept and player(prs, WP34) == []
+          and len(late) == 1 and "KBD LEAD KILLED on press (late" in late[0]
+          and st2.get("kbd_leg") is None and st2.get("kbd_retired") is None,
+          "34e. THE SAFETY NET: a retired lead whose press no follow answered gets today's kill "
+          "after the next attack_tick (here the target died first), and NOT inside the tick the "
+          "press arrived in -- the lead never matures unanswered (1z-u's 498 u snap)",
+          f"retired {ret is not None} early {early} kept {kept} late {late}")
+    # 34f: a report since the retire answers it -- no late kill.
+    st = walking34()
+
+    def _reports(s):
+        s["client_pos_at"] = _t34.time() + 0.0005
+        s["agents"][10]["dead"] = True               # and nothing follows
+    w, r, prs, _ta = press34(st, before_tick=_reports)
+    check(player(w.rows, WP34) == [] and st.get("kbd_retired") is None,
+          "34f. a client report after the retire ends it silently: the report's own arm answers "
+          "world-0 (no late kill that would re-aim a fresh lead)", f"all {ops(w.rows)}")
+    # 34g: retail's sequence -- with a backpedal's pair in force the tick sends the reset and the
+    # follow, adjacent, and nothing else for the player; a later settle sends nothing.
+    st = walking34()
+    st["speed_pair_sent"], st["a2_family_sent"] = (0.66, 4), 4
+    w, r, prs, ta = press34(st)
+    again = _settle34(w, st, 0, r, (ta or 0.0) + 1.0)
+    seq = [(o, n) for o, n in ops(w.rows) if o in (WP34, DEST34, PIN34, authsrv.GAME_SMSG_AGENT_UPDATE_SPEED)]
+    check(seq == [(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED, "FOLLOW"), (DEST34, "APPROACH:")]
+          and again is False,
+          "34g. retail's wire for this press: 0x002B [1.0, 1] then the 0x002A, adjacent, and no "
+          "other player movement message (retail 30 of 46 nothing, 10 the reset alone; "
+          "1z-ds.39's adjacency kept); the answered retire stays closed", f"{seq} {again}")
+    # 34h: the guard reads the retire's point when the body estimate has expired (kill_fresh).
+    gm = []
+    for on in (True, False):
+        st = walking34(age=2.2, dest=(1100.0, 0.0))
+        w, r, prs, _ta = press34(st, on=on, mirror=(900.0, 0.0))
+        ap = [x for x in r.of("approach") if x.get("guard")]
+        gm.append((ap[0]["guard"].get("src"), ap[0]["guard"].get("model")) if ap else None)
+    check(gm[0] is not None and gm[0] == gm[1] and gm[0][0] == "estimate"
+          and abs(gm[0][1][0] - (100.0 + 288.0 * 2.2)) < 1.0,
+          "34h. past the 2.0 s estimate cap the follow's snap guard reads the retire's own point "
+          "(_kbd_kill_fresh), exactly what it read from the kill: the lead's model at the press",
+          f"{gm}")
+    # 34i: a matured lead is the kill's -- its row says matured, nothing is retired or sent.
+    st = walking34(age=2.2)                        # 520 u at 288 u/s matures at 1.81 s
+    w, r, prs, _ta = press34(st, mirror=(900.0, 0.0), tick=False)
+    kr = r.of("kbd_leg")
+    check(player(prs, WP34) == [] and kr and kr[0].get("act") == "kill" and kr[0].get("matured") is True
+          and st.get("kbd_retired") is None,
+          "34i. a MATURED lead is left to the kill, which grants nothing and says matured", f"{kr}")
+    # 34j: source locks -- the 0x0026 arm alone retires; both attack_tick sites settle.
+    i_arm = SRC.find("_pb = party_body(state, values[1])")
+    i_ret = SRC.find("if not _press_retires_lead(state, conn_id, rec, values[1]):", i_arm)
+    i_kill = SRC.find('_kbd_lead_kill(send, state, conn_id, rec, "press")', i_arm)
+    i_beg = SRC.find("begin_attack(send, state, values[1], conn_id, rec=rec)", i_arm)
+    _lines = SRC.splitlines()
+    _settle_after = [i for i, l in enumerate(_lines)
+                     if l.strip() == "attack_tick(send, state, conn_id, rec)"
+                     and "_kbd_retire_settle(send, state, conn_id, rec, _atk_at)" in _lines[i + 1]
+                     and _lines[i - 1].strip() == "_atk_at = time.time()"]
+    i_skill = SRC.find("def handle_skill_press(")
+    check(0 < i_arm < i_ret < i_kill < i_beg and SRC.count("_press_retires_lead(") == 2
+          and len(_settle_after) == 2 and SRC.count("_kbd_retire_settle(") == 3
+          and SRC.find("_press_retires_lead(", i_skill, SRC.find("\ndef ", i_skill + 10)) < 0,
+          "34j. the 0x0026 arm alone retires (before the kill it replaces, inside the walk-ending "
+          "pair's gate); the skill press keeps its kill; both attack_tick call sites settle",
+          f"arm {i_arm} retire {i_ret} kill {i_kill} begin {i_beg} settles {_settle_after}")
+    check("--press-follow-kills-lead" in ARGS_SRC and "if a.press_follow_kills_lead:" in SRC
+          and SRC.count("PRESS_FOLLOW_RETIRES_LEAD = True") == 1,
+          "34k. PRESS_FOLLOW_RETIRES_LEAD ships True and --press-follow-kills-lead is wired")
 
     return LEDGER.verdict()
 

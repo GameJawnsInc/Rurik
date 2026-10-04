@@ -831,6 +831,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "snap guard re-pins only when the legacy sync model AND the AgTrack "
                          "mirror are past 100 u. Off by default: GUARDW0 saw a 63-66 u drawn "
                          "hop on 2 of 6 presses made after a long backpedal.")
+    ap.add_argument("--press-follow-kills-lead", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.42: a 0x0026 that the world tick "
+                         "answers with a follow still grants the zero-lead KBD LEAD KILLED 0x0029 "
+                         "at the press. By default that lead is RETIRED (consumed, its point "
+                         "stamped, nothing sent) and the follow re-aims world-0: retail sends no "
+                         "press-triggered body grant (0 of 46 walking-press follows), and the "
+                         "zero-lead's static history node is the follow hop (4 of 4 static and "
+                         "behind follows hopped, 0 of 71 others).")
     ap.add_argument("--follow-leg-from-frame", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.30: a new follow's leg (origin, eta, "
                          "stop point) starts at the reach frame -- the world-0 mirror while the "

@@ -5547,7 +5547,9 @@ def combat_pass(send, state, conn_id, rec=None):
     chain_tick(send, state, conn_id)
     second_strike_tick(send, state, conn_id)
     projectile_tick(send, state, conn_id)
+    _atk_at = time.time()
     attack_tick(send, state, conn_id, rec)
+    _kbd_retire_settle(send, state, conn_id, rec, _atk_at)   # MOVECODE-1z-ds.42
     enemy_attack_tick(send, state, conn_id)
     ally_cast_tick(send, state, conn_id)
     ally_attack_tick(send, state, conn_id)
@@ -9935,6 +9937,122 @@ def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
           f"modelled body ({x:.0f},{y:.0f}), {remaining:.0f} u of the lead "
           f"unwalked", flush=True)
     return True
+
+
+# MOVECODE-1z-ds.42 (batch 6, the follow hop): A PRESS THE FOLLOW WILL ANSWER RETIRES THE KEYBOARD
+# LEAD -- no zero-lead 0x0029 kill goes out. GUARDW0 (1z-ds.41): 4 of 74 unpinned follows that
+# answered a press made on a live key walk re-placed the drawn copy 40-74 u forward at its first
+# re-settle. The discriminating variable (batch 6's H-mech lane; re-measured by the composing
+# critic's own join, c_census.py, n = 118 + the pilot's 5): the kill's zero-lead landed within
+# 1.0 u of the client's world-0 copy -- the bake's distSq <= 1 short-circuit (0x005FEA85) writes
+# v = 0, so the AgTrack history held a STATIC node at the kill point -- AND the drawn copy stood
+# BEHIND that point along the follow: 4 of 4 hopped; static and ahead 0 of 4; not static 0 of 67
+# (on the exact application clock: clock0 = the 0x001E tick sums, constant on 118 of 118 rows).
+# The client's by-time query (0x00604ED0, RECONSTRUCTION from the pristine image) offers a static
+# node with NO destination and gives ties to the OLDER node, so the drawn copy is held in a no-op,
+# walks its key bake on until no history point lies within 25 u (best = 625), and the by-time
+# default then relocates it onto world-0's path at the DRAWN clock: the hop. A 0x002C re-pin
+# Clears the record first -- 3 re-pinned follows were static and behind, 0 hopped. Retail sends NO
+# press-triggered body grant (0 of 46 walking-press follows; its own 0x0029s in that window answer
+# a c2s 0x003D/0x0047) and no 0x002C (0 of 527 presses): the follow alone.
+# So when this press's follow is due -- the target out of reach on the frame AND on the reckoned
+# body (_press_stops_body's out-on-both branch, the one that sends nothing) -- the lead is RETIRED:
+# the record is consumed and the kill point stamped exactly as the kill stamps them
+# (_kbd_kill_fresh and _click_leg_arm read the point), but nothing goes on the wire and
+# zl_last_grant_plane does not advance (no grant was sent). The follow re-aims world-0 from where
+# its lead put it. THE SAFETY NET: a retired lead whose press nothing answered by the end of the
+# next world tick (the target died, the reach changed, a windup held the approach) gets today's
+# kill then (_kbd_retire_settle, after attack_tick at both of its call sites), so a lead never
+# matures unanswered (1z-u, 1z-y). In-reach, follow-pin and refused presses keep today's kill, and
+# so do the click, interact, death and skill-press sites (the skill press's follow rides its own
+# batch -- the same mechanism, unmeasured: a registered leftover).
+# UNVERIFIED: the client's answer to a follow with no zero-lead before it -- no tapped follow
+# lacks the kill (118 of 118). The decode predicts the follow's node alone hands the drawn copy
+# over (REAIM/NODE); on the corpus the drawn copy stood within 21.7 u of that node's segment on
+# 122 of 122 follows (25 u is the query's radius), so no by-time default is predicted either.
+PRESS_FOLLOW_RETIRES_LEAD = True   # False (--press-follow-kills-lead): the press's 0x0029 kill.
+
+
+def _press_follow_due(state, target_id, now):
+    """MOVECODE-1z-ds.42: will the world tick answer this 0x0026 with a NEW follow? Pure. The branch
+    _press_stops_body leaves to the follow (out of reach on the frame and on the reckoned body), on
+    a target begin_attack accepts, with nothing holding the approach."""
+    if not ATTACK_APPROACH:
+        return False
+    agent = (state.get("agents") or {}).get(target_id)
+    if agent is None or agent.get("dead"):
+        return False
+    if knocked_down(state, PLAYER_AGENT_ID):
+        return False
+    if (WINDUP_HOLDS_APPROACH and state.get("player_swing") is not None
+            and not state.get("player_swing_cancel")):
+        return False
+    ax, ay = float(agent["pos"][0]), float(agent["pos"][1])
+    px, py = _reach_frame(state, now)
+    reach = attack_reach()
+    if math.hypot(ax - float(px), ay - float(py)) <= reach:
+        return False                    # the frame is in reach: a pin or the swing answers
+    if PRESS_STOPS_BODY and PRESS_STOP_ON_BODY:
+        est, _plane, _why = cast_stop_reckon(state, now)
+        if est is not None and math.hypot(ax - float(est[0]), ay - float(est[1])) <= reach:
+            return False                # the reckoned body is in reach: the PRESS STOP PIN
+    return True
+
+
+def _press_retires_lead(state, conn_id, rec, target_id, now=None):
+    """MOVECODE-1z-ds.42: the 0x0026 arm's lead kill when the follow will answer the press -- the leg
+    record is consumed and the kill point stamped as `_kbd_lead_kill` stamps them, and NO 0x0029 is
+    sent. True when it retired (the arm then sends no kill); False leaves the leg to the kill, which
+    also owns the matured case and its row."""
+    if not (PRESS_FOLLOW_RETIRES_LEAD and KBD_LEAD_KILL):
+        return False
+    leg = state.get("kbd_leg")
+    if leg is None:
+        return False
+    if now is None:
+        now = time.time()
+    dist = math.hypot(leg["dest"][0] - leg["x0"], leg["dest"][1] - leg["y0"])
+    eta = leg["t0"] + (dist / leg["speed"] if leg["speed"] > 0.0 else 0.0)
+    if now >= eta or not _press_follow_due(state, target_id, now):
+        return False
+    state.pop("kbd_leg", None)
+    x, y, _plane = a2_leg_position(leg, now)
+    _est = _kbd_body_estimate(state, now)
+    if _est is not None:
+        x, y = _est
+    remaining = math.hypot(leg["dest"][0] - x, leg["dest"][1] - y)
+    state["kbd_kill_point"] = (float(x), float(y))
+    state["kbd_kill_at"] = now
+    state["kbd_retired"] = {"t": now, "leg": leg, "target": target_id}
+    if rec is not None:
+        rec.event("kbd_leg", act="retire", why="press", matured=False,
+                  point=[float(x), float(y)], remaining=round(remaining, 1),
+                  age=round(now - leg["t0"], 3), dest=list(leg["dest"]), target=target_id)
+    print(f"[c{conn_id}] KBD LEAD RETIRED on press: the follow answers it, no zero-lead grant; "
+          f"the body is modelled at ({x:.0f},{y:.0f}), {remaining:.0f} u of the lead unwalked "
+          f"[MOVECODE-1z-ds.42]", flush=True)
+    return True
+
+
+def _kbd_retire_settle(send, state, conn_id, rec, tick_at):
+    """MOVECODE-1z-ds.42's safety net, right after attack_tick: a retired lead is answered once any
+    world-0 order (the follow's 0x002A, or a 0x0029/0x002C: `sync_at`) or a client report has gone
+    since the retire. One that a whole attack_tick (started at `tick_at`) left unanswered gets
+    today's kill now. Returns whether it sent."""
+    r = state.get("kbd_retired")
+    if r is None:
+        return False
+    if (float(state.get("sync_at") or 0.0) > r["t"]
+            or float(state.get("client_pos_at") or 0.0) > r["t"]):
+        state.pop("kbd_retired", None)
+        return False
+    if r["t"] >= tick_at:
+        return False                    # retired inside this tick: the next tick answers it
+    state.pop("kbd_retired", None)
+    if state.get("kbd_leg") is not None:
+        return False                    # a newer leg is in force; its own rules end it
+    state["kbd_leg"] = r["leg"]
+    return _kbd_lead_kill(send, state, conn_id, rec, "press (late: no follow answered it)")
 
 
 def kbd_lead_dest(reported, vec2):
@@ -42461,7 +42579,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # has: an isolated clear 25.00 s after the last gain,
                         # 15 of 15.
                         energy_tick(send, state, conn_id)
+                        _atk_at = time.time()
                         attack_tick(send, state, conn_id, rec)
+                        _kbd_retire_settle(send, state, conn_id, rec, _atk_at)   # 1z-ds.42
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
                         # Both halves of the fight, and the order matters. The
@@ -43089,7 +43209,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         _pb = party_body(state, values[1])
                         _corpse = PRESS_REFUSES_DEAD_PLAYER and state.get("player_dead")
                         if (_pb is None or _pb.get("dead")) and not _corpse:
-                            _kbd_lead_kill(send, state, conn_id, rec, "press")
+                            # MOVECODE-1z-ds.42: unless the follow answers it (retired, unsent).
+                            if not _press_retires_lead(state, conn_id, rec, values[1]):
+                                _kbd_lead_kill(send, state, conn_id, rec, "press")
                             _press_supersedes(send, state, conn_id, values[1],
                                               rec=rec)
                         begin_attack(send, state, values[1], conn_id, rec=rec)
@@ -47521,6 +47643,12 @@ def main():
         print("[map] --guard-both-world0: THE EXPERIMENT (MOVECODE-1z-ds.40/.41) -- the "
               "approach snap guard re-pins only when the legacy model AND the AgTrack mirror "
               "are past 100 u (GUARDW0: a 63-66 u drawn hop on 2 of 6 K presses)", flush=True)
+    if a.press_follow_kills_lead:
+        global PRESS_FOLLOW_RETIRES_LEAD
+        PRESS_FOLLOW_RETIRES_LEAD = False
+        print("[map] --press-follow-kills-lead: a 0x0026 the world tick answers with a follow still "
+              "grants the zero-lead KBD LEAD KILLED 0x0029 at the press (every build before "
+              "MOVECODE-1z-ds.42)", flush=True)
     if a.follow_leg_from_frame:
         global FOLLOW_LEG_FROM_BODY
         FOLLOW_LEG_FROM_BODY = False
