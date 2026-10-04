@@ -22356,3 +22356,76 @@ walk-aways. No assert; RUN VERDICT PASS.
 
 **A6:** one drawn-copy jump of 1,823 u in 0.115 s. That is the wipe's own placement at the shrine
 (1536, 1536), both copies together, so there are 0 snaps.
+
+
+### 1z-ds.39 A follow resets the speed pair it walks at (`FOLLOW_RESETS_RATE`, `--follow-keeps-rate` reverts)
+
+**Batch 5** (a read-only workflow at `d3e1cf57`, the snap guard's world-0 model): three lanes
+(mechanism with a rig, a census against the client tap, a run design), each with an adversarial
+verifier, then a critic that composed the designs in pinned trees across 39 test files and drove a
+rig with the real AgTrackGuard. Records: the scratchpad's `wfout7\` and `wf6-critic\`.
+
+**The question** was why the 1z-ds.38 pilot's snap guard sent three APPROACH RE-PINs (tape t
+104.358, 107.080, 110.019, sep 202-270 u) when the client's world-0 copy stood 10-12 u from the
+body. **The answer is a missing message, not the guard.**
+
+**The defect** (OBSERVED, lanes G-mech and G-run, reproduced by their verifiers):
+- A 0x002B is a pure store that the client bakes into its NEXT leg (sync +0x60).
+- On the pilot, a backpedal's KBD SPEED-TRUTH [0.66, 4] was in force from 81.230 to 109.879.
+  The follows at 101.887, 104.358 and 107.080 walked 190 u/s, and the tap read movespeed 0.66 on
+  both copies (49 samples).
+- Everything of ours walked those follows at 288: the leg's eta, the integrator's `dest_speed`,
+  the legacy sync model and `state["pos"]` (the raider's chase operand).
+- So the legacy model ran 202-270 u ahead, and the guard re-pinned. The tap shows each re-pin 10-21
+  u from the client's world-0 copy: spurious.
+- What the owner would feel: after backing off with S (or strafing) and pressing attack, the body
+  runs back at two-thirds speed (0.66; 0.75 after a strafe), and our leg's eta is a third early.
+  Whether that ever opened a swing early is UNVERIFIED: the frame reads the mirror, which
+  honours the rate.
+- Exposure on the owner tapes: 12 of 111 new follows were sent with a rate other than 1.0 in force,
+  in 6 sessions. With the facing-only pairs counted, the rule fires before 105 of 204 new follows
+  and 24 of 78 re-paths over 19 connections.
+
+**RETAIL** (OBSERVED, the critic's `k_retail_pair.py`, written independently of the lanes; 122
+observer connections):
+- Retail sends 0x002B [1.0, 1] as the message immediately before its own follow's 0x002A on 46 of
+  46 follows whose last own 0x002B was any other pair: 10 at a rate other than 1.0, 36 at 1.0 with
+  facing 2, 3 or 9.
+- It sends none on 0 of 384 with [1.0, 1] already in force, and on 0 of 28 with no own 0x002B yet.
+- The 0x002B is adjacent to the 0x002A on 46 of 46. With an action-hold release in the frame, the
+  order is release, 0x002B, 0x002A (5 of 5).
+
+**The fix:**
+- `_note_speed_pair` records, at the send() choke, the (moveSpeed, facing) pair of the last player
+  0x002B. That is the pair the client last RECEIVED; the family edge is not, because several
+  [1.0] senders do not advance it.
+- `_follow_rate_reset` sends 0x002B [1.0, 1] just before every `_approach_send` 0x002A (attack,
+  skill approach, pickup, re-path) when another pair is in force. It then sets the family edge to
+  1, so the next backpedal re-sends its [0.66, 4]. No recorded pair sends nothing.
+- `_order_walk`'s NPC walk is left out, as its docstring chose. Retail's census for it is a
+  registered leftover.
+- In the critic's rig, the pilot shape now sends 0x0029, 0x002B [1.0, 1], 0x002A. The legacy model
+  ends 36.5 u off, not 217, and no re-pin is sent.
+
+**What is UNVERIFIED:**
+- That the client walks a reset follow at 1.0. OBSERVED n=1: the pilot's own [1.0, 1] at 109.879,
+  then the 110.019 follow at |v| 288 with movespeed 1.0.
+- What the facing word does on the client. Facing-only resets are 37 % of the owner follows; retail
+  sends these bytes in this position 36 of 36 times. agenttap reads +0x60 only.
+
+**Corrections to earlier records:**
+- 1z-ds.37 said neither world-0 model could be replayed from a tape. The legacy model replays 33 of
+  33 logged values within 0.35 u once it is seeded at placement (the player's WORLD_CREATE_AGENT),
+  which batch 4's replays never did (lane G-mech, `g_validate_legacy.py`).
+- Batch 4's "25 of 50 kill-no-pin follows sent unseeded" came from the same replay. The model is
+  seeded at the send on 111 of 111.
+
+**Tests:** `test_kbdsync` section 33 (33a-i), floor 276 -> 285. Five mutations each redden their own
+check. The 38 other files the critic ran are unchanged.
+
+**Registered, not shipped here:**
+- The legacy model is still deaf to 0x002B (lane G1, MEASURE MORE). In the rig it alone produced a
+  visible 200.7 u warp (shape S5).
+- The rate-blind arrival time (`arrival_carry_leg`'s "621 of 621 at 1.0" docstring is stale).
+- The click-answer and deferred-grant [1.0] paths do not advance the family edge with D1 off.
+- The SLICE-F25 arm in `_note_wire_move` is unreachable from send().

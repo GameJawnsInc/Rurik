@@ -821,6 +821,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "By default only a swing in its windup is stopped, and never by an "
                          "instant skill: retail [3] 26 of 26 attack skills and 12 of 13 spells "
                          "in the windup, 0 of 19 instants (all landed), 4 of 374 between swings.")
+    ap.add_argument("--follow-keeps-rate", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.39: no 0x002B [1.0, 1] before a "
+                         "follow's 0x002A -- the follow walks at the speed pair in force (a "
+                         "backpedal's 0.66). Retail resets on 46 of 46 own follows with "
+                         "another pair in force, 0 of 384 with [1.0, 1].")
     ap.add_argument("--follow-leg-from-frame", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.30: a new follow's leg (origin, eta, "
                          "stop point) starts at the reach frame -- the world-0 mirror while the "

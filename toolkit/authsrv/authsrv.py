@@ -21347,6 +21347,56 @@ def _approach_abandon(state):
 # stays computable after the change.
 FOLLOW_LEG_FROM_BODY = True   # False (--follow-leg-from-frame): the leg starts at the reach frame.
 
+# MOVECODE-1z-ds.39: RETAIL RESETS THE SPEED PAIR BEFORE A FOLLOW. A 0x002B is a pure store the
+# client bakes into its NEXT leg (sync +0x60, read by the bake; agtrack_mirror on_speed /
+# bake_grant), so a backpedal's KBD SPEED-TRUTH [0.66, 4] left in force made the client walk the
+# follow that answers the next press at 0.66. On the pilot 20261003T201522 the follows at 101.887,
+# 104.358 and 107.080 walked 190.1 u/s with the tap's movespeed 0.66 on both copies (OBSERVED,
+# n = 49 samples), while this leg's eta, the integrator's dest_speed, the legacy sync model and
+# state["pos"] (the raider's chase operand) all walked 288: the legacy model ran 202-270 u ahead
+# and the snap guard sent three spurious APPROACH RE-PINs (tap |pin - world-0| 9.9-21.1 u).
+# Retail sends 0x002B [1.0, 1] as the message immediately before the 0x002A, in the same frame,
+# on 46 of 46 own follows whose last own 0x002B was any other PAIR (10 at a rate != 1.0, 36 at
+# 1.0 with facing 2, 3 or 9) and on 0 of 384 with [1.0, 1] already in force; the 28 with no own
+# 0x002B yet carry none (122 observer connections). The trigger is the pair the client last
+# RECEIVED, read off the wire by _note_speed_pair at the send() choke -- not the family edge,
+# which several [1.0] senders do not advance. Ours sent it before 0 of 204 follows; the pair rule
+# fires before 105 of 204 new follows and 24 of 78 re-paths over 19 connections (12 at a rate
+# != 1.0, the rest facing-only, chiefly the keyboard stop echo's [1.0, 9]). The edge memo becomes
+# family 1 (the router's precedent, 1z-ds.33), so the next backpedal re-sends its [0.66, 4].
+# Every _approach_send 0x002A (attack, skill approach, pickup, re-path) -- retail's 10 of 10 is
+# over all own 0x002A; _order_walk's NPC walk is left as its own docstring chose. The pair is a
+# stale-pair-gate pair: the 0x002A closes it on the same thread.
+FOLLOW_RESETS_RATE = True   # False (--follow-keeps-rate): the follow walks at the pair in force.
+
+
+def _note_speed_pair(state, opcode, values):
+    """The send() choke's record of the speed pair the player's client last RECEIVED
+    (MOVECODE-1z-ds.39): (moveSpeed, facing) of the last player 0x002B, and nothing else."""
+    if (opcode == GAME_SMSG_AGENT_UPDATE_SPEED and values and len(values) > 2
+            and values[0] == PLAYER_AGENT_ID):
+        state["speed_pair_sent"] = (float(values[1]), int(values[2]))
+
+
+def _follow_rate_reset(send, state, what):
+    """Retail's 0x002B [1.0, 1] immediately before a follow's 0x002A when any other pair is in
+    force (FOLLOW_RESETS_RATE's comment). Returns whether it sent. No pair recorded (no player
+    0x002B yet this connection) sends nothing, as retail's 28 of 28."""
+    if not FOLLOW_RESETS_RATE:
+        return False
+    pair = state.get("speed_pair_sent")
+    if pair is None:
+        return False
+    rate, facing = float(pair[0]), int(pair[1])
+    if abs(rate - 1.0) <= 1e-6 and facing == 1:
+        return False
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(PLAYER_AGENT_ID, 1.0, 1),
+         f"FOLLOW RATE RESET 0x002B [1.0, 1] before {what}: [{rate:g}, {facing}] was in force "
+         f"({'rate' if abs(rate - 1.0) > 1e-6 else 'facing'}) [MOVECODE-1z-ds.39]")
+    state["a2_family_sent"] = (None if D1_LEAD else 1)
+    return True
+
 
 def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                    rec=None, stop_at=None, into="approach"):
@@ -21557,6 +21607,10 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     # message retail sends (bit-exact on 16/16 never-moved targets) and it
     # is what makes the client's own resolver stop the body at reach. Both
     # plane words carry the mover's plane (61/61 equal on retail).
+    # MOVECODE-1z-ds.39: retail's [1.0, 1] as the message just before it when the client holds
+    # any other speed pair (FOLLOW_RESETS_RATE), so the follow walks at the speed its leg assumes.
+    _follow_rate_reset(send, state, ("the pickup walk" if into == "pickup" else
+                                     "the approach re-path" if repath else "the approach"))
     send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
          [PLAYER_AGENT_ID, (tx, ty), plane, plane, target_id],
          (f"PICKUP WALK: player -> ground agent {target_id} at ({tx:.0f},"
@@ -41814,6 +41868,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # echo and the click sweep all grant through here, and a model fed
             # from any one of them would be blind to the other four. Costs
             # nothing when --resync is off -- _maybe_resync is the only reader.
+            # MOVECODE-1z-ds.39: the speed pair the client last received (FOLLOW_RESETS_RATE).
+            _note_speed_pair(state, opcode, values)
             if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
                           GAME_SMSG_AGENT_UPDATE_DESTINATION,
                           GAME_SMSG_AGENT_UPDATE_POSITION):
@@ -47423,6 +47479,12 @@ def main():
         print("[map] --skill-stop-any-chain: every accepted skill press on a held chain "
               "sends [3] and drops the swing, instants and between-swing presses included "
               "(every build before MOVECODE-1z-ds.24)", flush=True)
+    if a.follow_keeps_rate:
+        global FOLLOW_RESETS_RATE
+        FOLLOW_RESETS_RATE = False
+        print("[map] --follow-keeps-rate: a follow's 0x002A goes out with whatever speed pair "
+              "is in force -- a backpedal's [0.66, 4] walks it at 190 u/s (every build before "
+              "MOVECODE-1z-ds.39)", flush=True)
     if a.follow_leg_from_frame:
         global FOLLOW_LEG_FROM_BODY
         FOLLOW_LEG_FROM_BODY = False

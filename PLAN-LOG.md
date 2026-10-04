@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.39 -- 2026-10-03 -- **A follow resets the speed pair it walks at (`FOLLOW_RESETS_RATE`, `--follow-keeps-rate` reverts): 0x002B [1.0, 1] just before a follow's 0x002A when the client holds another pair. A backpedal's [0.66, 4] walked our follows back at 190 u/s (the pilot's tap) while every model of ours said 288, which is what drove the pilot's three spurious APPROACH RE-PINs. Retail 46 of 46, 0 of 384 with [1.0, 1].**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.39.
+- **Batch 5** (the snap guard's world-0 model): item 1 of 2.
+
 ### MOVECODE-1z-ds.38 -- 2026-10-03 -- **The follow-pin pilot `20261003T201522` (scripted, agenttap beside it): 0 follow-branch presses against a floor of 3. 28 backpedal walking presses all in reach, body - frame p50 -0.4 u; the frame now tracks the body. P1-F is PARKED: the PRESS FOLLOW PIN stays, the unpinned branch is not shipped. Side measurement: the tap's world-0 copy nearer the mirror than the snap guard's legacy model on 3 of 3 long chases (192-263 u off).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.38.

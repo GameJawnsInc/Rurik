@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=276)   # MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=285)   # MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -3098,6 +3098,125 @@ def main():
     after = {k: v for k, v in st.items() if k != "pathmap"}
     check(out is not None and out.get("legacy") == [60.0, 0.0] and before == after,
           "32c. the diagnostic read is pure: it writes no state key", f"{out}")
+
+    # 33. MOVECODE-1z-ds.39: FOLLOW_RESETS_RATE -- retail's 0x002B [1.0, 1] as the message just
+    # before a follow's 0x002A whenever the client holds any other speed pair.
+    print("\n33. 1z-ds.39: the follow resets the speed pair it walks at (FOLLOW_RESETS_RATE)")
+    import stalepair
+    SPD33 = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+    DEST33 = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    ME33 = authsrv.PLAYER_AGENT_ID
+    _nsp = getattr(authsrv, "_note_speed_pair", lambda *a: None)
+
+    class Sent33(Sent):
+        """Sent, plus what the real send() choke does with a 0x002B: record the pair."""
+
+        def __call__(self, opcode, values, label, quiet=False):
+            _nsp(self.state, opcode, values)
+            Sent.__call__(self, opcode, values, label, quiet)
+
+    def flag33(on):
+        if hasattr(authsrv, "FOLLOW_RESETS_RATE"):
+            sv = authsrv.FOLLOW_RESETS_RATE
+            authsrv.FOLLOW_RESETS_RATE = on
+            return sv
+        return None
+
+    def follow33(pair, fam=4, on=True):
+        """A press out of reach while a key walk's pair is in force -> the follow (32b's shape)."""
+        st = walking32(age=0.47)
+        if pair is not None:
+            st["speed_pair_sent"] = tuple(pair)
+        st["a2_family_sent"] = fam
+        w, r = Sent33(st), FakeRec()
+        sv = flag33(on)
+        try:
+            with_mirror((300.0, 0.0), authsrv.begin_attack, w, st, 10, 0, rec=r)
+            with_mirror((300.0, 0.0), authsrv.attack_tick, w, st, 0, rec=r)
+        finally:
+            if sv is not None:
+                authsrv.FOLLOW_RESETS_RATE = sv
+        return st, w, r
+
+    def before_dest(w):
+        """The message just before the first player 0x002A, and every player 0x002B."""
+        rows = w.rows
+        i = next((k for k, (op, v, _l) in enumerate(rows) if op == DEST33 and v[0] == ME33), None)
+        prev = rows[i - 1] if i else None
+        spd = [(v, l) for op, v, l in rows if op == SPD33 and v and v[0] == ME33]
+        return i, prev, spd
+
+    st, w, r = follow33((0.66, 4))
+    i, prev, spd = before_dest(w)
+    check(i is not None and prev is not None and prev[0] == SPD33 and prev[1] == [ME33, 1.0, 1]
+          and "FOLLOW RATE RESET" in prev[2] and "(rate)" in prev[2],
+          "33a. the pilot's shape (KBD SPEED-TRUTH [0.66, 4] in force at the press): the follow's "
+          "0x002A is immediately preceded by 0x002B [1.0, 1] -- retail's 10 of 10, same frame",
+          f"i {i} prev {prev}")
+    w2 = Sent33(st)
+    authsrv._a2_family_rate(w2, st, 4, tag="KBD SPEED-TRUTH")
+    re = [v for op, v, _l in w2.rows if op == SPD33]
+    check(st.get("speed_pair_sent") == (0.66, 4) and re == [[ME33, 0.66, 4]],
+          "33b. and the family edge re-arms: the next backpedal's KBD SPEED-TRUTH re-sends "
+          "[0.66, 4] (left at family 4, the client would walk that backpedal at 1.0)",
+          f"re-sent {re}, pair now {st.get('speed_pair_sent')}")
+    st, w, r = follow33((0.66, 4), on=False)
+    i, prev, spd = before_dest(w)
+    check(i is not None and spd == [] and (prev is None or prev[0] != SPD33),
+          "33c. KNOWN-BAD ARM (--follow-keeps-rate): no 0x002B -- the client walks the follow at "
+          "the backpedal's 0.66, 190 u/s against every 288 u/s model of ours",
+          f"spd {spd} prev {prev}")
+    st, w, r = follow33((1.0, 1), fam=1)
+    _i1, _p1, spd1 = before_dest(w)
+    st, w, r = follow33(None, fam=None)
+    _i2, _p2, spd2 = before_dest(w)
+    check(_i1 is not None and _i2 is not None and spd1 == [] and spd2 == [],
+          "33d. CONTROL: [1.0, 1] in force sends nothing (retail 0 of 384), and no player 0x002B "
+          "yet this connection sends nothing (retail 0 of 28)", f"{spd1} / {spd2}")
+    st, w, r = follow33((1.0, 9), fam=None)
+    i, prev, spd = before_dest(w)
+    check(prev is not None and prev[0] == SPD33 and prev[1] == [ME33, 1.0, 1]
+          and "(facing)" in prev[2],
+          "33e. a facing-only pair -- the KBD STOP-ECHO's [1.0, 9] -- resets too: retail's "
+          "trigger is the PAIR (36 of 36 at rate 1.0 with facing 2, 3 or 9)", f"prev {prev}")
+    import time as _t33
+    outs = []
+    for kw in ({"repath": True}, {"into": "pickup", "stop_at": 0.0}):
+        st = walking32(age=0.47)
+        st["speed_pair_sent"], st["a2_family_sent"] = (0.66, 4), 4
+        w, r = Sent33(st), FakeRec()
+        sv = flag33(True)
+        try:
+            with_mirror((300.0, 0.0), authsrv._approach_send, w, st, 0, 10, st["agents"][10],
+                        _t33.time(), rec=r, **kw)
+        finally:
+            if sv is not None:
+                authsrv.FOLLOW_RESETS_RATE = sv
+        i, prev, spd = before_dest(w)
+        outs.append(prev is not None and prev[0] == SPD33 and prev[1] == [ME33, 1.0, 1])
+    check(outs == [True, True],
+          "33f. a re-path and a pickup walk reset too: retail's 10 of 10 is over every own "
+          "0x002A, one of them a re-path", f"{outs}")
+    st, w, r = follow33((0.66, 4))
+    gate = stalepair.StalePairGate()
+    verdicts = [gate.note(op, v, 1, 0.0) for op, v, _l in w.rows]
+    check("open" in verdicts and gate.pending == {} and gate.closed >= 1,
+          "33g. the reset is a stale-pair-gate pair: the 0x002A closes it, nothing is left open "
+          "for a tick to split (AgAgent.cpp:1198)", f"{verdicts} pending {gate.pending}")
+    _d = SRC.find("def send(opcode, values, label, quiet=False):")
+    _e = SRC.find("blob = codec.encode(smsg, opcode, values)", _d)
+    st = {}
+    _nsp(st, SPD33, [ME33, 0.66, 4])
+    a = st.get("speed_pair_sent")
+    _nsp(st, SPD33, [110, 1.0, 1])
+    _nsp(st, authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT, [ME33, [0.0, 0.0], 0, 0])
+    check(0 < _d < _e and "_note_speed_pair(state, opcode, values)" in SRC[_d:_e]
+          and a == (0.66, 4) and st.get("speed_pair_sent") == (0.66, 4),
+          "33h. send() records the pair on every message, and only a PLAYER 0x002B moves it (an "
+          "NPC's rate and a 0x0029 leave it)", f"pair {a} -> {st.get('speed_pair_sent')}")
+    check("--follow-keeps-rate" in ARGS_SRC and "if a.follow_keeps_rate:" in SRC
+          and SRC.count("FOLLOW_RESETS_RATE = True") == 1,
+          "33i. FOLLOW_RESETS_RATE ships True and --follow-keeps-rate is wired")
 
     return LEDGER.verdict()
 
