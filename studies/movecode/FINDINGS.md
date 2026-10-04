@@ -22303,3 +22303,56 @@ it turns on is which server model of the client's world-0 copy is right at a fol
 
 **Tests:** `test_kbdsync` section 32 (32a-c), floor 273 -> 276. Reading `w0` after the pin
 reddens 32a, the row without `guard` 32b, a state write in the helper 32c.
+
+
+### 1z-ds.38 The follow-pin pilot: `20261003T201522` -- scripted walk-away presses produce NO follow-branch press; the frame tracks the body (lag p50 -0.4 u)
+
+**What ran** (FPPILOT-run-registered, agent-driven): tree `f436f494`, arm T (today's PRESS FOLLOW
+PIN), the `followpin` sandbox (revheal2 with the raider at 30,000 health and the player at 1,400),
+map 168, agenttap on agents 1, 110 and 111 beside the harness. The plan engaged the raider, then ran
+30 S-backpedal chords (`chord:S,HOLD,space,AT`, the press 0.21-0.27 s into the hold) and 6 forward
+walk-aways. No assert; RUN VERDICT PASS.
+
+**The instruments work:**
+- The chord: 36 of 36 ran their full hold. 32 joined a c2s 0x0026, every one with a moving
+  0x003D as its last movement input. The 4 that did not fell inside the player's 10.6 s dead window
+  (the raider killed the player at 90.7; the wipe at 101.4), where the client sends no press. So
+  every chord made while alive is a walking press.
+- The tap: 1,207 samples, 0 lost in the span, median gap 0.115 s, the player controlled throughout.
+- 1z-ds.37's rows: `w0` on 28 of 28 fired press_stop rows, `guard` on 5 of 5 new follows.
+- 1z-ds.36: 0 same-tick swings.
+
+**THE EXPOSURE FLOOR IS NOT MET** (registered E0: at least 3): **0 follow-branch presses.**
+- The 28 backpedal presses after a walk-in all took the STOP branch. The body sat at p50 83 u
+  (max 120 u), inside the 128 u reach, and body minus frame was p50 -0.4 u.
+- The 4 forward walk-aways (all after the wipe, from the shrine) went out on both frame and body,
+  so they were ordinary follows.
+- Lane R's desk model predicted about 0.31 follow-branch presses per S cycle (RECONSTRUCTION). It is
+  refuted: 0 of 28. Its lag source was a replay of the walk-in endpoint, and on this build the frame
+  is already on the body when the backpedal starts.
+- Registered consequence: the A/B is not flown by script. The registration's fallback, a
+  hand-flown A/B, stays possible but is not scheduled: the owner's own play produced the
+  branch 0 times in the two runs since 1z-ds.17, and each arm needs at least 6.
+
+**What that says about the follow pin at HEAD:**
+- The branch needs the frame to LAG the body by at least (body - 128) u.
+- Of the 10 historical pins, 3 came from a server re-approach during a key walk (removed by
+  1z-ds.14) and 2 from fence-shut zero leads (removed by 1z-ds.10/.17). About 5 came from the
+  walk-in offset (batch-4 lane M3 and the lane-R verifier).
+- The pilot shows that offset is about 0 on a scripted walk-in at this build.
+- Owner exposure since batch 3: 0 in two runs, against 10 in the four runs before 1z-ds.14/.17.
+- So the PRESS FOLLOW PIN now fires about never. Its one freeze specimen (141118 42.836) is on a
+  build before 1z-ds.17. **PARKED: the pin stays (KEEP-AS-IS), and the unpinned branch (batch 4's
+  item C) is NOT shipped**, because no reachable run could test it. The design, its builder and its
+  tests stay in the scratchpad (`wf5-critic\c_mkfinal.py`, `b4_c.py`, `b4_c_test.py`) for the day
+  an owner tape shows the branch again.
+
+**A side measurement for the snap guard** (T-W0, n=3, the long chases from the shrine):
+- At each new follow send, the tap's world-0 copy stood 46-76 u from the AgTrack mirror and
+  192-263 u from the legacy sync model, which is the model the snap guard reads. The mirror was
+  nearer on 3 of 3 (registered prediction: at least 80 %).
+- Small n, and only long chases. It supports the batch-4 critic's open item: the guard reads the
+  wrong world-0 model. It is not acted on here.
+
+**A6:** one drawn-copy jump of 1,823 u in 0.115 s. That is the wipe's own placement at the shrine
+(1536, 1536), both copies together, so there are 0 snaps.

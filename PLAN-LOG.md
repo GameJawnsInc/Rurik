@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.38 -- 2026-10-03 -- **The follow-pin pilot `20261003T201522` (scripted, agenttap beside it): 0 follow-branch presses against a floor of 3. 28 backpedal walking presses all in reach, body - frame p50 -0.4 u; the frame now tracks the body. P1-F is PARKED: the PRESS FOLLOW PIN stays, the unpinned branch is not shipped. Side measurement: the tap's world-0 copy nearer the mirror than the snap guard's legacy model on 3 of 3 long chases (192-263 u off).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.38.
+- **Closes:** batch 4. Items A (1z-ds.36) and B (1z-ds.37) and the harness chord verb shipped; item C was withdrawn for want of exposure.
+
 ### MOVECODE-1z-ds.37 -- 2026-10-03 -- **Both world-0 models (the AgTrack mirror and the legacy sync model) on the press_stop row (before its 0x002C) and on every new follow's approach row (what the snap guard read, and whether it re-pinned). Diagnostic only; the follow-pin run's guard-model question reads them.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.37.
