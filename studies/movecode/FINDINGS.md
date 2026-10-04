@@ -22719,3 +22719,102 @@ about 15 u from the body estimate, and retire when it stands closer.
 - What it needs: the error of the server's world-0 model at the press (the AgTrack mirror, the legacy
   model, the lead's own position) against the tap's world-0. The 16 tapped launches (GUARDW0,
   LEADRETIRE, the pilot) carry the truth for it.
+
+
+### 1z-ds.44 Kill far, retire near: the server replicates the client's world-0 on the tick clock, and the press retires only where its kill would bake a static node (`PRESS_KILL_FAR`, `--press-kill-always` reverts) -- SHIPPED ON, UNRUN
+
+**What 1z-ds.43 registered:** kill when the server's world-0 model stands more than about 15 u from
+the body estimate, retire when closer, with a calibration of that model first. 1z-ds.43 said "16
+tapped launches"; there are 15 (the pilot, 6 GUARDW0, 8 LEADRETIRE).
+
+**The press table** (OBSERVED, orchestrator, scratchpad `wf9-table/pt_build.py`): every 0x0026 on the
+15 launches, judged on the exact application clock (clock0 = C_run + the 0x001E sum before the press;
+C_run constant per run on 12/12 to 83/83 joined follows). Domain: 206 unpinned, follow-answered,
+key-walk presses, 141 under the kill (K) and 65 under the retire (R).
+
+**Batch 7** (a workflow pinned at `6912b95c`: lanes KF-bake, KF-models, KF-rule, each with an
+independent verifier, then a composing critic; records in scratchpad `wfout9/`).
+
+**1. The client's world-0 is a deterministic function of OUR sends on the tick clock** (KF-bake,
+confirmed by its verifier's own replica):
+- A grant (0x0029 / 0x002A) SETTLES the copy at its own position_at at the application clock (clamp
+  first), then bakes: |d|^2 <= 1 writes the static node (v = 0, arrival at c + 1), else v = 288 x the
+  0x002B pair in force along d, arrival at c + int(|d| * 1000 / |v|). A 0x002C hard-sets; a 0x0028
+  parks in place; a 0x002B is a pure store the next bake reads. These are the rules
+  `agtrack_mirror.SyncAgent` already transcribes (RECONSTRUCTION, 0x005FE950 / 0x005FEA85).
+- REFUTED: the orchestrator's lead that a key lead bakes from the client's REPORT point. On the 144
+  domain rows where the two origins differ (p50 10.1 u), the settle origin is exact on 143 and the
+  report origin on 0; the report point coincided only where world-0 was already parked there.
+- The clock: the tap's clock0 takes only tick values (6,928 of 6,928 samples); C_run cancels.
+- At the press (OBSERVED): 205 of 206 domain presses within 0.5 u (p50 0.00 u). The one miss, LT2
+  142.594 (102 u), is the client's own avoidance halt of a follow at the raider's disc, which the
+  replica does not model.
+- Every tap sample of the 15 launches: 88.65 % of 20,626 within 1 u (per launch 72-97 %). The check
+  can fail: deaf to 0x002B, 67.3 %; one tick late, 49.9 %.
+- Out of sample (49 older tapped tapes, the replica unchanged): 82.6 % of 42,372 samples within 1 u
+  (zero-lead era 99.3 %, lead era 75.3 %; the misses are the client's F14 avoidance). No older tape
+  holds a domain press, so the press-level accuracy out of sample is the KILLFAR run's H2.
+
+**2. The server's existing models are not good enough** (KF-models, at the press, p50 / p90):
+- legacy `_sync_position` 15.3 / 44.7 u (the wall clock; walks at the declared base, deaf to 0x002B);
+- the AgTrack mirror 18.0 / 132 u (the wall clock; it sidesteps party heroes the client does not avoid:
+  hero 200 0 of 21 encounters, raider 110 23 of 23);
+- the lead's own `a2_leg_position` 7.2 / 18.3 u (the report origin and the wall clock).
+- The body estimate B's error against the drawn copy is all TIME: p50 5.1 / p90 10.2 u, the server's
+  now minus the last tick it sent. B read at the last tick (D_tick) errs p90 1.4 u. Not shipped: the
+  rule below needs no drawn-side estimate.
+
+**3. The right operand is where the kill lands against world-0, |f32(B) - replica|** -- the client's
+own static test, not a 15 u band:
+- On the K rows, operand <= 1 names the tap's static node on 141 of 141 (17 static, 0 disagreements).
+  The edge is sharp: 6 false positives at 1.5 u, 10 at 2.0.
+- Hops (> 30 u, gated to records the client stamped after the press applied) by operand band:
+
+| Operand (u) | K hops | R hops |
+|---|---|---|
+| 0-1 | 11 of 17 (behind 11 of 11, ahead 0 of 6) | 0 of 6 |
+| 1-2 | 0 of 8 | 0 of 2 |
+| 2-8 | 0 of 57 | 0 of 17 |
+| 8-21 | 0 of 51 | 1 of 30 |
+| >= 21 | 1 of 8 | 3 of 8 |
+
+- Hops per 100 domain presses, matched arm (the arms were interleaved launches), with Jeffreys 90 %:
+  always-kill 8.51 (5.2-13.0); retire at operand <= 2 u 0.72 (0.33-4.9), launch-bootstrap difference
+  from always-kill 90 % (-12.0, -4.1); retire at <= 10-20 u 2.64-2.83; always-retire 6.35.
+- Any radius in [1, 8] u prices the same; 2 u is the client's 1 u plus 1 u for the replica. The
+  registered 15 u is DROPPED: it moves about 80 % of presses to the retire for no measured gain
+  outside the static zone (K non-static 0 of 116 below 21 u).
+- The needed accuracy (KF-rule, noise injected into world-0): sigma <= ~2 u per axis. The legacy,
+  mirror and guard models score 5.6-8.2 hops per 100 as the operand -- no better than always-kill.
+
+**Corrections and residuals:**
+- gG2 35.520 was a scorer artifact, not a hop: gw0_hop2's window opens 0.3 s before the follow and
+  read a record 0.244 s before the press (gated, 5.1 u). K has 12 hops, not 13. The run gates the hop
+  to the client clock.
+- LT4 70.653 (K, 50.7 u): world-0 trailed the body 35.6 u along the backpedal and the kill re-aimed it
+  along its own line; neither action avoids it.
+- LR4 100.329 (R, 46.4 u): the client's own disc halt at +92 ms. That the kill would have avoided it is
+  UNVERIFIED.
+- LR2 90.748 (48.6 u): a lead the server judged matured while world-0 still walked; neither arm acts
+  (logged as `w0_walking`, registered).
+- LR2 140.540: the retire's safety net sent its late kill in the retire's own tick (a world tick ran
+  before begin_attack). A late kill at a near retire's clock is static by construction, so the net
+  now waits a whole tick after a near retire.
+
+**What ships** (the critic's composition, applied unchanged; `wf9-critic/kf44.diff`):
+- `toolkit/authsrv/w0replica.py`, a leaf: one `agtrack_mirror.SyncAgent` on the 0x001E clock, f32 wire
+  values, an immutable published snapshot; no avoidance pass.
+- `_w0_rep_step` in send(), inside `with send_lock:` after the stale-pair note (keystream order), fused
+  so it cannot raise; `_w0_rep_read` / `_w0_rep_fields`.
+- `PRESS_KILL_FAR = True`, `PRESS_KILL_FAR_RADIUS = 2.0`, inside `_press_retires_lead`: a follow-due
+  press retires iff |f32(B) - replica| <= 2 u; otherwise, and with no replica, today's kill (fail
+  closed). `--press-follow-retires-lead` still retires every such press; `--press-kill-always` reverts.
+- Every kill, matured and retire kbd_leg row carries kf (near / far / blind / matured / not-due / off /
+  always), w0_rep, w0_clock, w0_op, w0_theta, w0_walking and both older models, so a run scores from
+  the tape.
+- Tests: test_kbdsync section 35 (35a-p; 35o-p vault-gated), 296 -> 310; eleven mutations each redden
+  their own checks.
+- Not shipped: the 15 u threshold, a taint veto (it sent 3 of the 11 static hops back to the kill),
+  D_tick, moving any legacy or mirror consumer onto the replica, a 0x0027 re-bake.
+- Registered, not built: the kill nudged >= 2 u off world-0 (the fallback if the run's H4 fails); the
+  matured-while-walking lead; the mirror's party sidesteps (its own arc).

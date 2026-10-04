@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.44 -- 2026-10-04 -- **Kill far, retire near, SHIPPED ON (`PRESS_KILL_FAR`, `--press-kill-always` reverts), UNRUN. The server now replicates the client's world-0 copy of the player from its own sends on the 0x001E tick clock (`w0replica.py`): 205 of 206 domain presses within 0.5 u on the 15 tapped launches, against p50 15-18 u for the legacy and mirror models. A follow-answered press retires its lead only where the zero-lead kill would land within 2 u of that world-0 -- the static node (K 11 of 17 static rows hopped, every kill elsewhere 1 of 124). Matched-arm hops per 100: 0.72 against the kill's 8.51. The registered 15 u band is dropped.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.44.
+- **Next:** the KILLFAR run (registered).
+
 ### MOVECODE-1z-ds.43 -- 2026-10-04 -- **LEADRETIRE (8 interleaved launches, agenttap): the retire's registered prediction FAILED and `PRESS_FOLLOW_RETIRES_LEAD` goes back to DARK (`--press-follow-retires-lead` arms it). Kill 8 of 79 follows hopped, retire 5 of 81. By world-0's offset from the drawn body before the press, the kill hops when world-0 is already on the body (< 10 u: 7 of 44) and the retire when it is 20 u or more off (4 of 11); 0 of 42 in 10-20 u. The next rule -- kill when far, retire when near -- is registered.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.43.

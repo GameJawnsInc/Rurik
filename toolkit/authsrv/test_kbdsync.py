@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=296)   # MOVECODE-1z-ds.42 +11 (34a-k: a press the follow answers retires the keyboard lead); MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=310)   # MOVECODE-1z-ds.44 +14 (35a-n: kill far, retire near, on the tick-clock world-0 replica; 35o-p are vault-gated and skip on a bare machine, so the floor is the mandatory core: 312 run here); MOVECODE-1z-ds.42 +11 (34a-k: a press the follow answers retires the keyboard lead); MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -3452,6 +3452,496 @@ def main():
           and authsrv.PRESS_FOLLOW_RETIRES_LEAD is False,
           "34k. PRESS_FOLLOW_RETIRES_LEAD ships DARK (1z-ds.43, LEADRETIRE) and "
           "--press-follow-retires-lead arms it")
+
+    # 35. MOVECODE-1z-ds.44: KILL FAR, RETIRE NEAR -- a follow-answered press sends its zero-lead kill
+    # only where the kill cannot bake a STATIC node (|f32(B) - world-0| <= 1, 0x005FEA85); inside
+    # PRESS_KILL_FAR_RADIUS it retires. world-0 is `w0replica`: the decoded bake driven by our own sends
+    # in keystream order on the 0x001E tick clock.
+    print("\n35. 1z-ds.44: kill far, retire near (PRESS_KILL_FAR, the tick-clock world-0 replica)")
+    import json as _j35
+    import w0replica as W35
+    import agtrack_mirror as AM35
+    TICK35 = authsrv.GAME_SMSG_WORLD_SIMULATION_TICK
+    MAKE35 = authsrv.GAME_SMSG_WORLD_CREATE_AGENT
+    SPD35 = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+    STOP35 = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    step35 = authsrv._w0_rep_step
+
+    def rep35(st, walked_ms=200, rate=None, seed=(100.0, 0.0), dest=(620.0, 0.0)):
+        """The replica as send() steps it: the player's create parked at `seed`, one 50 ms tick, the
+        lead grant from there toward `dest`, then `walked_ms` of ticks (50 ms each, the tail shorter)."""
+        st.pop("w0_rep", None)
+        st.pop("w0_rep_dead", None)
+        step35(st, MAKE35, [ME34, 0, 0, 0, seed, 0])
+        step35(st, TICK35, [50])
+        if rate is not None:
+            step35(st, SPD35, [ME34, rate, 4])
+        step35(st, WP34, [ME34, list(dest), 0, 0])
+        left = walked_ms
+        while left > 0:
+            step35(st, TICK35, [min(50, left)])
+            left -= min(50, left)
+        return st
+
+    def snap35(st):
+        return st["w0_rep"].snap
+
+    class Clock35:
+        """authsrv's `time` frozen at `t` (time() only; everything else is the real module), so a
+        press's body estimate B does not drift with the machine's load while the arm runs."""
+
+        def __init__(self, t):
+            self.t = t
+
+        def time(self):
+            return self.t
+
+        def __getattr__(self, k):
+            return getattr(_t34, k)
+
+    def frozen35(t, fn, *a, **kw):
+        saved = authsrv.time
+        authsrv.time = Clock35(t)
+        try:
+            return fn(*a, **kw)
+        finally:
+            authsrv.time = saved
+
+    class Sent35(Sent33):
+        """Sent33, plus what send()'s lock does since 1z-ds.44: step the replica with the message."""
+
+        def __call__(self, opcode, values, label, quiet=False):
+            Sent33.__call__(self, opcode, values, label, quiet)
+            step35(self.state, opcode, values)
+
+    # 35a: the bake's two arms, on the tick clock.
+    st = rep35({}, walked_ms=0)
+    s0 = snap35(st)
+    v0 = math.hypot(s0[W35.S_VX], s0[W35.S_VY])
+    step35(st, WP34, [ME34, [100.6, 0.0], 0, 0])          # 0.6 u from the copy
+    s1 = snap35(st)
+    check(abs(v0 - 288.0) < 1e-6 and s0[W35.S_EPOCH] == 50 and s0[W35.S_ARRIVE] == 50 + int(520.0 * 1000.0 / 288.0)
+          and s1[W35.S_VX] == 0.0 and s1[W35.S_VY] == 0.0 and s1[W35.S_ARRIVE] == s1[W35.S_EPOCH] + 1
+          and abs(s1[W35.S_X] - 100.6) < 1e-4,
+          "35a. the replica bakes as the client does: a 520 u lead walks at 288 u/s from the clock its "
+          "send applied at (the 0x001E sum before it, 50 ms), arriving at +int(d*1000/s); a grant within "
+          "1 u of the copy is the STATIC node -- v = 0, the arrival at clock + 1 (0x005FEA85)",
+          f"v {v0:.3f} epoch {s0[W35.S_EPOCH]} arrive {s0[W35.S_ARRIVE]} -> static {s1}")
+    # 35b: the clock is the tick sum -- wall time moves nothing.
+    st = rep35({}, walked_ms=100)
+    p1 = authsrv._w0_rep_read(st)
+    _t34.sleep(0.03)
+    p2 = authsrv._w0_rep_read(st)
+    step35(st, TICK35, [50])
+    p3 = authsrv._w0_rep_read(st)
+    check(p1 == p2 and abs(p1[0] - 128.8) < 1e-3 and p1[2] == 150 and abs(p3[0] - p1[0] - 14.4) < 1e-3
+          and p3[2] == 200,
+          "35b. world-0 advances only with the 0x001E deltas we send (the client's clock: the tap's "
+          "clock0 takes only tick values, 20,626 of 20,626 samples) -- 30 ms of wall time between two "
+          "reads moves it 0 u, one 50 ms tick 14.4 u", f"{p1} {p2} {p3}")
+    # 35c: a grant mid-leg bakes from where the copy STANDS (the settle), not from the leg's origin.
+    st = rep35({}, walked_ms=150)                         # world-0 at 143.2
+    step35(st, WP34, [ME34, [143.7, 0.0], 0, 0])
+    s = snap35(st)
+    check(s[W35.S_VX] == 0.0 and abs(s[W35.S_X] - 143.7) < 1e-3,
+          "35c. a grant mid-leg is measured from world-0's SETTLED position at its clock (143.2 u), not "
+          "from the leg's origin or the report (100 u): 0.5 u from it is a static node (batch 7: the "
+          "settle origin exact on 143 of 144 discriminating rows, the report origin on 0)", f"{s}")
+    # 35d: the rate is a pure store the NEXT bake reads.
+    st = rep35({}, walked_ms=50, rate=0.66)
+    va = math.hypot(snap35(st)[W35.S_VX], snap35(st)[W35.S_VY])
+    step35(st, SPD35, [ME34, 1.0, 1])
+    vb = math.hypot(snap35(st)[W35.S_VX], snap35(st)[W35.S_VY])
+    step35(st, WP34, [ME34, [900.0, 0.0], 0, 0])
+    vc = math.hypot(snap35(st)[W35.S_VX], snap35(st)[W35.S_VY])
+    check(abs(va - 190.08) < 0.01 and abs(vb - 190.08) < 0.01 and abs(vc - 288.0) < 1e-6,
+          "35d. a 0x002B is a pure store read by the next bake: a lead after [0.66, 4] walks at 190.08 u/s, "
+          "the [1.0, 1] reset leaves that leg alone, and the next grant walks at 288 (|v| on the tap: "
+          "288.0 / 190.1 / 216.0 by the pair in force)", f"{va:.3f} {vb:.3f} {vc:.3f}")
+    # 35e: anchors, the stop, seeding, and other agents.
+    st = {}
+    step35(st, WP34, [ME34, [5.0, 0.0], 0, 0])
+    unseeded = authsrv._w0_rep_read(st)
+    st = rep35({}, walked_ms=100)
+    step35(st, WP34, [110, [999.0, 999.0], 0, 0])          # an NPC's grant
+    other = authsrv._w0_rep_read(st)
+    step35(st, PIN34, [ME34, [300.0, 40.0], 0])
+    step35(st, TICK35, [50])
+    pinned = authsrv._w0_rep_read(st)
+    st2 = rep35({}, walked_ms=100)
+    step35(st2, STOP35, [ME34])
+    step35(st2, TICK35, [50])
+    halted = authsrv._w0_rep_read(st2)
+    check(unseeded is None and abs(other[0] - 128.8) < 1e-3
+          and abs(pinned[0] - 300.0) < 1e-4 and abs(pinned[1] - 40.0) < 1e-4
+          and abs(halted[0] - 128.8) < 1e-3,
+          "35e. nothing reads before the player's 0x0020 seeds it (fail closed); an NPC's grant does not "
+          "move it; a 0x002C parks it at the point (136 of 136 records exact on all five fields) and a "
+          "0x0028 parks it where it stands", f"{unseeded} {other} {pinned} {halted}")
+    # 35f: clamp first -- a due arrival reads the segment end, never an overshoot.
+    st = rep35({}, walked_ms=0, dest=(120.0, 0.0))
+    step35(st, TICK35, [100])
+    pf = authsrv._w0_rep_read(st)
+    check(pf is not None and pf[0] == W35.f32(120.0) and pf[1] == 0.0 and not W35.walking(snap35(st)),
+          "35f. AgAgent::position_at clamps FIRST: 100 ms into a 20 u leg world-0 reads the segment end "
+          "(120, 0), not 148.8", f"{pf}")
+
+    # The rule, called directly at a pinned instant: walking34's body (report (100, 0) at t - 0.2 s,
+    # walking away at 288 u/s) puts B at 157.6 u exactly when `now` = the report + 0.2 s.
+    def rule35(walked_ms, on=None, far_on=None):
+        st = walking34()
+        rep35(st, walked_ms=walked_ms)
+        now = st["client_pos_at"] + 0.2
+        sv, svk = flag34(on) if on is not None else None, authsrv.PRESS_KILL_FAR
+        if far_on is not None:
+            authsrv.PRESS_KILL_FAR = far_on
+        r = FakeRec()
+        w = Sent35(st)
+        try:
+            ret = with_mirror((300.0, 0.0), authsrv._press_retires_lead, st, 0, r, 10, now=now)
+            kf = st.get("kbd_kf")
+            killed = None
+            if not ret:
+                killed = with_mirror((300.0, 0.0), authsrv._kbd_lead_kill, w, st, 0, r, "press", now=now)
+        finally:
+            if sv is not None:
+                authsrv.PRESS_FOLLOW_RETIRES_LEAD = sv
+            authsrv.PRESS_KILL_FAR = svk
+        return st, ret, kf, killed, r.of("kbd_leg"), w
+
+    # 35g: NEAR -- world-0 within 2 u of B: retired, labelled, nothing sent.
+    st, ret, kf, killed, kr, w = rule35(200)
+    row = kr[0] if kr else {}
+    check(ret is True and killed is None and player(w.rows, WP34) == [] and st.get("kbd_leg") is None
+          and (st.get("kbd_retired") or {}).get("kf") == "near" and row.get("act") == "retire"
+          and row.get("kf") == "near" and row.get("w0_op") is not None and row["w0_op"] < 0.01
+          and row.get("w0_theta") == 2.0 and row.get("w0_clock") == 250
+          and abs(row["w0_rep"][0] - 157.6) < 0.01 and set(row.get("w0_models") or {}) == {"mirror", "legacy"}
+          and row.get("w0_walking") is True,
+          "35g. NEAR (world-0 0.0 u from the kill point): the lead RETIRES -- no 0x0029, the row says "
+          "kf=near and carries the operand, the replica's world-0, its clock, the radius and both older "
+          "models (the K static rows hopped 11 of 17, static and behind 11 of 11)", f"{ret} {kf} {row}")
+    # 35h: FAR -- world-0 14.4 u behind B: today's kill, its row labelled with the operand.
+    st, ret, kf, killed, kr, w = rule35(150)
+    row = kr[0] if kr else {}
+    kills = player(w.rows, WP34)
+    check(ret is False and kf == "far" and killed is True and len(kills) == 1
+          and "KBD LEAD KILLED on press" in kills[0][1] and row.get("act") == "kill"
+          and row.get("kf") == "far" and abs((row.get("w0_op") or 0) - 14.4) < 0.01
+          and st.get("kbd_kf") is None,
+          "35h. FAR (14.4 u): the kill goes out as at 6912b95c and its row says kf=far with the operand "
+          "(every non-static kill in the corpus: 1 hop in 124)", f"{kf} {row}")
+    # 35i: the boundary is the radius: 1.73 u retires, 2.02 u kills.
+    near_b = rule35(194)
+    far_b = rule35(193)
+    check(near_b[1] is True and abs(near_b[4][0]["w0_op"] - 1.728) < 0.01
+          and far_b[1] is False and far_b[2] == "far" and abs(far_b[4][0]["w0_op"] - 2.016) < 0.01,
+          "35i. the radius decides: 1.73 u retires, 2.02 u sends the kill (PRESS_KILL_FAR_RADIUS 2.0 = the "
+          "bake's 1 u plus 1 u for the replica)", f"{near_b[2]} {near_b[4][:1]} | {far_b[2]} {far_b[4][:1]}")
+    # 35j: FAIL CLOSED -- no replica, or a dead one, is today's kill.
+    st = walking34()
+    r = FakeRec()
+    w = Sent35(st)
+    now = st["client_pos_at"] + 0.2
+    ret = with_mirror((300.0, 0.0), authsrv._press_retires_lead, st, 0, r, 10, now=now)
+    kf_blind = st.get("kbd_kf")
+    with_mirror((300.0, 0.0), authsrv._kbd_lead_kill, w, st, 0, r, "press", now=now)
+    blind_kill = player(w.rows, WP34)
+    st2 = walking34()
+    rep35(st2, walked_ms=200)
+    _apply = W35.W0Replica.apply
+
+    def _boom(self, opcode, values):
+        raise ValueError("a replica bug")
+    W35.W0Replica.apply = _boom
+    try:
+        step35(st2, TICK35, [50])                  # must not raise out of send()'s lock
+        raised = False
+    except Exception:
+        raised = True
+    finally:
+        W35.W0Replica.apply = _apply
+    step35(st2, TICK35, [50])
+    dead_read = authsrv._w0_rep_read(st2)
+    ret2 = with_mirror((300.0, 0.0), authsrv._press_retires_lead, st2, 0, FakeRec(), 10,
+                       now=st2["client_pos_at"] + 0.2)
+    check(ret is False and kf_blind == "blind" and len(blind_kill) == 1 and not raised
+          and dead_read is None and "ValueError" in (st2.get("w0_rep_dead") or "") and ret2 is False
+          and st2.get("kbd_kf") == "blind",
+          "35j. FAIL CLOSED: with no replica the press keeps today's kill (kf=blind); a replica that raises "
+          "is caught inside its step (nothing leaves send()'s lock early: the stale-pair notify is "
+          "already done), stays dead for the connection, and every read after is the kill",
+          f"{ret} {kf_blind} {len(blind_kill)} raised {raised} dead {st2.get('w0_rep_dead')}")
+    # 35k: the arms keep their meanings.
+    st, ret, kf, killed, kr, w = rule35(200, far_on=False)       # --press-kill-always
+    off_row = kr[0] if kr else {}
+    st_a, ret_a, kf_a, killed_a, kr_a, w_a = rule35(150, on=True)   # --press-follow-retires-lead, FAR
+    check(ret is False and kf == "off" and killed is True and off_row.get("kf") == "off"
+          and off_row.get("w0_op") is not None and off_row["w0_op"] < 0.01
+          and ret_a is True and kr_a and kr_a[0].get("kf") == "always" and player(w_a.rows, WP34) == [],
+          "35k. the arms keep their meanings: --press-kill-always sends the kill on a NEAR press too (its "
+          "row still carries the operand, kf=off: the run can score K's counterfactual from the tape), "
+          "and --press-follow-retires-lead still retires every follow-answered press, FAR ones too "
+          "(kf=always)", f"off {kf} {off_row.get('w0_op')} | always {kr_a[:1]}")
+    # 35l: through the real 0x0026 arm and the world tick, the clock frozen at the press.
+    outs = {}
+    for name, walked, far_on in (("near", 200, True), ("far", 150, True), ("near-always-kill", 200, False)):
+        st = walking34()
+        rep35(st, walked_ms=walked)
+        t_press = st["client_pos_at"] + 0.2
+        w, r = Sent35(st), FakeRec()
+        svk = authsrv.PRESS_KILL_FAR
+        authsrv.PRESS_KILL_FAR = far_on
+        try:
+            frozen35(t_press, with_mirror, (300.0, 0.0), ARM26, [38, 10, 0], st, r, w, 0)
+            prs = list(w.rows)
+            t_atk = _t34.time() + 1e-6
+            frozen35(t_press, with_mirror, (300.0, 0.0), authsrv.attack_tick, w, st, 0, rec=r)
+            frozen35(t_press, with_mirror, (300.0, 0.0), _settle34, w, st, 0, r, t_atk)
+        finally:
+            authsrv.PRESS_KILL_FAR = svk
+        outs[name] = (player(prs, WP34), player(w.rows, WP34), player(w.rows, DEST34), st)
+    nr, fr, ak = outs["near"], outs["far"], outs["near-always-kill"]
+    check(nr[0] == [] and nr[1] == [] and len(nr[2]) == 1 and "APPROACH" in nr[2][0][1]
+          and nr[3].get("kbd_retired") is None
+          and len(fr[0]) == 1 and "KBD LEAD KILLED on press" in fr[0][0][1] and len(fr[2]) == 1
+          and len(ak[0]) == 1 and len(ak[2]) == 1,
+          "35l. through the shipped 0x0026 arm and attack_tick: a NEAR press sends no 0x0029 at all and the "
+          "next tick's follow is the only player order (retail's batch); a FAR press keeps the kill, then "
+          "the follow; --press-kill-always kills the near one too",
+          f"near {[l[:24] for _v, l in nr[1]]} far {[l[:24] for _v, l in fr[0]]} always {[l[:24] for _v, l in ak[0]]}")
+    # 35m: THE SAFETY NET waits a whole tick after the press arm for a NEAR retire (LR2 140.540: the
+    # world tick ran between the retire and begin_attack, and its late kill -- at the retire's own
+    # clock, so static by construction -- went out before the follow).
+    nets = {}
+    for name, on in (("near", None), ("always", True)):
+        st = walking34()
+        rep35(st, walked_ms=200)
+        st["sim_ticks"] = 7
+        now = st["client_pos_at"] + 0.2
+        sv = flag34(on) if on is not None else None
+        try:
+            ret = with_mirror((300.0, 0.0), authsrv._press_retires_lead, st, 0, FakeRec(), 10, now=now)
+        finally:
+            if sv is not None:
+                authsrv.PRESS_FOLLOW_RETIRES_LEAD = sv
+        w, r = Sent35(st), FakeRec()
+        st["sim_ticks"] = 8                        # the race: a tick before begin_attack set the order
+        t1 = _t34.time() + 1e-6
+        with_mirror((300.0, 0.0), authsrv.attack_tick, w, st, 0, rec=r)
+        first = with_mirror((300.0, 0.0), _settle34, w, st, 0, r, t1)
+        n1 = len(player(w.rows, WP34))
+        st["sim_ticks"] = 9                        # nothing answered it by the end of a whole tick
+        t2 = _t34.time() + 1e-6
+        with_mirror((300.0, 0.0), authsrv.attack_tick, w, st, 0, rec=r)
+        second = with_mirror((300.0, 0.0), _settle34, w, st, 0, r, t2)
+        nets[name] = (ret, first, n1, second, [l for _v, l in player(w.rows, WP34)])
+    nn, na = nets["near"], nets["always"]
+    check(nn[0] is True and nn[1] is False and nn[2] == 0 and nn[3] is True and len(nn[4]) == 1
+          and "(late" in nn[4][0]
+          and na[0] is True and na[1] is True and len(na[4]) == 1,
+          "35m. THE SAFETY NET, near: no late kill in the tick that raced the press arm (sim_ticks + 1); a "
+          "lead nothing answered by the end of the next whole tick gets it then. The always-retire arm "
+          "keeps 1z-ds.42's timing (the first settle)", f"near {nn} always {na}")
+    # 35n: source locks -- the step sits inside send()'s lock after the note; one flag, one revert.
+    i_def = SRC.find("        def send(opcode, values, label, quiet=False):")
+    i_lock = SRC.find("            with send_lock:", i_def)
+    i_note = SRC.find("stale_gate.note(opcode, values", i_def)
+    i_step = SRC.find("                _w0_rep_step(state, opcode, values)", i_def)
+    i_after = SRC.find("            if held is not None and (held[0]", i_def)
+    w0src = open(W35.__file__, encoding="utf-8").read()
+    imports = sorted({l.split()[1].split(".")[0] for l in w0src.splitlines()
+                      if l.startswith("import ") or l.startswith("from ")})
+    check(0 < i_def < i_lock < i_note < i_step < i_after and SRC.count("_w0_rep_step(") == 2   # its def + one call
+          and SRC.count("PRESS_KILL_FAR = True") == 1 and authsrv.PRESS_KILL_FAR is True
+          and authsrv.PRESS_KILL_FAR_RADIUS == 2.0 and "--press-kill-always" in ARGS_SRC
+          and "if a.press_kill_always:" in SRC
+          and imports == ["agtrack_mirror", "math", "os", "struct", "sys"],
+          "35n. LOCKS: the replica steps once, inside send()'s `with send_lock:` AFTER the stale-pair note "
+          "(keystream order; never the pre-lock hooks or the file's 'sent' row); PRESS_KILL_FAR ships on "
+          "at 2.0 u with --press-kill-always as its revert; w0replica is a leaf (stdlib + agtrack_mirror)",
+          f"def {i_def} lock {i_lock} note {i_note} step {i_step} after {i_after} imports {imports}")
+
+    # 35o / 35p: THE CLIENT'S OWN ANSWER -- the leaf over the 15 tapped launches it was built for
+    # (GUARDW0, LEADRETIRE, the follow-pin pilot), against the tap's world-0. Vault-gated.
+    PAIRS35 = (
+        ("LR1", "20261004T114118-c1", "agenttap-leadretire-followpin-g-R-20261004T114039.jsonl"),
+        ("LR2", "20261004T114959-c1", "agenttap-leadretire-followpin-g-R-20261004T114915.jsonl"),
+        ("LR3", "20261004T115848-c1", "agenttap-leadretire-followpin-g-R-20261004T115804.jsonl"),
+        ("LR4", "20261004T120736-c1", "agenttap-leadretire-followpin-g-R-20261004T120653.jsonl"),
+        ("LT1", "20261004T113658-c1", "agenttap-leadretire-followpin-g-T-20261004T113611.jsonl"),
+        ("LT2", "20261004T114534-c1", "agenttap-leadretire-followpin-g-T-20261004T114459.jsonl"),
+        ("LT3", "20261004T115423-c1", "agenttap-leadretire-followpin-g-T-20261004T115341.jsonl"),
+        ("LT4", "20261004T120311-c1", "agenttap-leadretire-followpin-g-T-20261004T120229.jsonl"),
+        ("P", "20261003T201605-c1", "agenttap-followpin-T-20261003T201522.jsonl"),
+        ("gF1", "20261004T003131-c1", "agenttap-guardw0-followpin-g-F-20261004T003055.jsonl"),
+        ("gF2", "20261004T004026-c1", "agenttap-guardw0-followpin-g-F-20261004T003951.jsonl"),
+        ("gG1", "20261004T003600-c1", "agenttap-guardw0-followpin-g-G3o-20261004T003525.jsonl"),
+        ("gG2", "20261004T004855-c1", "agenttap-guardw0-followpin-g-G3o-20261004T004819.jsonl"),
+        ("gT1", "20261004T002706-c1", "agenttap-guardw0-followpin-g-T-20261004T002623.jsonl"),
+        ("gT2", "20261004T004439-c1", "agenttap-guardw0-followpin-g-T-20261004T004404.jsonl"),
+    )
+    try:
+        import vaultpath as _vp35
+        import codec as _codec35
+        gs35 = _vp35.require_dir("captures", "gamesrv", why="35o's tapes")
+        ar35 = _vp35.require_dir("research", "animref", why="35o's agenttap files")
+        have35 = all(os.path.exists(os.path.join(gs35, "authsrv-%s.jsonl" % s))
+                     and os.path.exists(os.path.join(ar35, t)) for _r, s, t in PAIRS35)
+    except (Exception, SystemExit) as exc:                    # noqa: BLE001
+        have35, gs35, ar35 = False, None, None
+        LEDGER.skip("35o-35p", f"no vault on this machine ({type(exc).__name__}: {exc})")
+    if gs35 is not None and not have35:
+        LEDGER.skip("35o-35p", "the 15 GUARDW0 / LEADRETIRE / pilot tapes or their taps are not in this vault")
+    if have35:
+        cd35 = _codec35.Codec(os.path.join(os.path.dirname(os.path.dirname(HERE)), "schema", "messages.json"))
+
+        def tpos35(b, c):
+            if b["stop"] and c - b["stop"] >= 0 and isinstance(b.get("segx"), (int, float)) \
+                    and math.isfinite(b["segx"]):
+                return (b["segx"], b["segy"])
+            dt = (c - b["updated"]) * 0.001
+            return (b["x"] + b["vx"] * dt, b["y"] + b["vy"] * dt)
+
+        def load35(stamp, tap):
+            rows = []
+            for l in open(os.path.join(gs35, "authsrv-%s.jsonl" % stamp), encoding="utf-8", errors="replace"):
+                if l.startswith("{"):
+                    try:
+                        r = _j35.loads(l)
+                    except ValueError:
+                        continue
+                    if isinstance(r.get("t"), (int, float)):
+                        rows.append(r)
+            sends = []
+            for i, r in enumerate(rows):
+                if r.get("kind") == "sent" and r.get("opcode") in W35.OPS:
+                    op, v, _o = cd35.decode_one("GAME_SMSG", bytes.fromhex(r["plain"]))
+                    sends.append((r.get("seq", 0), op, v[1:], i, r.get("label", ""), r["t"]))
+            sends.sort(key=lambda s: s[0])                     # KEYSTREAM order, as the lock steps it
+            S = []
+            for l in open(os.path.join(ar35, tap), encoding="utf-8"):
+                try:
+                    x = _j35.loads(l)
+                except ValueError:
+                    continue
+                if x.get("kind") == "sample" and "1" in (x.get("agents") or {}):
+                    S.append((x["clock0"], x["agents"]["1"]["sync"]))
+            return rows, sends, S
+
+        def join35(sends, S):
+            """The run's clock constant, label-free: the mode of (record epoch - cum) over the tap's
+            world-0 records that name a player grant's point (target) or a 0x002C's (parked)."""
+            cum, keyed = 0, []
+            for _q, op, v, _i, _l, _t in sends:
+                if op == TICK35:
+                    cum += int(v[0])
+                elif v and v[0] == ME34 and op in (WP34, DEST34, PIN34):
+                    keyed.append((op, round(W35.f32(v[1][0]), 1), round(W35.f32(v[1][1]), 1), cum))
+            idx = {}
+            for _c, b in S:
+                idx.setdefault((round(b.get("tx") or 0, 1), round(b.get("ty") or 0, 1)), set()).add(b["updated"])
+                if b["vx"] == 0 and b["vy"] == 0:
+                    idx.setdefault(("p", round(b["x"], 1), round(b["y"], 1)), set()).add(b["updated"])
+            cnt = {}
+            for op, x, y, k in keyed:
+                for u in idx.get(("p", x, y) if op == PIN34 else (x, y), ()):
+                    cnt[u - k] = cnt.get(u - k, 0) + 1
+            return max(cnt.items(), key=lambda kv: kv[1])[0] if cnt else None
+
+        def samples35(S, sends, C, knock=None):
+            ev, cum = [], 0
+            for q, op, v, _i, _l, _t in sends:
+                if knock == "rateblind" and op == SPD35:
+                    continue
+                ev.append((C + cum + (50 if (knock == "late" and op != TICK35) else 0), q, op, v))
+                if op == TICK35:
+                    cum += int(v[0])
+            ev.sort(key=lambda e: (e[0], e[1]))
+            by_c = {}
+            for c, b in S:
+                by_c.setdefault(c, []).append(b)
+            rep, ok, n, i = W35.W0Replica(ME34), 0, 0, 0
+            for c in sorted(by_c):
+                while i < len(ev) and ev[i][0] < c:
+                    rep.apply(ev[i][2], ev[i][3])
+                    i += 1
+                pre = W35.position_at(rep.snap, c - C) if rep.snap is not None else None
+                while i < len(ev) and ev[i][0] == c:
+                    rep.apply(ev[i][2], ev[i][3])
+                    i += 1
+                post = W35.position_at(rep.snap, c - C) if rep.snap is not None else None
+                if pre is None and post is None:
+                    continue
+                for b in by_c[c]:
+                    t = tpos35(b, c)
+                    n += 1
+                    ok += min(math.hypot(p[0] - t[0], p[1] - t[1]) for p in (pre, post) if p is not None) <= 1.0
+            return ok, n
+
+        def kills35(rows, sends, S, C):
+            recs = sorted({(b["updated"], round(b["x"], 3), round(b["y"], 3)): b for _c, b in S}.values(),
+                          key=lambda b: b["updated"])
+            out, rep, cum, last_move = [], W35.W0Replica(ME34), 0, None
+            for q, op, v, i, label, t in sends:
+                if op == WP34 and v and v[0] == ME34 and label.startswith("KBD LEAD KILLED on press"):
+                    answered = None
+                    for r in rows[i + 1:]:
+                        if r["t"] > t + 0.6 or (r.get("kind") == "decoded" and r.get("opcode") == 0x26):
+                            break
+                        if r.get("kind") == "sent" and r.get("opcode") == PIN34 and "PIN" in r.get("label", "").upper():
+                            answered = False
+                            break
+                        if (r.get("kind") == "sent" and r.get("opcode") == DEST34
+                                and r.get("label", "").startswith("APPROACH:")):
+                            answered = True
+                            break
+                    K = (W35.f32(v[1][0]), W35.f32(v[1][1]))
+                    w = W35.position_at(rep.snap)
+                    pre = [b for b in recs if b["updated"] < C + cum]
+                    if (answered and w is not None and pre and last_move is not None
+                            and pre[-1]["updated"] >= C + last_move):
+                        X = tpos35(pre[-1], C + cum)
+                        out.append((math.hypot(K[0] - w[0], K[1] - w[1]) <= 1.0,
+                                    math.hypot(K[0] - X[0], K[1] - X[1]) <= 1.0))
+                rep.apply(op, v)
+                if op == TICK35:
+                    cum += int(v[0])
+                elif v and v[0] == ME34 and op in (WP34, DEST34, PIN34, STOP35, MAKE35,
+                                                   authsrv.GAME_SMSG_AGENT_MOVE_CANCEL):
+                    last_move = cum
+            return out
+
+        tot35, per35, kt35, cs35 = {}, [], {}, []
+        for run, stamp, tap in PAIRS35:
+            rows, sends, S = load35(stamp, tap)
+            C = join35(sends, S)
+            cs35.append(C)
+            if C is None:
+                continue
+            for knock in (None, "rateblind", "late"):
+                ok, n = samples35(S, sends, C, knock)
+                a = tot35.setdefault(knock, [0, 0])
+                a[0] += ok
+                a[1] += n
+                if knock is None:
+                    per35.append((run, ok / max(n, 1)))
+            for k in kills35(rows, sends, S, C):
+                kt35[k] = kt35.get(k, 0) + 1
+        pool = {k: v[0] / max(v[1], 1) for k, v in tot35.items()}
+        check(None not in cs35 and pool.get(None, 0) >= 0.87 and min(p for _r, p in per35) >= 0.70
+              and tot35[None][1] >= 20000 and pool["rateblind"] <= 0.75 and pool["late"] <= 0.60,
+              "35o. THE CLIENT AGREES: over every tap sample of the 15 launches (20,626) the replica is within "
+              "1 u of the client's world-0 on >= 87 % (shipped 88.65 %; every launch >= 70 %, the misses the "
+              "client's own avoidance at the raider's disc) -- and the check can fail: the same replica deaf "
+              "to 0x002B scores <= 75 % (67.3), one tick late <= 60 % (49.9)",
+              f"pooled {pool} per {[(r, round(p, 3)) for r, p in per35]} n {tot35.get(None)} C {cs35}")
+        n_tt, n_ff = kt35.get((True, True), 0), kt35.get((False, False), 0)
+        n_dis = kt35.get((True, False), 0) + kt35.get((False, True), 0)
+        check(n_dis == 0 and n_tt >= 15 and n_ff >= 110,
+              "35p. THE OPERAND IS THE CLIENT'S: at every follow-answered, unpinned press kill whose tap record "
+              "is in force (141), |f32(K) - replica| <= 1 names the client's static node exactly -- "
+              "18 static, 123 not, 0 disagreements", f"{kt35}")
 
     return LEDGER.verdict()
 

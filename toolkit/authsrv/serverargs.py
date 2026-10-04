@@ -841,6 +841,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "press-triggered body grant (0 of 46 walking-press follows), and the "
                          "zero-lead's static history node is the follow hop (4 of 4 static and "
                          "behind follows hopped, 0 of 71 others).")
+    ap.add_argument("--press-kill-always", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.44 (kill far, retire near): every "
+                         "follow-answered press on a live keyboard lead sends the zero-lead KBD "
+                         "LEAD KILLED 0x0029. By default a press whose kill would land within "
+                         "2 u of the client's world-0 copy (the tick-clock replica of our own "
+                         "sends) RETIRES the lead instead, because that kill bakes a static node "
+                         "(11 of 11 static and behind kills hopped). --press-follow-retires-lead "
+                         "still retires every such press.")
     ap.add_argument("--follow-leg-from-frame", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.30: a new follow's leg (origin, eta, "
                          "stop point) starts at the reach frame -- the world-0 mirror while the "
