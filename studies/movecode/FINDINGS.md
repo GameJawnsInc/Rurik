@@ -22480,3 +22480,69 @@ dropping the legacy fallback reddens 24d.
   world-0 keeps walking an interrupted follow until our lead re-aims it.
 - The party-free mirror (OBSTACLES_SKIP_PARTY): MEASURE MORE, by a static decode of 0x006011F0's
   same-team arm or a hero tap.
+
+
+### 1z-ds.41 On the client: GUARDW0 CONFIRMS 1z-ds.39 (64 of 64 follows reset and walked at 288) and takes 1z-ds.40 back to DARK (a 63-66 u hop on 2 of 6 presses made after a long backpedal)
+
+**What ran** (GUARDW0-run-registered, agent-driven, 6 launches on the 1z-ds.40 tree `ad5867d9`):
+- The rig: the `followpin-g` sandbox (raider damage 1, heroes at 2,000 health; nobody died).
+- The plan: wf6-G-run/g_plan.txt, 74 steps.
+- agenttap on agents 1, 110 and 200.
+- The launches:
+
+| Arm | Flags | Harness dirs |
+|---|---|---|
+| T, today's behaviour | `--follow-keeps-rate --guard-legacy-only` | 20261004T002624, T004405 |
+| F, both items | the defaults | 20261004T003055, T003951 |
+| G3o, item 1 alone | `--guard-legacy-only` | 20261004T003526, T004819 |
+
+**Instruments:**
+- No assert on any launch.
+- The tap lost 0 % on every launch, median gap 0.106-0.129 s.
+- The stale-pair census found 0 bare and 0 split pairs (153-171 pairs a launch).
+- 0 same-tick swings.
+
+**1z-ds.39 CONFIRMED** (R1, registered):
+- Follows sent with another speed pair in force: T 21 + 21, F 16 + 16, G3o 16 + 16.
+- T sent a reset on 0 of 42, and the tap's world-0 copy walked every one of those follows at
+  moveSpeed 0.66 (190.1 u/s) or 0.75 (216.0 u/s).
+- F and G3o sent the FOLLOW RATE RESET immediately before 64 of 64, and the tap read moveSpeed
+  1.00 and 288.0 u/s on 64 of 64.
+- The rate-class re-pins went with it. T sent 19 APPROACH RE-PINs a launch, every one spurious in
+  the client form (|world-0 - drawn| at most 15 u). G3o sent 3 a launch: only the K class (a press
+  1.5 s into a backpedal) was left.
+
+**1z-ds.40: its registered F prediction FAILED, and the item goes back to DARK:**
+- On F, the 6 K presses got no re-pin, as designed. On 2 of them (F2 33.169 and 94.899) the client
+  re-placed the drawn copy 65.7 u and 63.1 u forward, toward the target, at its first re-settle
+  after the follow: a visible hop.
+- The measure: `gw0_hop.py`, the new settled point against the old path's position at the same
+  stamp.
+- Both follows went out 51-53 ms after the press, a world tick later. F2 54.208 had the same gap and
+  hopped 10.8 u; F1's three K presses (gaps 5-29 ms) hopped at most 10.4 u.
+- On T and G3o the legacy-only guard re-pinned all 12 K presses, and those drawn copies moved at
+  most 4.4 u. By separation those re-pins were not needed, but they put both copies on one point
+  before the 0x002A.
+- Neither the registered abort (a jump > 100 u) nor any other fired. R2's "0 snaps on F" and R3's
+  "|model - legacy| <= 60 u on F" (the legacy model stays 97-155 u off after a K press, because
+  nothing re-seeds it once no re-pin goes) did NOT hold.
+- **Shipped:** `GUARD_BOTH_WORLD0 = False`, and `--guard-both-world0` arms it. The rule's row fields
+  (`sep_legacy`, `rule`) stay for the next look.
+
+**THE HOP IS PRE-EXISTING, and a re-pin prevents it** (OBSERVED, all 6 launches; the mechanism is
+UNVERIFIED):
+- Hops over 30 u at the first re-settle after a new follow:
+  - 0 of 44 follows that carried an APPROACH RE-PIN;
+  - 4 of 74 that did not. Besides F2's two, there was T2 73.996 (39.8 u, a 0.2 s backpedal press,
+    52 ms gap) and G3o2 114.581 (73.7 u, a 0.2 s press, 14 ms gap).
+- So today's code shows it too, about 5 % of follows sent without a re-pin.
+- The candidate mechanism (RECONSTRUCTION, to test): the press's KBD LEAD KILLED zero-lead grant
+  parks world-0 at the modelled body while the key is still held. The drawn copy keeps walking until
+  the 0x002A hands it to world-0's nodes.
+- A re-pin's 0x002C clears AgTrack and lands both copies first, which fits 0 of 44.
+- Retail sends no zero-lead grant, re-pins at 0 of 527 presses, and walks the follow alone.
+- Registered as its own open item.
+
+**Owner feel run** (registered, optional): back away with S, press Space while still holding S, and
+let the character run back, five times. Does it run back at normal speed? Does the swing start on
+arrival?

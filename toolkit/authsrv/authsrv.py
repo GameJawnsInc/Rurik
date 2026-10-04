@@ -21362,7 +21362,14 @@ FOLLOW_LEG_FROM_BODY = True   # False (--follow-leg-from-frame): the leg starts 
 # ctl 0 head 0 on 3 of 3 presses) and no reprieve test runs -- the 0x002A hands the drawn body to
 # world-0's nodes, so world-0 against the body is what decides, and 100 u is this guard's own
 # threshold, not the client's. No mirror (no AgTrack guard, or a dead one): the legacy model alone.
-GUARD_BOTH_WORLD0 = True   # False (--guard-legacy-only): the legacy model alone decides.
+# MOVECODE-1z-ds.41, the GUARDW0 run (6 launches, agenttap): DARK. With the rule on, 2 of 6
+# presses made 1.5 s into a backpedal got no re-pin, the follow went out a world tick after
+# the press, and the client re-placed the drawn copy 63-66 u forward at the follow (F2
+# 33.169, 94.899) -- a visible hop. The legacy-only guard re-pinned all 9 such presses on
+# T and G3o, and their drawn copies moved <= 4.4 u. Those re-pins were not needed by the
+# separation (|world-0 - drawn| <= 15 u) but they put both copies on one point before the
+# 0x002A. Until the hop's mechanism is known, the legacy model alone decides.
+GUARD_BOTH_WORLD0 = False   # True (--guard-both-world0): the smaller of legacy and mirror.
 
 # MOVECODE-1z-ds.39: RETAIL RESETS THE SPEED PAIR BEFORE A FOLLOW. A 0x002B is a pure store the
 # client bakes into its NEXT leg (sync +0x60, read by the bake; agtrack_mirror on_speed /
@@ -47508,12 +47515,12 @@ def main():
         print("[map] --follow-keeps-rate: a follow's 0x002A goes out with whatever speed pair "
               "is in force -- a backpedal's [0.66, 4] walks it at 190 u/s (every build before "
               "MOVECODE-1z-ds.39)", flush=True)
-    if a.guard_legacy_only:
+    if a.guard_both_world0:
         global GUARD_BOTH_WORLD0
-        GUARD_BOTH_WORLD0 = False
-        print("[map] --guard-legacy-only: the approach snap guard re-pins on the legacy sync "
-              "model alone, not the smaller of it and the AgTrack mirror (every build before "
-              "MOVECODE-1z-ds.40)", flush=True)
+        GUARD_BOTH_WORLD0 = True
+        print("[map] --guard-both-world0: THE EXPERIMENT (MOVECODE-1z-ds.40/.41) -- the "
+              "approach snap guard re-pins only when the legacy model AND the AgTrack mirror "
+              "are past 100 u (GUARDW0: a 63-66 u drawn hop on 2 of 6 K presses)", flush=True)
     if a.follow_leg_from_frame:
         global FOLLOW_LEG_FROM_BODY
         FOLLOW_LEG_FROM_BODY = False

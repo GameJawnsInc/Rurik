@@ -3737,8 +3737,8 @@ def section_guard_both_world0():
           "separations", f"pins {pins} guard {g}")
     pins, g = follow((256.0 + 217.0, 0.0), (256.0, 0.0), flag=False)
     check(len(pins) == 1 and pins[0][0][1] == [256.0, 0.0],
-          "24b. KNOWN-BAD ARM (--guard-legacy-only): the same follow re-pins at the body on the "
-          "legacy model alone -- the pilot's three spurious 0x002C", f"pins {pins}")
+          "24b. the legacy model alone (the DEFAULT since 1z-ds.41): the same follow re-pins at "
+          "the body -- the pilot's three 0x002C, which GUARDW0 found keep a hop away", f"pins {pins}")
     pins, g = follow((256.0 + 500.0, 0.0), (256.0 + 450.0, 0.0))
     check(len(pins) == 1 and pins[0][0][1] == [256.0, 0.0] and near(g.get("sep_guard"), 450.0),
           "24c. both models 450-500 u off the body: the re-pin at the modelled body precedes the "
@@ -3764,9 +3764,10 @@ def section_guard_both_world0():
     src = open(authsrv.__file__, encoding="utf-8").read()
     args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
                     encoding="utf-8").read()
-    check("--guard-legacy-only" in args_src and "if a.guard_legacy_only:" in src
-          and src.count("GUARD_BOTH_WORLD0 = True") == 1,
-          "24h. GUARD_BOTH_WORLD0 ships True and --guard-legacy-only is wired")
+    check("--guard-both-world0" in args_src and "if a.guard_both_world0:" in src
+          and src.count("GUARD_BOTH_WORLD0 = False") == 1 and authsrv.GUARD_BOTH_WORLD0 is False,
+          "24h. GUARD_BOTH_WORLD0 ships DARK (1z-ds.41, GUARDW0's hop) and --guard-both-world0 "
+          "arms it")
 
 
 def main():

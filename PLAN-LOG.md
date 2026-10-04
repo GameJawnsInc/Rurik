@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.41 -- 2026-10-04 -- **GUARDW0 (6 scripted launches, agenttap): 1z-ds.39 CONFIRMED -- 64 of 64 follows sent with a slow pair in force got the reset and walked at moveSpeed 1.00 / 288 u/s (today's code: 0 of 42, walked at 190 or 216). 1z-ds.40 back to DARK (`--guard-both-world0` arms it): with no re-pin, 2 of 6 presses made after a long backpedal hopped the drawn body 63-66 u at the follow; re-pinned follows hopped 0 of 44, unpinned 4 of 74 (a pre-existing class, registered).**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.41.
+- **Closes:** batch 5. 1z-ds.39 ships confirmed; 1z-ds.40 ships dark.
+
 ### MOVECODE-1z-ds.40 -- 2026-10-03 -- **The approach snap guard re-pins only when BOTH world-0 models (legacy sync model and AgTrack mirror) put the client's sync copy more than 100 u off the body (`GUARD_BOTH_WORLD0`, `--guard-legacy-only` reverts). The min can only remove re-pins: on the corpus it removes the pilot's 3 (tap-verified spurious) and 201838 22.160, and it keeps every re-pin both models agree on.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.40.

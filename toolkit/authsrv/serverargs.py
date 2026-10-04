@@ -826,10 +826,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "follow's 0x002A -- the follow walks at the speed pair in force (a "
                          "backpedal's 0.66). Retail resets on 46 of 46 own follows with "
                          "another pair in force, 0 of 384 with [1.0, 1].")
-    ap.add_argument("--guard-legacy-only", action="store_true",
-                    help="THE REVERT ARM for MOVECODE-1z-ds.40: the approach snap guard re-pins "
-                         "on the legacy sync model alone instead of the smaller of it and the "
-                         "AgTrack mirror (the pilot's three spurious APPROACH RE-PINs).")
+    ap.add_argument("--guard-both-world0", action="store_true",
+                    help="THE EXPERIMENT MOVECODE-1z-ds.40, dark since 1z-ds.41: the approach "
+                         "snap guard re-pins only when the legacy sync model AND the AgTrack "
+                         "mirror are past 100 u. Off by default: GUARDW0 saw a 63-66 u drawn "
+                         "hop on 2 of 6 presses made after a long backpedal.")
     ap.add_argument("--follow-leg-from-frame", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.30: a new follow's leg (origin, eta, "
                          "stop point) starts at the reach frame -- the world-0 mirror while the "
