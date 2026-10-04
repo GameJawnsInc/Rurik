@@ -9934,6 +9934,7 @@ def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
     # (`_click_leg_arm`'s `start`), not at that report.
     state["kbd_kill_point"] = (float(x), float(y))
     state["kbd_kill_at"] = now
+    state["kbd_kill_sent_at"] = now      # MOVECODE-1z-ds.47: a kill node went out (a retire never writes it)
     if rec is not None:
         rec.event("kbd_leg", act="kill", why=why, matured=False,
                   point=[float(x), float(y)], remaining=round(remaining, 1),
@@ -21618,6 +21619,58 @@ GUARD_BOTH_WORLD0 = False   # True (--guard-both-world0): the smaller of legacy 
 # stale-pair-gate pair: the 0x002A closes it on the same thread.
 FOLLOW_RESETS_RATE = True   # False (--follow-keeps-rate): the follow walks at the pair in force.
 
+# MOVECODE-1z-ds.47 (batch 8, the far-zone kill hops): THE TRAIL RE-PIN. Of the 281 far-zone press kills on
+# the 24 tapped launches 8 read a gated hop over 30 u, and 3 are PROVEN relocations (LT4 70.653, kK1 49.449,
+# kN3 70.557: 46-51 u at +7-8 ms, each with the BY-TIME signature -- the drawn record on world-0's follow path
+# at its own stamp, the stops equal; the other 5 are walkable between tap samples and carry no signature, the
+# scorer extrapolating a stale record). All three are the TRAILING class: a key reversal during our follow
+# leaves world-0 37-43 u past the report point on the target side, the lead bakes from there, and the
+# press's kill re-aims world-0 toward B at the pair in force (0.66: 190 u/s), closing ~9.7 u in the tick
+# before the follow. The kill hands the drawn copy to B, where it stops (the first post-follow record sits AT
+# the kill point on 75 of 83 far kills at a 25-40 ms press-to-follow gap, 61 of 62 at 40 ms or more); the
+# follow's node takes it iff it stands within the by-time query's 25 u (0x00604ED0, best = 625:
+# RECONSTRUCTION), else the default relocates it onto world-0's path: the hop. So the operand is
+# dist(f32(K), [world-0 at this follow's clock (the replica), the target]): 25.99 / 26.80 / 32.84 u on the
+# three, at most 18.92 u on the 276 other far kills the replica tracks, none in [19, 25). The accepted
+# handovers reach 23.86 u, a K term of 17.78 plus the copy's walk past K when the kill and the follow
+# reach the client in one frame (2.5-6.1 u at the backpedal's 190 u/s); FOLLOW_TRAIL_RADIUS is 25 less
+# that walk. When it fires the snap guard RE-PINS AT THE KILL POINT: the 0x002C clears AgTrack first and
+# lands both copies there, so the follow hands the drawn copy over from 0 u (today's legacy re-pinned
+# follows: 0 hops on 97, all at world-0-to-drawn separations of 16.8 u or less, so the client's answer at
+# 25-35 u is UNVERIFIED: the registered run's H4). The guard's walked-on model is NOT read: it runs ahead
+# of K by the press-to-follow wall gap (p50 0.7 u under 10 ms, 8.0 u at 40 ms or more), largest exactly
+# where the copy has stopped at K -- read with K it flagged 12 far kills, 8 of them handed over by the
+# client itself. Retail sends no 0x002C at a press (0 of 527); this one fires on 4 of 281 far kills (the
+# three hops, and LT2 142.594 -- the replica's avoidance blind spot, where the drawn copy stood AT K: a
+# 0 u nudge) and 0 of 14 in the owner's feel run. A retire's stamp, a report since the kill, a kill older
+# than KBD_KILL_FRESH, no replica: nothing (today's wire). The approach row logs guard.trail on both arms,
+# so a run scores the counterfactual from the tape.
+FOLLOW_TRAIL_REPINS = True     # False (--no-follow-trail-repin): no trail re-pin (fb1957a6 and before).
+FOLLOW_TRAIL_RADIUS = 19.0     # u: the by-time query's 25 u less the same-frame walk past the kill point.
+
+
+def _trail_handover(state, now, target_xy):
+    """MOVECODE-1z-ds.47: (h, K) -- K the press kill's point and h the drawn copy's distance from this follow's
+    node if it stands there: dist(f32(K), segment [the replica's world-0 at the clock the follow applies at,
+    f32(target)]) -- or None: no kill node on the wire (none sent, or the newest stamp a retire's), older than
+    KBD_KILL_FRESH, a client report since it, or no replica. Pure."""
+    kp, at = state.get("kbd_kill_point"), state.get("kbd_kill_sent_at")
+    if kp is None or at is None or state.get("kbd_kill_at") != at:
+        return None                     # the newest stamp is a retire's: no kill node went out
+    if not 0.0 <= now - at <= KBD_KILL_FRESH:
+        return None
+    if (state.get("client_pos_at") or 0.0) > at:
+        return None                     # the client has reported since: its report is the body
+    w = _w0_rep_read(state)
+    if w is None:
+        return None
+    kx, ky = w0replica.f32(kp[0]), w0replica.f32(kp[1])
+    ax, ay = float(w[0]), float(w[1])
+    vx, vy = w0replica.f32(target_xy[0]) - ax, w0replica.f32(target_xy[1]) - ay
+    L2 = vx * vx + vy * vy
+    s = 0.0 if L2 <= 0.0 else max(0.0, min(1.0, ((kx - ax) * vx + (ky - ay) * vy) / L2))
+    return math.hypot(kx - (ax + s * vx), ky - (ay + s * vy)), (float(kp[0]), float(kp[1]))
+
 
 def _note_speed_pair(state, opcode, values):
     """The send() choke's record of the speed pair the player's client last RECEIVED
@@ -21719,6 +21772,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
         _sync_leg = _sync_position(state, now)
         sync = _sync_leg or state.get("pos")
         _g_m = _npc_mirror_pos(state, now)   # 1z-ds.37: the frame's world-0 model, for the row
+        # MOVECODE-1z-ds.47: the trail re-pin's reading, before either write below moves the answer
+        _trail = _trail_handover(state, now, (tx, ty)) if into == "approach" else None
         if model is not None and sync is not None:
             sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
             _sep_l = sep                       # 1z-ds.40: the legacy model's (pos when unseeded)
@@ -21734,15 +21789,28 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                       rule=("min" if GUARD_BOTH_WORLD0 and _g_m is not None else "legacy"),
                       sep_mirror=(None if _g_m is None else round(math.hypot(
                           model[0] - _g_m[0], model[1] - _g_m[1]), 1)))
-            if sep > reprieve:
+            _g["trail"] = None if _trail is None else round(_trail[0], 1)
+            # MOVECODE-1z-ds.47: past the trail radius, re-pin at the KILL POINT (where the kill stopped the
+            # drawn copy) -- only where the legacy test does not fire; it keeps its own point and label
+            _trail_fire = (FOLLOW_TRAIL_REPINS and sep <= reprieve and _trail is not None
+                           and _trail[0] > FOLLOW_TRAIL_RADIUS)
+            if _trail_fire:
+                model, src = _trail[1], "estimate"
+                _body = (float(model[0]), float(model[1]))
+                _g["rule"] = "trail"
+            if sep > reprieve or _trail_fire:
                 send(GAME_SMSG_AGENT_UPDATE_POSITION,
                      [PLAYER_AGENT_ID, [float(model[0]), float(model[1])],
                       plane],
-                     f"APPROACH RE-PIN 0x002C at ({model[0]:.0f},"
-                     f"{model[1]:.0f}) plane {plane}: the server's copy sat "
-                     f"{sep:.0f} u from the modelled click-leg end (legacy "
-                     f"{_sep_l:.0f} u, rule {_g.get('rule')}), past the "
-                     f"client's {reprieve:.0f} u reprieve [ANIMREF-RE 38]")
+                     (f"APPROACH RE-PIN 0x002C at ({model[0]:.0f},{model[1]:.0f}) plane {plane}: the "
+                      f"drawn copy would stand {_trail[0]:.0f} u from the follow's node at the handover "
+                      f"(legacy {_sep_l:.0f} u, rule trail), past the {FOLLOW_TRAIL_RADIUS:.0f} u trail "
+                      f"radius [MOVECODE-1z-ds.47]") if _trail_fire else
+                     (f"APPROACH RE-PIN 0x002C at ({model[0]:.0f},"
+                      f"{model[1]:.0f}) plane {plane}: the server's copy sat "
+                      f"{sep:.0f} u from the modelled click-leg end (legacy "
+                      f"{_sep_l:.0f} u, rule {_g.get('rule')}), past the "
+                      f"client's {reprieve:.0f} u reprieve [ANIMREF-RE 38]"))
                 _g["repin"] = True
                 state["pos"] = (float(model[0]), float(model[1]))
                 # AND THE REPORT IS NOW KNOWN-WRONG -- when the point was
@@ -47765,6 +47833,12 @@ def main():
         PRESS_KILL_FAR = False
         print("[map] --press-kill-always: every follow-answered press sends the zero-lead KBD LEAD "
               "KILLED 0x0029, the static ones too (every build before MOVECODE-1z-ds.44)", flush=True)
+    if a.no_follow_trail_repin:
+        global FOLLOW_TRAIL_REPINS
+        FOLLOW_TRAIL_REPINS = False
+        print("[map] --no-follow-trail-repin: a follow that answers a press kill sends no TRAIL re-pin "
+              "-- the drawn copy is handed to the follow's node from the kill point, and past 25 u the "
+              "client relocates it (every build before MOVECODE-1z-ds.47)", flush=True)
     if a.follow_leg_from_frame:
         global FOLLOW_LEG_FROM_BODY
         FOLLOW_LEG_FROM_BODY = False

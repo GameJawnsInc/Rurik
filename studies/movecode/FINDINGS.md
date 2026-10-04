@@ -22911,3 +22911,82 @@ first-seen numbers are kept beside it (K 17.3 per 100, 18 hops).
 - Open (registered): the far-zone kill hops (world-0 trailing ~36 u; a W-away forward press; the
   replica's avoidance blind spot, which the false-near press here also comes from); swings in a follow
   re-path's tick; a kill row that logs the decision's own operand.
+
+
+### 1z-ds.47 The far-zone kill hops: only the TRAILING class is real, and a re-pin at the kill point takes it (`FOLLOW_TRAIL_REPINS`, `--no-follow-trail-repin` reverts) -- SHIPPED ON, UNRUN; the short-follow class is a scorer artifact (KEEP-AS-IS)
+
+**The census** (OBSERVED, orchestrator, scratchpad `wf10-table/fz_build.py`): every follow-answered press on
+24 tapped launches (the 15 calibration launches, the 8 KILLFAR launches, the owner's feel run) with the
+replica's operand at the press and the gated hop. Domain 435 presses; 281 far-zone kills (operand > 2 u,
+the same kill on both builds), 8 gated hops over 30 u.
+
+**Batch 8** (a workflow pinned at `fb1957a6`: lanes FZ-trail, FZ-short, FZ-retail, each with an independent
+verifier, then a composing critic; records in scratchpad `wfout10/`). The critic rebuilt the census
+byte-identical from its own pin.
+
+**1. THE INSTRUMENT, corrected first (FZ-short, confirmed by its verifier and the critic):**
+- The tap's achieved rate is about 7-10 Hz (p50 sample gaps 99-249 ms), not the 30 Hz asked for.
+- The client RE-STAMPS drawn records (26.9 % of pairs at rest, 20.2 % moving). So the first record seen after
+  a start, halt or turn can carry a stamp up to a sample gap old, and gw0_hop2's extrapolation misses by
+  |dv| x that age: up to ~37 u for a start or halt, ~70 u for a reversal -- overlapping the real 40-82 u class.
+- THE PROOF GATE: a hop is PROVEN only past the 288 u/s speed bound between samples, or with the moving
+  BY-TIME signature (the drawn record on world-0's path at its own stamp within 2 u, stops equal).
+  Positive control: the static-class hops 24 of 24 proven.
+- CORRECTIONS, proven hops:
+  - KILLFAR (1z-ds.45): K 14 of 104 (13.5 per 100), N 1 of 106 (0.9). The verdict stands, slightly stronger.
+  - The owner's feel run (1z-ds.46): 0 of 19. Its "three 31-33 u drawn adjustments" were scorer aliases, not
+    adjustments: the body walked continuously, as the owner saw.
+  - The far-zone kills: 8 gated become 3 proven, all three the trailing class.
+
+**2. THE SHORT-FOLLOW CLASS (follows under 150 u): KEEP-AS-IS.** Proven 0 of 34 (by-time 0 of 10, speed bound
+0 of 10 on the readings over 30 u). The body walks a few u more to world-0's follow origin, reverses within
+1-3 frames, walks 40-70 u back at 288 u/s, and halts at the target's disc 140-270 ms after the follow (the
+client's own avoidance): no jump. Retail answers 7 of 7 such presses with a follow as well. No server change.
+
+**3. THE TRAILING CLASS (FZ-trail, confirmed at its core by its verifier):**
+- (OBSERVED, on the 3 hops LT4 70.653, kK1 49.449, kN3 70.557.) During our follow the drawn copy reaches each
+  of world-0's nodes 148-190 ms after world-0 does; the lag is set at that follow's start by the chord before.
+- The key reversal (S) arrives while world-0 is 47-55 u ahead on the target side. The lead bakes from where
+  world-0 stands, 37-43 u past the report point, and both copies then walk the backpedal at 190 u/s.
+- The press's kill re-aims world-0 toward K at the pair in force (0.66), closing ~9.7 u in the tick before the
+  follow (the FOLLOW RATE RESET rides only with the follow). The kill hands the drawn copy to K, where it stops
+  (the first post-follow record sits AT K on 75 of 83 far kills at 25-40 ms press-to-follow gaps, 61 of 62 at
+  40 ms or more). When the kill and the follow reach the client in one frame it walks 2.5-6.1 u past K.
+- THE RULE: the follow's node takes the drawn copy iff it stands within the by-time query's 25 u (0x00604ED0,
+  RECONSTRUCTION); else the default relocates it onto world-0's follow path at the drawn clock. The relocation
+  is exact on the tap (0.00 u). The operand is the K TERM: dist(f32(K), [world-0 at the follow's clock,
+  the target]).
+- The K term is 25.99 / 26.80 / 32.84 u on the three hops and at most 18.92 u on the 276 other far kills the
+  replica tracks, none in [19, 25). The largest accepted handover is 23.86 u, so the tap brackets the radius
+  in (23.86, 25.99); the decoded 25 u lies inside. n = 3: one refused handover under 25 u, or one accepted one
+  between 25 and 26 u, would break it.
+- Where it arises: every far kill with a K term over 19 u is the THIRD S + Space of a chain (the second short
+  press during the long S chord's follow); the second never exceeds 17.8 u.
+
+**4. Retail** (FZ-retail): no template -- no kill, no 0x002C at a press (0 of 527), and its world-0 overshoots
+a key reversal by a comparable distance. Whether retail's own client hops on this geometry is UNVERIFIED (it
+needs a retail tap).
+
+**5. The owner's exposure:** on the 11 older owner tapes (2026-10-01..03, builds before 1z-ds.39-.44) the K term
+exceeds 19 u on 13 of 47 follow-due presses and 25 u on 9 (the verifier's count, UNVERIFIED as a hop rate).
+
+**What ships** (the critic's composition, applied unchanged; `wf10-critic/fz47.diff`):
+- `FOLLOW_TRAIL_REPINS = True`, `FOLLOW_TRAIL_RADIUS = 19.0` (the 25 u radius less the same-frame walk past K),
+  `--no-follow-trail-repin` reverts.
+- `_trail_handover(state, now, target_xy)`: the K term from the replica at the follow's clock. It reads nothing
+  when no kill went out (`kbd_kill_sent_at`, a retire never writes it), past KBD_KILL_FRESH, after a client
+  report, or with no replica.
+- In `_approach_send`, where the legacy test is quiet and the K term exceeds 19 u, an APPROACH RE-PIN 0x002C
+  at the KILL POINT (label "rule trail"), before the 0x002B reset and the 0x002A. The 0x002C clears AgTrack
+  and lands both copies at K, where the drawn copy already stands (0 u in case a, up to 6.1 u in case b).
+  `guard.trail` is logged on every follow, on both arms.
+- Replay over the census: it fires on 4 of 281 far kills (the 3 hops and LT2 142.594, the replica's blind
+  spot, where the drawn copy stood at K: 0 u) and on 0 of 14 in the feel run. The client's answer to a
+  follow-time 0x002C at 25-35 u is UNVERIFIED (today's 97 re-pinned follows reach 16.8 u): the run's H4.
+- Tests: test_kbdsync section 36 (36a-l), 310 -> 322; the critic's eleven mutations each redden their own checks.
+- NOT shipped: the guard's walked-on model term (it runs ahead of K by the press-to-follow wall gap and flagged
+  8 far kills the client handed over itself); a 25 u radius (misses case b); re-placing world-0 at the report
+  point, delaying the follow, re-aiming the kill, or moving the rate reset ahead of the kill; any change for
+  the short-follow class.
+- Registered: the TRAILPIN run (`wf10-critic/TRAILPIN-run-registered.txt`); the fallback if its H4 fails, a
+  press-time 0x002C at B.

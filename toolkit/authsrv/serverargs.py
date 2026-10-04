@@ -849,6 +849,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "sends) RETIRES the lead instead, because that kill bakes a static node "
                          "(11 of 11 static and behind kills hopped). --press-follow-retires-lead "
                          "still retires every such press.")
+    ap.add_argument("--no-follow-trail-repin", action="store_true",
+                    help="THE REVERT ARM for MOVECODE-1z-ds.47 (the trail re-pin): a follow that "
+                         "answers a press kill goes out without the APPROACH RE-PIN 0x002C at the "
+                         "kill point that the default sends when the kill point stands more than "
+                         "19 u from the follow's node (world-0 by the tick-clock replica, to the "
+                         "target). Past the client's 25 u handover radius it relocates the drawn "
+                         "body onto world-0's path: the far-zone trailing hop, 3 of 3 such kills, "
+                         "46-51 u.")
     ap.add_argument("--follow-leg-from-frame", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.30: a new follow's leg (origin, eta, "
                          "stop point) starts at the reach frame -- the world-0 mirror while the "

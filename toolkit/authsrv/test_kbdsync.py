@@ -67,7 +67,7 @@ receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "c
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=310)   # MOVECODE-1z-ds.44 +14 (35a-n: kill far, retire near, on the tick-clock world-0 replica; 35o-p are vault-gated and skip on a bare machine, so the floor is the mandatory core: 312 run here); MOVECODE-1z-ds.42 +11 (34a-k: a press the follow answers retires the keyboard lead); MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=322)   # MOVECODE-1z-ds.47 +12 (36a-l: the trail re-pin at the kill point, from the green run: 324 run here); MOVECODE-1z-ds.44 +14 (35a-n: kill far, retire near, on the tick-clock world-0 replica; 35o-p are vault-gated and skip on a bare machine, so the floor is the mandatory core: 312 run here); MOVECODE-1z-ds.42 +11 (34a-k: a press the follow answers retires the keyboard lead); MOVECODE-1z-ds.39 +9 (33a-i: the follow resets the speed pair); MOVECODE-1z-ds.37 +3 (32a-c: both world-0 models on the press and approach rows); MOVECODE-1z-ds.32 +3 (31a-c: the live-key click answer and the key's re-lead); MOVECODE-1z-ds.31 +2 (30s/30t: a key report in a held walk-in windup releases first and gets a REAL lead); MOVECODE-1z-ds.21 +1 (30r; 30d re-aimed with a 0 u twin); MOVECODE-1z-ds.17 +6 (30l-30q; 30e re-aimed); MOVECODE-1z-ds.16 +1 (30k, the cancel batch's order); MOVECODE-1z-ds.14 +5 (30f-30j; 30b re-aimed); MOVECODE-1z-ds.10 +5 (30a-30e); MOVECODE-1z-ds +7 (29a-29g); MOVECODE-1z-dr +3 (28a-28c); MOVECODE-1z-dq +4 (27a-27d, 2026-10-01); 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -3942,6 +3942,193 @@ def main():
               "35p. THE OPERAND IS THE CLIENT'S: at every follow-answered, unpinned press kill whose tap record "
               "is in force (141), |f32(K) - replica| <= 1 names the client's static node exactly -- "
               "18 static, 123 not, 0 disagreements", f"{kt35}")
+
+    # 36. MOVECODE-1z-ds.47: THE TRAIL RE-PIN -- a follow that answers a far press kill re-pins at the KILL
+    # POINT when that point stands more than FOLLOW_TRAIL_RADIUS from the follow's node (world-0 by the
+    # tick-clock replica, to the target): the client's 25 u by-time handover radius (0x00604ED0) less the
+    # drawn copy's walk past K when the kill and the follow share a client frame. Shapes: walking34's body
+    # (report (100, 0) 0.2 s before the press, walking AWAY +x at 288 u/s: B = 157.6), the replica walked
+    # from (100, 0) at [0.66, 4] so world-0 trails B on the TARGET side (the trailing class), the press
+    # through the shipped 0x0026 arm, one 50 ms 0x001E, then the world tick. The kill bakes toward B at
+    # 190.08 u/s for that tick, so the K term is 157.6 - (X + 9.504).
+    print("\n36. 1z-ds.47: the trail re-pin (FOLLOW_TRAIL_REPINS: the kill point against the follow's node)")
+    _th36 = getattr(authsrv, "_trail_handover", None)
+
+    def _trail36(st, now, target):
+        return None if _th36 is None else _th36(st, now, target)
+
+    def w_for36(r_k):
+        """The walked_ms that puts the K term at r_k u (world-0 at 100 + 0.19008 W before the kill)."""
+        return int(round((157.6 - r_k - 9.504 - 100.0) / 0.19008))
+
+    def chord36(walked_ms, target=(0.0, 0.0), tick_dt=0.0, on=None, kill_dead=False, pair=None,
+                before_tick=None, rate=0.66):
+        """The press (time frozen at it; the mirror out of reach, so the follow is due), one 50 ms
+        0x001E, then attack_tick at press + tick_dt. Returns (state, every row, the press's rows, rec)."""
+        st = walking34(target=target)
+        rep35(st, walked_ms=walked_ms, rate=rate)
+        if pair is not None:
+            st["speed_pair_sent"], st["a2_family_sent"] = pair, 4
+        t_press = st["client_pos_at"] + 0.2
+        w, r = Sent35(st), FakeRec()
+        sv = getattr(authsrv, "FOLLOW_TRAIL_REPINS", None)
+        if on is not None and sv is not None:
+            authsrv.FOLLOW_TRAIL_REPINS = on
+        try:
+            frozen35(t_press, with_mirror, (300.0, 0.0), ARM26, [38, 10, 0], st, r, w, 0)
+            prs = list(w.rows)
+            step35(st, TICK35, [50])
+            if kill_dead:
+                st["w0_rep"], st["w0_rep_dead"] = None, "a test"
+            if before_tick is not None:
+                before_tick(st)
+            frozen35(t_press + tick_dt, with_mirror, (300.0, 0.0), authsrv.attack_tick, w, st, 0, rec=r)
+        finally:
+            if on is not None and sv is not None:
+                authsrv.FOLLOW_TRAIL_REPINS = sv
+        return st, w.rows, prs, r
+
+    def guard36(r):
+        ap = [e for e in r.of("approach") if e.get("act") == "send"]
+        return ((ap[0].get("guard") or {}) if ap else {}), (ap[0] if ap else {})
+
+    def near36(a, b, tol=0.6):
+        return a is not None and abs(float(a) - float(b)) < tol
+
+    def tick_ops36(rows, prs):
+        return [o for o, v, _l in rows[len(prs):] if v and v[0] == ME34 and o in (WP34, PIN34, DEST34, SPD35)]
+
+    # 36a: the trailing class at a K term of 22 u -- inside the client's 25 u, past the trail radius
+    W_A36 = w_for36(22.0)
+    st, rows, prs, r = chord36(W_A36, pair=(0.66, 4))
+    g, ap = guard36(r)
+    kills = player(prs, WP34)
+    pins = player(rows, PIN34)
+    check(len(kills) == 1 and "KBD LEAD KILLED on press" in kills[0][1] and len(pins) == 1
+          and near36(pins[0][0][1][0], 157.6) and abs(pins[0][0][1][1]) < 0.01
+          and pins[0][1].startswith("APPROACH RE-PIN 0x002C at (") and "rule trail" in pins[0][1]
+          and near36(g.get("trail"), 22.0, 0.3) and g.get("rule") == "trail" and g.get("repin") is True
+          and tick_ops36(rows, prs) == [PIN34, SPD35, DEST34],
+          "36a. THE TRAILING CLASS (LT4 70.653's shape at a 22 u K term): the far kill at the press, then in the "
+          "tick an APPROACH RE-PIN 0x002C AT THE KILL POINT, 'rule trail', before the [1.0, 1] reset and the "
+          "0x002A (the reset stays adjacent to the follow, 1z-ds.39)",
+          f"W {W_A36} kills {[l[:28] for _v, l in kills]} pins {pins} guard {g} tick {tick_ops36(rows, prs)}")
+    st_a36, ap_a36 = st, ap
+    # 36b: the radius decides -- a 17 u K term is the client's own handover (the 5 near-threshold non-hops)
+    st, rows, prs, r = chord36(w_for36(17.0))
+    g, _ap = guard36(r)
+    check(len(player(prs, WP34)) == 1 and player(rows, PIN34) == [] and near36(g.get("trail"), 17.0, 0.3)
+          and g.get("rule") == "legacy",
+          "36b. CONTROL, the radius: a 17 u K term (the corpus's non-hops sit at 17.8-18.9 u, every one handed "
+          "over by the client's own node) -- the kill and the follow only; the row still logs the reading",
+          f"pins {player(rows, PIN34)} guard {g}")
+    # 36c: the segment -- the target AHEAD puts the kill point on the follow's own segment
+    st, rows, prs, r = chord36(W_A36, target=(900.0, 0.0))
+    g, _ap = guard36(r)
+    check(len(player(prs, WP34)) == 1 and player(rows, PIN34) == [] and g.get("trail") is not None
+          and g["trail"] < 1.0,
+          "36c. CONTROL, the segment: 36a's world-0 and kill with the target ahead (+x, 900 u) -- K lies on "
+          "[world-0, target], the reading is ~0 u and nothing is sent (the owner's feel run: 14 of 14 far kills "
+          "read 0.0)", f"guard {g}")
+    # 36d: the known-bad arm
+    st, rows, prs, r = chord36(W_A36, on=False)
+    g, _ap = guard36(r)
+    check(len(player(prs, WP34)) == 1 and player(rows, PIN34) == [] and near36(g.get("trail"), 22.0, 0.3)
+          and g.get("rule") == "legacy",
+          "36d. KNOWN-BAD ARM (--no-follow-trail-repin): 36a's press sends the kill and the follow only -- the "
+          "wire of the three 46-51 u hops -- and the row still carries the reading, so a run scores both arms",
+          f"pins {player(rows, PIN34)} guard {g}")
+    # 36e: only a KILL node counts -- a retire stamps the point and kbd_kill_at, never kbd_kill_sent_at
+    st, rows, prs, r = chord36(200, rate=None)          # world-0 ON B: the near retire (35g's shape)
+    g, _ap = guard36(r)
+    st_e = walking34()
+    rep35(st_e, walked_ms=W_A36, rate=0.66)
+    now_e = st_e["client_pos_at"] + 0.2
+    st_e["kbd_kill_point"], st_e["kbd_kill_at"] = (157.6, 0.0), now_e
+    e_none = _trail36(st_e, now_e, (0.0, 0.0))                   # retires only, ever
+    st_e["kbd_kill_sent_at"] = now_e - 0.1
+    e_retire = _trail36(st_e, now_e, (0.0, 0.0))                 # a kill, then a newer retire
+    st_e["kbd_kill_sent_at"] = now_e
+    e_kill = _trail36(st_e, now_e, (0.0, 0.0))
+    check(_th36 is not None and player(prs, WP34) == [] and player(rows, PIN34) == [] and g.get("trail") is None
+          and "kbd_kill_sent_at" not in st and e_none is None and e_retire is None
+          and e_kill is not None and near36(e_kill[0], 31.5, 0.3) and e_kill[1] == (157.6, 0.0),
+          "36e. ONLY A KILL NODE COUNTS: a near press retires (no 0x0029) and its follow reads None and re-pins "
+          "nothing; the retire's stamps read None directly too, even after an older kill; the same stamps "
+          "from a kill read the distance (31.5 u before the kill's tick)", f"{g} / {e_none} {e_retire} {e_kill}")
+    # 36f: the press's own kill, and the client's word
+    st_f = walking34()
+    rep35(st_f, walked_ms=W_A36, rate=0.66)
+    kf36 = st_f["client_pos_at"] + 0.2
+    st_f["kbd_kill_point"], st_f["kbd_kill_at"], st_f["kbd_kill_sent_at"] = (157.6, 0.0), kf36, kf36
+    f_ok = _trail36(st_f, kf36 + 0.05, (0.0, 0.0))
+    f_late = _trail36(st_f, kf36 + authsrv.KBD_KILL_FRESH - 0.05, (0.0, 0.0))
+    f_stale = _trail36(st_f, kf36 + authsrv.KBD_KILL_FRESH + 0.05, (0.0, 0.0))
+    st_f["client_pos_at"] = kf36 + 0.01
+    f_rep = _trail36(st_f, kf36 + 0.05, (0.0, 0.0))
+    check(f_ok is not None and f_late is not None and f_stale is None and f_rep is None,
+          "36f. the reading needs the press's own kill: inside KBD_KILL_FRESH (0.5 s) it reads, past it None, "
+          "and a client report after the kill is the body's word (None)", f"{f_ok} / {f_late} / {f_stale} / {f_rep}")
+    # 36g: fail to today's wire -- a dead replica sends no trail re-pin
+    st, rows, prs, r = chord36(W_A36, kill_dead=True)
+    g, _ap = guard36(r)
+    check(len(player(prs, WP34)) == 1 and player(rows, PIN34) == [] and g.get("trail") is None,
+          "36g. NO REPLICA (dead after the kill): no trail re-pin -- today's kill and follow", f"{g}")
+    # 36h: what the re-pin does to the server's own state
+    check(st_a36.get("pos") is not None and near36(st_a36["pos"][0], 157.6)
+          and ap_a36.get("origin") is not None and near36(ap_a36["origin"][0], 157.6, 0.2)
+          and st_a36.get("client_pos") is None and st_a36.get("cast_stop_pin") is not None,
+          "36h. the re-pin is a modelled placement: state['pos'] and the follow's leg start at the kill point "
+          "(1z-ds.30), the report is forgotten and the park marker written (PLACEMENT_PARKS: the next key "
+          "report is a walk-start, as for every estimate re-pin today)",
+          f"pos {st_a36.get('pos')} origin {ap_a36.get('origin')} client_pos {st_a36.get('client_pos')} "
+          f"marker {st_a36.get('cast_stop_pin')}")
+    # 36i: the guard's walked-on model is NOT read -- a follow 50 ms after the press (the copy at K: 61 of 62
+    # corpus rows at a 40 ms+ gap stood there) with a 12 u K term; the model has walked 14.4 u past K
+    st, rows, prs, r = chord36(w_for36(12.0), tick_dt=0.05)
+    g, _ap = guard36(r)
+    mx = (g.get("model") or [0.0])[0]
+    check(len(player(prs, WP34)) == 1 and player(rows, PIN34) == [] and near36(g.get("trail"), 12.0, 0.3)
+          and near36(mx, 172.0, 0.6),
+          "36i. THE LONG-GAP CONTROL: the guard's model stands 14.4 u past the kill point (26.4 u off the node) "
+          "but the drawn copy stops at K when the kill reaches it a frame first -- the reading is K's 12 u and "
+          "nothing is sent (the model term would have re-pinned 8 corpus kills the client handed over itself)",
+          f"pins {player(rows, PIN34)} guard {g}")
+    # 36j: the legacy test keeps its own point and label where it fires
+    def _far36(s):
+        s["sync_from"], s["sync_to"], s["sync_at"] = (520.0, 0.0), None, _t34.time()
+        s["pos"] = (520.0, 0.0)
+    st, rows, prs, r = chord36(W_A36, tick_dt=0.02, before_tick=_far36)
+    g, _ap = guard36(r)
+    pins = player(rows, PIN34)
+    check(len(pins) == 1 and "rule legacy" in pins[0][1] and "rule trail" not in pins[0][1]
+          and near36(pins[0][0][1][0], 163.36) and g.get("rule") == "legacy" and near36(g.get("trail"), 22.0, 0.3),
+          "36j. PRECEDENCE: where the legacy test fires (the server's copy 356 u off) it re-pins at its own model "
+          "with its own label, as at fb1957a6 -- the trail re-pin only fills the case it leaves", f"pins {pins} guard {g}")
+    # 36k: the point is the KILL POINT, never the guard's walked-on model (case b's walk past K is 2.5-6.1 u;
+    # pinning at the model would cost case a, the common one, the whole gap)
+    st, rows, prs, r = chord36(W_A36, tick_dt=0.02)
+    g, _ap = guard36(r)
+    pins = player(rows, PIN34)
+    check(len(pins) == 1 and near36(pins[0][0][1][0], 157.6, 0.05) and "rule trail" in pins[0][1]
+          and near36((g.get("model") or [0.0])[0], 163.4, 0.2),
+          "36k. the re-pin lands AT THE KILL POINT (157.6), not at the guard's model 5.8 u past it (a follow 20 ms "
+          "after the press): the drawn copy stops at K when the kill reaches it a frame ahead (75 of 83 corpus "
+          "rows at a 25-40 ms gap)", f"pins {pins} guard {g}")
+    # 36l: locks
+    i_read = SRC.find("_trail = _trail_handover(state, now, (tx, ty)) if into == \"approach\" else None")
+    i_guard = SRC.find("if model is not None and sync is not None:", i_read)
+    i_fire = SRC.find("if sep > reprieve or _trail_fire:", i_read)
+    i_pos = SRC.find('state["pos"] = (float(model[0]), float(model[1]))', i_fire)
+    check(0 < i_read < i_guard < i_fire < i_pos and SRC.count("FOLLOW_TRAIL_REPINS = True") == 1
+          and getattr(authsrv, "FOLLOW_TRAIL_REPINS", None) is True
+          and getattr(authsrv, "FOLLOW_TRAIL_RADIUS", None) == 19.0
+          and "--no-follow-trail-repin" in ARGS_SRC and "if a.no_follow_trail_repin:" in SRC
+          and SRC.count('state["kbd_kill_sent_at"] = now') == 1 and "def _trail_handover(state, now, target_xy):" in SRC
+          and authsrv.capture_flags().get("FOLLOW_TRAIL_REPINS") is True,
+          "36l. LOCKS: the reading precedes the guard's send and its writes; FOLLOW_TRAIL_REPINS ships on at 19 u "
+          "with --no-follow-trail-repin as its revert and rides the capture header; only _kbd_lead_kill stamps "
+          "kbd_kill_sent_at; the reading takes no model", f"read {i_read} guard {i_guard} fire {i_fire} pos {i_pos}")
 
     return LEDGER.verdict()
 
