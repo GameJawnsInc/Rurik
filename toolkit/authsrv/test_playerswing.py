@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=279)   # MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=287)   # MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -3667,6 +3667,108 @@ def section_press_stop_hold():
           f"press {b9}, tick {k9}")
 
 
+def section_guard_both_world0():
+    """MOVECODE-1z-ds.40: the approach snap guard re-pins only when BOTH world-0 models -- the
+    legacy sync model and the AgTrack mirror -- put the client's sync copy off the modelled body.
+    The real _approach_send; the mirror is the frame's _npc_mirror_pos, monkeypatched, and the
+    legacy model is seeded by hand."""
+    import authsrv
+    import time as _t
+
+    print("\n24. 1z-ds.40: the snap guard reads both world-0 models (GUARD_BOTH_WORLD0)")
+    UP = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
+
+    class _PM:
+        def walkable(self, x, y): return True
+        def clip(self, x0, y0, x1, y1, step=None, plane=None): return (x1, y1)
+        def plane_at(self, x, y, prefer=None): return prefer if prefer is not None else 0
+        def containing(self, x, y): return []
+
+    class _Rw:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def follow(legacy_xy, mirror_xy, flag=True, leg=False):
+        """A NEW follow. Keyboard regime: the last report 0.5 s old at (400, 0) walking -x (W),
+        so the guard's estimate is (256, 0). leg=True: the click regime instead -- 9i's shape, a
+        500 u leg (0, 0) -> (500, 0) walked 3 s ago, the model at its end. The legacy model
+        parked at `legacy_xy` (None: unseeded), the mirror at `mirror_xy` (None: no AgTrack
+        guard)."""
+        sent, rec = [], _Rw()
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        now = _t.time()
+        at = now - 0.5
+        st = {"agents": {10: {"name": "target", "dead": False, "last_hit": 0.0,
+                              "max_health": 100.0, "health": 100.0,
+                              "pos": ((900.0, 0.0) if leg else (0.0, 0.0))}},
+              "plane": 0, "pathmap": _PM(), "pos": (256.0, 0.0)}
+        if leg:
+            st["click_moving_at"] = now - 3.0
+            st["click_leg"] = authsrv._leg_record((0.0, 0.0), (500.0, 0.0), now - 3.0, 288.0)
+        else:
+            st.update({"client_pos": (400.0, 0.0), "client_pos_at": at, "client_plane": 0,
+                       "client_heading": (-766.0, 0.0, 1, at),
+                       "last_report": (400.0, 0.0, False, at), "kbd_moving_at": at})
+        if legacy_xy is not None:
+            st["sync_from"], st["sync_to"], st["sync_at"] = tuple(legacy_xy), None, now
+        has = hasattr(authsrv, "GUARD_BOTH_WORLD0")
+        saved = (authsrv._npc_mirror_pos, authsrv.GUARD_BOTH_WORLD0 if has else None)
+        authsrv._npc_mirror_pos = lambda s, n: mirror_xy
+        if has:
+            authsrv.GUARD_BOTH_WORLD0 = flag
+        try:
+            authsrv._approach_send(send, st, 0, 10, st["agents"][10], now, rec=rec)
+        finally:
+            authsrv._npc_mirror_pos = saved[0]
+            if has:
+                authsrv.GUARD_BOTH_WORLD0 = saved[1]
+        row = next((kw for k, kw in rec.rows if k == "approach"), {})
+        pins = [(v, l) for op, v, l in sent if op == UP and "APPROACH RE-PIN" in l]
+        return pins, (row.get("guard") or {})
+
+    def near(a, b):
+        return a is not None and abs(float(a) - float(b)) < 0.5
+
+    pins, g = follow((256.0 + 217.0, 0.0), (256.0, 0.0))
+    check(pins == [] and g.get("rule") == "min" and near(g.get("sep_guard"), 0.0)
+          and near(g.get("sep_legacy"), 217.0),
+          "24a. the pilot's shape (20261003T201605 104.358): the legacy model 217 u ahead, the "
+          "mirror on the body -- no APPROACH RE-PIN; the row names the rule and both "
+          "separations", f"pins {pins} guard {g}")
+    pins, g = follow((256.0 + 217.0, 0.0), (256.0, 0.0), flag=False)
+    check(len(pins) == 1 and pins[0][0][1] == [256.0, 0.0],
+          "24b. KNOWN-BAD ARM (--guard-legacy-only): the same follow re-pins at the body on the "
+          "legacy model alone -- the pilot's three spurious 0x002C", f"pins {pins}")
+    pins, g = follow((256.0 + 500.0, 0.0), (256.0 + 450.0, 0.0))
+    check(len(pins) == 1 and pins[0][0][1] == [256.0, 0.0] and near(g.get("sep_guard"), 450.0),
+          "24c. both models 450-500 u off the body: the re-pin at the modelled body precedes the "
+          "follow, acted on the smaller separation", f"pins {pins} {g}")
+    pins, g = follow((256.0 + 500.0, 0.0), None)
+    check(len(pins) == 1 and g.get("rule") == "legacy",
+          "24d. CONTROL, no mirror (no AgTrack guard): the legacy model alone decides, as "
+          "before -- the re-pin goes out", f"pins {pins} {g}")
+    pins, g = follow((256.0 + 38.0, 0.0), (256.0 + 140.0, 0.0))
+    check(pins == [] and near(g.get("sep_guard"), 38.0),
+          "24e. the batch-4 'blind' shape (124744 57.424: legacy 38-62 u, mirror 103-141 u, the "
+          "mirror's party sidestep): no re-pin -- min <= legacy, the rule never adds one",
+          f"pins {pins} {g}")
+    pins, g = follow((0.0, 0.0), (0.0, 0.0), leg=True)
+    check(len(pins) == 1 and pins[0][0][1] == [500.0, 0.0] and g.get("src") == "leg"
+          and near(g.get("sep_guard"), 500.0),
+          "24f. the guard's FOUNDING shape (9i: world-0 left at a 500 u click leg's start, both "
+          "models agreeing there) still re-pins at the leg's end", f"pins {pins} {g}")
+    lab = pins[0][1] if pins else ""
+    check(lab.startswith("APPROACH RE-PIN 0x002C at (") and "(legacy 500 u, rule min)" in lab,
+          "24g. the label keeps the scorers' prefix and names the legacy separation and the rule",
+          f"{lab}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    check("--guard-legacy-only" in args_src and "if a.guard_legacy_only:" in src
+          and src.count("GUARD_BOTH_WORLD0 = True") == 1,
+          "24h. GUARD_BOTH_WORLD0 ships True and --guard-legacy-only is wired")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -3693,6 +3795,7 @@ def main():
     section_reach_frame()
     section_swing_clock_carry()
     section_combat_deadlines()
+    section_guard_both_world0()
     print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
     # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
     # swings left NO row anywhere. `_press_refused` returns early once the

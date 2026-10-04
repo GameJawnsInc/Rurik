@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.40 -- 2026-10-03 -- **The approach snap guard re-pins only when BOTH world-0 models (legacy sync model and AgTrack mirror) put the client's sync copy more than 100 u off the body (`GUARD_BOTH_WORLD0`, `--guard-legacy-only` reverts). The min can only remove re-pins: on the corpus it removes the pilot's 3 (tap-verified spurious) and 201838 22.160, and it keeps every re-pin both models agree on.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.40.
+- **Batch 5** (the snap guard's world-0 model): item 2 of 2; the registered run GUARDW0-F confirms both.
+
 ### MOVECODE-1z-ds.39 -- 2026-10-03 -- **A follow resets the speed pair it walks at (`FOLLOW_RESETS_RATE`, `--follow-keeps-rate` reverts): 0x002B [1.0, 1] just before a follow's 0x002A when the client holds another pair. A backpedal's [0.66, 4] walked our follows back at 190 u/s (the pilot's tap) while every model of ours said 288, which is what drove the pilot's three spurious APPROACH RE-PINs. Retail 46 of 46, 0 of 384 with [1.0, 1].**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.39.

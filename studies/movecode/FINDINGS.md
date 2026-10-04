@@ -22429,3 +22429,54 @@ check. The 38 other files the critic ran are unchanged.
 - The rate-blind arrival time (`arrival_carry_leg`'s "621 of 621 at 1.0" docstring is stale).
 - The click-answer and deferred-grant [1.0] paths do not advance the family edge with D1 off.
 - The SLICE-F25 arm in `_note_wire_move` is unreachable from send().
+
+
+### 1z-ds.40 The snap guard re-pins only when both world-0 models are off (`GUARD_BOTH_WORLD0`, `--guard-legacy-only` reverts)
+
+**Batch 5's item 2.** 1z-ds.39 removed the cause of the pilot's three spurious re-pins. This item
+removes the guard's dependence on one model that has two construction errors the mirror does not
+share.
+
+**The two models** (RECONSTRUCTION, lane G-mech, confirmed by its verifier):
+- The LEGACY sync model (`_sync_position`) walks a 0x002A onto the target's own point, with no disc
+  stop: 67-78 u past it after a melee walk-in (the F8/F10 taps). It also walks every leg at the
+  base, deaf to the 0x002B rate the client bakes (lane G1, unshipped).
+- The AgTrack MIRROR (`_npc_mirror_pos`, the frame's model) honours both, but it sidesteps party
+  heroes with the hostile pair's 80 u radius, and the ally radius is UNMEASURED. The pilot's mirror
+  stood 45-75 u off the tap's world-0 copy where the client walked straight.
+
+**The rule:**
+- The guard acts on the SMALLER of the two separations, min(legacy, mirror). Since that can never
+  exceed the legacy separation, the rule can only REMOVE re-pins.
+- It keeps every re-pin both models agree on: the founding click-leg shape, 194336 39.258's 568 u,
+  and 13 of the 15 out-of-corpus owner re-pins.
+- With no mirror (no AgTrack guard, or a dead one), the legacy model alone decides, as before.
+- On the corpus the rule removes 4 re-pins:
+  - the pilot's 3, which the tap shows were spurious;
+  - 201838 22.160, the disc case.
+- It also drops one out-of-corpus re-pin, 131850 72.179 (legacy 121 u, mirror 97 u), whose need is
+  UNVERIFIED.
+- A needed re-pin could be lost only if the mirror sat within 100 u of the body while world-0 was
+  more than 100 u off. The mirror is fed the same sends as the legacy model and differs only in its
+  avoidance, so there is no instance and no constructed mechanism.
+- After a PRESS the client's record is disarmed (ANIMREF 37.2; the pilot's tap read ctl 0, head 0
+  on 3 of 3 presses), so no reprieve test runs. The 0x002A hands the drawn body to world-0's nodes,
+  so world-0 against the body is what decides. 100 u is this guard's own threshold, not the client's.
+
+**Owner exposure:** 0 APPROACH RE-PINs in the 34 new follows since batch 2. So nothing visible
+changes in owner play today; the rule matters for the K class (a press after a long slow key walk).
+
+**The row and the label:** `sep_guard` is the separation acted on (the min). New fields:
+`sep_legacy`, and `rule` (`min` or `legacy`). The re-pin label keeps its `APPROACH RE-PIN 0x002C
+at (` prefix and appends `(legacy N u, rule R)`.
+
+**Tests:** `test_playerswing` section 24 (24a-h), floor 279 -> 287. The max rule reddens 24a/c/e;
+dropping the legacy fallback reddens 24d.
+
+**Not shipped:**
+- A guard reading the mirror alone (the census lane's C5a: DROP).
+- The max rule, which was batch 4's item C8.
+- A legacy model that stops at a report: wrong on 3 of 12 rig decisions, because the client's
+  world-0 keeps walking an interrupted follow until our lead re-aims it.
+- The party-free mirror (OBSTACLES_SKIP_PARTY): MEASURE MORE, by a static decode of 0x006011F0's
+  same-team arm or a hero tap.

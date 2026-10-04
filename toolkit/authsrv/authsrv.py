@@ -21347,6 +21347,23 @@ def _approach_abandon(state):
 # stays computable after the change.
 FOLLOW_LEG_FROM_BODY = True   # False (--follow-leg-from-frame): the leg starts at the reach frame.
 
+# MOVECODE-1z-ds.40: THE SNAP GUARD RE-PINS ONLY WHEN BOTH WORLD-0 MODELS PUT THE CLIENT'S SYNC
+# COPY OFF THE BODY. It read the legacy sync model alone, and each model has a construction error
+# the other lacks: the legacy model walks a 0x002A onto the target's own point (no disc stop:
+# 67-78 u past it after a melee walk-in, F8/F10) and walks every leg at the base, deaf to the
+# 0x002B rate the client bakes (the K class: a key walk at 0.66 for t seconds runs it
+# (1 - 0.66) x 288 x t ahead -- 202-270 u on the pilot's three chases, all tap-verified
+# spurious); the AgTrack mirror honours both but sidesteps party heroes with the hostile pair's
+# 80 u radius (UNMEASURED for allies; the pilot's logged mirror stood 45-75 u off the tap's
+# world-0 where the client walked straight). The smaller of the two separations is the guard's:
+# min <= legacy, so this can only REMOVE re-pins, and it keeps every re-pin where both models
+# agree (the founding click-leg shape, 194336 39.258's 568 u, 13 of the 15 out-of-corpus owner
+# re-pins). After a PRESS the client's record is disarmed (ANIMREF 37.2; the pilot's tap read
+# ctl 0 head 0 on 3 of 3 presses) and no reprieve test runs -- the 0x002A hands the drawn body to
+# world-0's nodes, so world-0 against the body is what decides, and 100 u is this guard's own
+# threshold, not the client's. No mirror (no AgTrack guard, or a dead one): the legacy model alone.
+GUARD_BOTH_WORLD0 = True   # False (--guard-legacy-only): the legacy model alone decides.
+
 # MOVECODE-1z-ds.39: RETAIL RESETS THE SPEED PAIR BEFORE A FOLLOW. A 0x002B is a pure store the
 # client bakes into its NEXT leg (sync +0x60, read by the bake; agtrack_mirror on_speed /
 # bake_grant), so a backpedal's KBD SPEED-TRUTH [0.66, 4] left in force made the client walk the
@@ -21472,12 +21489,17 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
         _g_m = _npc_mirror_pos(state, now)   # 1z-ds.37: the frame's world-0 model, for the row
         if model is not None and sync is not None:
             sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
+            _sep_l = sep                       # 1z-ds.40: the legacy model's (pos when unseeded)
+            if GUARD_BOTH_WORLD0 and _g_m is not None:
+                sep = min(sep, math.hypot(model[0] - _g_m[0], model[1] - _g_m[1]))
             _g.update(src=src, model=[round(float(model[0]), 1), round(float(model[1]), 1)],
                       legacy=(None if _sync_leg is None else
                               [round(float(_sync_leg[0]), 1), round(float(_sync_leg[1]), 1)]),
                       mirror=(None if _g_m is None else
                               [round(float(_g_m[0]), 1), round(float(_g_m[1]), 1)]),
-                      sep_guard=round(sep, 1),        # legacy, or pos when unseeded
+                      sep_guard=round(sep, 1),        # the separation acted on (1z-ds.40: the min)
+                      sep_legacy=round(_sep_l, 1),    # legacy, or pos when unseeded
+                      rule=("min" if GUARD_BOTH_WORLD0 and _g_m is not None else "legacy"),
                       sep_mirror=(None if _g_m is None else round(math.hypot(
                           model[0] - _g_m[0], model[1] - _g_m[1]), 1)))
             if sep > reprieve:
@@ -21486,7 +21508,8 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                       plane],
                      f"APPROACH RE-PIN 0x002C at ({model[0]:.0f},"
                      f"{model[1]:.0f}) plane {plane}: the server's copy sat "
-                     f"{sep:.0f} u from the modelled click-leg end, past the "
+                     f"{sep:.0f} u from the modelled click-leg end (legacy "
+                     f"{_sep_l:.0f} u, rule {_g.get('rule')}), past the "
                      f"client's {reprieve:.0f} u reprieve [ANIMREF-RE 38]")
                 _g["repin"] = True
                 state["pos"] = (float(model[0]), float(model[1]))
@@ -47485,6 +47508,12 @@ def main():
         print("[map] --follow-keeps-rate: a follow's 0x002A goes out with whatever speed pair "
               "is in force -- a backpedal's [0.66, 4] walks it at 190 u/s (every build before "
               "MOVECODE-1z-ds.39)", flush=True)
+    if a.guard_legacy_only:
+        global GUARD_BOTH_WORLD0
+        GUARD_BOTH_WORLD0 = False
+        print("[map] --guard-legacy-only: the approach snap guard re-pins on the legacy sync "
+              "model alone, not the smaller of it and the AgTrack mirror (every build before "
+              "MOVECODE-1z-ds.40)", flush=True)
     if a.follow_leg_from_frame:
         global FOLLOW_LEG_FROM_BODY
         FOLLOW_LEG_FROM_BODY = False
