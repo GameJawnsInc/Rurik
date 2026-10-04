@@ -3340,7 +3340,7 @@ def main():
     check(len(kills) == 1 and "KBD LEAD KILLED on press" in kills[0][1]
           and abs(kills[0][0][1][0] - 157.6) < 0.6 and len(player(w.rows, DEST34)) == 1
           and st.get("kbd_retired") is None,
-          "34b. KNOWN-BAD ARM (--press-follow-kills-lead): the zero-lead kill at the press, then the "
+          "34b. the kill (the DEFAULT again since 1z-ds.43): the zero-lead kill at the press, then the "
           "follow -- GUARDW0's wire; a static kill node there is the hop (4 of 4 static and behind)",
           f"press {ops(prs)}")
     # 34c: CONTROL -- an in-reach press keeps today's wire exactly (kill, then the PRESS STOP PIN).
@@ -3447,9 +3447,11 @@ def main():
           "34j. the 0x0026 arm alone retires (before the kill it replaces, inside the walk-ending "
           "pair's gate); the skill press keeps its kill; both attack_tick call sites settle",
           f"arm {i_arm} retire {i_ret} kill {i_kill} begin {i_beg} settles {_settle_after}")
-    check("--press-follow-kills-lead" in ARGS_SRC and "if a.press_follow_kills_lead:" in SRC
-          and SRC.count("PRESS_FOLLOW_RETIRES_LEAD = True") == 1,
-          "34k. PRESS_FOLLOW_RETIRES_LEAD ships True and --press-follow-kills-lead is wired")
+    check("--press-follow-retires-lead" in ARGS_SRC and "if a.press_follow_retires_lead:" in SRC
+          and SRC.count("PRESS_FOLLOW_RETIRES_LEAD = False") == 1
+          and authsrv.PRESS_FOLLOW_RETIRES_LEAD is False,
+          "34k. PRESS_FOLLOW_RETIRES_LEAD ships DARK (1z-ds.43, LEADRETIRE) and "
+          "--press-follow-retires-lead arms it")
 
     return LEDGER.verdict()
 

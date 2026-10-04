@@ -22645,3 +22645,77 @@ itself cannot be flagged on the wire per event: no client report comes within 1 
   safety net (34e), a net deaf to reports (34f), a net inside the tick (34e), no point stamp
   (27d/34a/34h), and a plane write (34a).
 - The 38 other affected files are green.
+
+
+### 1z-ds.43 On the client: LEADRETIRE -- the retire's registered prediction FAILS and it goes back to DARK; each action hops on the opposite side of a 10-20 u band of world-0's offset
+
+**What ran** (LEADRETIRE-run-registered, agent-driven, on `abf92982`):
+- Eight interleaved launches on the `followpin-g` rig with the wf7-critic plan (96 steps), with
+  agenttap beside each.
+- T = `--press-follow-kills-lead` (today's kill), at harness 20261004T113613, T114459, T115341 and
+  T120230.
+- R = the retire, at 20261004T114039, T114916, T115805 and T120655.
+- Every launch: RUN VERDICT PASS, 0 asserts, 0 deaths.
+- The wire did what each arm said:
+  - T: 29 press kills a launch and 0 retire rows.
+  - R: 18-20 retire rows a launch, and 0-1 follows with a player 0x0029 before their 0x002A.
+  - R1 72.243's was a PRESS FOLLOW PIN, which keeps its kill by design. It is also the first follow
+    pin a scripted run produced.
+  - R2 had 2 late kills; the safety net fired.
+
+**A scorer artifact, fixed first:**
+- `gw0_hop.py` read a 148.0 u "hop" on R2 44.771, which is past the registered 100 u abort, and the
+  sequence was halted for it. The drawn body was continuous: 1695.9, then the re-pin at 1668.7 (1-2 u
+  off its path), then 1713.6 and 1753.9 at 288 u/s.
+- The cause: our late send stamps put the re-pin's record inside "before". The follow then re-aimed
+  the copy without a new `updated`, so the next settle came half a second later.
+- `gw0_hop2.py` takes every distinct (point, updated) record around the follow. It reproduces every
+  GUARDW0 hop and removes the artifact. The sequence was resumed.
+- The registered abort "a non-late press kill on R" cannot hold as written, because in-reach presses
+  keep the kill on R by design (34c). It was scored as a follow-answered press with a player 0x0029
+  before its follow: 0 that were not the follow pin.
+
+**The result** (gw0_hop2, hops over 30 u):
+
+| Arm | Follows | Hops | Kind | Size |
+|---|---|---|---|---|
+| T | 79 | 8 | 7 the static marker (the census's at-risk rows: 7 of 7 hopped), 1 offset | 51-82 u |
+| R | 81 | 5 | all offset or trailing | 44-49 u |
+
+**THE SPLIT** (OBSERVED, `lr_class.py`): every unpinned key-walk press, 66 per arm, binned by the
+tap's |world-0 - drawn| at the last sample before the press.
+
+| Offset before the press | T, the kill | R, the retire |
+|---|---|---|
+| < 10 u | 7 of 44 hopped | 1 of 32 |
+| 10-20 u | 0 of 19 | 0 of 23 |
+| 20-25 u | 0 of 2 | 1 of 6 |
+| >= 25 u | 1 of 1 | 3 of 5 |
+
+- The kill hops where world-0 is already ON the body: its zero-lead lands on world-0 and leaves a
+  static node, 1z-ds.42's mechanism.
+- The retire hops where world-0 is 20 u or more OFF the body: nothing pulls world-0 onto the body,
+  and the follow's handover lands past the client's 25 u query radius (the batch-6 critic's
+  boundary, RECONSTRUCTION).
+- Examples:
+  - R2 90.758: world-0 33 u off laterally on a strafe.
+  - R3 49.39: world-0 26 u behind on a backpedal. The keyboard lead bakes from the report point, so
+    world-0 trails the drawn body.
+- Neither arm hopped in the 10-20 u band: 0 of 42.
+
+**Registered outcome:**
+- H2 for R ("0 of >= 40 hop-class follows") FAILED. By the registration, the item goes dark:
+  `PRESS_FOLLOW_RETIRES_LEAD = False`, and `--press-follow-retires-lead` arms it.
+- H4 (the drawn copy within 25 u of the follow's segment on R) failed too, on R4 90.042 at 27.1 u.
+- The census's own boundary operand (max 21.9-27.1 u) understated the offset rows, so it cannot be
+  the rule's input.
+
+**THE NEXT RULE** (registered, not built): kill when the server's world-0 model stands more than
+about 15 u from the body estimate, and retire when it stands closer.
+- A static node needs world-0 within 1 u of the kill point, so it is in the retire zone.
+- An offset hop needs world-0 more than about 20-25 u off, so it is in the kill zone.
+- Either action is safe in between, so the rule tolerates a world-0 model error of about +-5-10 u.
+  It does not need the 1 u the "skip only a static kill" lever needed.
+- What it needs: the error of the server's world-0 model at the press (the AgTrack mirror, the legacy
+  model, the lead's own position) against the tap's world-0. The 16 tapped launches (GUARDW0,
+  LEADRETIRE, the pilot) carry the truth for it.

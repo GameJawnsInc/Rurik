@@ -9970,7 +9970,14 @@ def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
 # lacks the kill (118 of 118). The decode predicts the follow's node alone hands the drawn copy
 # over (REAIM/NODE); on the corpus the drawn copy stood within 21.7 u of that node's segment on
 # 122 of 122 follows (25 u is the query's radius), so no by-time default is predicted either.
-PRESS_FOLLOW_RETIRES_LEAD = True   # False (--press-follow-kills-lead): the press's 0x0029 kill.
+# MOVECODE-1z-ds.43, the LEADRETIRE run (8 interleaved launches, agenttap): DARK. Its registered
+# prediction (0 hops on the retire arm) FAILED: 5 of 81 follows hopped 44-49 u, every one with
+# world-0 already 20 u or more off the drawn body before the press (4 of 11 such presses) --
+# the kill's zero-lead would have pulled world-0 onto the body. The kill arm hopped 8 of 79,
+# 7 of them with world-0 within 10 u of the body (7 of 44: the static node). In the 10-20 u
+# band neither arm hopped (0 of 42). So each action is right on one side of the band; until a
+# rule chooses between them on the server's world-0 model, the kill stays (FINDINGS 1z-ds.43).
+PRESS_FOLLOW_RETIRES_LEAD = False   # True (--press-follow-retires-lead): the retire, dark.
 
 
 def _press_follow_due(state, target_id, now):
@@ -47643,12 +47650,12 @@ def main():
         print("[map] --guard-both-world0: THE EXPERIMENT (MOVECODE-1z-ds.40/.41) -- the "
               "approach snap guard re-pins only when the legacy model AND the AgTrack mirror "
               "are past 100 u (GUARDW0: a 63-66 u drawn hop on 2 of 6 K presses)", flush=True)
-    if a.press_follow_kills_lead:
+    if a.press_follow_retires_lead:
         global PRESS_FOLLOW_RETIRES_LEAD
-        PRESS_FOLLOW_RETIRES_LEAD = False
-        print("[map] --press-follow-kills-lead: a 0x0026 the world tick answers with a follow still "
-              "grants the zero-lead KBD LEAD KILLED 0x0029 at the press (every build before "
-              "MOVECODE-1z-ds.42)", flush=True)
+        PRESS_FOLLOW_RETIRES_LEAD = True
+        print("[map] --press-follow-retires-lead: THE EXPERIMENT (MOVECODE-1z-ds.42/.43) -- a "
+              "0x0026 the world tick answers with a follow retires its keyboard lead, no "
+              "zero-lead 0x0029 (LEADRETIRE: hops where world-0 stood >= 20 u off the body)", flush=True)
     if a.follow_leg_from_frame:
         global FOLLOW_LEG_FROM_BODY
         FOLLOW_LEG_FROM_BODY = False

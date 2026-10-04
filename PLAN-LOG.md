@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.43 -- 2026-10-04 -- **LEADRETIRE (8 interleaved launches, agenttap): the retire's registered prediction FAILED and `PRESS_FOLLOW_RETIRES_LEAD` goes back to DARK (`--press-follow-retires-lead` arms it). Kill 8 of 79 follows hopped, retire 5 of 81. By world-0's offset from the drawn body before the press, the kill hops when world-0 is already on the body (< 10 u: 7 of 44) and the retire when it is 20 u or more off (4 of 11); 0 of 42 in 10-20 u. The next rule -- kill when far, retire when near -- is registered.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.43.
+- **Also:** `gw0_hop2.py` replaces `gw0_hop.py` (a late-stamp artifact read 148 u on a continuous body).
+
 ### MOVECODE-1z-ds.42 -- 2026-10-04 -- **A press the follow answers retires the keyboard lead: no zero-lead KBD LEAD KILLED 0x0029 when the press will be answered by a new follow (`PRESS_FOLLOW_RETIRES_LEAD`, `--press-follow-kills-lead` reverts; a late kill if nothing answers by the next tick). The follow hop was a static zero-lead node with the drawn body behind it: 4 of 4 hopped, 0 of 71 others, 0 of 3 re-pinned. Retail sends nothing between such a press and its follow (30 of 46; 10 the reset alone).**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.42.
