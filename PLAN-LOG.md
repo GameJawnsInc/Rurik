@@ -28,6 +28,10 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.46 -- 2026-10-04 -- **The owner's feel run on the static retire: "done, no warps" -- both registered questions held. The capture: 19 domain presses, the rule acted on its labels at every one (5 near retires, 14 far kills). The replica was within 1 u at 18 (the miss is the client's avoidance near the raider; that press retired and did not hop). Three 31-33 u drawn adjustments the owner did not perceive.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.46.
+
 ### MOVECODE-1z-ds.45 -- 2026-10-04 -- **KILLFAR (8 interleaved launches, agenttap) CONFIRMS the static retire: 1.9 gated hops per 100 domain presses against the kill's 15.4 (N - K -13.5, 90 % -18.3 to -8.8). The K static-and-behind presses hopped 13 of 13, and N's near retires 0 of 26. The tick-clock replica held out of sample on 209 of 210 presses. PRESS_KILL_FAR stays ON. Same-tick swings on follow re-paths (both arms; already in LEADRETIRE) are registered as a leftover.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.45.

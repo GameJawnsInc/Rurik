@@ -22876,3 +22876,38 @@ first-seen numbers are kept beside it (K 17.3 per 100, 18 hops).
 - Registered: the trailing class (a re-pin, or the kill aimed at the drawn estimate) and the W-away class.
 
 **Owner feel run** (registered, on N): not yet run.
+
+
+### 1z-ds.46 The owner's feel run CONFIRMS the static retire: "done, no warps"
+
+**What ran** (KILLFAR's registered owner feel run):
+- One owner-driven launch on the N build, `e7e50be8`'s defaults (harness 20261004T164434, tape
+  authsrv-20261004T164509-c1, agenttap beside it).
+- The launcher is `launch_killfar_feel.ps1`: the KILLFAR rig with no scripted walk and a 420 s hold.
+- The two registered questions, each predicted no:
+  1. S tap + Space while still holding S, ten times: a jump forward as the follow began?
+  2. W away 5 s, stand 2 s, turn back, S + Space, five times: any jump or snap?
+- **The owner: "done, no warps."** Both predictions held.
+- The client exited with code 0 and no error dialog 77 s into the hold: the owner closed it. The harness
+  labels any exit during a hold RETRACTED/FAIL; that verdict is about the hold, not the play.
+
+**The capture** (OBSERVED, `kf_score.py NF` / `kf_rowdump.py`): 47 presses, 19 in the domain.
+- The rule acted on its labels at every press: 5 near presses retired, 14 far presses killed, no player
+  0x0029 on a near press, 0 late kills.
+- The replica was within 1 u of the tap's world-0 at 18 of the 19.
+- The miss, 20.858 (19.6 u), is the client's avoidance near the raider, the known blind spot.
+  - Here it failed toward NEAR: the rule retired where world-0 stood about 20 u from B.
+  - The press did not hop (12.7 u). It is the false-near class the critic priced at 0.5 % in sample and
+    5.3 % out of sample.
+- Three drawn displacements just over the 30 u threshold, none the owner saw as a warp:
+  - 80.503 (33.1 u, a near retire, operand 0.42 u): world-0 trailed the drawn body 13.3 u. When the
+    owner released S, the client handed the stopped body onto world-0's follow path. The kill here
+    would have been static, the 40-82 u class.
+  - 71.085 and 87.494 (33.0, 30.8 u): far-zone kills, the same action as today's.
+  - All three sit in the 30-40 u range where the measure's threshold is drawn (the corpus gap was
+    22-40 u), below the 40-82 u static-node hops.
+
+**Status:** the follow hop's static class is closed on the owner's play and on the scripted run.
+- Open (registered): the far-zone kill hops (world-0 trailing ~36 u; a W-away forward press; the
+  replica's avoidance blind spot, which the false-near press here also comes from); swings in a follow
+  re-path's tick; a kill row that logs the decision's own operand.
