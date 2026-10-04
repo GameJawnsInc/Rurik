@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.45 -- 2026-10-04 -- **KILLFAR (8 interleaved launches, agenttap) CONFIRMS the static retire: 1.9 gated hops per 100 domain presses against the kill's 15.4 (N - K -13.5, 90 % -18.3 to -8.8). The K static-and-behind presses hopped 13 of 13, and N's near retires 0 of 26. The tick-clock replica held out of sample on 209 of 210 presses. PRESS_KILL_FAR stays ON. Same-tick swings on follow re-paths (both arms; already in LEADRETIRE) are registered as a leftover.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.45.
+- **Also:** one abort was the instrument's (the kill row re-reads B ~0.6 ms after the decision) and was amended; the gated hop measure now keeps gw0_hop2's last-seen velocity.
+
 ### MOVECODE-1z-ds.44 -- 2026-10-04 -- **Kill far, retire near, SHIPPED ON (`PRESS_KILL_FAR`, `--press-kill-always` reverts), UNRUN. The server now replicates the client's world-0 copy of the player from its own sends on the 0x001E tick clock (`w0replica.py`): 205 of 206 domain presses within 0.5 u on the 15 tapped launches, against p50 15-18 u for the legacy and mirror models. A follow-answered press retires its lead only where the zero-lead kill would land within 2 u of that world-0 -- the static node (K 11 of 17 static rows hopped, every kill elsewhere 1 of 124). Matched-arm hops per 100: 0.72 against the kill's 8.51. The registered 15 u band is dropped.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.44.

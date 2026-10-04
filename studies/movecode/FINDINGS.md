@@ -22818,3 +22818,61 @@ own static test, not a 15 u band:
   D_tick, moving any legacy or mirror consumer onto the replica, a 0x0027 re-bake.
 - Registered, not built: the kill nudged >= 2 u off world-0 (the fallback if the run's H4 fails); the
   matured-while-walking lead; the mirror's party sidesteps (its own arc).
+
+
+### 1z-ds.45 On the client: KILLFAR CONFIRMS the static retire -- 1.9 against 15.4 gated hops per 100 domain presses; the replica holds out of sample
+
+**What ran** (KILLFAR-run-registered, agent-driven, on `e7e50be8`):
+- Eight interleaved launches on the `followpin-g` rig, 2026-10-04 15:23-16:22. K = `--press-kill-always`
+  at harness stamps 20261004T152358 (K1), T153832, T155328, T160810. N = the defaults (the 2 u static
+  retire) at T153115 (N1), T154550, T160051, T161526.
+- The plan was LEADRETIRE's plus block C, ten repeats of its chord 26 (S + Space after a 5 s W walk-away).
+- Every launch: RUN VERDICT PASS, 0 asserts, 0 deaths, stale-pair census 0 split / 0 bare, 0 late kills.
+
+**An abort fired after N2, and it was the instrument's:**
+- N2 200.152 was killed as kf=far, but its row logs w0_op 1.994, inside the radius.
+- The rule decides at the press; the kill row re-reads the body estimate B about 0.6 ms later, and B
+  moves at up to 288 u/s. So a decision just over 2.0 u can log just under it (the bound here 0.18 u).
+- The kill landed about 2 u from world-0, outside the client's 1 u static test, so the press was right.
+- The abort was amended to that drift tolerance (`kf_check.py`), disclosed here, and the sequence
+  resumed at N3. A row that logs the decision's own operand is a registered leftover.
+
+**A scorer fix:** `wf9-critic/c_replay.hop_gated` kept each drawn record's FIRST-seen velocity. A follow
+re-aims a record in place, without a new `updated`, so it read 147.5 u on K2 87.158, a body that walked
+on. gw0_hop2's rule (the LAST-seen velocity) is the registered one, and `kf_score.py` uses it. The
+first-seen numbers are kept beside it (K 17.3 per 100, 18 hops).
+
+**Results** (OBSERVED, `kf_score.py`; domain = unpinned, follow-answered, key-walk presses; a hop = over
+30 u, gated to the client clock):
+
+| Check | Prediction | K | N |
+|---|---|---|---|
+| Floors (domain / near / far / K at-risk) | 60 / 12 / 40 / 8 | 104 / 33 / 71 / 13 | 106 / 26 / 80 / -- |
+| H1 wire | near: no 0x0029; far: the kill; K: kf=off | 104 of 104 kf=off | 25 near retires, 81 far kills; N2 200.152 above |
+| H2 the replica within 1 u of the tap's world-0 | >= 97 % | 103 of 104 | 106 of 106 |
+| H3 operand <= 1 against the tap's static flag | <= 1 disagreement | 0 of 104 | -- |
+| H4 the mechanism | K at-risk >= 70 %; N near 0 | 13 of 13 hopped | 0 of 26 |
+| H5 hops per 100 (Jeffreys 90 %) | K >= 10, N <= 4 | 15.4 (10.3-21.9) | 1.9 (0.5-5.1) |
+| H5 N - K (launch bootstrap 90 %) | <= -8, upper < 0 | -13.5 (-18.3, -8.8) | |
+| H6 far zone per 100 | within +-3 | 4.2 (3 of 71) | 2.5 (2 of 80) |
+| H6 forward chords | 0 hops | 0 of 8 | 0 of 8 |
+
+- H2 is out of sample: the replica, unchanged since the calibration, met 209 of 210 presses it was never
+  fitted to. The miss (K3 98.849, 51 u) is the client's own avoidance, the known blind spot.
+- Every registered check of the rule HELD. PRESS_KILL_FAR stays ON.
+
+**H6's "0 same-tick swings" FAILED as written, on both arms alike** (1-4 per launch):
+- They are a player swing in the tick of a follow RE-PATH (`APPROACH re-path`), or of a zero-run follow
+  after a re-pin (K2 91.502).
+- 1z-ds.36's hold covers a NEW follow while the body moves, and neither case is that.
+- They predate this item: LEADRETIRE carried 0-1 per launch on both arms (6 of its 8 launches, `kf_sametick.py`);
+  GUARDW0 none.
+- Not this item's: a registered leftover.
+
+**The hops neither arm avoids**, all far-zone kills (the same action on both arms):
+- The trailing class: K1 49.449 and N3 70.557, world-0 35.7 / 36.5 u behind the body (LT4 70.653's shape).
+- A W-away forward press: K3 24.590 and N3 22.024, mt 1, not static, not behind, 72 / 38 u.
+- The avoidance blind spot: K3 98.849.
+- Registered: the trailing class (a re-pin, or the kill aimed at the drawn estimate) and the W-away class.
+
+**Owner feel run** (registered, on N): not yet run.
