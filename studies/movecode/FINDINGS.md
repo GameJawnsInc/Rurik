@@ -23033,3 +23033,26 @@ exceeds 19 u on 13 of 47 follow-due presses and 25 u on 9 (the verifier's count,
 
 **Status:** FOLLOW_TRAIL_REPINS stays ON. The trailing class is closed on the scripted run. The owner feel run
 (two registered questions, on N) is pending.
+
+
+### 1z-ds.49 The owner's feel run on the trail re-pin: "no jumps or stutters" -- but the class was not reached by hand
+
+**What ran** (TRAILPIN's registered owner feel run): one owner-driven launch on `9e579523`'s defaults (the
+trail re-pin and the static retire both ON; `launch_trail_feel.ps1`, tape authsrv-20261004T210928-c1 with
+agenttap). The owner ran the two registered sequences (walk away with W ~5 s, stand 2 s, turn back,
+S + Space, then two more S + Space taps on the run-back; five times) and aggroed the raider along the way.
+The owner closed the client 2.5 min into the hold (exit 0, no error dialog; the harness's RETRACTED/FAIL is
+about the hold).
+
+**The owner: "no jumps or stutters."** Both registered predictions (no) held.
+
+**What the capture says it tested** (OBSERVED, `tp_score.py NF` + the approach rows):
+- 18 follow-answered presses, every one a long follow (1,160-2,012 u); 14 far kills.
+- The K term peaked at 12.6 u, so no trailing-class press occurred, and 0 trail re-pins fired. 0 proven hops.
+- So this run confirms that ordinary key-walk play is unaffected (no stutter, no jump), not that the
+  re-pin works under the owner's hands. TRAILPIN (1z-ds.48) is the confirmation of the re-pin itself. The
+  class is rare by hand: on the scripted plan it needs the third S + Space of a chain and arose on 1 chain
+  in 12-36.
+
+**Status:** the follow hop's static and trailing classes are closed. The re-path same-tick swings, W
+re-approach, the death stop and death-release timing stay open.

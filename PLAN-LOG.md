@@ -28,6 +28,10 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.49 -- 2026-10-04 -- **The owner's feel run on the trail re-pin: "no jumps or stutters". The capture shows 18 long follows and a K term of at most 12.6 u, so the re-pin never fired: this confirms ordinary play is unaffected; TRAILPIN alone confirms the re-pin. The follow hop's static and trailing classes are closed.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.49.
+
 ### MOVECODE-1z-ds.48 -- 2026-10-04 -- **TRAILPIN (8 interleaved launches, agenttap) CONFIRMS the trail re-pin. On the control arm the trailing presses over 25 u hopped 3 of 3 (proven), and 0 of 114 at 19 u or under. On the re-pin arm 3 of 3 due presses were re-pinned at the kill point and 0 hopped (nudges 0.2-6.0 u). Proven far-kill hops per 100: 2.5 against 0.0. FOLLOW_TRAIL_REPINS stays ON. Disclosed: the first two launches were unexposed (the plan lacked LEADRETIRE's opening turn) and the scorer misread re-pinned rows; both amended.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.48.
