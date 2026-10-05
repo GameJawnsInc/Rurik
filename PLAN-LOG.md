@@ -28,6 +28,10 @@ move back.
 
 ---
 
+### MOVECODE-1z-ds.48 -- 2026-10-04 -- **TRAILPIN (8 interleaved launches, agenttap) CONFIRMS the trail re-pin. On the control arm the trailing presses over 25 u hopped 3 of 3 (proven), and 0 of 114 at 19 u or under. On the re-pin arm 3 of 3 due presses were re-pinned at the kill point and 0 hopped (nudges 0.2-6.0 u). Proven far-kill hops per 100: 2.5 against 0.0. FOLLOW_TRAIL_REPINS stays ON. Disclosed: the first two launches were unexposed (the plan lacked LEADRETIRE's opening turn) and the scorer misread re-pinned rows; both amended.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-ds.48.
+
 ### MOVECODE-1z-ds.47 -- 2026-10-04 -- **The far-zone kill hops: of 8 gated hops on 281 far kills only 3 are PROVEN (a proof gate on the scorer: the tap runs at 7-10 Hz and the client re-stamps records, so stale records alias up to ~70 u), all the TRAILING class. A key reversal during our follow leaves world-0 37-43 u past the report point, the kill stops the drawn copy at its point, and the follow's node refuses it past the client's 25 u by-time radius. FOLLOW_TRAIL_REPINS SHIPPED ON, UNRUN: an APPROACH RE-PIN 0x002C at the kill point when that distance exceeds 19 u (4 of 281 far kills). The short-follow class is KEEP-AS-IS (0 of 34 proven). Corrected: KILLFAR proven 13.5 vs 0.9 per 100; the feel run 0 proven.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.47.

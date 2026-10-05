@@ -22990,3 +22990,46 @@ exceeds 19 u on 13 of 47 follow-due presses and 25 u on 9 (the verifier's count,
   the short-follow class.
 - Registered: the TRAILPIN run (`wf10-critic/TRAILPIN-run-registered.txt`); the fallback if its H4 fails, a
   press-time 0x002C at B.
+
+
+### 1z-ds.48 On the client: TRAILPIN CONFIRMS the trail re-pin -- the control arm's trailing presses over 25 u hopped 3 of 3, the re-pinned ones 0 of 3
+
+**What ran** (TRAILPIN-run-registered, agent-driven, on `feda2012`):
+- Eight interleaved launches on the `followpin-g` rig, 2026-10-04 19:44-20:50. T = `--no-follow-trail-repin`
+  (T1's tape authsrv-20261004T194444-c1, then T2-T4); N = the defaults (N1's tape authsrv-20261004T195308-c1).
+- Every launch: RUN VERDICT PASS, 0 asserts, stale-pair census 0 split / 0 bare, 0 late kills.
+
+**Two amendments, both disclosed in the registration:**
+- **The plan.** The first T1 (19:27) drew 2 domain presses, and N1 (19:35) ran the same plan. It began LEADRETIRE's
+  block B at the spawn without that plan's opening (its S/W chords and the `yaw:-1135` setup turn), so every
+  W:5 walk-away ran west into the x = 768 wall and the body never left the raider's reach. The sequence was
+  halted (STOP-TP), those two launches are UNEXPOSED and unscored, and the plan now carries LEADRETIRE's
+  opening verbatim. The scored eight began at 19:44.
+- **The scorer.** It read the tap's world-0 at the trail reading's clock including the re-pin's own record,
+  so every re-pinned row scored as the avoidance blind spot (rep_err = its K term). The record is now
+  excluded, as the kill's own record is in KILLFAR's scorer.
+
+**Results** (OBSERVED, `wf10-critic/tp_score.py`; hops are PROVEN hops, 1z-ds.47's gate):
+
+| Check | Prediction | T (no re-pin) | N (re-pin) |
+|---|---|---|---|
+| Floors (far kills / trailing class) | 40 / 3 | 121 / 7 | 122 / 3 |
+| H1 wire | T 0 re-pins; N every due press re-pinned at K | 0 | 3 of 3, at the kill point |
+| H2 the reading vs offline; replica vs tap | 100 %; >= 97 % | 121 / 121; 121 / 121 | 122 / 122; 122 / 122 |
+| H3 K term > 25 u: proven handover hops | >= 70 % | 3 of 3 (59.8, 46.8, 56.9 u) | -- |
+| H3 K term <= 19 u: proven hops | <= 1 per 100 | 0 of 114 | -- |
+| H4 proven hops after a re-pin | 0 | -- | 0 of 3 (K terms 33.4, 25.2, 23.6) |
+| H5 nudge into the pin's record | <= 8 u on 90 %, p50 <= 1 u | -- | 1.3, 6.0 u resolved (0.2 unresolved) |
+| H6 re-pins outside chain index 3 | <= 1 per launch | -- | 0 |
+| H7 proven far-kill hops per 100 | reported | 2.5 (3 of 121) | 0.0 (0 of 122) |
+
+- H1-H4 and H6 HELD. H5's 8 u clause held; its p50 clause FAILED narrowly (p50 1.3 u over 3 re-pins,
+  predicted <= 1 u).
+- The (19, 25] band on T: 4 presses (20.1-24.4 u), 0 hops, consistent with the 25 u radius.
+- n is small: 3 of 3 against 0 of 2 over 25 u alone is p = 0.10 (Fisher). The confirmation rests on that,
+  on the mechanism the census and the decode both give, and on 0 hops after any re-pin.
+- Controls: same-tick swings on follow re-paths 0-6 per launch on both arms (T 7, N 10; T4's 6 is just over
+  KILLFAR's 1-4), 0 on new follows -- the registered leftover, unchanged by this item.
+
+**Status:** FOLLOW_TRAIL_REPINS stays ON. The trailing class is closed on the scripted run. The owner feel run
+(two registered questions, on N) is pending.
