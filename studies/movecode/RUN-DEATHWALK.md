@@ -128,10 +128,71 @@ route. Server flags go inside `--game-args`.
 | **DEATHWALK-E4** a1 re-path | D1's flag on vs off | none needed: `followpin-g` + TRAILPIN's plan already makes 0–6 per launch | 5 re-paths per launch |
 
 E4 runs on `followpin-g`, not `revheal3`: it is the rig whose control rate is known.
-**DEATHWALK-E5** (a4; arms: `--target-death-releases-now` vs the default, D4 shipped)
-needs a new rig: a killable hostile that a hero or a second foe damages while the player
-swings, so that the target dies inside the player's windup. E2's arms are now `--rise-keeps-legs` vs the default (D3 shipped), and
-E4's are `--repath-inside-stop` vs the default (D1 shipped).
+**DEATHWALK-E5** (a4; arms: `--target-death-releases-now` vs the default, D4 shipped) runs
+on its own rig, built 2026-10-06 (§3a). E2's arms are now `--rise-keeps-legs` vs the
+default (D3 shipped), and E4's are `--repath-inside-stop` vs the default (D1 shipped).
+
+### 3a. The E5 rig: `deathwalk-e5`
+
+**What it must do:** make the player's attack TARGET die to someone else's damage, at a
+phase of the player's own swing the rig does not choose. That exposes both of D4's cells:
+the death inside the windup and the death in the gap after a landing.
+
+**The spec** is `vault/sandbox/deathwalk-e5.toml` (the house place for specs, gitignored).
+It compiles with `python toolkit/harness/sandbox.py --spec vault/sandbox/deathwalk-e5.toml --write`
+to `vault/sandbox/deathwalk-e5/world.toml`. Its numbers, so it can be rebuilt from here:
+- **The player:** a level-3 Warrior with an empty bar and no ranks, holding the starter
+  sword (2..3). Health 2,000.
+- **The heroes:** 7 and 8, both `academy_monk` bodies at level 20 with an empty bar,
+  `[[13, 12]]`, a staff with `damage = [10, 15]` and health 2,000. Not hero 3: the character
+  store holds a bar for hero 3, and the store wins over the spec (`sandbox.store_warnings`),
+  so it would cast heals and damage spells.
+- **The hostiles:** sixteen `bandit_raider`s in four groups of four. Each is level 20 with
+  70 health, damage `[1, 1]`, no skills, `[[19, 1]]` and the starter hammer at 1.75. The
+  last group's first member is the boss (glow 5), as the compiler requires. Agents
+  110–125, in groups along the corridor from y ≈ 3,650 to 10,680.
+
+**The tuning**, computed with the server's own `creature_armor_rating` and
+`combatmath.swing_damage`, not assumed:
+- A level-20 raider rates 80, of which 20 meets physical damage only.
+- The player's sword does **~1 a hit**: mean 0.5 at the spec's rank 0, and 1.0 at the
+  store's actual Swordsmanship 5 / level 5. Under `--persist` the store wins there too, and
+  the tuning holds either way.
+- A hero's staff, at strike level 3 x 20 = 60 against 60, does **12.5 a hit** (10..15).
+- A Monte Carlo of the fight (player 1.33 s with a 0.565 s windup; two staves at 1.75 s
+  with 0.2–0.6 s of flight; 70 health; RECONSTRUCTION, not a run) gives a median kill at
+  5.5 s, and kills split **41.8 % inside the player's windup, 54.1 % in the gap, 4.2 % by
+  the player's own landing**. So all 16 dying gives ~7 in-flight and ~9 next-start deaths
+  per launch, against E5's floor of 5 per arm.
+
+**Checked offline:** with `RURIK_CONTENT_EXTRA` at the overlay, the server's
+`area_population("errand,sandbox")` accepts all 16 rows (ids 110–125, 70 / 20 / `[1, 1]`),
+and `[party.sandbox]` carries heroes 8 and 7 at `[10, 15]` and player health 2,000, every
+row `source = "invented"`. **Not checked:** that the heroes engage the player's target at
+the predicted rate, the staff's real interval and flight, and the 16 actually dying in one
+launch. Those need a client, so E5's first launch is a one-launch pilot with a floor check,
+like E3's.
+
+**The launch, drafted** (PowerShell; agent-driven, HANDS OFF THE KEYBOARD, on the owner's
+go-ahead):
+
+```
+$env:RURIK_DAT='C:/gd/Rurik/vault/run/slice/Gw.dat'; $env:RURIK_CONTENT_EXTRA='C:/gd/Rurik/vault/sandbox/deathwalk-e5'
+python -u toolkit/harness/session.py --replace --warn 5 --settle 0 --hold 30 --shots 0 --exe C:/gd/Rurik/vault/run/slice/Gw.exe --game-args "--ping-seconds 0.5 --map 168 --party sandbox --area sandbox --spawn-profession 1 --unlocks <the list sandbox.py prints> [--target-death-releases-now]" --actions "0:play" --walk "wait:3 attack:110 wait:16 attack:111 wait:9 attack:112 wait:9 attack:113 wait:9 attack:114 wait:16 attack:115 wait:9 attack:116 wait:9 attack:117 wait:9 attack:118 wait:16 attack:119 wait:9 attack:120 wait:9 attack:121 wait:9 attack:122 wait:16 attack:123 wait:9 attack:124 wait:9 attack:125 wait:12"
+```
+
+The flags are TRAILPIN's (proven on this corridor): `--map 168` starts in the corridor, and there is no
+`--persist`, so the spec's ranks apply. With `--persist` the store's would, and the tuning holds either
+way. `attack:N` is the server's mailbox: the server walks the body in and swings. The first
+target of each group gets 16 s for the ~2,100 u walk plus the kill. An `attack:` on a target
+the heroes already killed is refused as `dead-target`, which loses nothing.
+
+**Still owed before E5 registers:** a scorer over our own tapes. It classifies each death of
+the chain target by cell (in flight / next start / input first), from the `swing_verdict`
+`held_to` field and the `target_death_release` row D4 writes, and checks the release's
+batch and its time against `lands_at` or the next due start. D2's census
+(`scratchpad d2_ours.py`, the agent's) is the starting point. Also owed: H6's floors and
+aborts, written into §4.
 
 ## 4. Predictions — to be filled by the desk steps
 

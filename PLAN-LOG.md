@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### DEATHWALK-E5 rig -- 2026-10-06 -- **`deathwalk-e5` is built: sixteen level-20 raiders at 70 health hitting for 1, two level-20 staff heroes (7 and 8) at `[10, 15]`, and a player whose sword does ~1 a hit, so the chain target dies to the heroes at a phase of the player's swing nobody chose. The server's own damage functions give 12.5 a hero hit and ~1 a player hit against armour 80 (60 for non-physical). A Monte Carlo puts 42 % of deaths in the windup and 54 % in the gap. The server accepts the overlay offline. No client run.**
+
+- **Record:** `studies/movecode/RUN-DEATHWALK.md` §3a, with the spec's numbers, the tuning, the offline check and a drafted launch. The spec is `vault/sandbox/deathwalk-e5.toml`; the overlay is `vault/sandbox/deathwalk-e5/world.toml`.
+- **Hero 3 avoided:** the character store holds a bar for it and the store wins over the spec.
+- **Owed before E5 registers:** the scorer over our own tapes, H6's floors and aborts, and a one-launch pilot that checks the heroes engage and the sixteen die.
+
 ### DEATHWALK-D4 -- 2026-10-06 -- **The attack target's death now holds to the chain's next scheduled event, retail's rule from 1z-ds.50. With the swing in flight, `[8, me, 0]` `[3, me, 0]` come at its due landing (20 of 20); otherwise `[8, me, 0]` comes alone at the next due start (34 of 34). Before, ours released on the next tick with no `[3]`. `TARGET_DEATH_HOLDS`, SHIPPED ON, UNRUN.**
 
 - **Record:** FINDINGS §1z-ds.52; `studies/movecode/RUN-DEATHWALK.md` §2a.
