@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### DEATHWALK-E5 pilot -- 2026-10-06 -- **One launch on the D4 arm (harness `20261006T193947`, tape `authsrv-20261006T194028-c1`): all 16 raiders died, 11 of them as the player's chain target, every judged killing blow a hero's (11-15). `e5_score.py` judged 5 in flight and 6 next start, all PASS: `[8, 0]` `[3]` at the due landing, or `[8, 0]` alone at the next due start, each within 1 ms of its wire-derived instant. Both floors were met in one launch. DEATHWALK-D4 now has its first client run.**
+
+- **Record:** `studies/movecode/RUN-DEATHWALK.md` §3b, with the pre-registration, the result against it, and what it does not show.
+- **Exposure lost:** 5 raiders died to the heroes before the plan named them, so they were never the chain's target.
+- **Open:** a `--target-death-releases-now` launch on the same rig, as a same-rig control. The old shape is already OBSERVED on September's tapes.
+
 ### DEATHWALK-E5 scorer -- 2026-10-06 -- **`studies/movecode/review/e5_score.py` scores every death of the player's chain target on our tapes. It places each by cell off the wire, computes the expected release instant off the wire (this chain's own windup or start-to-start gap), and reads each tape's arm from its flags row. Tapes written live by the real D4 code score PASS (2-3 ms from the expected instant), the known-bad arm scores old-shape, and a real pre-D4 vault tape scores old-shape. Over September's 570 tapes: 91 chain-target deaths, 0 UNEXPECTED, matching D2's census.**
 
 - **Record:** `studies/movecode/RUN-DEATHWALK.md` §3a ("The scorer is built"); H6 now names it.
