@@ -897,6 +897,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "flight sends no GV_ATTACK_STOPPED; the swing drops silently. By "
                          "default the death batch carries [3, me, 0] after the KILL status "
                          "(retail 30 of 30 open-windup deaths, 0 of 155 without).")
+    ap.add_argument("--target-death-releases-now", action="store_true",
+                    help="THE REVERT ARM for DEATHWALK-D4: the attack target's death releases "
+                         "the hold on the next tick and drops the swing in flight with no "
+                         "GV_ATTACK_STOPPED. By default the release waits for the chain's next "
+                         "scheduled event: [8, me, 0] [3, me, 0] at the due landing for a swing "
+                         "in flight (retail 20 of 20), [8, me, 0] at the next due start "
+                         "otherwise (34 of 34).")
     ap.add_argument("--press-allows-dead-player", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.15: an attack press from a dead "
                          "player is taken (the corpse pinned and halted, the order kept "

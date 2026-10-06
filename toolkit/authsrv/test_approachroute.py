@@ -344,12 +344,23 @@ def section_server():
         st_d["agents"][FOE]["dead"] = True
         die_sent, die_send = collect()
         authsrv.attack_tick(die_send, st_d, 1)
-        check(up and die_sent == [(OP_INT, [8, PLAYER, 0])] and "approach_hold" not in st_d
-              and st_d.get("action_hold") == 0,
-              "1r. the TARGET'S DEATH releases it: after the launch, attack_tick's "
-              "target-gone site sends [8, me, 0] and forgets the approach's hold (retail "
-              ":55934 384.3644, 0.79 s after agent 46 dies; :62994 86.2717)",
-              f"held through the launch {up}; {show(die_sent)}")
+        # RE-AIMED 2026-10-06 (DEATHWALK-D4): the release waits for the chain's next due
+        # start -- this check's own retail witnesses come 0.79 s after the death, and
+        # :62994 86.2717 is start + 1.7465, the next due start (1z-ds.50) -- so the
+        # death tick sends nothing and the scheduled release is the [8, me, 0].
+        pend_d = st_d.get("target_death_release") or {}
+        quiet = die_sent == [] and pend_d.get("cell") == "next-start"
+        if pend_d:
+            pend_d["at"] = time.time() - 0.001
+        rel_d, rel_send_d = collect()
+        authsrv.attack_tick(rel_send_d, st_d, 1)
+        check(up and quiet and rel_d == [(OP_INT, [8, PLAYER, 0])]
+              and "approach_hold" not in st_d and st_d.get("action_hold") == 0,
+              "1r. the TARGET'S DEATH releases it: after the launch nothing goes out on the "
+              "death tick, and at the chain's next due start the scheduled release sends "
+              "[8, me, 0] and forgets the approach's hold (retail :55934 384.3644, 0.79 s "
+              "after agent 46 dies; :62994 86.2717 = start + 1.7465; DEATHWALK-D4)",
+              f"held through the launch {up}; death {show(die_sent)}; release {show(rel_d)}")
     return batches
 
 

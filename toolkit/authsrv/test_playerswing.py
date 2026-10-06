@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=292)   # DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=303)   # DEATHWALK-D4 +11 (26a-k: the target's death holds to the chain's next scheduled event); DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -225,13 +225,19 @@ def section_lost_target():
             # release.
             # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.31): the start holds again, so the
             # target-gone tick releases it -- the one live target-death close above.
+            # RE-AIMED 2026-10-06 (DEATHWALK-D4): the swing was in flight at the death
+            # and its due landing is long past (the rewind), so retail's release is due
+            # at once -- [8, me, 0] then [3, me, 0], no landing (1z-ds.50, 20 of 20).
+            # The "Lakeside truncation" this check used to cite was the attacker's death.
             check(state["player_swing"] is None
                   and [(op, v) for op, v, _ in sent]
                   == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                       [authsrv.agents.GV_DISABLED, PLAYER, 0])],
-                  f"target {name}: the swing whiffs -- ArenaNet's own "
-                  f"truncation (the Lakeside 7th swing, 0.24 s in) -- and the "
-                  f"start's hold is released, nothing else",
+                       [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+                      (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                       [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
+                  f"target {name}: the swing never lands; the hold is released "
+                  f"and the swing STOPPED at its (past) due landing -- [8, 0] "
+                  f"then [3, 0], nothing else (DEATHWALK-D4)",
                   f"swing={state['player_swing']}, sent={sent!r}")
     # THE REVERT ARM (--no-late-hit): the walk-out drops silently, the
     # pre-F21 rule this section pinned as retail's until 2026-09-12.
@@ -3290,6 +3296,191 @@ def section_stop_disc_ends_follow():
           "25e. the flag ships on; the condition sits on approach_tick's re-path test, before "
           "the arrival branch; the revert arm is wired", f"{i_ap} {i_re} {i_arr}")
 
+def section_target_death_holds():
+    """DEATHWALK-D4 (MOVECODE-1z-ds.52): the attack target's death holds to the chain's next
+    scheduled event. Retail (1z-ds.50): [8, me, 0] then [3, me, 0] at the due landing for a swing
+    in flight (20 of 20), [8, me, 0] alone at the next due start otherwise (34 of 34), and any
+    input before then releases through its own door. Ours released on the next tick with no [3]."""
+    import time
+    import authsrv
+
+    print("\n26. DEATHWALK-D4: the target's death holds to the chain's next scheduled event")
+    INT, START = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
+    GV8, GV3 = authsrv.agents.GV_DISABLED, authsrv.agents.GV_ATTACK_STOPPED
+    FIN = authsrv.agents.GV_MELEE_ATTACK_FINISHED
+    DMG = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+
+    def shape(sent):
+        out = []
+        for op, v, _l in sent:
+            if op == INT and v[0] == GV8:
+                out.append("8:%d" % v[2])
+            elif op == INT and v[0] == GV3:
+                out.append("3")
+            elif op == INT and v[0] == FIN:
+                out.append("1")
+            elif op == START:
+                out.append("4")
+            elif op == DMG:
+                out.append("dmg")
+            else:
+                out.append(op)
+        return out
+
+    def armed(on=True):
+        """A standing body on its target, the start sent and held, the swing in its windup."""
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
+        st = _state()
+        authsrv.begin_attack(send, st, 10, 0)
+        authsrv.attack_tick(send, st, 0)
+        sent.clear()
+        return st, sent, send
+
+    def tick(st, sent, send, rec=None):
+        sent.clear()
+        authsrv.attack_tick(send, st, 0, rec=rec)
+        return shape(sent)
+
+    saved = (authsrv.TARGET_DEATH_HOLDS, authsrv.ATTACK_APPROACH)
+    authsrv.ATTACK_APPROACH = False
+    try:
+        authsrv.TARGET_DEATH_HOLDS = True
+        # 26a/b. IN FLIGHT: nothing at the death; [8, 0] [3] at the due landing, no [1].
+        st, sent, send = armed()
+        sw = st.get("player_swing")
+        st["agents"][10]["dead"] = True
+        at_death = tick(st, sent, send)
+        pend = st.get("target_death_release") or {}
+        check(sw is not None and st.get("action_hold") == 1 and at_death == []
+              and pend.get("cell") == "in-flight"
+              and abs(pend.get("at", 0) - sw["lands_at"]) < 1e-6
+              and st.get("player_swing") is sw and st.get("attacking") is None,
+              "26a. the target dies with the swing in its windup: NOTHING is sent at the death, "
+              "the hold stays up, the swing stays armed and the release is scheduled at its due "
+              "landing (retail: nothing at the death, 20 of 20)",
+              f"sent {at_death} pend {pend.get('cell')} hold {st.get('action_hold')}")
+        early = tick(st, sent, send)
+        pend["at"] = time.time() - 0.001
+        sw["lands_at"] = pend["at"]
+        rows = []
+
+        class _R:
+            def event(self, kind, **kw): rows.append((kind, kw))
+        at_due = tick(st, sent, send, rec=_R())
+        check(early == [] and at_due == ["8:0", "3"] and st.get("player_swing") is None
+              and st.get("target_death_release") is None and st.get("action_hold") == 0
+              and any(k == "target_death_release" and kw.get("stop") for k, kw in rows),
+              "26b. at the due landing: [8, me, 0] then [3, me, 0] in one batch, no [1] and no "
+              "damage, then nothing pending (retail 20 of 20, that order) -- and a row",
+              f"before {early} at {at_due} rows {[k for k, _ in rows]}")
+
+        # 26c/d. NOT IN FLIGHT: nothing at the death; [8, 0] alone at the next due start.
+        st, sent, send = armed()
+        _rewind(st, 5.0)
+        landed = tick(st, sent, send)
+        st["player_last_swing"] = time.time() - 0.2
+        st["agents"][10]["dead"] = True
+        at_death = tick(st, sent, send)
+        pend = st.get("target_death_release") or {}
+        interval = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(st, PLAYER)
+        want = st["player_last_swing"] + authsrv.swing_interval_due(st, interval)
+        check("1" in landed and at_death == [] and pend.get("cell") == "next-start"
+              and abs(pend.get("at", 0) - want) < 1e-6 and st.get("action_hold") == 1,
+              "26c. the target dies after the landing: nothing at the death, the release "
+              "scheduled at the next due start (last start + the gate; retail 34 of 34 within "
+              "0.06 s)", f"landed {landed} sent {at_death} pend {pend.get('cell')}")
+        pend["at"] = time.time() - 0.001
+        at_due = tick(st, sent, send)
+        check(at_due == ["8:0"] and st.get("target_death_release") is None,
+              "26d. at the next due start: [8, me, 0] ALONE, no [3] (retail 34 of 34)",
+              f"{at_due}")
+
+        # 26e. A DOOR IN THE WINDOW: a move carries its own [8, 0] and [3]; nothing later.
+        st, sent, send = armed()
+        st["agents"][10]["dead"] = True
+        tick(st, sent, send)
+        sent.clear()
+        authsrv.cancel_on_move(send, st, 0, moved=50.0)
+        door = shape(sent)
+        st["target_death_release"]["at"] = time.time() - 0.001
+        after = tick(st, sent, send)
+        check(door[:1] == ["8:0"] and "3" in door and after == []
+              and st.get("target_death_release") is None and st.get("player_swing") is None,
+              "26e. a move inside the window releases through ITS OWN door ([8, 0] first, its "
+              "[3] -- the kept swing keeps the chain live) and the scheduled release then sends "
+              "nothing (retail's input-first cell)", f"door {door} after {after}")
+
+        # 26f. A NEW ORDER in the window cancels it; the old target's release never comes.
+        st, sent, send = armed()
+        st["agents"][99] = _fresh_agent()
+        st["agents"][10]["dead"] = True
+        tick(st, sent, send)
+        sent.clear()
+        authsrv.begin_attack(send, st, 99, 0)
+        st["target_death_release"] and st["target_death_release"].__setitem__(
+            "at", time.time() - 0.001)
+        after = tick(st, sent, send)
+        check(st.get("target_death_release") is None and st.get("attacking") == 99
+              and "3" not in after[1:] and after.count("8:0") <= 1,
+              "26f. a press on another target inside the window cancels the scheduled release; "
+              "the new chain runs on its own door", f"after {after}")
+
+        # 26g. THE PLAYER DIES in the window: the kill's own [3] stops the kept swing.
+        st, sent, send = armed()
+        st["agents"][10]["dead"] = True
+        tick(st, sent, send)
+        sent.clear()
+        st["player_health"] = 1.0
+        authsrv.kill_player(send, st, 0)
+        kill = shape(sent)
+        after = tick(st, sent, send)
+        check("3" in kill and st.get("target_death_release") is None and "3" not in after,
+              "26g. the player dying in the window: kill_player's [3] stops the kept swing "
+              "(1z-ds.27's rule) and the scheduled release is dropped", f"kill {kill} after {after}")
+
+        # 26h. the hold already DOWN: nothing scheduled, today's silent drop.
+        st, sent, send = armed()
+        st["action_hold"] = 0
+        st["agents"][10]["dead"] = True
+        at_death = tick(st, sent, send)
+        check(at_death == [] and st.get("target_death_release") is None
+              and st.get("player_swing") is None,
+              "26h. CONTROL: with the hold already down nothing is scheduled and the swing drops "
+              "silently, as before (retail's case is the input's own door)", f"{at_death}")
+
+        # 26i. the deadline pass wakes for a next-start release.
+        st, sent, send = armed()
+        _rewind(st, 5.0)
+        tick(st, sent, send)
+        st["player_last_swing"] = time.time() - 0.2
+        st["agents"][10]["dead"] = True
+        tick(st, sent, send)
+        check(st["target_death_release"]["at"] in authsrv.combat_deadlines(st),
+              "26i. combat_deadlines carries the scheduled release, so it lands on its instant "
+              "rather than a tick late", "")
+
+        # 26j. KNOWN-BAD ARM: the next-tick release, no [3].
+        authsrv.TARGET_DEATH_HOLDS = False
+        st, sent, send = armed()
+        st["agents"][10]["dead"] = True
+        at_death = tick(st, sent, send)
+        check(at_death == ["8:0"] and st.get("player_swing") is None
+              and st.get("target_death_release") is None,
+              "26j. KNOWN-BAD ARM (--target-death-releases-now): [8, me, 0] on the death tick and "
+              "the swing dropped with no [3] -- every build before D4", f"{at_death}")
+    finally:
+        authsrv.TARGET_DEATH_HOLDS, authsrv.ATTACK_APPROACH = saved
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    check(authsrv.TARGET_DEATH_HOLDS is True and "--target-death-releases-now" in args_src
+          and "if a.target_death_releases_now:" in src
+          and src.count("_target_death_release_tick(send, state, conn_id, rec)") == 2,
+          "26k. the flag ships on, its revert is wired, and the release is served from "
+          "attack_tick's top and from the target-gone branch only", "")
+
 def section_attack_start_holds():
     """MOVECODE-1z-ds.31: every own attack start leaves the action hold [8, me, 1] up, to the
     next input. Retail: 1,647 of 1,654 own starts held at start + 0.1 s, raised in the start's
@@ -3398,9 +3589,11 @@ def section_attack_start_holds():
     st["agents"][10]["dead"] = True
     sent.clear()
     authsrv.attack_tick(send, st, 0)
-    check(shape(sent) == ["8:0"] and st.get("action_hold") == 0,
-          "21i. the target's death releases it on the target-gone tick (recorded: retail waits "
-          "for the chain's next scheduled event, 50 of 59)", f"{shape(sent)}")
+    check(shape(sent) == [] and st.get("action_hold") == 1
+          and (st.get("target_death_release") or {}).get("cell") == "in-flight",
+          "21i. the target's death mid-windup releases NOTHING on the target-gone tick: the "
+          "hold waits for the swing's due landing (DEATHWALK-D4, section 26; retail 20 of 20)",
+          f"{shape(sent)}")
     # the live interact walk (the router door): our walk goes out with the hold released
     st = _state()
     st.update({"pos": (0.0, 0.0), "plane": 0, "action_hold": 1, "press_hold": True,
@@ -3884,6 +4077,7 @@ def main():
     section_windup_holds_approach()
     section_follow_tick_holds_swing()
     section_stop_disc_ends_follow()
+    section_target_death_holds()
     section_attack_start_holds()
     section_placement_frame()
     section_still_streak()
