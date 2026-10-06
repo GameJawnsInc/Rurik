@@ -218,8 +218,48 @@ Its `--selftest` (about 5 s) has four layers:
 `old-shape`, 2 `input-first`, 53 `hold-down`). That reproduces D2's independent census of
 the same tapes.
 
-**Still owed before E5 registers:** the owner's go-ahead, and the one-launch pilot that
-checks the heroes engage and the sixteen die (`--check` is its floor).
+### 3b. The E5 pilot RAN (2026-10-06): the rig works, and D4 scores 11 of 11
+
+**What ran:** one launch on the D4 (default) arm, on the owner's go-ahead, agent-driven, with
+HANDS OFF announced. Launched from `main` at `36230914` with §3a's command; the slice
+client's cage cleared it for loopback only. Harness `20261006T193947`; tape
+`authsrv-20261006T194028-c1`. RUN VERDICT PASS: 33 plan steps all ran, no assert, and the
+client closed cleanly after the hold.
+
+**Pre-registered before launch:**
+- the abort: zero chain-target deaths (`--check` exit 3);
+- the model's guess: 16 deaths, ~7 in flight, ~9 next start, ~1 by the player's own hit;
+- every judged death on this arm `PASS`, within 0.06 s;
+- the rig undercut if the heroes did not engage, or if either cell judged fewer than 5.
+
+**What it showed** (`e5_score.py --check 20261006T194028`, exit 0; OBSERVED):
+- **All 16 raiders died.** 11 died as the player's chain target and were judged; 5 (112,
+  113, 117, 121, 125) died to the heroes before the plan's order named them, so they were
+  never the chain's target and are not scored.
+- **The heroes landed every judged killing blow:** agents 200 / 201 for 11–15, the tuned
+  10–15 band, with 96 hero hits spread evenly over 10..15. The player's own hit size is
+  not separately read off this tape.
+- **In flight: 5 judged, 5 `PASS`.** `[8, 0]` then `[3]` in one batch at the due landing,
+  no landing after the death. Deaths 0.10–0.56 s into the windup; releases 0.008–0.46 s
+  after the death.
+- **Next start: 6 judged, 6 `PASS`.** `[8, 0]` alone at the next due start, 0.10–0.57 s
+  after the death.
+- **On time:** every release is within 1 ms of its wire-derived instant. The server's own
+  rows agree: `held_to` names the right cell, and `target_death_release` was at most
+  0.9 ms late.
+- **Against the prediction:** both cells met their floor of 5 in ONE launch; the model
+  guessed ~7 / ~9 / ~1, and the run gave 5 / 6 / 0 judged.
+
+**What it does NOT show:**
+- that retail's client draws these batches as retail's does (D4 is retail's rule
+  replayed on our wire);
+- anything about the known-bad arm on this rig. The pre-D4 old shape is already OBSERVED
+  on September's tapes (29 + 4 `old-shape`, §3a's baseline), so a `--target-death-releases-now`
+  launch would add a same-rig control, not a new fact.
+
+**To finish E5 as registered:** interleave one or more `--target-death-releases-now`
+launches (the same command with the flag) until that arm's cells reach 5. The cap of 8
+launches is not needed: one launch per arm meets the floor.
 
 ## 4. Predictions — to be filled by the desk steps
 
