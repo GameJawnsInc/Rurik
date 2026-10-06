@@ -34,7 +34,7 @@ the same map, operator and instrument:
 |---|---|---|---|
 | shipped — refuse the click | **5,970 u** | 8,040 u | warps to spawn |
 | **`--click-echo` (MOVECODE-K2)** | **446 u** | **1,101 u** | **best measured** |
-| `--router` | 2,127 u | 3,276 u | REFUTED, §1o |
+| `--router` | 2,127 u | 3,276 u | REFUTED, §1o — **REVERSED by §1y / §1z / §2a; `ROUTER = True` ships (`authsrv.py`)** |
 | `--answer-kbd-click` (R1-B1) | 537 u | 1,385 u | REFUTED, §1q — on HALF the walk |
 | `--echo-any-refusal` (R1-B2) | **1,094 u** | 2,203 u | REFUTED, §1r. Its rate is lower, but **the rate is disqualified** — §1r.7 |
 
@@ -97,7 +97,7 @@ refuted candidate carrying its measurement is worth more than a deleted one.
 | `--heading-grant` | refreshed FASTER than retail (0.32 s) and still warped: point computed from `state["pos"]`, and clipped to our navmesh |
 | `--client-endpoint` | met both its terms and warped MORE (14.6 jumps/min vs 5.7) |
 | `--keepalive-grant` (K1) | INERT — 2 fires in 1,773 verdicts. §1l.4's claim that it *caused* the spawn warps is **withdrawn** by §1m.1 |
-| `--router` | 4.8× worse than the echo alone; re-granted the same first leg 4× |
+| `--router` | 4.8× worse than the echo alone; re-granted the same first leg 4× — **REVERSED by §1y / §1z / §2a: the router is the no-clip fix and ships ON; not dead** |
 | **MOVECODE-K3** (route from `_sync_position`) | **withdrawn before being built** — the router's origins are on-mesh and its routes are valid, so a better origin yields a *different* valid route the client still disagrees with |
 | **clip-gated echo** (gate the echo on a clip from `_sync_position`) | **REFUTED at a desk 2026-08-28, §1p.12** — replayed against K2's own 8 echoed clicks it refuses **7 of 8**, i.e. a near-total revert to the shipped refusal. `--heading-grant` had already granted a clipped point and its epitaph names the clip as one of its two failures |
 | **one-leg-gated echo** (echo only when our mesh says one leg suffices) | **NOT WORTH BUILDING, §1p.8** — buys **0** additional bit-exact matches against retail (13/26 either way); its only win is not granting an off-mesh line in 11 of 26, into an else-branch that is either `--router` (2,127 u) or refusal (5,970 u). A gate whose false branch is a refuted policy is a refuted policy with extra steps |
@@ -235,7 +235,9 @@ client's route" head-on rather than routing around it.
 Note what R4 is **not**: §1o showed our routes are *valid* — legs clear, shortcuts
 genuinely blocked. So this is not "fix broken routes"; it is "make our mesh agree with
 theirs", which is a much larger claim and may not be worth it for a mod platform
-(`PLAN.md` — fidelity is per-map effort, not extraction).
+(a paraphrase: no `PLAN.md` sentence says "fidelity is per-map effort, not extraction", and this
+line used to cite one -- MOVEMENT-2026-09-04 §4. The nearest written framing is the private-server-
+plus-mod-platform goal in `studies/deskwork/PLAN.md` near its line 39).
 
 ---
 

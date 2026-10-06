@@ -4208,7 +4208,7 @@ def _selftest_r5():
     return bad, ran
 
 
-def calibrate(handle, agbase, ptr, aid=None, reads=40):
+def calibrate(handle, agbase, ptr, aid=None, reads=40, pid=None, base=None):
     """How fast can this reader ACTUALLY sample? Measured, before the run.
 
     WHY THIS EXISTS. The floor used to be `seconds * hz * 0.5` -- half the
@@ -4230,10 +4230,24 @@ def calibrate(handle, agbase, ptr, aid=None, reads=40):
     # against a loop that does one. Measuring a cheaper sample than the run
     # performs would set a floor the run cannot meet -- the exact defect this
     # function was written to fix, from the other side.
+    #
+    # And WITH the per-poll resolve, for the same reason (MOVEMENT-2026-09-04
+    # §4): the run loop calls `resolve()` before every `sample()`, and that walks
+    # every thread's TEB (`_threads_of`, a toolhelp snapshot) and passes the
+    # controller context on. Timing `sample()` alone measured a cheaper poll than
+    # the run performs. Given `pid` and `base`, each calibration read is the
+    # loop's own pair; without them it is the old sample-only figure, an upper
+    # bound.
     t0 = time.perf_counter()
     got = 0
     for _ in range(reads):
-        if sample(handle, agbase, ptr, aid) is not None:
+        ctx = None
+        if pid is not None and base is not None:
+            try:
+                ctx, agbase, aid, ptr = resolve(pid, handle, base)
+            except TapFail:
+                continue
+        if sample(handle, agbase, ptr, aid, ctx=ctx) is not None:
             got += 1
     dt = time.perf_counter() - t0
     if dt <= 0 or got == 0:
@@ -4374,7 +4388,7 @@ def main():
             fh.write(json.dumps({"kind": "head", "pid": pid, "exe": path,
                                  "hz": a.hz, "wall": stamp}) + "\n")
             _ctx, agbase, aid, ptr = resolve(pid, handle, base, verbose=True)
-            cap_hz = calibrate(handle, agbase, ptr, aid)
+            cap_hz = calibrate(handle, agbase, ptr, aid, pid=pid, base=base)
             target_hz = a.hz if cap_hz is None else min(a.hz, cap_hz)
             if cap_hz is None:
                 print("could not calibrate the reader; floor falls back to the "

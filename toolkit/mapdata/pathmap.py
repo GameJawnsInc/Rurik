@@ -53,7 +53,12 @@ away on the next line.
 Portals (tag 9) carry the CROSS-plane structure and are fully decoded -- see the
 Portal class. The x/y BSP nodes and sink nodes are an acceleration structure for
 point-to-trapezoid lookup, which `containing()` already does by banding; they
-are still read as sized blocks and skipped, and nothing needs them.
+are still read as sized blocks and skipped, and the SERVER needs nothing from
+them. The client is another matter: its point location walks this DAG, so where
+a point near a seam resolves on the client is the DAG's answer, not this banding's
+-- the open question behind the `SEAM_TOL` patches, with an offline DAG walk
+proposed and not yet run (studies/review/MOVEMENT-2026-09-04.md §3.5;
+`pathchunk.py` decodes the blocks).
 
 CROSSING BETWEEN PLANES, and how it was settled without guessing. Intra-plane
 links alone leave Kamadan in 61 components with the largest at 17%. Two readings

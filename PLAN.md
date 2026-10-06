@@ -1645,7 +1645,12 @@ the client's own pathfinder (§1z-o.4) and by mesh ground truth (§1z-f.4 via
    `--router` — ON in 4 of 4 armed runs against 1.2% of the corpus, with the
    armed sessions granting 4.2× more per report. **The shipped default (armed,
    router off) has never once been run**; `studies/movecode/RUN-R8.md`
-   pre-registers the run that fills it.
+   pre-registers the run that fills it. *(2026-10-06: R8 WITHDRAWN — since
+   MOVECODE-1z-v the router is the default, so the shipped default is armed with
+   the router ON and has run: 233 armed captures, 9,384 reports, disagreement 0.91 %
+   against 2.31 % replay-only, `planecensus.py --armed`, populations not matched.
+   The rest of this item — the watched fire, the hardcoded "nothing both fired and
+   was watched" — is DESKWORK-D10 step 1's. PLAN-LOG "RUN-R8 withdrawn".)*
 2. **The `ambiguous` safety valve is decorative** (§1z-n.3, §1z-o.9). Engaged
    **0 of 259** disagreements; dead by construction at its own call site;
    stacked ground is 0.17–0.50% of the meshes, and 194 corpus reports stood on
@@ -1661,11 +1666,11 @@ the client's own pathfinder (§1z-o.4) and by mesh ground truth (§1z-f.4 via
    too quiet (misses intermittent locks) and unprotected (the disarm never
    engages).
 
-*What would settle it:* **R8** (the shipped default armed for the first time —
-specificity and the router confound, provokes nothing) then **R8b** (authorship
+*What would settle it:* ~~**R8**~~ (withdrawn 2026-10-06, item 1), and **R8b** (authorship
 by removal, and the first live trial of the heal — the `0x002C` restamp has
-never met a locked client). Both are pre-registered with predictions, exposure
-floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
+never met a locked client). R8b is pre-registered with predictions, exposure
+floors and aborts in `RUN-R8.md` §6; it is an operator-driven client run, and it
+needs `--no-router` now.
 
 **Q15. Should `agtrack_guard.STATIONARY_WAIVER` exist at all?**
 ✅ **RULED 2026-09-05 — the owner: delete it. Landed as MOVECODE-1z-bt
@@ -2245,9 +2250,6 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   eye, not a defect); Q8 is an observation.
 * **`movetap` cannot certify a capture under the harness** — 10–12 Hz against its own
   50 Hz floor (§1z-ag). Instrument debt; nulls taken that way do not count.
-* **RUN-R8** ([studies/movecode/RUN-R8.md](studies/movecode/RUN-R8.md)) is a
-  pre-registration that never ran. Run it or withdraw it.
-* **The review's nine one-sentence documentation fixes** (§1z-bh) are still owed.
 * A real `D1_LEAD` default — `--no-d1-lead`, a composition-matrix value and a
   router × d1 rule — is "its own arc, if wanted" (§1z-bu). Not wanted so far.
 
@@ -2286,9 +2288,6 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   shipped as DESKWORK-D1 steps 1 + 4 and was CONFIRMED on our client in an outpost
   2026-09-23 — studies/deskwork/CONFIRM-2026-09-23.md R1–R5; the hero ADD stays
   RECONSTRUCTION, heroes §3.3; the kick of an embodied hero stays UNOBSERVED on retail.)
-* **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
-  `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
-  facts; the window shows them as editable defaults.
 * **SANDBOX, the residue of the hostile-cap lift** (2026-09-24; PLAN-LOG "R-SANDBOX, hostile
   level and rank caps lifted", "Two things NOT done" — its (a), the server-load guard for a
   content row past 255, shipped the same day: PLAN-LOG "R-SANDBOX, the server-load level
@@ -2356,9 +2355,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 Older than September, and each confirmed against something current rather than against
 the log alone.
 
-* **Skills** (skills §35.6, §37.6, §38.8): `effects.py`'s `EFFECT_TYPES` still lists
-  five types while Well, Ward, Item and Weapon Spell, Form, Chant and Echo are plainly
-  timed; the character's own cast-animation duration is NOT FOUND; `GmSkSlot`'s refresh
+* **Skills** (skills §35.6, §37.6, §38.8): `effects.py`'s `EFFECT_TYPES` times five
+  types; the seven more ids are OBSERVED names (skills §35.3: 9 Well, 11 Ward, 24 Item,
+  25 Weapon, 26 Form, 27 Chant, 28 Echo) but admitting any is a BEHAVIOUR change (it
+  moves who opens an episode and what resolves at cast; `test_skilldesc` pins the
+  census) with no retail apply of any of them on tape — so it is DESKWORK-D4 step 6's,
+  scoped there as 24 / 25 / 26 / 28 / 16 with Wells and Wards to D6 and Chant left out
+  ([studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3 D4); the character's own
+  cast-animation duration is NOT FOUND; `GmSkSlot`'s refresh
   at `0x00543020` is an UNVERIFIED second way to clear the overlay; 56 of the 60 refusal
   ids 1934–1993 are RECONSTRUCTION-labelled, not OBSERVED (skills §57). The unmet-weapon-requirement
   term is unmodelled on purpose ([studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) §7).
@@ -2373,8 +2377,7 @@ the log alone.
   durable key must come from the map id the server sends or an `s_missionClientData`
   join, and it waits for a second archive state.
 * **The silent-opcode sweep's residue** ([studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md)):
-  the five account-name selectors (§7.9), and `0x0191` — READ as a map change (§7.5) —
-  has no `schema/overrides.json` row.
+  the five account-name selectors (§7.9).
 * **ANIMREF's desk queue** ([studies/animref/FINDINGS.md](studies/animref/FINDINGS.md)):
   §19's second refusal gate — 20 of 39 reason-1960 refusals arrive with the client-rule
   slot exactly at cost (`adrenreplay.py`, 2026-09-22; the simulation is built, the

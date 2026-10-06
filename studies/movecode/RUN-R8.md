@@ -1,5 +1,20 @@
 # MOVECODE-R8 — the empty cell, and the heal: the shipped default has NEVER been run armed
 
+> **R8 WITHDRAWN 2026-10-06. R8b (§6) stays open as `PLAN.md` §7 Q14's instrument.**
+> R8 existed because the shipped default had never run with the repair armed. That
+> stopped being true when MOVECODE-1z-v (`7475b86a`, 2026-09-03) made the router the
+> default: the cell R8 fills is now `--no-router`, a diagnostic arm, and the
+> configuration this repo actually ships has run armed many times —
+> `planecensus.py --armed` at `cdf15970`: **233 armed captures, 9,384 position
+> reports, disagreement 0.91 % per on-mesh report against 2.31 % replay-only** (the
+> populations still grant differently, 0.86 vs 0.58 grants per report, so it is not a
+> controlled comparison). P2 and P4 were already read on attempt 2 below; P1 and P3
+> were never scored and are not scored here, because they now ask about a non-default
+> arm. Nobody will write `## 1z-p`; the staleness test below retires with the run.
+> Scoring the rest of the corpus (the router-off population, the one watched fire)
+> stays with DESKWORK-D10 step 1 (`studies/deskwork/PLAN.md`). Record: `PLAN-LOG.md`,
+> "RUN-R8 withdrawn".
+
 > **2026-09-03 late (MOVECODE-1z-v): the router is now the DEFAULT click policy.**
 > This sheet's "armed, router off" cell — the shipped default when it was written —
 > now needs `--no-router` to reproduce, and the "armed, router on" cell IS the

@@ -525,7 +525,7 @@ first_byte = 0x55
 thiscall = false
 deref_agent = false
 deref_char_gate = true
-what = "the POINT begin-move: click-to-move. Calls MapFindPath (0x0081AF51) with maxCount = 9 and range = 10000.0f, prunes leading waypoints, issues waypoint 0 and parks the rest in m_path. Asserted to run only for the local player (ChCliBase:248)."
+what = "the POINT begin-move: click-to-move. Calls MapFindPath (0x0081AF51) with maxCount = 9 and range = 10000.0f, (UNVERIFIED, no decode behind it: prunes leading waypoints), issues waypoint 0 and parks the rest in m_path. Asserted to run only for the local player (ChCliBase:248)."
 why_hooked = "this is where a click BECOMES a path. Pairing it with the mapfindpath site shows the query and the legs that came out of it in one capture."
 [hook_site.chcli_point.provenance]
 source = "client-table"
