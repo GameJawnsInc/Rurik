@@ -5533,6 +5533,9 @@ def combat_deadlines(state):
         out.append(state["player_last_swing"] + swing_interval_due(
             state, ATTACK_INTERVAL
             * attack_interval_factor(state, PLAYER_AGENT_ID)))   # DAGGERS-F20
+    _tdr = state.get("target_death_release")                 # DEATHWALK-D4
+    if _tdr:
+        out.append(_tdr.get("at"))
     for agent_id, agent in list((state.get("agents") or {}).items()):
         if agent.get("dead"):
             continue
@@ -20356,6 +20359,24 @@ PRESS_REFUSES_DEAD_PLAYER = True   # False (--press-allows-dead-player): every b
 # its `lands_at` says. The player half only -- the NPC twin (kill_agent) is the NPC lane's.
 DEATH_STOPS_WINDUP = True   # False (--death-keeps-windup): the corpse's swing drops silently.
 
+# DEATHWALK-D4 (MOVECODE-1z-ds.52, 2026-10-06): THE TARGET'S DEATH HOLDS TO THE CHAIN'S NEXT
+# SCHEDULED EVENT. Retail (1z-ds.50, OBSERVED over 122 observer connections, 106 deaths of
+# the chain target): nothing is released AT the death. With the swing in flight, the release
+# comes at its due landing as [8, me, 0] then [3, me, 0] in one batch, and the swing's [1]
+# never comes (20 of 20, within 0.03 s). With no swing in flight and the chain undisturbed,
+# [8, me, 0] alone comes at the next due start (34 of 34, within 0.06 s on 33). Any input
+# before then releases through its own door (33). Ours sent [8, me, 0] on the next tick and
+# dropped the swing with no [3]. So the target-gone branch now SCHEDULES the release
+# (`target_death_release`) and keeps the swing armed but unlandable to its due landing, so
+# the input doors that read `_windup_open` (a move, Esc, a skill press, the player's own
+# death) still carry the [3] retail's input-first cell shows. A new order or any release of
+# the hold cancels it; the hold already down schedules nothing. RECONSTRUCTION in two
+# places: the "chain disturbed" cell (a skill, press or follow since the start, 19 on retail,
+# scattered) takes the same next-due-start rule, and a target death while the hold is down
+# keeps today's silent drop. Zero exposure on our tapes under the old code, so the client
+# run is DEATHWALK-E5. --target-death-releases-now reverts.
+TARGET_DEATH_HOLDS = True   # False (--target-death-releases-now): release on the next tick, no [3].
+
 
 def begin_attack(send, state, target_id, conn_id, rec=None):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -22266,6 +22287,68 @@ def _land_player_swing(send, state, conn_id, swing):
                     "the swing landed -- movement is legal now")
 
 
+def _schedule_target_death_release(state, target_id, now):
+    """DEATHWALK-D4: the chain's next scheduled event after its target died, or None.
+
+    In flight (an armed swing, landed or not by the clock): its due landing, with the stop.
+    Otherwise: the next due start, `player_last_swing` + the start-to-start gate, never in
+    the past. Nothing when the hold is already down -- there is nothing to release, and
+    retail's cell for that case is the input's own door."""
+    if state.get("action_hold", 0) != 1:
+        return None
+    swing = state.get("player_swing")
+    if swing is not None and not state.get("player_swing_cancel"):
+        return {"target": target_id, "at": max(now, float(swing["lands_at"])),
+                "stop": True, "swing": swing, "cell": "in-flight"}
+    interval = ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID)
+    due = state.get("player_last_swing", 0.0) + swing_interval_due(state, interval)
+    return {"target": target_id, "at": max(now, due), "stop": False, "swing": None,
+            "cell": "next-start"}
+
+
+def _target_death_release_tick(send, state, conn_id, rec=None):
+    """DEATHWALK-D4: serve a scheduled target-death release. True while one is pending
+    (attack_tick has nothing else to do: the order is gone), False when there is none or a
+    door took it over.
+
+    CANCELLED, sending nothing, by a new order (`attacking` set again -- begin_attack's own
+    door handles the hold and the stop) or by the hold already released (a move, Esc, a skill
+    press: whatever that door sent IS the release, retail's input-first cell). Either way a
+    kept swing no door dropped is dropped here, silently, as before D4. Otherwise at its
+    instant: [8, me, 0], then [3, me, 0] when the swing it kept is still the armed one."""
+    pend = state.get("target_death_release")
+    if pend is None:
+        return False
+    kept = pend.get("swing")
+    if state.get("attacking") is not None or state.get("action_hold", 0) != 1:
+        state["target_death_release"] = None
+        if kept is not None and state.get("player_swing") is kept:
+            state["player_swing"] = None
+        return False
+    now = time.time()
+    if now < pend["at"]:
+        return True
+    state["target_death_release"] = None
+    action_hold(send, state, 0, f"target {pend['target']} died: the chain's next scheduled "
+                                f"event ({pend['cell']}) [DEATHWALK-D4]")
+    stopped = (pend["stop"] and kept is not None and state.get("player_swing") is kept
+               and not state.get("player_swing_cancel"))
+    if stopped:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             f"attack_stopped: target {pend['target']} died in the windup, released at "
+             f"the due landing [DEATHWALK-D4]")
+    if kept is not None and state.get("player_swing") is kept:
+        state["player_swing"] = None
+    if rec is not None:
+        try:
+            rec.event("target_death_release", target=pend["target"], cell=pend["cell"],
+                      stop=bool(stopped), late=round(now - pend["at"], 4))
+        except Exception:      # telemetry must never take the tick down
+            pass
+    return True
+
+
 def attack_tick(send, state, conn_id, rec=None):
     """Keep swinging at whatever the player last clicked -- in TWO phases.
 
@@ -22285,14 +22368,14 @@ def attack_tick(send, state, conn_id, rec=None):
     code: damage and the close are one instant (40 of 40 live), and the next
     START is what the interval gates.
 
-    An armed swing that loses its target -- death, removal, out of range --
-    is DROPPED, silently. That is OURS, not retail's, for a target's death:
-    the Lakeside swing this sentence used to cite ended when the ATTACKER
-    (the worm) died, not its target. Retail on a target's death (DEATHWALK-D2,
-    MOVECODE-1z-ds.50, OBSERVED): the hold stays up to the chain's next
-    scheduled event, then `[8, me, 0]` + `[3, me, 0]` at the due landing if the
-    swing was in flight (20 of 20), `[8, me, 0]` alone at the next due start if
-    not (34 of 34). Not yet ours. `state["player_swing"]` is owned by THIS thread: armed here,
+    An armed swing that loses its target to removal or range is DROPPED,
+    silently. A target's DEATH is not silent (the Lakeside swing this sentence
+    used to cite ended when the ATTACKER, the worm, died). Retail (DEATHWALK-D2,
+    MOVECODE-1z-ds.50, OBSERVED) holds to the chain's next scheduled event:
+    `[8, me, 0]` + `[3, me, 0]` at the due landing if the swing was in flight
+    (20 of 20), `[8, me, 0]` alone at the next due start if not (34 of 34).
+    Ours since DEATHWALK-D4 (TARGET_DEATH_HOLDS): the swing stays armed and
+    unlandable to that instant. `state["player_swing"]` is owned by THIS thread: armed here,
     landed here, dropped here. The connection thread asks for a drop through
     `player_swing_cancel` and never touches the entry itself -- the same
     single-writer split `pending_casts`/`cast_tick` already prove.
@@ -22350,12 +22433,15 @@ def attack_tick(send, state, conn_id, rec=None):
             _chain_pause_note(state, "dead-player")
         _swing_dropped(state, rec, conn_id, "dead-player")
         state["player_swing"] = None
+        state["target_death_release"] = None    # DEATHWALK-D4: the kill path stopped it
         _press_refused(state, rec, conn_id, "dead-player", terminal=True)
         if PRESS_REFUSES_DEAD_PLAYER:
             # MOVECODE-1z-ds.15: an order set across the kill dies with the player --
             # kill_player cleared it, a press handled after it on the connection
             # thread could set it again, and the rise would resume it.
             state["attacking"] = None
+        return
+    if _target_death_release_tick(send, state, conn_id, rec):   # DEATHWALK-D4
         return
     if knocked_down(state, PLAYER_AGENT_ID):
         # SLICE-H12: a down body opens no swing and lands none; the chain
@@ -22379,21 +22465,30 @@ def attack_tick(send, state, conn_id, rec=None):
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
-        # OURS releases the hold on the next tick and drops the swing with no
-        # [3]. RETAIL (DEATHWALK-D2, MOVECODE-1z-ds.50, OBSERVED) holds to the
+        # RETAIL (DEATHWALK-D2, MOVECODE-1z-ds.50, OBSERVED) holds to the
         # chain's next scheduled event: [8, me, 0] then [3, me, 0] at the due
         # landing for a swing in flight (20 of 20), [8, me, 0] alone at the next
         # due start otherwise (34 of 34). castmech 3c's one close (t=20.1637,
         # "~0.25 s after the death") is the second cell, one phase draw of a
         # 0.02-0.79 s spread -- not a rule that the swing drops silently.
-        action_hold(send, state, 0, f"target {target_id} is gone")
+        # DEATHWALK-D4 (TARGET_DEATH_HOLDS): the release is SCHEDULED here and
+        # served by _target_death_release_tick; the swing stays armed, unlandable,
+        # so an input door inside the window still carries its [3].
         if _moving_now:
             _chain_pause_note(state, "target-gone")
-        _swing_dropped(state, rec, conn_id, "target-gone", target=target_id)
+        pend = (_schedule_target_death_release(state, target_id, time.time())
+                if TARGET_DEATH_HOLDS else None)
+        _swing_dropped(state, rec, conn_id, "target-gone", target=target_id,
+                       **({"held_to": pend["cell"]} if pend else {}))
         state["attacking"] = None
-        state["player_swing"] = None
         _approach_abandon(state)
         _press_refused(state, rec, conn_id, "target-gone", terminal=True)
+        if pend is not None:
+            state["target_death_release"] = pend
+            _target_death_release_tick(send, state, conn_id, rec)   # due already: now
+            return
+        action_hold(send, state, 0, f"target {target_id} is gone")
+        state["player_swing"] = None
         return
     if ATTACK_APPROACH and not (WINDUP_HOLDS_APPROACH
                                 and state.get("player_swing") is not None):
@@ -47955,6 +48050,12 @@ def main():
         DEATH_STOPS_WINDUP = False
         print("[map] --death-keeps-windup: a death mid-windup sends no GV_ATTACK_STOPPED; the "
               "swing drops silently (every build before MOVECODE-1z-ds.27)", flush=True)
+    if a.target_death_releases_now:
+        global TARGET_DEATH_HOLDS
+        TARGET_DEATH_HOLDS = False
+        print("[map] --target-death-releases-now: the target's death releases the hold on the "
+              "next tick and drops the swing with no [3] (every build before DEATHWALK-D4)",
+              flush=True)
     if a.press_allows_dead_player:
         global PRESS_REFUSES_DEAD_PLAYER
         PRESS_REFUSES_DEAD_PLAYER = False

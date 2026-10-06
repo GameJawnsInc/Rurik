@@ -28,6 +28,14 @@ move back.
 
 ---
 
+### DEATHWALK-D4 -- 2026-10-06 -- **The attack target's death now holds to the chain's next scheduled event, retail's rule from 1z-ds.50. With the swing in flight, `[8, me, 0]` `[3, me, 0]` come at its due landing (20 of 20); otherwise `[8, me, 0]` comes alone at the next due start (34 of 34). Before, ours released on the next tick with no `[3]`. `TARGET_DEATH_HOLDS`, SHIPPED ON, UNRUN.**
+
+- **Record:** FINDINGS §1z-ds.52; `studies/movecode/RUN-DEATHWALK.md` §2a.
+- **Mechanism:** the target-gone branch schedules `target_death_release` instead of releasing, and keeps the swing armed but unlandable. The doors that read `_windup_open` / `chain_live` (move, Esc, skill press, the player's death) still carry their own `[3]`. A new order or any hold release cancels the schedule. `combat_deadlines` carries the instant. `--target-death-releases-now` reverts.
+- **RECONSTRUCTION:** the "chain disturbed" cell takes the next-due-start rule; a death with the hold already down keeps the silent drop.
+- **Tests:** `test_playerswing` §26 (26a-k), 292 -> 303; §3's dies arm and 21i re-aimed. Full suite: 267 / 268 green. The one red was `test_approachroute` 1r, which expected `[8, 0]` on the death tick after a bow's launch. Its own cited witnesses (0.79 s after the death; :62994 = start + 1.7465) are the next-due-start cell, so it was re-aimed to the scheduled release and re-run green (46).
+- **Open:** DEATHWALK-E5, a rig whose hostile can die to someone else's damage inside the player's windup.
+
 ### DEATHWALK desk steps D0-D3 -- 2026-10-06 -- **The batch's desk half, done. D0: the 1z-ds scorers of record are in the tree and every one reproduces. D1: the re-path same-tick swing is a zero leg made inside the stop disc, and arrival now wins there (`STOP_DISC_ENDS_FOLLOW`, SHIPPED ON, UNRUN). D2: the target-death contest was one rule seen from two cells; ours diverges in both, the fix is D4. D3: the rise in place retires the stale walk (`RISE_ENDS_LEGS`, SHIPPED ON, UNRUN).**
 
 - **Record:** `studies/movecode/RUN-DEATHWALK.md` §2a; FINDINGS §1z-ds.51 (D1), §1z-ds.50 (D2), §1z-dp.5 (D3).

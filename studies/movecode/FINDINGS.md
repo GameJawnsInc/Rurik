@@ -23179,3 +23179,47 @@ the same wire leftover). **Not covered:** C2 and C3, one each, registered as lef
 the known-bad arm sends `0x002A` then `[4]` in one call; the start opens once the leg's eta passes; a 130 u
 CONTROL still re-paths; the wiring. **The client run is DEATHWALK-E4**, whose fixed arm should show none of
 the C1 class (run <= 0.4 u, inside the stop) and whose `--repath-inside-stop` arm reproduces 1-6 per launch.
+
+### 1z-ds.52 DEATHWALK-D4: the target's death holds to the chain's next scheduled event (`TARGET_DEATH_HOLDS`, `--target-death-releases-now` reverts)
+
+**The rule shipped** is 1z-ds.50's, measured there over 122 retail observer connections. Nothing is
+released at the death:
+- with the swing in flight: `[8, me, 0]` then `[3, me, 0]` at its due landing, and no `[1]` (20 of 20);
+- otherwise: `[8, me, 0]` alone at the next due start (34 of 34);
+- any input before then: its own door's release (the input-first cell).
+
+**How.** `attack_tick`'s target-gone branch no longer releases the hold. It schedules
+`target_death_release` (`_schedule_target_death_release`):
+- **In flight:** at the armed swing's `lands_at`, with the stop. The swing stays armed but unlandable,
+  because `attack_tick` returns while the release is pending.
+- **Otherwise:** at `player_last_swing` + the start-to-start gate, never in the past.
+
+`_target_death_release_tick`, served at the top of `attack_tick`, fires it at its instant;
+`combat_deadlines` carries that instant, so the deadline pass lands it on time. Keeping the swing armed
+is the point: the doors that read `_windup_open` / `chain_live` (a move, Esc, a skill press, the
+player's own death) still see a swing in flight and carry their own `[3]`, as retail's input-first
+cell does. The release is CANCELLED, sending nothing, by a new order (`begin_attack`'s own door) or by
+any release of the hold. A death of the player inside the window goes through `kill_player`'s
+1z-ds.27 stop, and the dead branch drops the pending release.
+
+**RECONSTRUCTION, stated:**
+- The "chain disturbed" cell (a skill, press or follow since the start; 19 on retail, scattered) takes
+  the same next-due-start rule.
+- A target death with the hold already DOWN schedules nothing and keeps the old silent drop.
+- An overdue, unlanded swing (its landing passed, the death processed first) fires at once with the
+  stop.
+
+**Tests:** `test_playerswing` §26 (26a-k), 292 -> 303. The cases:
+- in flight: nothing at the death, then `[8, 0]` `[3]` at the due landing with a row;
+- not in flight: nothing, then `[8, 0]` alone at the next due start;
+- a move in the window: its own `[8, 0]` and `[3]`, then nothing;
+- a new order cancels it;
+- the player's death: the kill's `[3]`, the pending release dropped;
+- the hold down: CONTROL;
+- the deadline;
+- the known-bad arm: `[8, 0]` on the death tick, no `[3]`;
+- the wiring.
+
+Re-aimed: §3's dies arm (an overdue swing: `[8, 0]` `[3]` at once) and 21i (nothing on the
+target-gone tick). **Client exposure: zero** -- the October rigs' raider never dies. The run is
+DEATHWALK-E5, on a rig whose hostile can die to someone else's damage inside the player's windup.

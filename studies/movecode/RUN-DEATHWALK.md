@@ -2,8 +2,9 @@
 
 > **DRAFT, 2026-10-06. NOT REGISTERED, NOT RUN.** This plan becomes a registration only
 > when its desk steps have run and their numbers are written into the H rows below.
-> **D0–D3 RAN the same day** (§2a). One new desk step came out of them (D4, a4's fix),
-> so the plan is still a draft. A launch needs the owner's go-ahead (parallel sessions
+> **D0–D4 RAN the same day** (§2a): every desk step is done and four fixes ship ON,
+> none of them run on a client yet. What is left is registration: the E3 pilot must find
+> its exposure, and E5 needs its rig. A launch needs the owner's go-ahead (parallel sessions
 > share the harness), announced as **HANDS OFF THE KEYBOARD**.
 
 **Identifiers.** `DEATHWALK-D<n>` = desk steps, no client. `DEATHWALK-E<n>` = scripted
@@ -97,12 +98,13 @@ offline.
   latch, leg and pre-walk report at an in-place rise, through the wipe's own helper
   (`--rise-keeps-legs` reverts). The wipe's own rise is not in place, so each revert arm
   reproduces its defect alone; the test caught that masking.
-- **DEATHWALK-D4 — NEW, not done: a4's fix.** At the target's death, schedule the release
-  instead of sending it: at the swing's `lands_at` with `[3]` if it is in flight, else at
-  the next due start. Any input's own door cancels it. Keep the swing visible but
-  unlandable to `lands_at`, so a move inside that window still carries its `[3]`. Behind a
-  revert flag, with a known-bad arm. Its client run needs a hostile that can die to
-  someone else's damage inside the player's windup; revheal3's 3,000 hp raider cannot.
+- **DEATHWALK-D4 — done, fix SHIPPED (2026-10-06, FINDINGS §1z-ds.52).** At the target's
+  death the release is scheduled instead of sent: at the swing's `lands_at` with `[3]` if
+  it is in flight, else at the next due start. A new order or any hold release cancels
+  it. The swing stays armed but unlandable, so a move in the window still carries its
+  `[3]`. `TARGET_DEATH_HOLDS`, with `--target-death-releases-now` as the revert;
+  `test_playerswing` §26. Its client run, E5, needs a hostile that can die to someone
+  else's damage inside the player's windup; revheal3's 3,000 hp raider cannot.
 
 ## 3. The scripted experiments
 
@@ -126,9 +128,9 @@ route. Server flags go inside `--game-args`.
 | **DEATHWALK-E4** a1 re-path | D1's flag on vs off | none needed: `followpin-g` + TRAILPIN's plan already makes 0–6 per launch | 5 re-paths per launch |
 
 E4 runs on `followpin-g`, not `revheal3`: it is the rig whose control rate is known.
-**DEATHWALK-E5** (a4) waits on D4. It needs a new rig: a killable hostile that a hero
-or a second foe damages while the player swings, so that the target dies inside the
-player's windup. E2's arms are now `--rise-keeps-legs` vs the default (D3 shipped), and
+**DEATHWALK-E5** (a4; arms: `--target-death-releases-now` vs the default, D4 shipped)
+needs a new rig: a killable hostile that a hero or a second foe damages while the player
+swings, so that the target dies inside the player's windup. E2's arms are now `--rise-keeps-legs` vs the default (D3 shipped), and
 E4's are `--repath-inside-stop` vs the default (D1 shipped).
 
 ## 4. Predictions — to be filled by the desk steps
