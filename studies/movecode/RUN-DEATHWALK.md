@@ -187,12 +187,39 @@ way. `attack:N` is the server's mailbox: the server walks the body in and swings
 target of each group gets 16 s for the ~2,100 u walk plus the kill. An `attack:` on a target
 the heroes already killed is refused as `dead-target`, which loses nothing.
 
-**Still owed before E5 registers:** a scorer over our own tapes. It classifies each death of
-the chain target by cell (in flight / next start / input first), from the `swing_verdict`
-`held_to` field and the `target_death_release` row D4 writes, and checks the release's
-batch and its time against `lands_at` or the next due start. D2's census
-(`scratchpad d2_ours.py`, the agent's) is the starting point. Also owed: H6's floors and
-aborts, written into §4.
+**The scorer is built (2026-10-06): `studies/movecode/review/e5_score.py`.**
+- **Cells from the wire:** it reads each death of the chain target and places it by cell
+  from the wire alone: in flight when the chain's last start has no landing and no stop
+  before the death.
+- **Expected instant, from the wire:** the start plus this chain's own previous windup,
+  or the last start plus this chain's own start-to-start gap. The tape's medians are the
+  fallback; our own rows are a cross-check only.
+- **Arm from the tape:** `flags.TARGET_DEATH_HOLDS`.
+- **Verdicts:**
+  - `PASS` / `FAIL` on the D4 arm: the batch (`[8, 0]` `[3]` in flight, `[8, 0]` alone
+    otherwise), no landing after the death, and within 0.06 s of the expected instant;
+  - `old-shape` / `UNEXPECTED` on the known-bad and pre-D4 arms;
+  - `input-first`, `hold-down` and `NO-RELEASE`, reported and not judged.
+- **Floors:** 5 judged deaths per cell per arm; below that the arm is UNEXPOSED.
+- **Abort:** `--check STAMP` exits 3 when a launch has no chain-target death at all, which
+  means the rig failed.
+
+Its `--selftest` (about 5 s) has four layers:
+- the opcodes and props are the server's;
+- 13 synthetic cases, every verdict reachable;
+- three tapes written live by the REAL server code: D4 in flight, D4 next start and the
+  known-bad arm score `PASS`, `PASS` and `old-shape`, the D4 releases 2–3 ms from the
+  wire-derived instant;
+- the real pre-D4 vault tape (`20261001T160802` 111.051, D2's specimen) scores
+  `old-shape` off real bytes.
+
+**Baseline over September's 570 tapes:** 91 chain-target deaths, 0 `UNEXPECTED`, 0
+`NO-RELEASE`. In flight there are 7 (4 `old-shape`, 3 `hold-down`); next start 84 (29
+`old-shape`, 2 `input-first`, 53 `hold-down`). That reproduces D2's independent census of
+the same tapes.
+
+**Still owed before E5 registers:** the owner's go-ahead, and the one-launch pilot that
+checks the heroes engage and the sixteen die (`--check` is its floor).
 
 ## 4. Predictions — to be filled by the desk steps
 
@@ -203,7 +230,7 @@ aborts, written into §4.
 | **DEATHWALK-H3** (E2) | after an in-place rise, the first press sends no `0x002C` at the stale leg and the drawn body does not jump > 25 u (agenttap agent 1) | indirect only *(pending D3: a rise-then-press witness)* | a re-pin at the leg's point; jump = the leg's remainder |
 | **DEATHWALK-H4** (E3) | 0 own `0x002A` inside an own windup; every re-approach at or after the landing, most in the landing's batch (`[1]`, `[8, 0]`, `0x002A`) | 0 of 1,654; 18 of 18; 13 of 18 in the batch | a follow inside the windup |
 | **DEATHWALK-H5** (E4) | 0 swings of the C1 class (a `[4]` within 25 ms of a re-path with run ≤ 0.4 u inside the stop) on the fixed arm; C2 / C3 counted and reported, not held to 0 | 0 of 458 (193 re-paths, nearest 43.5 ms) | 1–6 per launch, C1 (TRAILPIN T 7, N 10; KILLFAR 1–4) |
-| **DEATHWALK-H6** (E5, after D4) | a chain target's death releases at the due landing with `[8, me, 0]` `[3, me, 0]` for a swing in flight, and at the next due start with `[8, me, 0]` alone otherwise | 20 of 20; 34 of 34 | `[8, me, 0]` on the next tick, no `[3]` |
+| **DEATHWALK-H6** (E5; scored by `review/e5_score.py`, 5 judged per cell per arm) | a chain target's death releases at the due landing with `[8, me, 0]` `[3, me, 0]` for a swing in flight, and at the next due start with `[8, me, 0]` alone otherwise | 20 of 20; 34 of 34 | `[8, me, 0]` on the next tick, no `[3]` |
 
 **Aborts, checked between launches:** a client assert or crash dialog (stop the
 sequence and read the dump statically first); the player face-down more than 60 s

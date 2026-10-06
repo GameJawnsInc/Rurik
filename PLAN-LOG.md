@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### DEATHWALK-E5 scorer -- 2026-10-06 -- **`studies/movecode/review/e5_score.py` scores every death of the player's chain target on our tapes. It places each by cell off the wire, computes the expected release instant off the wire (this chain's own windup or start-to-start gap), and reads each tape's arm from its flags row. Tapes written live by the real D4 code score PASS (2-3 ms from the expected instant), the known-bad arm scores old-shape, and a real pre-D4 vault tape scores old-shape. Over September's 570 tapes: 91 chain-target deaths, 0 UNEXPECTED, matching D2's census.**
+
+- **Record:** `studies/movecode/RUN-DEATHWALK.md` §3a ("The scorer is built"); H6 now names it.
+- **Floors:** 5 judged deaths per cell per arm. `--check` exits 3 on a launch with no chain-target death (the rig failed).
+- **Owed:** the owner's go-ahead and the one-launch pilot.
+
 ### DEATHWALK-E5 rig -- 2026-10-06 -- **`deathwalk-e5` is built: sixteen level-20 raiders at 70 health hitting for 1, two level-20 staff heroes (7 and 8) at `[10, 15]`, and a player whose sword does ~1 a hit, so the chain target dies to the heroes at a phase of the player's swing nobody chose. The server's own damage functions give 12.5 a hero hit and ~1 a player hit against armour 80 (60 for non-physical). A Monte Carlo puts 42 % of deaths in the windup and 54 % in the gap. The server accepts the overlay offline. No client run.**
 
 - **Record:** `studies/movecode/RUN-DEATHWALK.md` §3a, with the spec's numbers, the tuning, the offline check and a drafted launch. The spec is `vault/sandbox/deathwalk-e5.toml`; the overlay is `vault/sandbox/deathwalk-e5/world.toml`.
