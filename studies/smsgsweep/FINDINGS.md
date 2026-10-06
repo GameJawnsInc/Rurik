@@ -567,6 +567,15 @@ here by hand rather than by loosening that refusal.
 row of this pass: it is the first opcode found that moves the player between maps, and
 `PLAN.md` §3.6's capture campaign wants exactly that.
 
+**NAMED 2026-10-06, `MAP_CHANGE`, medium** (`schema/overrides.json` row `401`, which
+carries the handler read and the reasons for medium). The wire half it cites, MEASURED
+from the vault that day: all three sends (`authsrv-20260813T142130`, `…151715`,
+`…153717`, `-c1`) are the same four bytes `91 01 00 00` — word 0 — and on each run the
+client's NEXT game connection declares `map_id=0` where the first declared 148, 3 of 3.
+That is consistent with the word being the destination map id, and one value cannot
+separate it from a default of 0. Retail never sends it (0 of 96 live connections,
+`studies/deskwork/PLAN.md` REX-9; retail's travel is `0x01A5`).
+
 ### 7.6 TWENTY-TWO NAMED, and thirteen CHANGED rows that were the operator's mouse
 
 **Status: OBSERVED, 2026-08-13.** The owner read the page and labelled every CHANGED

@@ -82,7 +82,13 @@ all of which had already produced a wrong number that reached a document:
 
 Note what the speed gate does NOT need: a long silence makes an implied speed
 SMALLER, never larger, so a sparse capture cannot mint a hard jump. That is why
-the hard bar answers on captures where the legacy bar refuses.
+the hard bar answers on captures where the legacy bar refuses. The same property
+is its blind side: a snap that lands inside more than ~1 s of report silence
+fires NEITHER arm, and ~80 % of this repo's capture span is silence (coverage
+20.4 % over 43 current-regime captures, 19.9 % over 61 before 09-03; MEASURED,
+studies/review/MOVEMENT-2026-09-04.md §1.4, where 12 tape-visible teleports up to
+2,021 u scored 0 hard steps here). A zero from this bar is not "no warp"; the
+drawn body's jumps are on the tape (`agenttap`), not on the wire.
 
 AND THEN THE NEW BAR HAD A HOLE THE OLD ONE DID NOT, which is the 2026-08-19
 adversarial pass and the rest of this header. Fixing an instrument is how you

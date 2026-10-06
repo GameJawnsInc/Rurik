@@ -5429,13 +5429,16 @@ def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
 
 PLAYER_AGENT_ID = 1        # what INSTANCE_LOAD_INFO already claims
 DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
-# How often the server reports where the agent got to. The client SNAPS to each
-# position we send rather than interpolating between them, so this rate is
-# visible directly as motion smoothness: at 0.25 the character jolted forward a
-# few times a second. A real server ticks slowly and lets the client animate
-# toward the destination; until we work out what makes it do that (probably
-# AGENT_UPDATE_DESTINATION rather than MOVE_TO_POINT), a fast tick buys
-# smoothness cheaply -- this is loopback, and 20 Hz of one small message is free.
+# The world thread's period: one 0x001E WORLD_SIMULATION_TICK, one integrator
+# step of `state["pos"]`, and the combat timers, every tick. It was chosen for a
+# per-tick POSITION broadcast the client snapped to (at 0.25 the character jolted
+# forward a few times a second), and that broadcast is GONE -- `world_tick` says
+# "NOTHING IS BROADCAST FROM HERE" and moves the client only by event (grants,
+# re-pins, the keep-alive). So 20 Hz is no longer about smoothness; it is the
+# 0x001E cadence and the timer grain a dozen tuned constants are expressed in,
+# which is why it has not moved. It is ours, not retail's or upstream's
+# (MOVEMENT-2026-09-04 §4, which reads upstream's loop as 500 ms-capped --
+# UPSTREAM, not re-checked here).
 TICK_SECONDS = 0.05
 
 
@@ -35434,11 +35437,16 @@ def enemy_move_tick(send, state, conn_id, rec=None):
     player's own movement uses, and the destination is re-announced whenever the
     player has moved far enough for the client's version to be wrong.
 
-    THERE IS NO PATHFINDING. `pathmap.route` is an A* and it is NOT wired in here:
-    this walks a straight line and uses `pathmap.clip` to stop at the first thing
-    it cannot cross, so an agent meets a wall and waits rather than sliding through
-    it. That is honest but it is not clever -- a hostile on the far side of a
-    building will stand against the wall for as long as you stay there.
+    THERE WAS NO PATHFINDING, and the legacy arm still has none: it walks a
+    straight line and uses `pathmap.clip` to stop at the first thing it cannot
+    cross, so an agent meets a wall and waits rather than sliding through it -- a
+    hostile on the far side of a building stands against the wall for as long as
+    you stay there. That sentence used to describe every chase. Since
+    MOVECODE-1z-by the NPC follow's copy walks `pathmap.route`'s corridor
+    (NPC_FOLLOW_ROUTER, default ON) and NPCTRACK-Q9 puts it on the wire, so the
+    wall-standing is now the FALLBACK's -- no pathmap, `--no-npc-follow-router`,
+    or a route() that returns None -- and what the client draws on that fallback
+    is UNVERIFIED (MOVEMENT-2026-09-04 §4).
 
     TWO SHAPES (ANIMREF-RE 40). Under NPC_FOLLOW the chase is retail's: a
     0x002A naming the player, re-pathed on the half-second while they move,

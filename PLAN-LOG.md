@@ -28,6 +28,28 @@ move back.
 
 ---
 
+### MOVECODE-1z-bh.7's nine -- 2026-10-06 -- **The movement review's nine owed corrections, applied. Eight are sentences; one was a defect: `movetap.calibrate()` timed `sample()` alone while the run loop does `resolve()` (a toolhelp thread walk) plus `sample(ctx=...)` on every poll, so its capability figure, and the floor set from it, was too high. It now times the loop's own pair. No default moves.**
+
+- **Record:** `studies/movecode/FINDINGS.md` §1z-bh.7 (closing note); the list is studies/review/MOVEMENT-2026-09-04.md §4.
+- **The nine:** `movesync.py`'s header names the hard bar's blind side (~80 % of span is silence; 12 tape-visible teleports scored 0 there); `pathmap.py`'s "nothing needs them" now says the SERVER needs nothing and the client's point location walks that DAG (review §3.5, unrun); `movetap.calibrate()` (above); `authsrv.TICK_SECONDS`'s rationale no longer describes the per-tick position broadcast `world_tick` stopped making ("NOTHING IS BROADCAST FROM HERE"); `enemy_move_tick`'s "stands against the wall" is now the fallback's, since `NPC_FOLLOW_ROUTER` (1z-by) and NPCTRACK-Q9 route the chase; movement `HANDOFF.md` §A marks itself STALE at `22bfe86`; `RETHINK.md` records that its NO-policy-code rule was never lifted IN WRITING (Q12 is not that lift) and resumed in conduct — the lift is the owner's to write, not declared here; `HANDOFF-WARP.md`'s two `--router` REFUTED rows carry the §1y/§1z/§2a reversal and its phantom `PLAN.md` citation is labelled a paraphrase; `content/movecode.toml`'s "prunes leading waypoints" is UNVERIFIED.
+- **Knock-on:** nine line citations in `studies/movement/PROBE-GATEFIRE.md` re-pointed (+6 movesync, +14 movetap), `test_citelint`'s control with them, and §6's two sha256 pins moved with a note — nothing a §6 block prints changed, and `test_probedoc` re-checked every block green.
+- **Not done:** DESKWORK-Q2's wider audit of the review's ~45 §4 lines.
+- **Tests:** movetap `--selftest` 250, `test_movesync` 206, `test_pathmap` 129, `test_citelint` 50, `test_probedoc` 76, `test_position_trust` 251, `test_srclint` 26, `test_provlint` 19, `test_content` 58 — green.
+
+### RUN-R8 withdrawn -- 2026-10-06 -- **R8 is withdrawn; R8b stays open. R8 was the shipped default armed for the first time, and since MOVECODE-1z-v (2026-09-03) the shipped default is the router-ON cell, which has run armed: 233 captures, 9,384 reports, 0.91 % disagreement against 2.31 % replay-only (`planecensus.py --armed`, populations not matched). R8's cell is now the diagnostic `--no-router` arm.**
+
+- **Record:** `studies/movecode/RUN-R8.md` header; `PLAN.md` §7 Q14 items 1 and "what would settle it".
+- P2 and P4 had been read on attempt 2 (in-sheet); P1 and P3 are not scored and are not claimed. `## 1z-p` will not be written.
+- **Still open:** R8b (needs `--no-router` and the operator; its heal premise is weakened by §1z-ao, which puts the lock in the client's arrival snap) and the rest of DESKWORK-D10 step 1 (the router-off population, the one watched fire, `planecensus.py`'s hardcoded line).
+
+### SMSGSWEEP 0x0191 named -- 2026-10-06 -- **`0x0191` gets its `schema/overrides.json` row: `MAP_CHANGE`, medium. Loopback-only (3 of 3 sends, each `91 01 00 00`; the next connection declares `map_id=0` where the first declared 148, 3 of 3); retail never sends it (0 of 96).**
+
+- **Record:** `studies/smsgsweep/FINDINGS.md` §7.5 ("NAMED 2026-10-06"); the row's `why` carries the handler read (`0x0084EB30`, an index into the mission-map table).
+- Name-only row: the catalog's `[word]` layout stands; build 38974 does not renumber it (the shift starts at `0x0194`).
+- **Tests:** `test_codec` 43, `test_catalog` 25, `test_smsgnames` 15, `test_smsgsweep` 124, `test_shotlabel` 61, `test_agentlife` 704 — green.
+
+### SANDBOX energy table, line retired -- 2026-10-06 -- **`PLAN.md` §8.1's "`ENERGY_BY_PROFESSION` is WIKI recalled, unread" was already closed on 2026-10-01 by HEROENERGY (`050f8b4d`): GWW "Energy" rev 2722984 was read, nine rows held and the Paragon's moved to 30 / 2, and the sandbox table became `pools.PROFESSION_ENERGY`. The §8 line outlived it by five days; removed.**
+
 ### MOVECODE-1z-ds.49 -- 2026-10-04 -- **The owner's feel run on the trail re-pin: "no jumps or stutters". The capture shows 18 long follows and a K term of at most 12.6 u, so the re-pin never fired: this confirms ordinary play is unaffected; TRAILPIN alone confirms the re-pin. The follow hop's static and trailing classes are closed.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-ds.49.

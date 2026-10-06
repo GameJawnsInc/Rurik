@@ -13916,6 +13916,9 @@ client's start resolution is), `movetap.py`'s `calibrate()` floor, `authsrv.py`'
 rationale and the NPC "stands against the wall" sentence, `HANDOFF.md` §A's currency row,
 `RETHINK.md:6`'s never-lifted rule, `HANDOFF-WARP.md`'s `--router` rows and its PLAN.md citation,
 `content/movecode.toml:528`. Each is one sentence; none changes behaviour.
+**(2026-10-06: all nine DONE, PLAN-LOG "MOVECODE-1z-bh.7's nine". One was not a
+sentence: `movetap.calibrate()` now times the loop's own resolve-then-sample pair, which
+can only lower the measured capability and so the floor.)**
 
 ## 1z-bi. THE LEAD'S CONVICTION, REPLAYED THROUGH THE FIXED GUARD — five of the seven locks begin with OUR gate-2 `0x002C` halting the body under a held W, and the shipped guard removes that halt in every one; the chain is exposure, not a verdict (4 of 7 chain-complete runs locked, 3 did not); the two Q-leg locks are a different class; one `--kbd-lead` run under HEAD is the next verbatim check
 

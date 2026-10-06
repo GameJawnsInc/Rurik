@@ -7,6 +7,16 @@ deliverables. **The standing rule until the owner lifts it: NO policy code.**
 The instrument builds below are ranked for the owner's pick; nothing here has
 been built.
 
+> **Status, 2026-10-06: no written lift of this rule exists.** Searched `PLAN.md`
+> §7, `PLAN-LOG.md` and the movement and movecode studies; the only ruling the
+> same night is §7 Q12 (2026-08-26, `86214397`), which is about how a hook arc
+> carries the repo's discipline, not about policy code. Policy code resumed in
+> practice: 16 default-True switches 2026-09-02..04
+> (studies/review/MOVEMENT-2026-09-04.md §2.6) and every MOVECODE-1z-ds ship
+> since, several of them confirmed by the owner's own feel runs (1z-ds.46,
+> 1z-ds.49). That is consent in conduct, not a recorded lift; whether to write
+> one is the owner's call (review §2.6). Read this rule as historical.
+
 Evidence base: three recon lanes + a scripted skeptic over the whole campaign
 record and the live corpus (lane files `rethink-R1-retro.md`,
 `rethink-R2-regime.md`, `rethink-R3-instruments.md`, `rethink-skeptic.md` +

@@ -163,8 +163,8 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 
 | Document | What it is for | Currency |
 |---|---|---|
-| **this file** | the arc's entry point; where each thread stands and what to do next | current at `22bfe86` |
-| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-s** (the pre-emit rule DERIVED — three zones, three clauses; 217/251 corpus warps retrodictively pre-empted, 10/10 current regime; shadow telemetry shipped ON) is the newest, on §1z-q/§1z-r (decode + mirror). ⚠ Numbering skips `1z-p` on purpose — that heading is `RUN-R8.md`'s staleness test and R8 is still not run |
+| **this file** | the arc's entry point; where each thread stands and what to do next | **STALE** — last current at `22bfe86` (2026-08-30). The arc moved on through §1z-ds.49 (2026-10-04); status is `PLAN.md` §3 and the newest `FINDINGS.md` sections, not this table |
+| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-s** (the pre-emit rule DERIVED — three zones, three clauses; 217/251 corpus warps retrodictively pre-empted, 10/10 current regime; shadow telemetry shipped ON) was the newest at `22bfe86`, on §1z-q/§1z-r (decode + mirror); the newest is now §1z-ds.49 (2026-10-04). ⚠ Numbering skips `1z-p` on purpose — that heading is `RUN-R8.md`'s staleness test and R8 is still not run |
 | `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `8bc8609`, `6c9b699`, `1381e3a`, `25b829e`, and its own "written at `a481a88`" stamp is wrong (last edited `40e3d27`) |
 | `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
 | `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |

@@ -1324,7 +1324,9 @@ re-pointing); keep §8 under `test_checks`' 40,000-byte ceiling; run the ~40 sou
 tests that read `authsrv.py` as text. **Lands before D12's compaction.**
 
 **DESKWORK-Q2 — the movement review's owed corrections: audit all of
-MOVEMENT-2026-09-04 §4, not only 1z-bh.7's nine** (MOV-6, INF-13; S). All nine are still
+MOVEMENT-2026-09-04 §4, not only 1z-bh.7's nine** (MOV-6, INF-13; S). *(2026-10-06: the
+nine are DONE, PLAN-LOG "MOVECODE-1z-bh.7's nine"; RETHINK's rule is recorded as never
+lifted in writing rather than declared lifted. The rest of §4 is still unaudited.)* All nine were still
 unfixed at HEAD (RETHINK.md:6 "NO policy code until the owner lifts it";
 `content/movecode.toml:528` "prunes leading waypoints" with no decode behind it;
 `pathmap.py:54-56`; `authsrv.py:23272/:23526` "stand against the wall"; the TICK_SECONDS
