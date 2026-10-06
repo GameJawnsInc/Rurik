@@ -323,8 +323,16 @@ def check_corpus(src, snap):
                                        errors="replace") if line.strip()]
             for la, lb in zip(a, b):
                 ra, rb = json.loads(la), json.loads(lb)
-                for tag, text in elem.findall(ra.get("body", "") or ""):
-                    repl = dict(elem.findall(rb.get("body", "") or "")).get(tag, "")
+                # Only the auth server's XML body is a string. Since MOVECODE-1z-ds.7
+                # (2026-10-02) our own press_stop row carries a NUMERIC `body` (the reckoned
+                # body's distance), and a regex over a float raised here -- the harvester
+                # above already tests isinstance; this loop now does the same.
+                body_a, body_b = ra.get("body"), rb.get("body")
+                if not isinstance(body_a, str):
+                    continue
+                for tag, text in elem.findall(body_a):
+                    repl = dict(elem.findall(body_b if isinstance(body_b, str)
+                                             else "")).get(tag, "")
                     if len(repl) != len(text):
                         lengths_ok = False
                     if text in seen and seen[text] != repl:

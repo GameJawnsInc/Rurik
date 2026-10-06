@@ -1,10 +1,10 @@
 # DEATHWALK — death, rise and re-approach: the follow hop's leftovers, as one batch
 
 > **DRAFT, 2026-10-06. NOT REGISTERED, NOT RUN.** This plan becomes a registration only
-> when its desk steps (D0–D3) have run and their numbers are written into the H rows
-> below. Until then every number marked *(pending D-n)* is a placeholder, and nothing
-> here may be quoted as a prediction. A launch needs the owner's go-ahead (parallel
-> sessions share the harness), announced as **HANDS OFF THE KEYBOARD**.
+> when its desk steps have run and their numbers are written into the H rows below.
+> **D0–D3 RAN the same day** (§2a). One new desk step came out of them (D4, a4's fix),
+> so the plan is still a draft. A launch needs the owner's go-ahead (parallel sessions
+> share the harness), announced as **HANDS OFF THE KEYBOARD**.
 
 **Identifiers.** `DEATHWALK-D<n>` = desk steps, no client. `DEATHWALK-E<n>` = scripted
 experiments, one flag each. `DEATHWALK-H<n>` = registered predictions. Convention:
@@ -73,6 +73,37 @@ offline.
   Per "don't ask to ship", this ships ON once derived, flagged and tested; E2 below
   confirms it on the client.
 
+## 2a. What the desk steps found (2026-10-06)
+
+- **DEATHWALK-D0 — done.** Eight scorers of record, plus their support files, are in
+  `studies/movecode/review/` (17 files). **Every one reproduces its published number**:
+  0 of 458; 1,654 windups / 18 of 18; 30 of 30 / 0 of 155; 20 of 20; KILLFAR H6's 1-4 per
+  launch; TRAILPIN's H1-H7 and its T 7 / N 10; DSBATCH3's wire counts. One attribution
+  corrected: TRAILPIN's T 7 / N 10 came from `tp_controls.py`, not `tp_score.py`. Both are
+  ported.
+- **DEATHWALK-D1 — done, fix SHIPPED** (FINDINGS §1z-ds.51). 47 of 49 same-tick swings are
+  a re-path due on the tick the body crossed inside its 80 u stop. That re-path makes a
+  zero leg that replaces a live latch, and 1z-ds.36's re-read then lets the swing through.
+  `STOP_DISC_ENDS_FOLLOW` makes arrival win inside the disc (`--repath-inside-stop`
+  reverts). The other two are C2 (a sub-tick re-path) and C3 (a zero-run new follow), one
+  each, both leftovers.
+- **DEATHWALK-D2 — done, the contest RESOLVED** (FINDINGS §1z-ds.50). It was one rule seen
+  from two cells. Retail holds the hold to the chain's next scheduled event: `[8, me, 0]`
+  `[3, me, 0]` at the due landing for a swing in flight (20 of 20), `[8, me, 0]` alone at
+  the next due start otherwise (34 of 34). castmech 3c's n = 1 close is the second cell.
+  Ours diverges in both cells, and has ZERO exposure under today's code. The code
+  comments now say so; the behaviour is D4.
+- **DEATHWALK-D3 — done, fix SHIPPED** (FINDINGS §1z-dp.5). `RISE_ENDS_LEGS` retires the
+  latch, leg and pre-walk report at an in-place rise, through the wipe's own helper
+  (`--rise-keeps-legs` reverts). The wipe's own rise is not in place, so each revert arm
+  reproduces its defect alone; the test caught that masking.
+- **DEATHWALK-D4 — NEW, not done: a4's fix.** At the target's death, schedule the release
+  instead of sending it: at the swing's `lands_at` with `[3]` if it is in flight, else at
+  the next due start. Any input's own door cancels it. Keep the swing visible but
+  unlandable to `lands_at`, so a move inside that window still carries its `[3]`. Behind a
+  revert flag, with a known-bad arm. Its client run needs a hostile that can die to
+  someone else's damage inside the player's windup; revheal3's 3,000 hp raider cannot.
+
 ## 3. The scripted experiments
 
 **Driver.** Agent-driven, `toolkit/harness/session.py` on the loopback build under
@@ -95,7 +126,10 @@ route. Server flags go inside `--game-args`.
 | **DEATHWALK-E4** a1 re-path | D1's flag on vs off | none needed: `followpin-g` + TRAILPIN's plan already makes 0–6 per launch | 5 re-paths per launch |
 
 E4 runs on `followpin-g`, not `revheal3`: it is the rig whose control rate is known.
-a4 has no experiment until D2 says whether it needs one.
+**DEATHWALK-E5** (a4) waits on D4. It needs a new rig: a killable hostile that a hero
+or a second foe damages while the player swings, so that the target dies inside the
+player's windup. E2's arms are now `--rise-keeps-legs` vs the default (D3 shipped), and
+E4's are `--repath-inside-stop` vs the default (D1 shipped).
 
 ## 4. Predictions — to be filled by the desk steps
 
@@ -105,7 +139,8 @@ a4 has no experiment until D2 says whether it needs one.
 | **DEATHWALK-H2** (E1) | 0 `[3, me, 0]` on deaths with no windup open | 0 of 155 | 0 |
 | **DEATHWALK-H3** (E2) | after an in-place rise, the first press sends no `0x002C` at the stale leg and the drawn body does not jump > 25 u (agenttap agent 1) | indirect only *(pending D3: a rise-then-press witness)* | a re-pin at the leg's point; jump = the leg's remainder |
 | **DEATHWALK-H4** (E3) | 0 own `0x002A` inside an own windup; every re-approach at or after the landing, most in the landing's batch (`[1]`, `[8, 0]`, `0x002A`) | 0 of 1,654; 18 of 18; 13 of 18 in the batch | a follow inside the windup |
-| **DEATHWALK-H5** (E4) | 0 swings within 25 ms of a re-path on the fixed arm | 0 of 458 | 1–6 per launch *(pending D1's mechanism)* |
+| **DEATHWALK-H5** (E4) | 0 swings of the C1 class (a `[4]` within 25 ms of a re-path with run ≤ 0.4 u inside the stop) on the fixed arm; C2 / C3 counted and reported, not held to 0 | 0 of 458 (193 re-paths, nearest 43.5 ms) | 1–6 per launch, C1 (TRAILPIN T 7, N 10; KILLFAR 1–4) |
+| **DEATHWALK-H6** (E5, after D4) | a chain target's death releases at the due landing with `[8, me, 0]` `[3, me, 0]` for a swing in flight, and at the next due start with `[8, me, 0]` alone otherwise | 20 of 20; 34 of 34 | `[8, me, 0]` on the next tick, no `[3]` |
 
 **Aborts, checked between launches:** a client assert or crash dialog (stop the
 sequence and read the dump statically first); the player face-down more than 60 s

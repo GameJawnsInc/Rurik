@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=287)   # MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=292)   # DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -3196,6 +3196,100 @@ def section_follow_tick_holds_swing():
           "inside attack_tick; the revert arm is wired", f"{i_at} {i_ap} {i_rr} {i_row}")
 
 
+def section_stop_disc_ends_follow():
+    """DEATHWALK-D1 (MOVECODE-1z-ds.51): a follow inside its stop disc is ARRIVED, even on the tick
+    its re-path falls due. approach_tick tested the 0.5 s re-path before arrival, so a body that
+    crossed inside the 80 u stop on that tick got a 0x002A with run 0.0 -- a zero leg replacing a
+    latch still running -- and 1z-ds.36's re-read then read it not moving, so the [4] went out in
+    the same call (47 of 49 same-tick swings on the KILLFAR/TRAILPIN/LEADRETIRE tapes). Retail: 0
+    of 458 own follows, re-paths included, carry an own start within 25 ms."""
+    import time
+    import authsrv
+
+    print("\n25. DEATHWALK-D1: a follow inside its stop disc is arrived on the re-path tick")
+    DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    START = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+
+    class _R:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def tick(st, frame):
+        sent = []
+        saved = authsrv._npc_mirror_pos
+        authsrv._npc_mirror_pos = lambda s, n: frame
+        try:
+            authsrv.attack_tick(lambda op, v, label="", quiet=False: sent.append(op), st, 0,
+                                rec=_R())
+        finally:
+            authsrv._npc_mirror_pos = saved
+        return [op for op in sent if op in (DEST, START)]
+
+    def due_repath(frame_x, on=True):
+        """A follow sent 0.52 s ago toward a target 400 u out, its leg still ~0.6 s short of its
+        eta, the re-path due (the target walked 20 u in), the frame `frame_x` on the axis."""
+        saved = (authsrv.STOP_DISC_ENDS_FOLLOW, authsrv.FOLLOW_TICK_HOLDS_SWING,
+                 authsrv.ATTACK_APPROACH)
+        authsrv.STOP_DISC_ENDS_FOLLOW = on
+        authsrv.FOLLOW_TICK_HOLDS_SWING, authsrv.ATTACK_APPROACH = True, True
+        try:
+            st = _state()
+            st["agents"][10]["pos"] = (400.0, 0.0)
+            st.update(attacking=10, player_health=100.0, player_dead=False)
+            first = tick(st, (0.0, 0.0))                 # the new follow, run 320 u
+            d = 0.52                                     # shift the follow's stamps together
+            st["click_moving_at"] -= d
+            leg = st["click_leg"]
+            leg["t0"] -= d
+            leg["eta"] -= d
+            ap = st["approach"]
+            ap["t0"] -= d
+            ap["sent_at"] -= d
+            ap["eta"] -= d
+            f = st["follow_order_at"]
+            st["follow_order_at"] = (f[0] - d, f[1], f[2])
+            st["agents"][10]["pos"] = (380.0, 0.0)       # the target walked in
+            ops = tick(st, (frame_x, 0.0))
+            return st, first, ops, leg["eta"] - time.time()
+        finally:
+            (authsrv.STOP_DISC_ENDS_FOLLOW, authsrv.FOLLOW_TICK_HOLDS_SWING,
+             authsrv.ATTACK_APPROACH) = saved
+
+    st, first, ops, left = due_repath(310.0)             # 70 u from the target, inside 80
+    check(DEST in first and ops == [] and st.get("approach") is None
+          and st.get("approach_closed") == 10 and authsrv._player_body_moving(st)
+          and left > 0.3,
+          "25a. 70 u inside the 80 u stop on the re-path tick: NO 0x002A and NO start -- the "
+          "arrival branch closes the follow and the live leg holds the swing",
+          f"first {first} ops {ops} approach {st.get('approach')} "
+          f"closed {st.get('approach_closed')} leg left {left:.3f} s")
+    _s, _f, ops0, _l = due_repath(310.0, on=False)
+    check(ops0 == [DEST, START],
+          "25b. KNOWN-BAD ARM (--repath-inside-stop): the zero-run re-path and the start in one "
+          "call, 0x002A first -- the 47-of-49 class", f"ops {ops0}")
+    leg = st["click_leg"]
+    leg["eta"] = time.time() - 0.01                      # the live leg's eta passes
+    st["pos"] = st.get("dest") or st["pos"]
+    st["dest"] = None
+    later = tick(st, (310.0, 0.0))
+    check(later == [START],
+          "25c. once the live leg's eta passes, the start opens -- with no 0x002A in that call",
+          f"ops {later}")
+    _s, _f, opsc, _l = due_repath(250.0)                 # 130 u out: run 50 u
+    check(opsc == [DEST],
+          "25d. CONTROL: 130 u out the re-path still goes (run 50 u) and no start opens -- the "
+          "condition touches only a body already inside its stop", f"ops {opsc}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    args_src = open(os.path.join(os.path.dirname(authsrv.__file__), "serverargs.py"),
+                    encoding="utf-8").read()
+    i_ap = src.find("def approach_tick(")
+    i_re = src.find("and not (STOP_DISC_ENDS_FOLLOW and dist <= stop)", i_ap)
+    i_arr = src.find('if now >= ap["eta"] or dist <= stop:', i_ap)
+    check(authsrv.STOP_DISC_ENDS_FOLLOW is True and 0 < i_ap < i_re < i_arr
+          and "--repath-inside-stop" in args_src and "if a.repath_inside_stop:" in src,
+          "25e. the flag ships on; the condition sits on approach_tick's re-path test, before "
+          "the arrival branch; the revert arm is wired", f"{i_ap} {i_re} {i_arr}")
+
 def section_attack_start_holds():
     """MOVECODE-1z-ds.31: every own attack start leaves the action hold [8, me, 1] up, to the
     next input. Retail: 1,647 of 1,654 own starts held at start + 0.1 s, raised in the start's
@@ -3789,6 +3883,7 @@ def main():
     section_dead_press()
     section_windup_holds_approach()
     section_follow_tick_holds_swing()
+    section_stop_disc_ends_follow()
     section_attack_start_holds()
     section_placement_frame()
     section_still_streak()
