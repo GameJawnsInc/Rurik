@@ -20398,6 +20398,25 @@ client speaks again. The follow needs nothing: `kill_player` abandoned it.
   leg's end once it has finished. That is zero after an approach that arrived, and up to the
   leg's remainder after a click-walk cut short by the death. Not fixed here: one change
   per test.
+
+### 1z-dp.5 Shipped — `RISE_ENDS_LEGS`, `--rise-keeps-legs` reverts (DEATHWALK-D3, 2026-10-06)
+
+The rise in place now retires what 1z-dp.3's wipe retires, through one helper,
+`_retire_corpse_legs` (latch, leg, `_forget_client_position`), which both now call.
+- **Where the corpse is.** `kill_player` nulls `dest`, and every click and follow leg walks
+  `state["pos"]` through `dest`, so `pos` holds the point the body stopped at. The rise sends
+  no 0x002C; the press after it finds no click in flight and re-pins nothing.
+- **Only when a walk was outstanding.** A player who died standing keeps its report, and gets
+  no park marker.
+- **The park marker is a RECONSTRUCTION for the rise.** The helper parks the body, so the next
+  moving report is a walk-start. For a placement that is the 0x002C's decode; for a corpse it is
+  inferred from the death stopping the body. No report from a corpse can show it.
+- **The wipe's own rise is not in place** (`revive_player(..., in_place=False)`). Without that,
+  the rise's clear masked `--wipe-keeps-legs`: the test caught the wipe's known-bad arm going
+  green. Each revert arm now reproduces its own defect alone.
+- **Derived from the code, never exercised on a client.** `test_shrinewarp` §6-10 drives the
+  real revive and the real press: the fixed arm keeps the body at the corpse (288, 0); the
+  known-bad arm re-pins at the leg's end (1000, 0), 712 u away. DEATHWALK-E2 is the client run.
 - **The client run:** done, 1z-dp.5.
 
 ### 1z-dp.5 On the client — `20260930T231034`, CONFIRMED
@@ -23059,3 +23078,104 @@ about the hold).
 
 **Status:** the follow hop's static and trailing classes are closed. The re-path same-tick swings, W
 re-approach, the death stop and death-release timing stay open.
+
+### 1z-ds.50 DEATHWALK-D2: a target's death holds to the chain's next scheduled event -- the contest was one rule seen from two cells
+
+**Asked** (DEATHWALK-D2, [RUN-DEATHWALK.md](RUN-DEATHWALK.md) §2): when the player's attack target dies,
+does retail send `[3, me, 0]` (1z-ds.31's "20 of 20") or drop the swing silently with the hold released
+~0.25 s on (the target-gone branch's comment, castmech 3c, n = 1)? Desk only, no run, no code change.
+Scorers: `review/h_retail_death.py`, `review/h_retail_release2.py` (DEATHWALK-D0's ports, which reproduce
+1z-ds.31 exactly), and a death-side census over the same 122 retail observer connections.
+
+**Retail, counted from the death** (OBSERVED; 106 deaths of the chain target, 73 with the hold up and no
+input before the release):
+
+| Cell | n | The release batch | When | Death to release |
+|---|---|---|---|---|
+| swing IN FLIGHT | 20 | `[8, me, 0]` then `[3, me, 0]`, 20 of 20, that order; the swing's `[1]` never comes (0 of 20) | the due landing (start + the previous swing's own windup), within 0.03 s, 20 of 20 | 0.020-0.749 s, p50 0.301 |
+| no swing in flight, chain undisturbed | 34 | `[8, me, 0]` alone, 34 of 34 | the next due start (last start + period), within 0.06 s on 33 of 34 (the 34th fits an attack-speed-boosted 0.89 s period) | 0.018-0.791 s, p50 0.514 |
+| no swing in flight, chain disturbed by a skill, press or follow | 19 | `[8, me, 0]` | scattered (a cast pauses the chain) | -- |
+| hold down, or an input first | 33 | the input's own door (7 carry `[3]`) | -- | -- |
+
+**castmech 3c's one close is the second cell**: capture `20260807T143055` :62994, a bow (period 1.75 s),
+start 84.5252, the arrow away at 85.3131, the dead bit at 86.0200, `[8, 31, 0]` alone at 86.2717 = start +
+1.7465, the next due start. Its "~0.25 s after the death" is one phase draw of a 0.02-0.79 s spread. So
+the two witnesses were never in conflict, and CONTESTED becomes OBSERVED in both cells.
+
+**The rule.** A target's death releases nothing at the death. The hold stays up to the chain's NEXT
+SCHEDULED EVENT: the swing's due landing if one is in flight (`[8, me, 0]`, `[3, me, 0]`, no `[1]`), else
+the next due start (`[8, me, 0]` alone). Any input before then releases through its own door.
+
+**Ours diverges in both cells** (the target-gone branch of `attack_tick`): `[8, me, 0]` on the next tick
+and the swing dropped with no `[3]`. In flight that is early by the rest of the windup AND missing the
+`[3]`; otherwise early by up to one interval. **Our exposure is ZERO under today's code**: 63 tapes since
+2026-10-01 hold 2 target deaths, both before 1z-ds.31 and neither in flight; the August-September corpus
+(119 target deaths, 7 in flight) shows the same branch, 0 of 7 `[3]`. The October rigs fight a raider that
+never dies.
+
+**A citation corrected in the code.** `attack_tick`'s docstring said retail drops the swing silently
+because "ArenaNet's 7th Lakeside swing ended 0.24 s in when the target died". Its own source (the
+`enemy_attack_tick` corpse branch) says the WORM died -- the attacker, 1z-ds.27's case, where retail sends
+`[3]` 30 of 30. The docstring and the branch comment now state the rule and say ours does not follow it yet.
+
+**Side observation, not this item's:** retail's dead bit arrives ~0.25 s after the player's own killing
+landing (p50 0.249, n = 35); ours sends the KILL in the landing's tick. That the landing is the killing
+blow is RECONSTRUCTION.
+
+**Next:** the fix is DEATHWALK-D4 (a pending release scheduled at the death, cancelled by any input,
+the swing kept visible but unlandable to its due landing, behind a revert flag), and its client run
+needs a rig whose hostile can die to someone else's damage inside the player's windup -- revheal3's
+3,000 hp raider cannot.
+
+### 1z-ds.51 DEATHWALK-D1: the re-path same-tick swing is a zero leg -- a follow inside its stop disc is arrived (`STOP_DISC_ENDS_FOLLOW`, `--repath-inside-stop` reverts)
+
+**Asked** (DEATHWALK-D1): why does a player `[4]` still open within 25 ms of an `APPROACH re-path`
+(KILLFAR 1-4 per launch, TRAILPIN T 7 / N 10) when 1z-ds.36's re-read fires on re-paths too? Read the
+operand at every occurrence before designing anything. Scorers: `review/kf_sametick.py`,
+`review/tp_controls.py` (DEATHWALK-D0's ports, which reproduce both published counts).
+
+**The census** (OBSERVED; every `[4]` within 25 ms after an own `APPROACH` `0x002A`): KILLFAR 26, TRAILPIN
+17 (T 7, N 10), LEADRETIRE 6 -- 49. They split three ways:
+- **C1, 47 of 49: a zero-length re-path.** The label reads `APPROACH re-path ... 54-80 u out, stops at
+  80 u`; the approach row has run 0.0 at a frame distance of 54.4-79.9 u, inside the stop. The follow it
+  replaced was a re-path 0.511-0.525 s earlier, still 27-472 ms short of its eta, with no client message
+  between. The `[4]` follows the `0x002A` by 0.12-0.25 ms, nothing between, through `attack_tick`'s
+  normal start (45 in the regular tick, 2 in a combat-deadline pass, which runs the same function).
+- **C2, 1: a sub-tick re-path** (K3 265.698): run 0.4 u, eta +1.4 ms, sent in a deadline pass and read as
+  expired by the regular tick 3.9 ms later.
+- **C3, 1: a zero-run NEW follow** (K2 91.502): the snap guard's `0x002C` (gap 103 u) put the body 65.9 u
+  from the target first.
+All 49 armed a leg of 0.4 u or less.
+
+**The mechanism** (OBSERVED in the code; reproduced offline on the real `attack_tick`):
+1. `approach_tick` tested the 0.5 s re-path BEFORE arrival (`now >= eta or dist <= stop`). The raider
+   walks in, so the body crosses inside the 80 u stop, and on the tick the re-path falls due the re-path
+   won.
+2. `_approach_send` computes run 0, stamps the click latch and a leg whose eta is the send instant, and
+   writes a new `follow_order_at`.
+3. `attack_tick`'s top-of-tick read was True (the old leg was live). 1z-ds.36's re-read then fires and
+   reads the zero leg: NOT moving. The reach gate passes at 54-80 u (reach 128), and the `[4]` goes out.
+So rival (i) of the plan holds, sharpened: the zero leg REPLACES a latch still running, and it is
+1z-ds.36's own re-read that lets it through. Rival (ii) is wrong: every occurrence has its own approach
+row at the send instant, through `attack_tick`'s own call.
+
+**Corpus check** (all 1,868 of our tapes): with 1z-ds.36 on, 49 of 3,306 re-paths carried a same-tick
+`[4]`, every one with a live previous leg and run <= 0.4 u. Before 1z-ds.36: 2 of 289, one of them C2's
+route, so that route predates 1z-ds.36. **The neighbours:** the other 163 follow-answered swings in these
+launches open 67 / 258 / 620 ms (p10 / p50 / p90) after the last `0x002A`; the class opens at 0 ms.
+
+**RETAIL:** 0 of 458 own follows carry an own start within 25 ms, and the pool includes re-paths (193 of
+them, nearest 43.5 ms; new follows 265, nearest 69.9 ms). Whether retail ever re-paths a body already
+inside its stop disc is UNVERIFIED.
+
+**The fix** (RECONSTRUCTION, shipped ON): the re-path test gains `and not (STOP_DISC_ENDS_FOLLOW and dist
+<= stop)`, so inside the stop disc the arrival branch wins on every tick, as it already did on ticks with
+no re-path due. The follow closes, the live leg holds the swing, and the swing opens at its eta like its
+163 neighbours. Rejected: suppressing the swing alone in the follow's own call (it leaves the zero-run
+`0x002A` on the wire and still cuts the old latch short), and reading `_moving_now or` the re-read (C1 only,
+the same wire leftover). **Not covered:** C2 and C3, one each, registered as leftovers.
+
+**Tests:** `test_playerswing` §25 (25a-e), 287 -> 292: the 70 u case sends nothing and keeps the leg live;
+the known-bad arm sends `0x002A` then `[4]` in one call; the start opens once the leg's eta passes; a 130 u
+CONTROL still re-paths; the wiring. **The client run is DEATHWALK-E4**, whose fixed arm should show none of
+the C1 class (run <= 0.4 u, inside the stop) and whose `--repath-inside-stop` arm reproduces 1-6 per launch.

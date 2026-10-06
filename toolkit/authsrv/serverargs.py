@@ -873,6 +873,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="THE REVERT ARM for MOVECODE-1z-ds.36: the tick's top-of-tick "
                          "moving read decides, so a follow whose frame reads in reach "
                          "opens the swing in its own tick (131011 79.492; retail 0 of 458).")
+    ap.add_argument("--repath-inside-stop", action="store_true",
+                    help="THE REVERT ARM for DEATHWALK-D1: a re-path that falls due while the "
+                         "body is already inside its stop disc is sent (run 0.0, a zero leg), "
+                         "and the swing opens in its own tick (47 of 49 same-tick swings on "
+                         "the KILLFAR/TRAILPIN/LEADRETIRE tapes; retail 0 of 458).")
     ap.add_argument("--approach-in-windup", action="store_true",
                     help="THE REVERT ARM for MOVECODE-1z-ds.28: re-approach a target that left "
                          "reach while the swing is still in its windup. By default the swing "
@@ -969,6 +974,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leaves the click leg, its latch and the last client report "
                          "describing where the player died, so the first attack press "
                          "after the wipe re-pins the body there (the owner's warp).")
+    ap.add_argument("--rise-keeps-legs", action="store_true",
+                    help="THE REVERT ARM for SHRINEWARP 1z-dp.4 (DEATHWALK-D3): a rise "
+                         "in place (a hero's signet, the no-party timer) leaves the "
+                         "click leg, its latch and the last report standing, so the "
+                         "first attack press after it re-pins the body at the stale "
+                         "leg's end -- a warp of the leg's remainder.")
     ap.add_argument("--hit-finish-last", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 43: the player's hit sends "
                          "melee_attack_finished [1] AFTER its damage word, as before. "

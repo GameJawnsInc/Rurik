@@ -19,6 +19,21 @@ that own them), and the wipe moved `pos` without retiring them. The press found 
   4  a press on a LIVE click leg (no wipe) still ends it at the modelled body -- the
      ANIMREF-RE 39 behaviour the fix must not touch.
   5  the switch's wiring.
+
+THE RISE IN PLACE (SHRINEWARP 1z-dp.4, DEATHWALK-D3, 2026-10-06). The wipe is one of two
+ways up; a hero's Resurrection Signet or the no-party timer stands the player up WHERE
+IT FELL, through revive_player, which retired nothing. A player killed one second into
+a 1,000 u click-walk lies at (288, 0); by the time it rises the leg's lerp has reached
+its end, so the first press re-pinned the body at (1000, 0) -- a 712 u warp.
+
+  6  the REAL revive_player after a death mid-walk retires the latch, the leg and the
+     pre-walk report, sends no 0x002C, and leaves `pos` at the corpse.
+  7  the REAL press after that rise re-pins nothing.
+  8  the KNOWN-BAD arm (--rise-keeps-legs): the same press sends 0x002C at (1000, 0),
+     the leg's end, 712 u from the corpse.
+  9  a CONTROL: a player who died standing (no latch, no leg) keeps its report -- the
+     rise forgets only what a cut-short walk made stale.
+  10 the rise switch's wiring, and the wipe through the same helper.
 """
 import os
 import sys
@@ -38,8 +53,10 @@ import leadgeom                                                # noqa: E402
 
 # Floor from the green run of 2026-09-30, bare (RURIK_VAULT at an empty directory) and
 # vaulted alike: 8 -- nothing here reads the vault. WIPE_PLACEMENT_ENDS_LEGS = False in
-# the source reddens 4 (the warp itself among them).
-LEDGER = checks.Ledger("shrine warp", floor=8)
+# the source reddens 4 (the warp itself among them). 15 since DEATHWALK-D3 (2026-10-06,
+# the green run); RISE_ENDS_LEGS = False reddens sections 6-7 and 10 (the 712 u warp
+# among them).
+LEDGER = checks.Ledger("shrine warp", floor=15)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -157,9 +174,110 @@ def section_wiring():
     wipe = wipe[:wipe.index("\ndef ")]
     check(authsrv.WIPE_PLACEMENT_ENDS_LEGS is True and '"--wipe-keeps-legs"' in args
           and "if a.wipe_keeps_legs:" in src
-          and '_forget_client_position(state, "the wipe placed the player at the shrine")' in wipe,
+          and '_retire_corpse_legs(state, "the wipe placed the player at the shrine")' in wipe,
           "WIPE_PLACEMENT_ENDS_LEGS ships ON, --wipe-keeps-legs reverts it, and the wipe "
           "uses the placement helper rather than a second writer of the report", "")
+
+
+CORPSE = (288.0, 0.0)               # one second into the walk at 288 u/s
+LEG_END = (1000.0, 0.0)
+
+
+def _dead_mid_walk():
+    """Killed one second into a 1,000 u click-walk that began 20 s ago: the body lies at
+    (288, 0) (kill_player froze the integrator there), the last report is the walk's
+    start, the latch and the leg are standing, and the leg's lerp has long reached its
+    end."""
+    now = time.time()
+    leg = leadgeom._leg_record((0.0, 0.0), LEG_END, now - 20.0, 288.0)
+    return {"agents": {FOE: _raider()}, "pos": CORPSE, "plane": 0, "dest": None,
+            "spawn_point": SHRINE, "map_id": -1,
+            "click_moving_at": leg["t0"], "click_leg": leg,
+            "client_pos": (0.0, 0.0), "client_plane": 0, "client_pos_at": now - 20.5,
+            "player_dead": True, "player_died_at": now - 19.0, "player_health": 0.0}
+
+
+def _rise(st, why=" (a hero's signet)"):
+    w = Wire()
+    authsrv.revive_player(w, st, 1, why=why)
+    return w.sent
+
+
+def section_rise():
+    print("== 6. the real rise in place retires what the cut-short walk left ==")
+    st = _dead_mid_walk()
+    sent = _rise(st)
+    pins = [v for op, v, _l in sent if op == POS]
+    check(st["player_dead"] is False and pins == [] and st["pos"] == CORPSE,
+          "revive_player stands the player up where it fell: no 0x002C, pos still the "
+          "corpse's (288, 0)", f"dead {st['player_dead']}, pins {pins}, pos {st['pos']}")
+    check(st.get("click_moving_at") is None and st.get("click_leg") is None
+          and st.get("client_pos") is None,
+          "and the click latch, its leg and the pre-walk report are GONE -- the death "
+          "ended the walk they describe",
+          f"latch {st.get('click_moving_at')}, leg {st.get('click_leg')}, "
+          f"report {st.get('client_pos')}")
+    return st
+
+
+def section_rise_press(st):
+    print("== 7. the press after the rise re-pins nothing ==")
+    w = Wire()
+    authsrv._press_supersedes(w, st, 1, FOE)
+    pins = [v for op, v, _l in w.sent if op == POS]
+    check(pins == [] and st["pos"] == CORPSE,
+          "C + space after the rise sends NO 0x002C and the player stays at the corpse",
+          f"pins {pins}, pos {st['pos']}")
+
+
+def section_rise_known_bad():
+    print("== 8. the known-bad arm: --rise-keeps-legs reproduces the warp ==")
+    saved = authsrv.RISE_ENDS_LEGS
+    authsrv.RISE_ENDS_LEGS = False
+    try:
+        st = _dead_mid_walk()
+        _rise(st)
+        check(st.get("click_moving_at") is not None and st.get("client_pos") == (0.0, 0.0),
+              "the rise leaves the latch and the pre-walk report standing", "")
+        w = Wire()
+        authsrv._press_supersedes(w, st, 1, FOE)
+        pins = [v for op, v, _l in w.sent if op == POS]
+        check(len(pins) == 1 and tuple(round(c) for c in pins[0][1]) == (1000, 0)
+              and tuple(round(c) for c in st["pos"]) == (1000, 0),
+              "and the press sends 0x002C at (1000, 0), the leg's END -- a 712 u warp "
+              "from the corpse, 1z-dp.4's predicted defect", f"pins {pins}, pos {st['pos']}")
+    finally:
+        authsrv.RISE_ENDS_LEGS = saved
+
+
+def section_rise_standing():
+    print("== 9. control: a player who died standing keeps its report ==")
+    now = time.time()
+    st = {"agents": {FOE: _raider()}, "pos": CORPSE, "plane": 0, "dest": None,
+          "click_moving_at": None, "click_leg": None,
+          "client_pos": CORPSE, "client_plane": 0, "client_pos_at": now - 15.0,
+          "player_dead": True, "player_died_at": now - 12.0, "player_health": 0.0}
+    _rise(st, why=" (the timer)")
+    check(st["player_dead"] is False and st.get("client_pos") == CORPSE
+          and st.get("cast_stop_pin") is None,
+          "with no walk outstanding the rise forgets nothing and parks nothing: the "
+          "report still describes the body", f"report {st.get('client_pos')}, "
+          f"park {st.get('cast_stop_pin')}")
+
+
+def section_rise_wiring():
+    print("== 10. the rise switch, and one helper for both ways up ==")
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    args = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+    rise = src[src.index("def revive_player("):]
+    rise = rise[:rise.index("\ndef ")]
+    check(authsrv.RISE_ENDS_LEGS is True and '"--rise-keeps-legs"' in args
+          and "if a.rise_keeps_legs:" in src and "_retire_corpse_legs(state, f\"the rise in place" in rise
+          and src.count("_retire_corpse_legs(state, ") - 1 == 2
+          and 'why=" (the shrine)", in_place=False)' in src,
+          "RISE_ENDS_LEGS ships ON, --rise-keeps-legs reverts it, and revive_player and the "
+          "wipe are the helper's two callers; the wipe's own rise is not in place, so "
+          "each revert arm reproduces its defect alone (section 3)", "")
 
 
 def main():
@@ -168,6 +286,11 @@ def main():
     section_known_bad()
     section_live_leg()
     section_wiring()
+    st = section_rise()
+    section_rise_press(st)
+    section_rise_known_bad()
+    section_rise_standing()
+    section_rise_wiring()
     return LEDGER.verdict()
 
 

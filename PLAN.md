@@ -2310,8 +2310,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **MOVECODE-1z-ds.49** (follow hop: static + trailing classes CLOSED): open -- re-path same-tick swings, W re-approach, death stop, death release; drafted with 1z-dp.4 as DEATHWALK, desk steps first, NOT RUN ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md)).
-* **SHRINEWARP 1z-dp.4:** a mid-leg death raised in place keeps the stale leg (DEATHWALK-D3 / E2).
+* **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D3 done 2026-10-06, PLAN-LOG): open -- D4 (the target-death release, 1z-ds.50); client runs E1-E5; the C2 / C3 same-tick leftovers.
 * **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.

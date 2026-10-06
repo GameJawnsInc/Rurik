@@ -28,6 +28,17 @@ move back.
 
 ---
 
+### DEATHWALK desk steps D0-D3 -- 2026-10-06 -- **The batch's desk half, done. D0: the 1z-ds scorers of record are in the tree and every one reproduces. D1: the re-path same-tick swing is a zero leg made inside the stop disc, and arrival now wins there (`STOP_DISC_ENDS_FOLLOW`, SHIPPED ON, UNRUN). D2: the target-death contest was one rule seen from two cells; ours diverges in both, the fix is D4. D3: the rise in place retires the stale walk (`RISE_ENDS_LEGS`, SHIPPED ON, UNRUN).**
+
+- **Record:** `studies/movecode/RUN-DEATHWALK.md` §2a; FINDINGS §1z-ds.51 (D1), §1z-ds.50 (D2), §1z-dp.5 (D3).
+- **D0:** 17 files in `studies/movecode/review/`: c_retail_sametick, r_windup_follow, r_death_any, h_retail_death, h_ours_deaths, kf_sametick, tp_score, tp_controls, score_ds3(b), and their loaders. Each reproduces its published number (0 of 458; 1,654 / 18 of 18; 30 of 30; 20 of 20; KILLFAR 1-4; TRAILPIN H1-H7 and T 7 / N 10; DSBATCH3's counts). They were scored from a dead session's scratchpad until today.
+- **D1:** 47 of 49 same-tick swings were a re-path due on the tick the body crossed inside its 80 u stop. The re-path made a run-0 leg that replaced a live latch, and 1z-ds.36's re-read read it as not moving. Retail: 0 of 458, re-paths included. `--repath-inside-stop` reverts. C2 and C3, one each, stay open.
+- **D2:** retail holds the action hold to the chain's next scheduled event: `[8, me, 0]` `[3, me, 0]` at the due landing (20 of 20), else `[8, me, 0]` at the next due start (34 of 34). castmech 3c's n = 1 close is the second cell. `attack_tick`'s docstring had cited the worm's OWN death as a target's; corrected. No behaviour change.
+- **D3:** a mid-walk death raised by a signet or the timer no longer re-pins at the stale leg's end (712 u on the fixture). One helper serves the wipe and the rise; the wipe's own rise passes `in_place=False`, so `--wipe-keeps-legs` and `--rise-keeps-legs` each reproduce their own defect.
+- **Also fixed:** `test_kbdsync` 25i went red on `main` at `2faed55d`. The new `TICK_SECONDS` comment quoted the "NOTHING IS BROADCAST FROM HERE" phrase that 25i uses as an anchor. The comment no longer quotes it.
+- **Also fixed:** `test_scrub` has crashed on every full run since 2026-10-02. MOVECODE-1z-ds.7's `press_stop` row carries a NUMERIC `body` (the reckoned distance), and the test's substitution-property loop ran a regex over every `body`. That loop now tests `isinstance(str)`, as its harvester already did (39 captures carry the row).
+- **Tests:** `test_shrinewarp` 8 -> 15, `test_playerswing` 287 -> 292, `test_kbdsync` 324. Full suite on this branch: 266 / 268 green. The two reds were §8's byte cap (40,069; my own §8 line, shortened to 39,803) and `test_scrub` (above, re-run green after the fix).
+
 ### MOVECODE-1z-bh.7's nine -- 2026-10-06 -- **The movement review's nine owed corrections, applied. Eight are sentences; one was a defect: `movetap.calibrate()` timed `sample()` alone while the run loop does `resolve()` (a toolhelp thread walk) plus `sample(ctx=...)` on every poll, so its capability figure, and the floor set from it, was too high. It now times the loop's own pair. No default moves.**
 
 - **Record:** `studies/movecode/FINDINGS.md` §1z-bh.7 (closing note); the list is studies/review/MOVEMENT-2026-09-04.md §4.

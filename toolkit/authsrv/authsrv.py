@@ -5432,9 +5432,10 @@ DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
 # The world thread's period: one 0x001E WORLD_SIMULATION_TICK, one integrator
 # step of `state["pos"]`, and the combat timers, every tick. It was chosen for a
 # per-tick POSITION broadcast the client snapped to (at 0.25 the character jolted
-# forward a few times a second), and that broadcast is GONE -- `world_tick` says
-# "NOTHING IS BROADCAST FROM HERE" and moves the client only by event (grants,
-# re-pins, the keep-alive). So 20 Hz is no longer about smoothness; it is the
+# forward a few times a second), and that broadcast is GONE -- `world_tick`'s
+# integrator broadcasts nothing (its own comment says so in capitals, and
+# test_kbdsync 25i anchors on that comment, so it is not quoted here) and the
+# client moves only by event (grants, re-pins, the keep-alive). So 20 Hz is no longer about smoothness; it is the
 # 0x001E cadence and the timer grain a dozen tuned constants are expressed in,
 # which is why it has not moved. It is ours, not retail's or upstream's
 # (MOVEMENT-2026-09-04 §4, which reads upstream's loop as 500 ms-capped --
@@ -6739,6 +6740,19 @@ WIPE_SHRINE = True             # False (--no-wipe-shrine): the timer stands the 
 # seventh player-0x002C site and post-dates that census, so it was never sorted.
 # --wipe-keeps-legs is the pre-fix arm.
 WIPE_PLACEMENT_ENDS_LEGS = True  # False (--wipe-keeps-legs): the press warps to the corpse.
+# SHRINEWARP 1z-dp.4 (DEATHWALK-D3, 2026-10-06): THE RISE IN PLACE ENDS THEM TOO. The wipe
+# was one of two ways up. A hero's Resurrection Signet or the no-party timer stands the
+# player up WHERE IT FELL (revive_player), and that path left the same three records: a
+# player killed mid-walk keeps its click latch and leg, so the first press after the rise
+# found a click "in flight", lerped the leg -- to its END by then -- and re-pinned the body
+# there: a warp of the leg's remainder (zero only if the leg had arrived before the death).
+# The corpse is where `pos` says (kill_player froze the integrator's dest at the death,
+# and every click and follow leg walks pos through dest), the client's last report
+# predates the walk the death cut short, and the death stopped the body. So the rise
+# retires exactly what the wipe retires, through the same helper, and only when a leg
+# was outstanding; a player who died standing keeps its report. Derived from the code,
+# never exercised on a client (DEATHWALK-E2 is the run). --rise-keeps-legs reverts.
+RISE_ENDS_LEGS = True  # False (--rise-keeps-legs): the press re-pins at the stale leg's end.
 # SLICE-F43 (2026-09-14): THE DELAY IS A COUNTDOWN THE CLIENT IS TOLD. On the
 # hero tape retail sent `0x0180 INSTANCE_COUNTDOWN ["յ", 5, 0, 10000]`
 # three times, 0.58 s after the last death, and the shrine batch landed at
@@ -7676,7 +7690,10 @@ def _forget_client_position(state, why):
         press stop and the follow branch, at the reckoned body),
         `_approach_send`'s snap re-pin WHEN `_click_leg_source` says "leg"
         or "estimate", `_press_supersedes` (the click leg lerped to the
-        press) and `wipe_to_shrine`. The cast-stop pin is a fifth modelled
+        press) and `_retire_corpse_legs` -- `wipe_to_shrine`'s placement and,
+        since DEATHWALK-D3, the rise in place: the ONE caller that sends no
+        0x002C, because there the death, not a placement, ended the walk the
+        report predates, and the body it parks is a corpse. The cast-stop pin is a fifth modelled
         placement and reaches the same end by its own older route:
         `cast_stop_pin` out-ranks any report older than the pin.
       keep -- `_maybe_resync` and `_agtrack_maybe_repin` (both send
@@ -19687,6 +19704,22 @@ WINDUP_HOLDS_APPROACH = True   # False (--approach-in-windup): the tick re-appro
 # so the swing waits for the leg's eta. Identity is the send test: follow_order_at's single
 # writer (_approach_send) builds a new tuple on every send.
 FOLLOW_TICK_HOLDS_SWING = True   # False (--swing-on-follow-tick): the top-of-tick read decides.
+# DEATHWALK-D1 (MOVECODE-1z-ds.51, 2026-10-06): A FOLLOW INSIDE ITS STOP DISC IS ARRIVED, EVEN
+# ON THE TICK ITS RE-PATH FALLS DUE. approach_tick tested the 0.5 s re-path BEFORE arrival, so
+# when the raider walked in and the body crossed inside the 80 u stop on the very tick the
+# re-path was due, the re-path won: a 0x002A with run 0.0, whose leg's eta is the send instant.
+# That zero leg replaced a click latch still running (27-472 ms short), 1z-ds.36's re-read then
+# found the body NOT moving, the reach gate passed at 54-80 u, and the [4] went out 0.12-0.25 ms
+# behind the 0x002A. OBSERVED on 47 of the 49 same-tick swings on the KILLFAR, TRAILPIN and
+# LEADRETIRE tapes (all 49 armed a leg of 0.4 u or less); reproduced offline on the real
+# attack_tick. RETAIL: 0 of 458 own follows carry an own start within 25 ms, re-paths included
+# (193 of them, nearest 43.5 ms). The arrival branch now wins inside the disc on every tick, as it
+# already did on ticks with no re-path due, so the swing waits on the live leg like its 163
+# neighbours (p50 258 ms after the last 0x002A). Whether retail ever re-paths a body already
+# inside its stop disc is UNVERIFIED; the rule is a RECONSTRUCTION. Not covered: a sub-tick
+# re-path read as expired by the next pass (K3 265.698) and a zero-run NEW follow after a
+# snap re-pin (K2 91.502), one each.
+STOP_DISC_ENDS_FOLLOW = True   # False (--repath-inside-stop): a follow inside its stop re-paths onto a zero leg.
 
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
@@ -22125,7 +22158,8 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
         moved = math.hypot(float(tx) - ap["told"][0],
                            float(ty) - ap["told"][1])
         if (moved > FOLLOW_REPATH_MOVED
-                and now - ap["sent_at"] >= FOLLOW_REPATH_INTERVAL):
+                and now - ap["sent_at"] >= FOLLOW_REPATH_INTERVAL
+                and not (STOP_DISC_ENDS_FOLLOW and dist <= stop)):   # DEATHWALK-D1
             _approach_send(send, state, conn_id, target_id, agent, now,
                            repath=True, rec=rec)
             return True
@@ -22252,9 +22286,13 @@ def attack_tick(send, state, conn_id, rec=None):
     START is what the interval gates.
 
     An armed swing that loses its target -- death, removal, out of range --
-    is DROPPED, silently, which is retail's own truncation: ArenaNet's 7th
-    Lakeside swing ended 0.24 s in when the target died, with no closing
-    event. `state["player_swing"]` is owned by THIS thread: armed here,
+    is DROPPED, silently. That is OURS, not retail's, for a target's death:
+    the Lakeside swing this sentence used to cite ended when the ATTACKER
+    (the worm) died, not its target. Retail on a target's death (DEATHWALK-D2,
+    MOVECODE-1z-ds.50, OBSERVED): the hold stays up to the chain's next
+    scheduled event, then `[8, me, 0]` + `[3, me, 0]` at the due landing if the
+    swing was in flight (20 of 20), `[8, me, 0]` alone at the next due start if
+    not (34 of 34). Not yet ours. `state["player_swing"]` is owned by THIS thread: armed here,
     landed here, dropped here. The connection thread asks for a drop through
     `player_swing_cancel` and never touches the entry itself -- the same
     single-writer split `pending_casts`/`cast_tick` already prove.
@@ -22341,10 +22379,13 @@ def attack_tick(send, state, conn_id, rec=None):
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
-        # The swing itself drops silently (retail's own truncation), but
-        # the HOLD releases on the wire: the one live target-death close
-        # carries [8, 31, 0] ~0.25 s after the death messages (t=20.1637,
-        # n=1, castmech 3c).
+        # OURS releases the hold on the next tick and drops the swing with no
+        # [3]. RETAIL (DEATHWALK-D2, MOVECODE-1z-ds.50, OBSERVED) holds to the
+        # chain's next scheduled event: [8, me, 0] then [3, me, 0] at the due
+        # landing for a swing in flight (20 of 20), [8, me, 0] alone at the next
+        # due start otherwise (34 of 34). castmech 3c's one close (t=20.1637,
+        # "~0.25 s after the death") is the second cell, one phase draw of a
+        # 0.02-0.79 s spread -- not a rule that the swing drops silently.
         action_hold(send, state, 0, f"target {target_id} is gone")
         if _moving_now:
             _chain_pause_note(state, "target-gone")
@@ -28726,7 +28767,8 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # test_position_trust for a reason): the four grant ticks in handle()
     # and the two movement arms are gated on player_dead, so a stale latch
     # can grant nothing until revive_player clears the flag and the next
-    # report re-stamps it. No send: the KILL status is what the client acts
+    # report re-stamps it (or the rise itself retires a cut-short walk's latch
+    # and leg: RISE_ENDS_LEGS, SHRINEWARP 1z-dp.5). No send: the KILL status is what the client acts
     # on, and a grant to a corpse is the defect -- except the one grant
     # that ENDS a lead (SLICE-F26, above): the kill's zero-lead 0x0029 at
     # the body, which is the opposite of a walk.
@@ -33003,6 +33045,22 @@ def shrine_point(state):
     return (float(px), float(py), int(state.get("plane", 0) or 0))
 
 
+def _retire_corpse_legs(state, why):
+    """A death ended the walk: retire the records the body left behind.
+
+    The click latch and its leg go, and the last report with them
+    (`_forget_client_position`), so no consumer lerps a leg the corpse stopped
+    walking or reads a report taken before it. Two callers, one per way up:
+    `wipe_to_shrine` (the shrine placement) and `revive_player` (the rise in
+    place, RISE_ENDS_LEGS). The helper's park marker is right for both: the
+    placement's 0x002C zeroes the client's velocity, and so does the death the
+    rise follows, so the next moving report is a walk-start either way. For the
+    rise that is a RECONSTRUCTION (a corpse sends no report to show it)."""
+    state["click_moving_at"] = None
+    state["click_leg"] = None
+    _forget_client_position(state, why)
+
+
 def wipe_to_shrine(send, state, conn_id):
     """The party wipe, retail's 340.21 s frame: facing and position set for
     the player (0x0025, 0x002C), every party body DELETED and RE-CREATED at
@@ -33031,9 +33089,7 @@ def wipe_to_shrine(send, state, conn_id):
         # placement drops it; `_click_leg_start` then answers from the placement
         # (the shrine) until the client speaks again. The follow needs nothing
         # here: kill_player abandoned it at the death every wipe follows.
-        state["click_moving_at"] = None
-        state["click_leg"] = None
-        _forget_client_position(state, "the wipe placed the player at the shrine")
+        _retire_corpse_legs(state, "the wipe placed the player at the shrine")
     for i, (aid, row) in enumerate(party_bodies(state)):
         entry = remove_agent(send, state, aid,
                              "the party wiped: re-created at the shrine", conn_id)
@@ -33054,7 +33110,7 @@ def wipe_to_shrine(send, state, conn_id):
     for _aid, _row in list(state.get("agents", {}).items()):
         if isinstance(_row, dict):
             _row["facing_told"] = None        # the player moved: revive_player's own note
-    revive_player(send, state, conn_id, why=" (the shrine)")
+    revive_player(send, state, conn_id, why=" (the shrine)", in_place=False)
     print(f"[c{conn_id}] THE PARTY WIPED: everyone stands at the shrine "
           f"({sx:.0f},{sy:.0f}) [JARIN]", flush=True)
 
@@ -38985,7 +39041,7 @@ def player_revive_due(send, state, conn_id):
 
 
 def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
-                  energy_frac=1.0):
+                  energy_frac=1.0, in_place=True):
     """Stand the player up -- player_revive_due's body since SLICE-H3, so a
     party member's resurrection (Resurrection Signet, 100% health) can call
     it too. The energy fraction is not modelled: restore_player_energy fills
@@ -39008,6 +39064,13 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
     heal = _fraction(health_frac, agents.GV_HEALTH_GAIN, "the rise's heal")
     state["player_dead"] = False
     state["corpse_reports"] = 0
+    # SHRINEWARP 1z-dp.4 (RISE_ENDS_LEGS): a player killed mid-walk stands up where it
+    # fell, not at the leg's end, so the walk the latch describes is over. The wipe
+    # is NOT a rise in place (in_place=False): its own placement retires them under
+    # its own switch, so each revert arm reproduces its defect alone.
+    if RISE_ENDS_LEGS and in_place and (state.get("click_moving_at") is not None
+                           or state.get("click_leg") is not None):
+        _retire_corpse_legs(state, f"the rise in place{why}: the death ended the walk")
     # THE GRACE WINDOW STARTS HERE, not at the refill: a player who is put back
     # on their feet and killed again before they can act has not had a turn,
     # and the deferred-refill experiment must not be able to move a game rule.
@@ -47864,6 +47927,12 @@ def main():
         FOLLOW_TICK_HOLDS_SWING = False
         print("[map] --swing-on-follow-tick: a swing may open in the tick its own follow "
               "is sent (every build before MOVECODE-1z-ds.36)", flush=True)
+    if a.repath_inside_stop:
+        global STOP_DISC_ENDS_FOLLOW
+        STOP_DISC_ENDS_FOLLOW = False
+        print("[map] --repath-inside-stop: a due re-path wins over arrival inside the stop "
+              "disc, so a zero leg can open the swing in its own tick (every build before "
+              "DEATHWALK-D1)", flush=True)
     if a.approach_in_windup:
         global WINDUP_HOLDS_APPROACH
         WINDUP_HOLDS_APPROACH = False
@@ -47969,6 +48038,12 @@ def main():
         print("[map] --wipe-keeps-legs: the shrine placement leaves the click leg and the "
               "last report standing -- the next attack press re-pins the body where it "
               "died [SHRINEWARP revert]", flush=True)
+    if a.rise_keeps_legs:
+        global RISE_ENDS_LEGS
+        RISE_ENDS_LEGS = False
+        print("[map] --rise-keeps-legs: a rise in place leaves the click leg and the last "
+              "report standing -- the next attack press re-pins the body at the leg's end "
+              "[SHRINEWARP 1z-dp.4 revert]", flush=True)
     if a.hit_finish_last:
         global HIT_FINISH_FIRST
         HIT_FINISH_FIRST = False
