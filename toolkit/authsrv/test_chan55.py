@@ -58,12 +58,13 @@ HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE_CORPUS = os.path.isdir(vaultpath.vault_path("captures", "live"))
 HAVE_CLIENT = os.path.isdir(vaultpath.vault_path("client"))
 # THE FLOOR IS PER MACHINE, decided on DIRECTORIES and never on what loaded. Each number is
-# a green run's count, MEASURED 2026-10-07 in the desk-chan55 tree: 25 with RURIK_VAULT at an
-# empty directory and at a nonexistent path alike (sections 1-7; 8a-8c declared skips); 30 on
-# the owner's vault -- 8a's 1 (vault/content), 8b's 3 (vault/captures/live), 8c's 1
-# (vault/client), each section's own count on that run.
-FLOOR_BARE = 25
-FLOOR_8A, FLOOR_8B, FLOOR_8C = 1, 3, 1
+# a green run's count, MEASURED 2026-10-07 in the desk-chan55 tree: 36 with RURIK_VAULT at an
+# empty directory and at a nonexistent path alike (sections 1-7, 9, 10; 8a-8c and 11
+# declared skips); 44 on the owner's vault -- 8a's 1 (vault/content), 8b's 3 + 11's 3
+# (vault/captures/live), 8c's 1 (vault/client), each section's own count on that run.
+# (Commit 1 of the lane, the channel alone: 25 bare, 30 vault.)
+FLOOR_BARE = 36
+FLOOR_8A, FLOOR_8B, FLOOR_8C = 1, 6, 1
 LEDGER = checks.Ledger("armour-ignoring damage rides property 55", floor=(
     FLOOR_BARE + FLOOR_8A * HAVE_VAULT_CONTENT + FLOOR_8B * HAVE_LIVE_CORPUS
     + FLOOR_8C * HAVE_CLIENT))
@@ -663,6 +664,214 @@ def section_client_labels():
           "8c. CENSUS_LABELS is the client's own parse, skill for skill (type and label set); "
           "2809 is outside the player corpus (a PvP split, read through 219)", diff)
 
+def section_steal_server():
+    print("\n9. LIFE STEAL on the server (SKILLS-CH3): Vampiric Gaze 153 both directions")
+    steal = getattr(authsrv, "skill_steal", lambda *_a: "absent")
+    amt = (steal(STEAL, 0), steal(STEAL, 10))
+    with flags(LIFE_STEAL=False):
+        off = steal(STEAL, 10)
+    check(amt == (18, 46) and off is None and authsrv.skill_damage(STEAL, 0) is None
+          and authsrv.skill_heal(STEAL, 0) is None and prop_of(STEAL) == P55,
+          "9a. the row reads as a STEAL, not as damage or a heal: 18 at rank 0 and 46 at rank "
+          "10 -- the tape's two amounts through our own interpolator (the ranks are "
+          "RECONSTRUCTION) -- None under --no-life-steal, and its word's property is 55",
+          (amt, off, prop_of(STEAL)))
+    # (b) the player's OWN steal on a hurt foe whose maximum the client has not been told
+    st = {"agents": {FOE: body("foe", HOSTILE, (60.0, 0.0), health=300.0, max_health=480.0,
+                               max_declared_on_hit=None)},
+          "pos": (0.0, 0.0)}
+    authsrv.player_pools(st)
+    pool = authsrv.player_max_health(st)
+    st["player_health"] = pool - 50.0
+    sent = player_cast(STEAL, st)
+    e5 = next((i for i, (op, v) in enumerate(sent) if op == authsrv.GAME_SMSG_SKILL_RECHARGE
+               and v[1] == STEAL), None)
+    shape = [(op, v[0], v[1], v[2]) for op, v in sent[(e5 or 0):]
+             if (op == FLOAT_T and v[0] in (P55, P16, P17)) or (op == INT and v[0] in (P42, P10))]
+    want = [(INT, P42, PLAYER, int(pool)), (FLOAT_T, P55, PLAYER, PLAYER),
+            (INT, P42, FOE, 480), (FLOAT_T, P55, FOE, PLAYER)]
+    hl, wd = heals(sent), words(sent, P55, P16, P17)
+    check(e5 is not None and shape == want and hl == [(PLAYER, PLAYER, f32r(18.0 / pool))]
+          and wd == [(P55, FOE, PLAYER, f32r(-18.0 / 480.0))]
+          and not any(op == GAIN for op, _v in sent)
+          and st["player_health"] == pool - 32.0 and st["agents"][FOE]["health"] == 282.0,
+          "9b. the player's OWN 153 through handle_skill_press + cast_tick, behind its E5: "
+          "[42, me, max] (declared: never told), the heal [55, me, me, +18/max], the foe's "
+          "first-word [42, foe, 480], the word [55, foe, me, -18/480] -- retail's own-cast "
+          "batch (:58544 593.854) -- no [10], no 16 / 17, no gain; the player +18, the foe -18",
+          (e5, shape, hl, wd, st["player_health"], st["agents"][FOE]["health"]))
+    # (c) Deep Wound does not cut a steal's heal (WIKI, GWW "Deep Wound" rev. 2026-03-02)
+    st = {"agents": {FOE: body("foe", HOSTILE, (60.0, 0.0), health=300.0, max_health=480.0)},
+          "pos": (0.0, 0.0), "deep_wound": {PLAYER: 20.0}}
+    authsrv.player_pools(st)
+    pool = authsrv.player_max_health(st)
+    st["player_health"] = pool - 50.0
+    sent = player_cast(STEAL, st)
+    check(heals(sent) == [(PLAYER, PLAYER, f32r(18.0 / pool))]
+          and st["player_health"] == pool - 32.0,
+          "9c. under a Deep Wound the steal's heal is NOT cut: +18 lands whole (healing=False; "
+          "a heal would be cut to 14)", (heals(sent), pool, st["player_health"]))
+    # (d) a hostile's 153 at the PLAYER through the real land_skill: retail's 143 tail
+    st, sent = body_cast(STEAL)
+    pool = authsrv.player_max_health(st)
+    i_w = next((i for i, (op, v) in enumerate(sent) if op == FLOAT_T and v[0] == P55
+                and v[1] == PLAYER), None)
+    four = sent[i_w - 3:i_w + 1] if i_w is not None and i_w >= 3 else []
+    ok_shape = (len(four) == 4 and four[0][0] == GAIN and four[0][1][0] == PLAYER
+                and four[1][0] == FLOAT_T and four[1][1][:3] == [P55, HATCHER, HATCHER]
+                and not (four[1][1][3] & 0x80000000)
+                and four[2] == (INT, [P10, PLAYER, STEAL])
+                and four[3][1][:3] == [P55, PLAYER, HATCHER] and bool(four[3][1][3] & 0x80000000))
+    check(ok_shape and heals(sent) == [(HATCHER, HATCHER, f32r(18.0 / 100.0))]
+          and words(sent, P55, P16, P17) == [(P55, PLAYER, HATCHER, f32r(-18.0 / pool))]
+          and st["player_health"] == pool - 18.0,
+          "9d. a hostile's 153 at the PLAYER through land_skill ends in retail's 143 tail, "
+          "message for message: 0x00CF [me, n], the caster's [55, hatcher, hatcher, +18/100], "
+          "[10, me, 153], [55, me, hatcher, -18/max] (20260916T213125 :57894, 3 of 3); one "
+          "word, the player -18", [(hex(op), v) for op, v in four])
+    # (e) a hostile's steal on a party body
+    st, sent = body_cast(STEAL, cast_target=MONK, monk_health=50.0)
+    hi = next((i for i, (op, v) in enumerate(sent) if op == FLOAT_T and v[0] == P55
+               and not (v[3] & 0x80000000)), None)
+    wi = next((i for i, (op, v) in enumerate(sent) if op == FLOAT_T and v[0] == P55
+               and (v[3] & 0x80000000)), None)
+    check(heals(sent) == [(HATCHER, HATCHER, f32r(0.18))]
+          and words(sent, P55, P16, P17) == [(P55, MONK, HATCHER, f32r(-0.18))]
+          and None not in (hi, wi) and hi < wi
+          and not any(op == INT and v[0] == P10 for op, v in sent)
+          and st["agents"][MONK]["health"] == 32.0,
+          "9e. a hostile's 153 on a PARTY body: the caster's heal, then [55, monk, hatcher, "
+          "-0.18], no [10]; the monk 50 -> 32 (RECONSTRUCTION: no body-on-body steal is "
+          "ordered on tape; the own steal's heal-first order is used)",
+          (heals(sent), words(sent, P55, P16), hi, wi, st["agents"][MONK]["health"]))
+    # (f) a party body's lethal steal on a hostile: the kill pays
+    st, sent = body_cast(STEAL, caster_allegiance=ALLY, cast_target=FOE, foe_health=10.0,
+                         monk_health=50.0)
+    check(heals(sent) == [(MONK, MONK, f32r(0.18))]
+          and words(sent, P55, P16, P17) == [(P55, FOE, MONK, f32r(-0.18))]
+          and st["agents"][FOE]["dead"] and KILL_REWARD in [op for op, _v in sent]
+          and st["agents"][MONK]["health"] == 68.0,
+          "9f. a PARTY body's 153 on a hostile at 10: the monk heals 18 (50 -> 68), the word "
+          "carries the raw 18, the hostile dies and the kill pays the reward",
+          (heals(sent), words(sent, P55, P16), st["agents"][FOE]["dead"],
+           st["agents"][MONK]["health"]))
+    # (g) a lethal hostile steal at the player
+    calls = []
+    real = authsrv.kill_player
+
+    def counting(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+    authsrv.kill_player = counting
+    try:
+        st, sent = body_cast(STEAL, player_health=5.0)
+    finally:
+        authsrv.kill_player = real
+    deaths = [v for op, v in sent if op == STATUS and v[0] == PLAYER and v[1] & agents.EFFECT_DEAD]
+    check(len(words(sent, P55)) == 1 and len(heals(sent)) == 1 and len(calls) == 1
+          and len(deaths) == 1 and st["player_dead"],
+          "9g. a LETHAL steal at the player: one heal to the caster, one word, one kill, one "
+          "death word", (words(sent, P55), heals(sent), len(calls), deaths))
+    # (h) the known-bad arm: --no-life-steal -- the energy for nothing, both directions
+    with flags(LIFE_STEAL=False):
+        st = {"agents": {FOE: body("foe", HOSTILE, (60.0, 0.0), health=300.0,
+                                   max_health=480.0)}, "pos": (0.0, 0.0)}
+        authsrv.player_pools(st)
+        own = player_cast(STEAL, st)
+        _, hostile = body_cast(STEAL)
+    check(heals(own) == [] and words(own, P55, P16, P17) == [] and heals(hostile) == []
+          and words(hostile, P55, P16, P17) == [] and st["agents"][FOE]["health"] == 300.0,
+          "9h. --no-life-steal: the own 153 and a hostile's resolve to NOTHING -- no heal, no "
+          "word (every session before 2026-10-07; retail moves the amount 13 of 13 and 3 of 3)",
+          (heals(own), words(own, P55), heals(hostile), words(hostile, P55)))
+
+
+def section_steal_source():
+    print("\n10. --no-life-steal: the flag, main()'s wiring, the row")
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            parsed = (ap.parse_args([]).no_life_steal,
+                      ap.parse_args(["--no-life-steal"]).no_life_steal)
+    except (SystemExit, AttributeError) as exc:
+        parsed = ("refused", repr(exc))
+    check(parsed == (False, True) and getattr(authsrv, "LIFE_STEAL", "absent") is True,
+          "10a. --no-life-steal parses (default off) and the steal ships ON", parsed)
+    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    wiring = [n for n in ast.walk(funcs["main"]) if isinstance(n, ast.If)
+              and isinstance(n.test, ast.Attribute) and n.test.attr == "no_life_steal"]
+    flipped = {}
+    for flag in (True, False):
+        saved = getattr(authsrv, "LIFE_STEAL", _MISSING)
+        try:
+            mod = ast.Module(body=wiring, type_ignores=[])
+            ast.fix_missing_locations(mod)
+            with contextlib.redirect_stdout(io.StringIO()):
+                exec(compile(mod, authsrv.__file__, "exec"),            # noqa: S102
+                     authsrv.__dict__, {"a": argparse.Namespace(no_life_steal=flag)})
+            flipped[flag] = getattr(authsrv, "LIFE_STEAL", "absent")
+        finally:
+            if saved is _MISSING:
+                authsrv.__dict__.pop("LIFE_STEAL", None)
+            else:
+                authsrv.LIFE_STEAL = saved
+    check(len(wiring) == 1 and flipped == {True: False, False: True},
+          "10b. main()'s `if a.no_life_steal:` block, lifted and RUN, flips the module bool",
+          (len(wiring), flipped))
+    row = agents.content.load(vault_dir="", extra_dirs=[]).rows("skill_effect").get("153") or {}
+    prov = getattr(row, "provenance", None) or {}
+    check(row.get("scale_means") == "Life stealing" and prov.get("source") == "capture"
+          and prov.get("origin") == "live" and prov.get("capture") == "20260929T100038",
+          "10c. content/world.toml (tracked, a bare load) carries skill_effect.153 as a "
+          "capture row (live, 20260929T100038) labelled \"Life stealing\"",
+          (dict(row), {k: prov.get(k) for k in ("source", "origin", "capture")}))
+
+
+def section_steal_corpus():
+    print("\n11. the live corpus: stealjoin.py, both directions")
+    if not HAVE_LIVE_CORPUS:
+        LEDGER.skip("11. the steal corpus", "no vault/captures/live directory")
+        return
+    import collections
+    import stealjoin
+    got = stealjoin.census()
+    own, hostile = got["own"], got["hostile"]
+    amounts = collections.Counter(round(r["heal_pts"]) for r in own if r["heal_pts"] is not None)
+    by_cap = collections.Counter(r["capture"] for r in own)
+    check(collections.Counter(r["skill"] for r in own) == {STEAL: 13}
+          and got["completions"][STEAL] == 13
+          and all(r["named"] == [] and r["damage_16"] == [] for r in own)
+          and all(r["heal_pts"] is not None and r["heal_pts"] == r["dmg_pts"] for r in own)
+          and amounts == {18: 2, 46: 11}
+          and by_cap == {"20260807T143055": 2, "20260928T103123": 5, "20260929T100038": 6}
+          and len({r["connection"] for r in own}) == 7
+          and all(set(r["between"]) <= {(0x009F, P42)} for r in own)
+          and got["set_aside"] == [("20260928T103123", "10.0.0.210:65009->98.95.137.136:80")],
+          "11a. OWN: every one of the observer's 13 Vampiric Gaze completions (7 connections, "
+          "3 captures) carries the heal [55, me, me, +h] and then the word [55, foe, me, -d] "
+          "with nothing but the foe's [42] between; |h| == |d| in points 13 of 13 (18 x 2, 46 "
+          "x 11); no [10], no 16 / 17 -- and no 153 completion lacks the pair",
+          (dict(amounts), dict(by_cap), got["completions"][STEAL]))
+    check(got["word_first"] == [] and all(r["heal_frac"] > 0 > r["dmg_frac"] for r in own),
+          "11b. known-bad reader: wanting the WORD first and the heal after it finds 0 of the "
+          "13 -- the order is the tape's, not the search's", len(got["word_first"]))
+    steals = [r for r in hostile if r["steal"]]
+    check(collections.Counter(r["skill"] for r in steals) == {143: 3}
+          and all(r["order"] == (r["order"][2] - 2, r["order"][2] - 1, r["order"][2],
+                                 r["order"][2] + 1) for r in steals)
+          and all(abs(r["heal_frac"] + r["dmg_frac"]) < 1e-6 for r in steals)
+          and len(hostile) == 94,
+          "11c. HOSTILE: of the 94 named 55 words at the observer, the steal-shaped ones are "
+          "143 x 3, each the four consecutive messages gain, the caster's heal, [10], the word, "
+          "heal fraction == word fraction (41 of 480; the caster's maximum is not on the wire)",
+          [(r["skill"], r["order"], r["heal_frac"], r["dmg_frac"]) for r in steals])
+
 
 def guarded(section):
     """Run one section; an exception is a FAIL naming it (a server without the change
@@ -678,10 +887,11 @@ def main():
     t0 = time.time()
     with carried():
         for section in (section_helper, section_hostile_at_player, section_known_bad,
-                        section_controls, section_lethal, section_bodies_and_own):
+                        section_controls, section_lethal, section_bodies_and_own,
+                        section_steal_server):
             guarded(section)
     for section in (section_source, section_vault_rows, section_corpus,
-                    section_client_labels):
+                    section_client_labels, section_steal_source, section_steal_corpus):
         guarded(section)
     print(f"\n({time.time() - t0:.1f} s)")
     return LEDGER.verdict()

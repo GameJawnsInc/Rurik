@@ -3251,6 +3251,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "102 133 143 251 272 302 2809 (94 words) and 16 / 17 for 20 "
                          "others; by default an armour-ignoring, non-attack skill's word "
                          "rides 0x00A3 [55, target, source, -fraction].")
+    ap.add_argument("--no-life-steal", action="store_true",
+                    help="CHAN55 REVERT (studies/skills 68.3): a life-steal row "
+                         "(Vampiric Gaze 153, scale_means \"Life stealing\") resolves to "
+                         "NOTHING -- the energy is spent and no word goes out, every "
+                         "session before 2026-10-07. WRONG on retail's evidence: the "
+                         "observer's own 153 moves one amount 13 of 13 ([55, me, me, +h] "
+                         "then [55, foe, me, -d], |h| == |d|) and a hostile's 143 at the "
+                         "observer 3 of 3 (the gain, the caster's heal, [10], the word).")
     ap.add_argument("--no-interrupt-chain-hold", action="store_true",
                     help="CASTAI-ZF17 REVERT: a cast interrupted under an auto-attack "
                          "chain that resumes sends no [8, player, 1] after the [35], and "

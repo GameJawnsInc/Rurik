@@ -10038,3 +10038,106 @@ map-168 corridor Monks' bar, and a party Monk's); on a vault machine the label t
 call sites: OBSERVED for a hostile's armour-ignoring spell at the observer and body-to-body;
 RECONSTRUCTION for the player's own holy cast and a hero's (no tape holds either; the corpus's
 own-cast witness of the channel is the steal, §68.3).
+
+### 68.3 SKILLS-CH3 — life steal: one amount moved, the heal AHEAD of the word in both directions (OBSERVED), and the server's three doors
+
+**Read off the wire first** (`toolkit/authsrv/stealjoin.py`, new; re-run 2026-10-07 over the
+whole corpus, :65009 set aside by its manifest). **OBSERVED:**
+
+- **The observer's OWN Vampiric Gaze (153), 13 of 13 completions** on 7 connections of 3
+  captures (20260807T143055 ×2, 20260928T103123 ×5, 20260929T100038 ×6). Every E5 batch:
+  `0x00E5 [me, 153, 0]`, `[58, me, 0]`, `[20, foe, me, 276]` (the visual), then
+  **`[55, me, me, +h]` immediately followed by `[55, foe, me, −d]`** — the only thing ever
+  between the two is the foe's `[42, foe, max]` (2 of 13: :58544 593.854, :51090 437.052),
+  i.e. MAXHP-1's first-word declaration — then `[8, me, 0]` `[8, me, 1]`. **No `[10]`, no
+  16 / 17, no gain.** `|h| == |d|` in points 13 of 13, each fraction times its own agent's
+  last property-42 maximum: **18 ×2, 46 ×11**. 18 is 153's scale0 exactly (rank 0, the
+  Necromancer session); 46 is interp(18, 60, 10 / 15) exactly (the rank is RECONSTRUCTION;
+  the table agreement CORROBORATED). A `[42, me, max]` rides ahead of the heal on 4 of 13
+  (238.151, 593.854, 437.052, 129.665) — whether each was a moved maximum is not re-derived.
+  The **known-bad reader** (the word first, the heal after it) finds **0** of the 13: the
+  order is the tape's, not the search's.
+- **A hostile's steal at the observer: 143, 3 of 3** (20260916T213125 :57894, caster 104, at
+  391.979, 445.361, 477.850): **`0x00CF [25, 9]`, `[55, 104, 104, +0.08542]`, `[10, 25, 143]`,
+  `[55, 25, 104, −0.08542]`, four consecutive messages** (41 of 480; heal fraction == word
+  fraction, the caster's maximum is not on the wire, so the absolute equality there is
+  RECONSTRUCTION). Of the 94 named 55 words at the observer only these three carry the
+  caster's heal: 102 ×1 (shadow plus a CONDITIONAL steal) has none in its batch, and 133 ×1
+  carries the caster's 10 % self-sacrifice `[55, 4, 4, −0.1]` ahead of the gain instead.
+
+**The server** (`LIFE_STEAL` / `--no-life-steal`; RECONSTRUCTION wherever no tape orders it):
+
+- **The row.** `content/world.toml` `skill_effect.153`, a **capture** row (20260929T100038,
+  live) with the client table and the 13-of-13 witness in `verified`: `scale_means = "Life
+  stealing"` — **OUR label** for the template's `LIFE_STEAL` slot (`skilldesc.HAND_FAMILY`
+  maps it, so the referee reads the hand row AGREE). GWW's own progression name for Vampiric
+  Gaze is **UNVERIFIED** (the page is owed; no browser this pass). `skill_steal(sid, rank)`
+  reads it — the scale as stated, no taker modifier — and `spell_damage_prop` puts a steal row
+  on 55.
+- **The player's own cast** — `cast_tick`, an arm beside the standalone one →
+  `player_life_steal`: `hit_enemy(exact=…, spell_skill=153)` with the heal in its
+  `before_damage` slot, so the batch is retail's: E5 …, `[42, me]` when it moved
+  (`declare_player_max`), the heal `[55, me, me, +h]`, the foe's first-word `[42]`, the word
+  `[55, foe, me, −d]`. No `[10]`, no gain.
+- **A body's cast** (hostile or party, at the player or a body) — `land_skill`, after
+  `resolve_heal`, its amount and fraction computed before the 58 (the refusal contract) →
+  `body_life_steal` → `armour_ignoring_damage(…, before_word=heal)`. The new hook seats the
+  caster's heal **after the gain and ahead of `[10]`** at the player — 143's four messages,
+  message for message — and ahead of the body's maximum and word at a body
+  (RECONSTRUCTION: no body-on-body steal is ordered on tape; the own cast's heal-first order
+  is used). **`body_spell_word` is not a steal door**: a steal row has no projectile, area or
+  burst, and `land_skill`'s steal arm returns before every branch that reaches it.
+- **The heal is `heal_agent(caster, caster, the same whole amount, healing=False)`** — WIKI
+  (GWW "Deep Wound", rev. 2026-03-02, heal_agent's own citation): the reduction "does not
+  affect life stealing". Overheal is sent as for every heal (SKILLS-HN).
+
+**Recorded, NOT shipped** (the brief's rule: no witness, no row):
+
+| skill | shape | why not |
+|---|---|---|
+| 156, 1077 | type 10 (touch), target 5, one LIFE_STEAL slot, 29..74 | UNWITNESSED — the same wire is predicted, no tape casts either |
+| 152 | type 5, target byte 14 (an animated undead), LIFE_STEAL 100..400 | UNWITNESSED, and its target byte is not a foe |
+| 1075 | type 5, target 5, one LIFE_STEAL slot, 15..60 | not plain: a 312 radius and a duration bit |
+| the other 28 LIFE_STEAL rows | area, conditional, hex, multi-slot | RECOGNISED, not SERVED (`skilldesc.CONSUMERS`) |
+
+### 68.4 What stays open, and what would refute this section
+
+- **The cap.** All 13 own steals stole the full amount from foes whose health is unknown. A
+  steal larger than what the target has left: does the word carry the raw amount (retail's
+  damage words do, `_damage_fraction`'s census) and does the heal carry it too? UNVERIFIED;
+  ours sends the full amount both ways. A runsheet item, and the "Life stealing" page is owed.
+- **Taker modifiers** (Frenzy's double, a conversion) are not applied to a steal —
+  RECONSTRUCTION; the same owed page would say.
+- **A body victim's adrenaline.** `armour_ignoring_damage`'s body branch charges a hero
+  nothing (Empathy's existing gap, shared); `hurt_agent_row`'s JARIN charge is not reached.
+- **The client draw.** Our client's drawing of a negative 55 at the player from a holy
+  spell, and of the steal pair, is unverified on loopback — the runsheet below.
+- **The label tier's breadth lever**: the triage counted about 39 plain spell / touch / hex
+  skills in the armour-ignoring families (holy, shadow, untyped, steal) RECOGNISED, not SERVED
+  (its count, not re-derived here); the helper now exists for the L lane that serves them.
+
+**Refuted if:** a retail armour-ignoring non-attack skill's word named on 16 / 17, or an
+armour-respecting one on 55; an attack skill's untyped damage on 55; an own steal whose heal
+follows its word, or whose two amounts differ; a hostile steal whose heal follows the `[10]`.
+
+### 68.5 The runsheet (owed to the owner, after landing — loopback, our client, the fixture Hatcher)
+
+RUNBOOK's three-terminal loop; the game server line is the only one that changes. Every arm is
+one server start; the captures go to the vault as usual.
+
+1. **A — Holy Strike at the player, default.** `python toolkit/authsrv/authsrv.py --explorable
+   --enemy-skills 312` (the Hatcher casts only Holy Strike). Stand in its reach and let it cast.
+   EXPECT on the wire per cast: `0x00CF`, `[10, me, 312]`, `0x00A3 [55, me, 10, −10/max]` and
+   no 16 (the log line `skill 312 deals 10 to the player (armour-ignoring, CHAN55)`); on screen
+   a damage number and the bar down 10. Watch how the client draws the number (colour, size)
+   against a swing's.
+2. **B — the same under `--no-armour-ignoring-on-55`.** EXPECT `[16, me, 10, −10/max]`.
+   Compare the two draws: same number, same bar, any visible difference is the finding.
+3. **A — Vampiric Gaze on the Hatcher.** `python toolkit/authsrv/authsrv.py --explorable
+   --practice-target --skills 153`. Hit the Hatcher once or twice first, then cast 153 at it.
+   EXPECT a blue `+18` over the player (rank 0) and the Hatcher's bar down 18 in the same
+   instant; the log's `skill 153 steals`. Repeat with the player hurt (the bar rises 18), at the
+   Hatcher's full health, and once at a few HP left (the overkill — write down what the number
+   shows; ours sends the full 18 both ways, UNVERIFIED).
+4. **B — the same under `--no-life-steal`.** EXPECT the energy spent and nothing drawn, no bar
+   moving.

@@ -4472,6 +4472,20 @@ ARMOUR_RESPECTING_MEANS = frozenset({"Fire damage", "Cold damage",
 # `Maximum heal` on Reversal of Fortune.
 SCALE_MEANS_HEAL = {"Heal", "Maximum heal", "Healing"}
 
+# LIFE STEAL (CHAN55, studies/skills 68.3, SKILLS-CH3): the label of a row whose scale is
+# health STOLEN -- the target loses it on the armour-ignoring channel (55, negative) and
+# the caster gains the same amount (55, positive, to itself). OUR label for the client
+# template's LIFE_STEAL slot (skilldesc.py); GWW's own progression name for it is
+# UNVERIFIED (the "Vampiric Gaze" page is owed, no browser this pass). OBSERVED both
+# directions: the observer's own Vampiric Gaze 153, 13 of 13 completions on 7 connections
+# -- [55, me, me, +h] then [55, foe, me, -d], |h| == |d| (18 x 2, 46 x 11), no [10], no
+# 16 / 17 (stealjoin.py); a hostile's 143 at the observer, 3 of 3 -- the gain, the
+# caster's [55, c, c, +h], [10, me, 143], [55, me, c, -d] (studies/skills 53.5).
+# LIFE_STEAL off (--no-life-steal) is the known-bad arm: a steal row resolves to nothing
+# at all, the energy spent for no effect -- every session before 2026-10-07.
+SCALE_MEANS_STEAL = {"Life stealing"}
+LIFE_STEAL = True
+
 # THE LABEL TIER (SKILLS-LT, 2026-09-23, studies/skills 55; DESKWORK-D4 step 4).
 # vault/content/skill_labels.toml carries `tier = "label"` skill_effect rows
 # that toolkit/clientscan/skilldesc.py --emit-labels generates from the
@@ -4546,8 +4560,8 @@ def _is_attack_skill(skill_id):
 # "armour-ignoring damage on a non-attack" -- WIKI's own split (ARMOUR_RESPECTING_MEANS'
 # banner) -- and NOT "holy": a holy key fails on 4 of the 7 (102, 133, 143, 2809).
 # Keyed on the LOADED ROW, never on a label string's words: a standalone damage label
-# outside ARMOUR_RESPECTING_MEANS ("Holy damage", "Armor-ignoring damage") on a skill
-# whose type is not ATTACK_TYPE_CODE. RECONSTRUCTION for the player's own holy cast and
+# outside ARMOUR_RESPECTING_MEANS ("Holy damage", "Armor-ignoring damage"), or a
+# SCALE_MEANS_STEAL row, on a skill whose type is not ATTACK_TYPE_CODE. RECONSTRUCTION for the player's own holy cast and
 # a hero's (no tape holds either); the corpus's own-cast witness of the channel is the
 # steal 153, 13 of 13 on 55 (studies/skills 68). An unknown type (no skills row) keeps
 # 16: the rule cannot say "not an attack" without it. AN AREA'S TICKS TAKE THE SAME RULE
@@ -4571,8 +4585,9 @@ def spell_damage_prop(skill_id):
     if not ARMOUR_IGNORING_ON_55 or not skill_id:
         return agents.PROP_DAMAGE
     means = skill_effect_row(skill_id).get("scale_means")
-    ignoring = (SCALE_MEANS_DAMAGE.get(means) == "standalone"
-                and means not in ARMOUR_RESPECTING_MEANS)
+    ignoring = means in SCALE_MEANS_STEAL or (                 # a steal: 13 of 13 on 55
+        SCALE_MEANS_DAMAGE.get(means) == "standalone"
+        and means not in ARMOUR_RESPECTING_MEANS)
     if not ignoring:
         return agents.PROP_DAMAGE
     try:
@@ -5461,6 +5476,27 @@ def skill_heal(skill_id, rank):
         return None
     # The vault-boundary guard `skill_damage` carries, for the same reason and
     # with the same narrow catch -- this is the arm `land_skill` reaches.
+    try:
+        return skill_scale_value(skill_id, rank)
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return None
+
+
+def skill_steal(skill_id, rank):
+    """How much health this skill STEALS at `rank` (CHAN55, SCALE_MEANS_STEAL's
+    banner), or None -- not a steal row, not resolved at the cast, no skills
+    row (skill_damage's vault-boundary guard), or --no-life-steal. The amount
+    is the scale as stated: the corpus's 13 own steals are the scale exactly
+    (18 = 153's scale0 at rank 0; 46 = interp(18, 60, 10 / 15)), and no taker
+    modifier is applied to it -- RECONSTRUCTION, the wiki's "Life stealing"
+    page (owed) is what would say whether Frenzy or a conversion touches it."""
+    if not LIFE_STEAL:
+        return None
+    if skill_effect_row(skill_id).get("scale_means") not in SCALE_MEANS_STEAL:
+        return None
+    if not _resolves_at_cast(skill_id):
+        return None
     try:
         return skill_scale_value(skill_id, rank)
     except agents.content.ContentError:
@@ -27462,6 +27498,7 @@ def cast_tick(send, state, conn_id):
             # does nothing to the target at all.
             _label_tier_note(cast["skill_id"], conn_id, "the player's")   # SKILLS-LT
             found = skill_damage(cast["skill_id"], rank)
+            _steal = skill_steal(cast["skill_id"], rank)             # CHAN55 (None: no steal)
             # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX's radius and
             # its on-cast hit (Deep Freeze, Ice Spikes: `hits_on_cast`), read
             # here beside `found` (None for every hex) and landed in the arm
@@ -27778,6 +27815,12 @@ def cast_tick(send, state, conn_id):
                         # burst arms' order (RECONSTRUCTION for a damage row)
                         nonattack_knock_down(send, state, cast["skill_id"], target,
                                              conn_id, "the player's")
+            elif target and _steal is not None and not _na_fail \
+                    and not target_dead(state, target):
+                # CHAN55 (studies/skills 68.3): the player's own LIFE STEAL -- the
+                # heal to the player, then the foe's word on 55, in the E5's batch
+                # (13 of 13 own Vampiric Gazes). A dead target steals nothing.
+                player_life_steal(send, state, conn_id, cast["skill_id"], target, _steal)
             elif target and _ahex_hit is not None and not _na_fail \
                     and not target_dead(state, target):
                 # studies/weapons 43: an AREA HEX that hits on cast bursts its
@@ -28218,9 +28261,16 @@ def aura_off(send, state, agent_id, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max=None, skill_id=None):
+                           declare_max=None, skill_id=None, before_word=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction]. Kills through the same doors a hit does.
+
+    `before_word` (CHAN55, a life steal's heal to its caster) is called once the
+    damage is certain to land, in retail's slot: at the PLAYER after the gain and
+    ahead of [10, player, skill] (143 at the observer, 3 of 3: 0x00CF, the
+    caster's [55, c, c, +h], [10], the word); at a BODY ahead of its maximum and
+    word (the own steal's order, heal then [42, foe] then the word, 13 of 13 --
+    RECONSTRUCTION for a body victim of a body). Never called when nothing lands.
 
     THE MAXIMUM (property 42) IS DECLARED ONLY WHEN IT MOVED (DESKWORK-D5 3(a)):
     the PLAYER branch goes through `declare_player_max`, which sends the 42 only
@@ -28266,6 +28316,8 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             player_gains_adrenaline(
                 send, state, pools.damage_units(amount / pool), time.time(),
                 conn_id, f"{amount:.0f} armour-ignoring damage taken ({what})")
+        if before_word is not None:
+            before_word()                       # CHAN55: a steal's heal, gain -> heal -> [10]
         # 3(b): the skill the word belongs to, when the caller knows it. On a
         # hex-triggered 55 (Empathy punishing the player's attack) this is
         # INFERRED from the every-skill-damage rule (skill completions at the
@@ -28291,6 +28343,8 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     # due must precede it. It sat after the declare until 2026-09-30, which
     # changed nothing then -- the provoke sends nothing.
     provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
+    if before_word is not None:
+        before_word()                           # CHAN55: a steal's heal, ahead of the 42
     # MAXHP-1: the player's first word on the body (or the first after its
     # maximum moved) carries the 42 right before it; a hero's Empathy none.
     declare_body_max_on_hit(send, agent, target_id, source_id, what,
@@ -28320,6 +28374,50 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             print(f"[c{conn_id}] PARTY AGENT {target_id} IS DEAD -- it waits "
                   f"for a resurrection (SLICE-H3)", flush=True)
     return amount
+
+
+# ---- CHAN55: LIFE STEAL (studies/skills 68.3, SKILLS-CH3) -------------------------
+#
+# A steal is ONE amount moved: the target loses it on 55 (negative) and the caster
+# gains it on 55 (positive, to itself) -- |heal| == |damage| 13 of 13 on the observer's
+# own Vampiric Gaze. The heal is heal_agent(healing=False): WIKI (GWW "Deep Wound", rev.
+# 2026-03-02, heal_agent's own citation) -- the reduction "does not affect life
+# stealing". The heal rides AHEAD of the damage word in both directions on tape; a heal
+# sent after the word is the known-bad order. NOT MODELLED, named here: a cap at the
+# target's remaining health (the 13 own steals all stole the full amount on foes whose
+# health is unknown; retail's damage words carry the raw overkill, _damage_fraction's
+# census) -- UNVERIFIED, a runsheet item; taker modifiers (Frenzy, a conversion) are not
+# applied to a steal -- RECONSTRUCTION (skill_steal).
+
+
+def player_life_steal(send, state, conn_id, skill_id, target, amount):
+    """The player's own steal on a hostile: hit_enemy's exact word on 55 (its
+    spell_skill names the steal row) with the heal in before_damage -- E5, the
+    caster's [42, me, max] when it moved (OBSERVED ahead of the heal on 4 of 13; the
+    "only when moved" half is declare_player_max's rule, RECONSTRUCTION here), the
+    heal, the foe's first-word [42], the word: retail's 593.854 batch on :58544. No
+    [10] and no gain (the caster's own cast). Returns hit_enemy's verdict."""
+    amount = _whole_points(float(amount))
+
+    def _heal():
+        declare_player_max(send, state, f"maximum declared ahead of skill {skill_id}'s steal")
+        heal_agent(send, state, PLAYER_AGENT_ID, PLAYER_AGENT_ID, amount, conn_id,
+                   healing=False)
+    return hit_enemy(send, state, target, conn_id, exact=amount, swing=False, armed=True,
+                     label=f"skill {skill_id} steals", spell_skill=skill_id,
+                     before_damage=_heal)
+
+
+def body_life_steal(send, state, conn_id, caster_id, skill_id, tid, amount):
+    """A body's steal on `tid` (the player, a party body, a hostile): the word through
+    armour_ignoring_damage with the caster's heal in its before_word slot -- at the
+    player the gain, the heal, [10, me, skill], the word (143's batch, 3 of 3)."""
+    amount = _whole_points(float(amount))
+    return armour_ignoring_damage(
+        send, state, tid, caster_id, amount, conn_id,
+        f"agent {caster_id}'s skill {skill_id} steals", skill_id=skill_id,
+        before_word=lambda: heal_agent(send, state, caster_id, caster_id, amount, conn_id,
+                                       healing=False))
 
 
 def on_attack_triggers(send, state, attacker_id, conn_id):
@@ -39159,6 +39257,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # apply_effect as a consequence; no skill on this bar both hexes and
     # damages, so nothing today can observe the reordering.)
     damage = skill_damage(skill_id, _rank)
+    # CHAN55 (studies/skills 68.3): a LIFE STEAL on the cast's target -- its amount and
+    # its fraction computed HERE, before the 58 (the refusal contract above); the word
+    # and the caster's heal go out at the end through body_life_steal.
+    _steal = skill_steal(skill_id, _rank) if (damage is None and _tid != agent_id) else None
+    if _steal is not None:
+        _steal = _whole_points(float(_steal))
+        _damage_fraction(_steal, (state["agents"][_tid]["max_health"] if _tbody
+                                  else player_max_health(state)),
+                         agents.GV_ARMOR_IGNORING, f"skill {skill_id}'s steal")
     # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX that hits on cast
     # (Deep Freeze, Ice Spikes) -- its scale is the burst's amount, every
     # foe's terms computed below before the 58, the words behind the hexes
@@ -39447,6 +39554,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # condition removed. Until 2026-09-10 this was a flat self-heal.
     healed = resolve_heal(send, state, skill_id, _rank, agent_id,
                           agent.get("cast_target"), conn_id)
+    if _steal is not None:
+        # CHAN55: the steal -- at the player the gain, the caster's heal, [10], the
+        # word (143 at the observer, 3 of 3); at a body the heal, then the word.
+        agent["casting"] = None
+        body_life_steal(send, state, conn_id, agent_id, skill_id, _tid, _steal)
+        return
 
     # The damage and its fraction were computed BEFORE the 58 went out (the
     # guard block at the top); from here on this is emission and bookkeeping
@@ -50665,6 +50778,14 @@ def main():
               "Holy Strike and Banish included, as until 2026-10-07 (retail: an "
               "armour-ignoring non-attack skill's word rides 55, negative -- 94 words, "
               "7 skills, no overlap; CHAN55).", flush=True)
+
+    if a.no_life_steal:
+        global LIFE_STEAL
+        LIFE_STEAL = False
+        print("NO LIFE STEAL: a life-steal row (Vampiric Gaze 153) resolves to nothing -- "
+              "its energy spent for no effect, as until 2026-10-07 (retail: the caster "
+              "gains what the target loses, 13 of 13 own casts, 3 of 3 at the player; "
+              "CHAN55).", flush=True)
 
     if a.no_interrupt_chain_hold:
         global INTERRUPT_CHAIN_RETAKES_HOLD
