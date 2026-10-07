@@ -36,15 +36,102 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
+import vaultpath  # noqa: E402
 
 # FLOOR 40, from a green run on 2026-08-15. Was 37 until section 2 was
 # rewritten: moving the damage to cast end made the connection thread's
 # ValueError contract unreachable, so that section now checks what replaced
 # it -- a press opens a cycle and lands nothing -- and carries 5 checks where
 # it carried 3, plus section 11's new single-caller check. Nothing here is
-# conditional, so a short run means a section stopped rather than passed.
-LEDGER = checks.Ledger("guard contract", floor=47)  # 2026-09-14: +4, DAMAGE-INT; 2026-10-07: +2, section 11's zero-recharge run (SLICE-F52 52.8), 47 MEASURED with the vault and on an empty one alike
+# conditional, so a short run means a section stopped rather than passed --
+# except section 12, which is vault-only by subject and declares its skip.
+# 2026-10-07 (the bare machine, below): +1, section 0's armed-bar check; 48
+# MEASURED with RURIK_VAULT at an empty directory (1 declared skip, section 12)
+# and at a nonexistent one; a vault run gives 49. Before that 47 = 2026-09-14
+# +4 (DAMAGE-INT) and 2026-10-07 +2 (section 11's zero-recharge run, SLICE-F52
+# 52.8) -- 47 RAN on an empty vault too, but 8 of them FAILED there.
+LEDGER = checks.Ledger("guard contract", floor=48)
 check = LEDGER.ok
+
+
+def _record(activation, aftercast, recharge, energy, attribute, profession, type_code,
+            target, skill_arguments, scale, duration=(0, 0), bonus_scale=(0, 0),
+            adrenaline=(0, 0), weapon_req=0, touch_range=False):
+    return {"activation": activation, "aftercast": aftercast, "recharge": recharge,
+            "energy": energy, "adrenaline": adrenaline[0],
+            "adrenaline_units": adrenaline[1], "attribute": attribute,
+            "profession": profession, "type_code": type_code, "target": target,
+            "combo": 0, "combo_req": 0, "weapon_req": weapon_req, "aoe_range": 0.0,
+            "skill_arguments": skill_arguments, "duration0": duration[0],
+            "duration15": duration[1], "scale0": scale[0], "scale15": scale[1],
+            "bonus_scale0": bonus_scale[0], "bonus_scale15": bonus_scale[1],
+            "projectile": 2077, "impact_visual": 2077, "touch_range": touch_range,
+            "half_range": False}
+
+
+# THE BARE MACHINE (2026-10-07). With RURIK_VAULT at an empty directory this file
+# FAILED 8 checks -- identically on 1a678280, before SLICE-F52 52.8 -- and not one
+# was a server defect: every one was a FIXTURE naming a skill whose row only the
+# vault's skills table holds (the tracked content carries 14 skills rows, none of
+# these). Without 322's row Power Attack is not an attack, costs nothing and has
+# no recharge, so section 2's press sends no energy debit and its "E5" lands no
+# swing; without 312's, Holy Strike has no damage and section 4's land_skill
+# returns before the guarded path. And without 317's, the default bar reads DARK
+# (`bar_holds_adrenal`: a rowless skill is zero-cost, by design -- a dark bar is
+# retail's silence), so sections 1, 3 and 9's controls, which count the 0x00CF
+# every landed hit carries to an ARMED bar, were one message short. So the rows
+# are carried here as the record's own (measured numbers -- CLAUDE.md's gate:
+# skilltable.py's rows as vault/content/skills.toml holds them, build 38974, equal
+# to 38888's and, for 317 / 322, to test_weapons' 38797 copies) and REPLACE the
+# table for the whole run (`carried_skills`), so a vault run takes the bare path
+# and cannot pass on a row a bare machine lacks. Section 12 holds every row to the
+# vault's own, column for column, and skips only on an absent vault/content
+# DIRECTORY. The attribute tables are NOT carried: no check here reads a rank's
+# value (section 2's Power Attack bonus at no rank still spends the target's
+# health, which is all section 2 asserts), and the bare run measures that.
+RECORD_BUILD = 38974
+RECORD = {
+    "42": _record(2.0, 0.75, 20, 10, 2, 5, 5, 5, 2, (1, 10), bonus_scale=(9, 9)),
+    # section 11's pressed spell, energy 10 against the bottomless pool
+    "135": _record(1.0, 0.75, 8, 10, 7, 4, 4, 5, 5, (50, 50), duration=(4, 18),
+                   bonus_scale=(1, 3)),          # Faintheartedness, section 2's HEX control
+    "312": _record(0.75, 0.75, 8, 5, 14, 3, 10, 5, 6, (10, 55), bonus_scale=(10, 55),
+                   touch_range=True),            # Holy Strike, section 4's damage skill
+    "317": _record(0.0, 0.0, 0, 0, 17, 1, 3, 0, 1, (33, 33), duration=(5, 20),
+                   adrenaline=(4, 80)),          # Battle Rage: ARMS the default bar
+    "322": _record(0.0, 0.0, 3, 5, 17, 1, 14, 5, 2, (10, 40),
+                   weapon_req=185),              # Power Attack, section 2's attack skill
+}
+
+
+@contextlib.contextmanager
+def carried_skills():
+    """WORLD's skills table REPLACED by RECORD for the block, then put back."""
+    import authsrv
+    tables = authsrv.agents.WORLD.tables
+    had, kept = "skills" in tables, tables.get("skills")
+    tables["skills"] = {k: dict(v) for k, v in RECORD.items()}
+    try:
+        yield
+    finally:
+        if had:
+            tables["skills"] = kept
+        else:
+            del tables["skills"]
+
+
+def section_fixture():
+    import authsrv
+
+    print("0. the fixture: the carried skills rows, the bar they arm")
+    # The controls in sections 1, 3, 4 and 9 count an 0x00CF that rides every
+    # landed hit to an ARMED bar and none to a dark one. Said once, here, so a
+    # bar that stops being armed reds this line rather than four counts that
+    # are each "one message short".
+    check(authsrv.bar_holds_adrenal(),
+          "the default bar is ARMED on the carried rows -- Battle Rage 317 (80 "
+          "units) is on it -- so every landed hit carries its 0x00CF",
+          f"SKILLBAR={authsrv.SKILLBAR}, carried={sorted(RECORD, key=int)}")
 
 
 def _fresh_agent():
@@ -969,18 +1056,57 @@ def _section_cast_timers_run(authsrv, threading, PRESSES, recharge):
         authsrv.skill_timing = saved_timing
 
 
+def section_record_rows():
+    """The carried rows against the vault's own -- the one vault-only check.
+
+    Its SUBJECT is the vault's table, so it skips without one; but the skip is
+    decided on the vault/content DIRECTORY and on nothing that loaded. With the
+    directory there and the rows absent (a skills.toml that did not load), every
+    row reads "absent" and the check FAILS.
+    """
+    import authsrv
+
+    print("\n12. the rows this file carries, against the vault's own")
+    try:
+        vaultpath.require_dir("content", why="the vault's skills table, which RECORD copies")
+    except SystemExit as exc:
+        LEDGER.skip("12. the carried rows against the vault's (1 check)",
+                    str(exc).splitlines()[0])
+        return
+    loaded = authsrv.agents.WORLD.rows("skills")
+    off, builds = {}, {}
+    for k, row in RECORD.items():
+        got = loaded.get(k)
+        if got is None:
+            off[k] = "absent"
+            continue
+        builds[k] = getattr(got, "provenance", {}).get("build")
+        cols = [c for c, v in row.items() if got.get(c, "absent") != v]
+        if cols:
+            off[k] = cols
+    check(not off,
+          f"every one of the {len(RECORD)} skills rows RECORD carries is the vault's own, "
+          f"column for column -- so the run on them took the path the vault's rows would",
+          f"off={off}, loaded builds={builds} (RECORD copied from {RECORD_BUILD}; a "
+          f"regenerated table that moves a carried column reds this, and the fix is to "
+          f"re-copy that row with its build)")
+
+
 def main():
-    section_hit_enemy()
-    section_skill_press()
-    section_land_swing()
-    section_land_skill()
-    section_revive_due()
-    section_player_revive_due()
-    section_agent_refill_due()
-    section_player_refill_due()
-    section_overkill()
-    section_concurrency()
-    section_cast_timers()
+    with carried_skills():
+        section_fixture()
+        section_hit_enemy()
+        section_skill_press()
+        section_land_swing()
+        section_land_skill()
+        section_revive_due()
+        section_player_revive_due()
+        section_agent_refill_due()
+        section_player_refill_due()
+        section_overkill()
+        section_concurrency()
+        section_cast_timers()
+    section_record_rows()
     return LEDGER.verdict()
 
 
