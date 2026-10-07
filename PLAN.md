@@ -2069,114 +2069,21 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
 
-* **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1, W2a, W6a,
-  W2c, W2b's server half, W5 and W4c landed — a held staff's or focus's `556` joins the
-  pool, and a wand or staff scales on the character's LEVEL against armour (strike level
-  3 × level, the wiki's rule and worked example; the owner's level-1 wand hits and a
-  level-20 client run reproduced, 20 of 20 words), where it dealt its raw range at any
-  level against anything; Dual Shot fires two arrows at one windup, each its own
-  roll at 75 % — the shape OBSERVED on eight pairs, the numbers WIKI; and a preparation
-  is on the wire — Kindle Arrows' own 343, its kind, its impact and its own second word,
-  OBSERVED on the owner's recurve; and W2f gives bodies the same preparation and arrow
-  factor). Q16 is MEASURED and open (§20): the client walks a follow to the melee disc
-  regardless of weapon, so a ranged press still closes to melee on the client even
-  though the server's copy stops at range — a MOVECODE-side clear-the-follow change, not
-  a weapon one. **The desk check of 2026-09-18 spent the last server-side arm** (the
-  hold and the `0x0028` TOGETHER, retail's own start batch, on a frozen target:
-  `20260918T201027`, flights 0.727 -> 0.282 -> 0.050 -> 0.050 s, the body closing to
-  the disc exactly as with neither message) and refuted two rivals -- no item
-  modifier is an attack REACH, and retail's follow aims at the TARGET as ours does --
-  so the wire is now byte-for-byte retail's and the stopping distance is decided
-  client's resolver. **That codescan ran the same day and CLOSED Q16's mechanism (section
-  22): the client's park threshold is `(r1 + r2 + TABLE[kind])^2` and NOT ONE of its six
-  inputs is a weapon, so a follow parks at the melee disc whatever is held -- retail's
-  client and ours alike -- and Q16's premise is refuted. `0x0028`'s handler never writes
-  the followed-agent field, which is why all three arms failed; only `0x0029` clears it,
-  and retail sends one to park a shooter 0 of 306 follows. **Section 22.4's "owner choice"
-  is RETRACTED by section 23: the operator asked for faithfulness, both options were
-  built or costed, and both are wrong -- reverting loses the range opening retail has,
-  and the `0x0029` sends a message retail never sends. WHAT WE HAVE IS FAITHFUL: the
-  wire is retail's bit for bit, the swing opens at the weapon's range (retail's first
-  launch after a follow reaches 1,284 u on a 1,273 u recurve), and the body finishing at
-  the melee disc is the client's own arithmetic. W2g (the leg moved to the disc) was
-  built, tested at 115 checks, REGRESSED on the client -- first shot 1.17 s -> 6.03 s,
-  every arrow at 80 u -- and is WITHDRAWN: the leg's END is what the reach gate reads,
-  so the leg at the range is the mechanism that opens the swing there. Its one internal
-  inaccuracy is now RANGERLOOP-F9 / F11 (section 23.3).** Eleven player types and the hostile-only ranged
-  type are one content table with retail items, and EVERY holder of a bow, wand or staff
-  shoots — the player, a party caster, a hostile archer: release at the windup, the hit
-  distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
-  E5 with the skill's own projectile (the skill record's `+0x88`, WEAPONS-C10), its
-  strike a flight later, no 46, and a press OUTSIDE range walks the server's copy to the
-  weapon's RANGE and opens the swing there (the old arm shot from 72 u), row for row
-  retail's on the client. Open: **Q16, W2b's client half** — the harness's attack step
-  is the server mailbox, so the client never arms its own attack-follow and walks on
-  through the start; retail's parks itself with no message; an OWNER press from beyond
-  range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
-  `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
-  `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: ~~the areas over time~~ (shipped 2026-09-26 with the scatter,
-  weapons §41–§42, monsterai §16) and its seven area
-  hexes, line of sight (*Obstructed* / *Stray*), and the BONUS penetration sources beyond the
-  hornbow (the client's item word 574 `Armor penetration`, the Sundering upgrade, on no corpus
-  item; Judge's Insight 267); ~~the point-blank bursts~~ shipped 2026-09-20, §40 -- the ten
-  single-packet bursts (target byte 16, no projectile, no duration: Earthquake, Meteor,
-  Rodgort's...) reach every foe inside the record's radius of the target's position at the
-  completion, each its word, `[20]`, condition and knock-down (RECONSTRUCTION: Fireball's
-  arrival without the flight; never cast on a tape, the lock says so); Earthquake's row; ~~the
-  finer hit test~~ shipped 2026-09-20, §39 -- the aim leads the target's velocity (WIKI), a
-  target off the aim by more than 24 u at the arrival dodges: an arrow draws `[38, target,
-  attacker, 1]` behind its `0x00A7` (7 of 7 on retail), a spell its impact on the ground; the
-  two numbers are ours, RUN-1B's Orb block measures them; `--no-dodge`; ~~Fireball's splash~~ shipped
-  2026-09-20, §38 -- the record's target byte 16 and `aoe_range` 240 make a burst at the aim: the
-  impact, the explosion `0x00A1` 333 (35 of 35), then a word and a `[20]` per foe inside the
-  radius, each its own number; `--no-spell-areas`; ~~a BODY's spell projectile~~ shipped 2026-09-20, §37 -- the
-  completion batch launches behind the 58 (75 of 77 launches at the client's own activation),
-  the terms are computed at the arrival against the taker as it stands then, `0x00A7` / the
-  impact visual / the word (the Master's Orb onto the owner 11 of 11); ~~a player's spell projectile~~ shipped 2026-09-20, §36
-  -- the E5 batch launches the record's projectile (Dancing Daggers 17 of 17, the corpus's only
-  player-cast projectile spell), the arrival is `0x00A7` / the impact visual / the word, a
-  spell of several sends them a third of a second apart, speeds a round number per projectile
-  (343 / 403 at 1800, 405 / 854 at 1200, OBSERVED 41 of 47), `--no-spell-projectiles`;
-  ~~the base penetration sources~~ shipped 2026-09-19, §35 -- the client's own bonus slot holds the
-  wiki's 10 / 20 / 25 on the five attack skills (CORROBORATED, every snapshot), Strength's 1 % a
-  rank rides attack skills only (WIKI, UNWITNESSED -- 1B's new block), Air Magic's 25 % is the
-  tape's Orb (80 → 60, studies/skills 50.1); the largest base plus the bonuses at every rating
-  read, `--no-base-penetration`;
-  ~~a spell's own type~~ read 2026-09-19, §34 -- no client column (all 41 checked), the wire
-  carries it (Orb arrives as lightning under an earth staff, Dancing Daggers as earth with
-  daggers, 79 of 79), the row's wiki label names it (`damage_type` on 194 / 312 / 252; Flare
-  meets the pieces' elemental rating, a physical spell would meet their +20); ~~identifier `573`~~ read 2026-09-19, §33 -- a hero's level-scaled
-  armour, the wire's (80, 23) the wiki's Warrior row and the isle's 3 x level + 20;
-  ~~the hornbow's 10 %~~ and ~~Q2~~ closed 2026-09-19, §32: the client's own 609 handler names
-  the classes -- 0 shortbow, 1 longbow, 2 flatbow, 3 recurve, 4 hornbow, 1 and 3 the corpus's
-  2.475 s pair -- so a bow now swings at its class's rate and a hornbow takes 10 % off the
-  target's rating, WIKI, `--no-bow-classes` reverts), ~~Q10~~ (the weapon's unmet term is the isle's, §30; the shield's
-  and focus's are WIKI; RUN-3 separates divisor from strike-level drop), ~~a staff's `570`
-  recharge word~~ (shipped 2026-09-19, §31: a 20 % roll at a spell's completion halves its
-  recharge to the nearest second on the player's and a hero's `0x00E5`; WIKI, unwitnessed on
-  any tape -- RUN-1B's staff should cast one 5 s spell ten times), ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
-  foe inside the client's own 156 u radius, armour-respecting, and fires even when
-  the arrow misses or is blocked); no content spawn row
-  holds a ranged item yet. Q16 (the client walking a ranged follow to melee, MEASURED,
-  its server-side arms EXHAUSTED
-  §20) is a MOVECODE-side clear-the-follow change; the rest of the arc needs the owner
-  (RUN-WEAPONS-1B / 2 / 3; 1A ran 2026-09-19) or a content decision (spawn rows). The
-  spear throws since §26 (143, flag 1, the 1600 class); ~~Q12~~ closed there (585 is the
-  customisation word, W8 reads it); ~~W9, the weapon-set switch~~ shipped 2026-09-19 (§27:
-  c2s `0x0032` answered with retail's one batch, `--weapon-set N=ITEM[+OFFHAND]`, F1-F4 on the
-  client) -- ~~RUN-W9-2~~ ran 2026-09-19 (§28: a base-changing switch owed a `0x0035`, retail
-  sends it at the NEXT attack start not in the batch -- 2 of 2 base changes on the 1A tape, 2 of
-  2 same-base sent none -- and `select_weapon_set` now arms it; on the client the axe -> hammer
-  swing ran 1.33 -> 1.75 s with the pair riding the first post-switch start); ~~`0x0152`'s client
-  effect and the item family's first field~~ closed at the desk 2026-09-19 (§29: the handler
-  EXCHANGES the two items' bag and slot, renamed `ITEM_SWAP_LOCATIONS`; the first field is the
-  `0x0144` inventory key). Open after W9, all on ONE live tape and written into RUN-1B's steps:
-  retail's reply to a same-set and to an empty-set press, and whether a switch that moves the
-  maximum energy re-sends 41 / 43 (INFERRED; a staff in a set does it).
-  Captures wanted: 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
-  (range: every range here is WIKI or reconstructed, and 1A's spear PARKED at 0.75 × the
-  wiki's number, §25.4 — the run must separate park from range).
+* **Every weapon type, accurately** — the desk halves of W0–W9 have SHIPPED, each with its
+  PLAN-LOG entry (2026-09-18 to 09-27) and its section in studies/weapons/PLAN.md (§20–§43;
+  the seven area hexes with DESKWORK-D6, skills §61–§62). Open: **Q16, W2b's client half**
+  (MEASURED; the mechanism CLOSED in §22 and ours FAITHFUL per §23 — the harness's attack step
+  is the server mailbox, so the client never arms its own attack-follow; an OWNER press from
+  beyond range, RUN-WEAPONS-2, is the instrument); **W4's rest** — line of sight (*Obstructed*
+  / *Stray*), the BONUS penetration sources beyond the hornbow (item word 574, the Sundering
+  upgrade, Judge's Insight 267) and Earthquake's row; **no content spawn row holds a ranged
+  item**; and **the owed runs**, their steps in the plan: RUN-WEAPONS-1B (five bows, staff,
+  wand — 1200 / 1600 / 2800 u/s predicted; the dodge's two numbers on the Orb block; the
+  staff's `570` halving; Strength's 1 % a rank; retail's reply to a same-set and to an
+  empty-set press, and whether a switch that moves maximum energy re-sends 41 / 43),
+  RUN-WEAPONS-2 (every range is WIKI or reconstructed and 1A's spear PARKED at 0.75 × the
+  wiki's number, §25.4 — the run must separate park from range) and RUN-WEAPONS-3 (the unmet
+  divisor against the strike-level drop, Q10).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 
