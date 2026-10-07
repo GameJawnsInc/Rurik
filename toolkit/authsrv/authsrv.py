@@ -24756,19 +24756,22 @@ import attribpassive  # noqa: E402
 EXPERTISE = True                 # False (--no-expertise): every cast pays its table cost.
 
 
-def expertise_rank(state, agent_id):
-    """The caster's Expertise rank RIGHT NOW: a body's from its own
+def passive_rank(state, agent_id, attr):
+    """The caster's rank in a primary RIGHT NOW: a body's from its own
     `attributes` (agent_attributes -- a hero's are its spend state's), the
     player's from the live attribute state (player_rank_of: spent points and
     gear), and either one lower under Weakness (SKILLS-WK). The player is not a
     row in state["agents"], the asymmetry episodemods.taker_rank reads too."""
-    attr = attribpassive.EXPERTISE_ATTRIBUTE
     rows = state.get("agents") or {}
     if agent_id in rows:
         rank = agent_attributes(rows[agent_id] or {}).get(attr, 0)
     else:
         rank = player_rank_of(attr, state)
     return int(weakened_rank(state, agent_id, int(rank or 0)) or 0)
+
+
+def expertise_rank(state, agent_id):
+    return passive_rank(state, agent_id, attribpassive.EXPERTISE_ATTRIBUTE)
 
 
 def expertise_energy_cost(state, agent_id, skill_id, base):
@@ -24792,6 +24795,46 @@ def body_skill_cost(state, agent_id, skill_id):
     pays what the same build would pay as the player."""
     cost, units = skill_cost(skill_id)
     return expertise_energy_cost(state, agent_id, skill_id, cost), units
+
+
+# ---- DIVINE FAVOR (SKILLS-EX6, studies/skills 66.7; the rule is attribpassive.py)
+#
+# The Monk's primary heals the ally a Monk spell is cast on for round(3.2 x
+# rank) -- its OWN property-55 word from the caster, in the completion batch,
+# after the spell's own heal (OBSERVED 147 of 147) and after its effect's
+# 0x0042 (n = 2); alone for a spell with no heal of its own (Healing Breeze,
+# Reversal of Fortune). The slope is the client's description 2105; the
+# rounding is the only one whose image holds retail's 3, 42 and 58. It is a
+# HEAL, so heal_agent's Deep Wound cut applies (retail's 34 at max 455 is 42
+# under that cut). One call per cast completion: the player's (cast_tick) and
+# every body's spell (land_skill), each right after resolve_heal.
+DIVINE_FAVOR = True              # False (--no-divine-favor): a Monk spell heals its own number only.
+
+
+def divine_favor_word(send, state, skill_id, caster_id, target_id, conn_id):
+    """The Divine Favor heal for one completed cast, or 0.0. Nothing with the
+    flag off, outside the scope (attribpassive.divine_favor_applies), at rank
+    0, or with no legal living recipient -- the client's target byte decides
+    who that is, the same verdict resolve_heal reads (cast_recipient)."""
+    if not DIVINE_FAVOR:
+        return 0.0
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return 0.0
+    if not attribpassive.divine_favor_applies(row):
+        return 0.0
+    bonus = attribpassive.divine_favor_bonus(
+        passive_rank(state, caster_id, attribpassive.DIVINE_FAVOR_ATTRIBUTE), skill_id)
+    if bonus <= 0:
+        return 0.0
+    recipient = cast_recipient(skill_id, caster_id, target_id,
+                               allies_of(state, caster_id))
+    if recipient is None or target_dead(state, recipient):
+        return 0.0
+    print(f"[c{conn_id}] Divine Favor: agent {caster_id}'s skill {skill_id} heals "
+          f"agent {recipient} for {bonus} more [SKILLS-EX6]", flush=True)
+    return heal_agent(send, state, recipient, caster_id, float(bonus), conn_id)
 
 
 def energy_cost_for(state, caster_id, skill_id, rank):
@@ -27865,6 +27908,8 @@ def cast_tick(send, state, conn_id):
             if not _na_fail:                                    # SKILLS-LU (C)
                 resolve_heal(send, state, cast["skill_id"], rank,
                              PLAYER_AGENT_ID, target, conn_id)
+                divine_favor_word(send, state, cast["skill_id"], PLAYER_AGENT_ID,
+                                  target, conn_id)                 # SKILLS-EX6
             # THE HOLD PULSE CLOSES THE E5 INSTANT for a non-attack cast:
             # [8 -> 0] then [8 -> 1] at the batch's end, after the
             # target-facing properties, 4 of 4 spell E5s -- the cast
@@ -39442,6 +39487,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # condition removed. Until 2026-09-10 this was a flat self-heal.
     healed = resolve_heal(send, state, skill_id, _rank, agent_id,
                           agent.get("cast_target"), conn_id)
+    divine_favor_word(send, state, skill_id, agent_id, agent.get("cast_target"),
+                      conn_id)                                     # SKILLS-EX6
 
     # The damage and its fraction were computed BEFORE the 58 went out (the
     # guard block at the top); from here on this is emission and bookkeeping
@@ -50508,6 +50555,12 @@ def main():
         print("NO EXPERTISE: attribute 23 takes nothing off an attack or Ranger "
               "skill's energy cost (the pre-SKILLS-EX arm; retail charged 14 "
               "for a 15 at Expertise 1).", flush=True)
+    if a.no_divine_favor:
+        global DIVINE_FAVOR
+        DIVINE_FAVOR = False
+        print("NO DIVINE FAVOR: attribute 16 adds no heal to a Monk spell cast "
+              "on an ally (the pre-SKILLS-EX6 arm; retail's henchmen sent +42 "
+              "on every one).", flush=True)
     if a.no_chain_state:
         global CHAIN_STATE
         CHAIN_STATE = False

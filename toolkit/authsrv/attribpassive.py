@@ -129,3 +129,68 @@ def expertise_cost(base, rank):
     if keep <= 0:
         return 0
     return (2 * base * keep + 100) // 200
+
+
+# ---- DIVINE FAVOR (attribute 16) -------------------------------------------
+#
+# THE RULE, and where each half comes from (studies/skills 66.4):
+#   * the SLOPE, 3.2 health a rank, and "allies ... whenever you cast Monk
+#     spells on them": OBSERVED, the client's description 2105 (38797). No
+#     rounding is stated.
+#   * the SHAPE, OBSERVED over 28 casters on three tapes: its OWN property-55
+#     word [55, recipient, caster, bonus / max] in the cast's completion batch,
+#     AFTER the spell's own heal word on the same recipient whenever there is
+#     one (147 of 147 where the pool is unambiguous), and alone for a spell
+#     with no heal of its own.
+#   * the ROUNDING, from the values alone: the constants on tape are 3, 42 and
+#     58 (the last via Healing Touch's 116). round(3.2 r) reaches all three;
+#     floor(3.2 r) never makes 42 or 58 and ceil(3.2 r) never makes 3. The
+#     casters' ranks (1, 13, 18) are then INFERRED -- none is on the wire.
+#   * the SCOPE, OBSERVED per skill, generalised by RECONSTRUCTION: a Monk spell
+#     or enchantment cast on an ally (the client's target byte 3 or 4) carries
+#     it 360 of 364 (the other 4 batches carry no property 55 at all); so does
+#     a self-cast enchantment (type 6, byte 0: 271, 22 of 23); a hex on a foe
+#     (251, 14) and a resurrection (314, 2) never do. Heal Area (a spell,
+#     byte 0) was seen once without it from a caster whose rank no tape shows:
+#     the byte-0 SPELL exclusion is RECONSTRUCTION, n = 1. A signet is not a
+#     spell (the description's word); no Monk signet completion is on tape.
+#   * HEALING TOUCH (313) DOUBLES the ROUNDED bonus: 84 = 2 x 42 on the
+#     level-20 Monks, 116 = 2 x 58 on a town caster; round(6.4 r) makes neither.
+#     OBSERVED, two kinds of caster.
+DIVINE_FAVOR_ATTRIBUTE = 16
+DIVINE_FAVOR_DESCRIPTION_ID = 2105
+DIVINE_FAVOR_TENTHS_PER_RANK = 32       # 3.2 health a rank, in tenths
+DIVINE_FAVOR_PROFESSION = 3             # Monk
+DIVINE_FAVOR_SPELL_TYPES = (5, 6)       # Spell, Enchantment Spell (studies/skills 35)
+DIVINE_FAVOR_ALLY_TARGETS = (3, 4)      # the client's target byte: ally, other ally
+DIVINE_FAVOR_SELF_ENCHANTMENT = (6, 0)  # (type, target byte): an enchantment on yourself
+DIVINE_FAVOR_MULTIPLIER = {313: 2}      # Healing Touch (OBSERVED, above)
+
+
+def divine_favor_applies(row):
+    """Does casting this skill give its recipient the Divine Favor heal? `row`
+    is the skill's `skills` row (profession, type_code, target). False for a
+    row that cannot say."""
+    if not row:
+        return False
+    try:
+        profession = int(row.get("profession", -1))
+        type_code = int(row.get("type_code", -1))
+        target = int(row.get("target", -1))
+    except (TypeError, ValueError):
+        return False
+    if profession != DIVINE_FAVOR_PROFESSION or type_code not in DIVINE_FAVOR_SPELL_TYPES:
+        return False
+    return (target in DIVINE_FAVOR_ALLY_TARGETS
+            or (type_code, target) == DIVINE_FAVOR_SELF_ENCHANTMENT)
+
+
+def divine_favor_bonus(rank, skill_id=None):
+    """The heal at Divine Favor `rank`: round(3.2 x rank), integer arithmetic
+    (32 r is even, so its last digit is never 5 and no half is reachable),
+    times the skill's multiplier (Healing Touch's 2). 0 at rank 0 or below."""
+    rank = int(rank or 0)
+    if rank <= 0:
+        return 0
+    bonus = (DIVINE_FAVOR_TENTHS_PER_RANK * rank + 5) // 10
+    return bonus * DIVINE_FAVOR_MULTIPLIER.get(int(skill_id) if skill_id is not None else -1, 1)

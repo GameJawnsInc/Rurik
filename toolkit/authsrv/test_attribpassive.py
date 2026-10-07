@@ -68,12 +68,13 @@ import vaultpath                                               # noqa: E402
 
 # The floor is VAULT-CONDITIONAL (test_agentlife's precedent), decided on three
 # DIRECTORIES and never on what loaded: vault/content (section 8, 2 checks),
-# vault/client (section 9, 2 checks) and vault/captures/live (section 10, 2
-# checks). FLOOR_BARE is sections 1-7, MEASURED on the bare-machine green run of
-# 2026-10-07 (RURIK_VAULT at an empty directory): 25 checks, 3 declared skips. The
-# vault run the same day: 31 checks, 0 skips.
-FLOOR_BARE = 25
-FLOOR_PER_DIR = {("content",): 2, ("client",): 2, ("captures", "live"): 2}
+# vault/client (section 9, 2 checks) and vault/captures/live (sections 10 and 15,
+# 2 + 2 checks). FLOOR_BARE is sections 1-7 and 11-14, MEASURED on the
+# bare-machine green run of 2026-10-07 (RURIK_VAULT at an empty directory and at a
+# nonexistent path): 39 checks, 4 declared skips. The vault run the same day: 47
+# checks, 0 skips. (Stage 1, Expertise alone, measured 25 / 31.)
+FLOOR_BARE = 39
+FLOOR_PER_DIR = {("content",): 2, ("client",): 2, ("captures", "live"): 4}
 
 
 def _floor():
@@ -109,27 +110,58 @@ TAPE = (
 )
 TAPE_RANK = 1
 
-# THE CARRIED ROWS: the vault's `skills` rows (skilltable.py, build 38974) for the
-# columns the cost path reads, so sections 3-6 run on a bare machine; section 8
-# holds them to the vault's own. SYN is SYNTHETIC -- a 1-energy Ranger bow attack
-# no table holds, for the free-at-rank-15 path; it is never compared to anything.
-SKILL_COLUMNS = ("energy", "adrenaline_units", "type_code", "profession", "attribute",
-                 "target", "activation", "aftercast", "recharge", "weapon_req",
-                 "touch_range")
+# DIVINE FAVOR's tape (OBSERVED; re-derived 2026-10-07 with healjoin.batches over
+# deepwoundjoin.sequence): the connection of 20260817T231139 whose two Monk casters
+# -- agent 12, the party's level-20 Monk henchman by its own 0x01BF, and agent 7, a
+# second Monk the tape does not name -- put a 42-point word (Divine Favor at rank 13
+# under round(3.2 r), the rank INFERRED) behind every Monk spell they cast on an
+# ally. Counts pinned from the run (section 15).
+DF_CAPTURE, DF_CONN, DF_CASTERS, DF_RANK = "20260817T231139", "54071", (7, 12), 13
+DF_TAPE = {"eligible": 52, "outside": 2, "cut": 2, "with_base": 43}
+
+# THE CARRIED ROWS: the vault's `skills` rows (skilltable.py, build 38974), every
+# column, so sections 3-6 and 12-13 run on a bare machine; section 8 holds them to
+# the vault's own, column for column. The Ranger and Warrior rows are the tape's;
+# the Monk rows are Divine Favor's scope witnesses (studies/skills 66.4) and the
+# hero's Orison. SYN is SYNTHETIC -- a 1-energy Ranger bow attack no table holds,
+# for the free-at-rank-15 path; it is never compared to anything.
+SKILL_COLUMNS = ("activation", "aftercast", "recharge", "energy", "adrenaline",
+                 "adrenaline_units", "attribute", "profession", "type_code", "target",
+                 "combo", "combo_req", "weapon_req", "aoe_range", "skill_arguments",
+                 "duration0", "duration15", "scale0", "scale15", "bonus_scale0",
+                 "bonus_scale15", "projectile", "impact_visual", "touch_range",
+                 "half_range")
 RECORD_BUILD = 38974
 RECORD = {
-    "392": (15, 0, 14, 2, 25, 5, 0.0, 0.0, 8, 2, False),
-    "394": (10, 0, 14, 2, 25, 5, 0.0, 0.0, 3, 2, False),
-    "433": (5, 0, 19, 2, 24, 0, 2.0, 0.0, 12, 0, False),
-    "446": (5, 0, 10, 2, 24, 0, 3.0, 0.75, 10, 0, False),
-    "455": (10, 0, 3, 2, 24, 0, 0.0, 0.0, 20, 0, False),
-    "322": (5, 0, 14, 1, 17, 5, 0.0, 0.0, 3, 185, False),
-    "346": (5, 0, 3, 1, 17, 0, 0.0, 0.0, 4, 0, False),
-    "281": (5, 0, 5, 3, 13, 3, 1.0, 0.75, 2, 0, False),
-    "312": (5, 0, 10, 3, 14, 5, 0.75, 0.75, 8, 0, True),
+    "392": (0.0, 0.0, 8, 15, 0, 0, 25, 2, 14, 5, 0, 0, 2, 0.0, 4, 0, 0, 0, 0, 3, 15, 680, 2077, False, False),
+    "394": (0.0, 0.0, 3, 10, 0, 0, 25, 2, 14, 5, 0, 0, 2, 0.0, 2, 0, 0, 25, 50, 0, 0, 680, 2077, False, False),
+    "433": (2.0, 0.0, 12, 5, 0, 0, 24, 2, 19, 0, 0, 0, 0, 0.0, 2, 24, 24, 3, 24, 0, 0, 343, 344, False, False),
+    "446": (3.0, 0.75, 10, 5, 0, 0, 24, 2, 10, 0, 0, 0, 0, 0.0, 2, 13, 13, 3, 10, 0, 0, 2077, 2077, False, False),
+    "455": (0.0, 0.0, 20, 10, 0, 0, 24, 2, 3, 0, 0, 0, 0, 0.0, 3, 8, 20, 1, 5, 25, 25, 2077, 2077, False, False),
+    "322": (0.0, 0.0, 3, 5, 0, 0, 17, 1, 14, 5, 0, 0, 185, 0.0, 2, 0, 0, 10, 40, 0, 0, 2077, 2077, False, False),
+    "346": (0.0, 0.0, 4, 5, 0, 0, 17, 1, 3, 0, 0, 0, 0, 0.0, 0, 8, 8, 33, 33, 175, 125, 2077, 2077, False, False),
+    "281": (1.0, 0.75, 2, 5, 0, 0, 13, 3, 5, 3, 0, 0, 0, 0.0, 2, 0, 0, 30, 80, 0, 0, 2077, 2077, False, False),
+    "312": (0.75, 0.75, 8, 5, 0, 0, 14, 3, 10, 5, 0, 0, 0, 0.0, 6, 0, 0, 10, 55, 10, 55, 2077, 2077, True, False),
+    "1": (2.0, 0.75, 4, 0, 0, 0, 21, 1, 7, 0, 0, 0, 0, 0.0, 2, 0, 0, 82, 172, 0, 0, 2077, 2077, False, False),
+    "251": (2.0, 0.75, 5, 10, 0, 0, 14, 3, 4, 5, 0, 0, 0, 0.0, 2, 30, 30, 15, 80, 0, 0, 2077, 2077, False, False),
+    "252": (1.0, 0.75, 10, 5, 0, 0, 14, 3, 5, 5, 0, 0, 0, 0.0, 2, 0, 0, 20, 65, 0, 0, 2077, 2077, False, False),
+    "271": (0.25, 0.75, 30, 10, 0, 0, 14, 3, 6, 0, 0, 0, 0, 156.0, 7, 60, 60, 5, 35, 1, 1, 2077, 2077, False, False),
+    "276": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 10, 70, 0, 0, 2077, 2077, False, False),
+    "280": (1.0, 0.75, 5, 10, 0, 0, 13, 3, 5, 0, 0, 0, 0, 156.0, 2, 0, 0, 30, 180, 0, 0, 2077, 2077, False, False),
+    "286": (0.75, 0.75, 3, 10, 0, 0, 13, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 35, 180, 0, 0, 2077, 2077, False, False),
+    "288": (1.0, 0.75, 5, 10, 0, 0, 13, 3, 6, 3, 0, 0, 0, 0.0, 2, 15, 15, 4, 9, 0, 0, 2077, 505, False, False),
+    "293": (2.0, 0.75, 5, 0, 0, 0, 16, 3, 7, 3, 0, 0, 0, 0.0, 2, 0, 0, 20, 120, 0, 0, 2077, 2077, False, False),
+    "307": (0.25, 0.75, 2, 5, 0, 0, 15, 3, 6, 3, 0, 0, 0, 0.0, 2, 8, 8, 15, 80, 0, 0, 2077, 2077, False, False),
+    "313": (0.75, 0.75, 5, 5, 0, 0, 13, 3, 5, 3, 0, 0, 0, 0.0, 2, 0, 0, 20, 80, 2, 2, 2077, 2077, True, False),
+    "314": (4.0, 0.75, 8, 10, 0, 0, 13, 3, 5, 6, 0, 0, 0, 0.0, 6, 0, 0, 20, 65, 42, 90, 2077, 2077, True, False),
 }
 SYN = 99001
-SYN_ROW = (1, 0, 14, 2, 25, 5, 0.0, 0.0, 8, 2, False)
+SYN_ROW = (0.0, 0.0, 8, 1, 0, 0, 25, 2, 14, 5, 0, 0, 2, 0.0, 4, 0, 0, 0, 0, 0, 0,
+           680, 2077, False, False)
+
+
+def _col(key, column):
+    return RECORD[key][SKILL_COLUMNS.index(column)]
 
 
 def _row(key, vals):
@@ -287,7 +319,7 @@ def section_player():
     check(out == [5, 5, 5],
           "rank 12 takes nothing off a Warrior stance, a Monk spell or a Monk touch "
           "skill", f"{out}")
-    want = [RECORD[k][0] for k in sorted(RECORD, key=int)] + [1]
+    want = [_col(k, "energy") for k in sorted(RECORD, key=int)] + [1]
     check(off == want,
           "KNOWN-BAD --no-expertise: every row at rank 12 (and SYN at 15) costs its "
           "table energy -- byte for byte what the server charged before", f"{off} vs {want}")
@@ -636,6 +668,284 @@ def section_tape():
           "column at the tape's own rank", f"{pred}")
 
 
+
+# ---------------------------------------------------------------------------------
+# DIVINE FAVOR (SKILLS-EX6, studies/skills 66.4 / 66.7)
+DF = attribpassive.DIVINE_FAVOR_ATTRIBUTE
+HEAL = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+ORISON, HEAL_AREA, TOUCH, BANISH, HEAL_OTHER = 281, 280, 313, 252, 286
+
+
+def _f(bits):
+    return struct.unpack("<f", struct.pack("<I", int(bits) & 0xFFFFFFFF))[0]
+
+
+def _heals(sent, caster, recipient=None):
+    """[(recipient, fraction)] of every 55 by `caster`, in wire order."""
+    out = []
+    for op, v in sent:
+        if op == HEAL and v[0] == agents.GV_HEALTH_GAIN and v[2] == caster \
+                and (recipient is None or v[1] == recipient):
+            out.append((v[1], _f(v[3])))
+    return out
+
+
+def section_df_rule():
+    print("== 11. Divine Favor's number: round(3.2 x rank), Healing Touch doubled ==")
+    b = attribpassive.divine_favor_bonus
+    got = [b(r) for r in (0, 1, 2, 13, 18)]
+    check(got == [0, 3, 6, 42, 58] and b(-1) == 0 and b(None) == 0,
+          "rank 1 -> 3 and rank 13 -> 42 (retail's two constants), 18 -> 58 (the town "
+          "caster's, half its 116), 2 -> 6 (the slice's Tahlkora); nothing at rank 0",
+          f"{got}")
+    check(b(13, TOUCH) == 84 and b(18, TOUCH) == 116 and b(13, ORISON) == 42,
+          "Healing Touch (313) doubles the ROUNDED bonus: 84 and 116, retail's words; "
+          "Orison is not doubled", f"{b(13, TOUCH)}, {b(18, TOUCH)}")
+    ranks = range(0, 41)
+    rnd = {(32 * r + 5) // 10 for r in ranks}
+    flo = {(32 * r) // 10 for r in ranks}
+    cei = {-(-32 * r // 10) for r in ranks}
+    six = {(64 * r + 5) // 10 for r in ranks}
+    check({3, 42, 58} <= rnd and not ({42, 58} & flo) and 3 not in cei,
+          "KNOWN-BAD floor never makes 42 or 58 and KNOWN-BAD ceil never makes 3 -- round "
+          "is the only one of the three whose image holds every constant on tape",
+          f"floor has {sorted({42, 58} & flo)}, ceil has 3: {3 in cei}")
+    check(not ({84, 116} & six) and {84, 116} <= {2 * x for x in rnd},
+          "KNOWN-BAD round(6.4 x rank) makes neither 84 nor 116: the doubling is of the "
+          "rounded bonus", f"{sorted({84, 116} & six)}")
+
+
+def section_df_scope():
+    print("== 12. Divine Favor's scope: a Monk spell cast on an ally ==")
+    rows = {k: dict(zip(SKILL_COLUMNS, v)) for k, v in RECORD.items()}
+    ins = [k for k in ("281", "286", "288", "307", "313", "276", "271")
+           if attribpassive.divine_favor_applies(rows[k])]
+    check(ins == ["281", "286", "288", "307", "313", "276", "271"],
+          "in: spells and enchantments on an ally (byte 3) or another ally (byte 4) -- "
+          "the witnesses 281 / 286 / 288 / 307 / 313 and the served 276 -- and a "
+          "self-cast enchantment (271, byte 0)", f"{ins}")
+    outs = [k for k in ("280", "251", "252", "314", "293", "1", "392", "312")
+            if attribpassive.divine_favor_applies(rows[k])]
+    check(not outs and not attribpassive.divine_favor_applies({})
+          and not attribpassive.divine_favor_applies({"profession": 3, "type_code": 5}),
+          "out: an area spell round the caster (280, byte 0 -- the n = 1 negative), a hex "
+          "and a spell on a FOE (251, 252), a resurrection (314, byte 6), a Monk SIGNET "
+          "(293), a Warrior signet, a Ranger attack, a Monk touch skill on a foe; a row "
+          "that cannot say", f"{outs}")
+
+
+class _Clock:
+    def __init__(self, t, real):
+        self.t, self._real = t, real
+
+    def time(self):
+        return self.t
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _hero_heal(df_rank, weaken=False):
+    """The REAL ally_cast_tick on a fake clock: a Monk hero (Healing Prayers 3,
+    Divine Favor `df_rank`) casts Orison at a hurt party body; every message out
+    until its heal lands."""
+    import time as _real
+    saved = authsrv.time
+    t0 = 2_000_000.0
+    sent = []
+
+    def send(op, vals, why="", quiet=False):
+        sent.append((op, list(vals)))
+    try:
+        authsrv.time = _Clock(t0, _real)
+        hero = _body(200, {13: 3, DF: df_rank, 15: 1}, skills=(ORISON,), hero=3,
+                     prof=3, emax=30.0)
+        hurt = _body(201, {}, pos=(120.0, 0.0), health=200.0)
+        st = {"agents": {200: hero, 201: hurt}, "pos": (0.0, 60.0),
+              "player_dead": False}
+        authsrv.player_pools(st)
+        st["player_health"] = float(authsrv.player_max_health(st))
+        authsrv.effect_table(st)
+        if weaken:
+            st["effects"].apply(200, effects.CONDITION_BY_NAME["Weakness"], 0, 60.0,
+                                t0, type_code=8)
+        for i in range(400):
+            authsrv.time.t = t0 + i * 0.01
+            authsrv.ally_cast_tick(send, st, 1)
+            if _heals(sent, 200):
+                break
+    finally:
+        authsrv.time = saved
+    return sent, st
+
+
+def _direct(ranks, skill, caster=None, body=None, deep_wound=False):
+    """divine_favor_word called directly: (points on 201's 480 max, in wire order)."""
+    st = _state(ranks, {201: body or _body(201, {}, health=100.0)})
+    if deep_wound:
+        st["deep_wound"] = {201: True}
+    out = []
+    authsrv.divine_favor_word(lambda op, v, why="", quiet=False: out.append((op, list(v))),
+                              st, skill, P if caster is None else caster, 201, 1)
+    return [round(f * 480.0, 3) for _tg, f in _heals(out, P if caster is None else caster)]
+
+
+def section_df_server():
+    print("== 13. the server's Divine Favor word (the real ally_cast_tick / land_skill) ==")
+    with carried(ENERGY=False, DIVINE_FAVOR=True, EFFECTS=True):
+        sent, st = _hero_heal(2)
+        mx = float(st["agents"][201]["max_health"])
+        h2 = [(tg, round(f * mx, 3)) for tg, f in _heals(sent, 200)]
+        wsent, _ = _hero_heal(2, weaken=True)
+        hw = [(tg, round(f * mx, 3)) for tg, f in _heals(wsent, 200)]
+        direct = {"orison": _direct({DF: 13}, ORISON), "touch": _direct({DF: 13}, TOUCH),
+                  "banish": _direct({DF: 13}, BANISH), "rank0": _direct({DF: 0}, ORISON)}
+        dw = _direct({DF: 13}, ORISON, deep_wound=True)
+        dead_other = _direct({DF: 13}, HEAL_OTHER, body=dict(_body(201, {}), dead=True))
+        dead_self = _direct({DF: 13}, ORISON, body=dict(_body(201, {}), dead=True))
+    with carried(ENERGY=False, DIVINE_FAVOR=False, EFFECTS=True):
+        osent, _ = _hero_heal(2)
+        h0 = [(tg, round(f * mx, 3)) for tg, f in _heals(osent, 200)]
+    check(len(h2) == 2 and h2[0][0] == 201 and h2[1] == (201, 6.0) and h2[0][1] > 6.0,
+          "a Monk hero at Divine Favor 2 casts Orison on a hurt ally: the spell's own heal, "
+          "THEN [55, ally, hero, 6 / max] -- retail's order, 147 of 147", f"{h2}")
+    check(len(h0) == 1 and h0[0] == h2[0],
+          "KNOWN-BAD --no-divine-favor: the same cast sends the spell's heal alone, the "
+          "server before this", f"{h0}")
+    check(len(hw) == 2 and hw[1] == (201, 3.0),
+          "a Weakened caster's Divine Favor is one rank lower: 2 -> 1, the word 3 "
+          "(SKILLS-WK)", f"{hw}")
+    check(direct == {"orison": [42.0], "touch": [84.0], "banish": [], "rank0": []},
+          "the player at Divine Favor 13: Orison on an ally +42, Healing Touch +84, a "
+          "spell on a foe nothing; at rank 0 nothing", f"{direct}")
+    check(len(dw) == 1 and 0 < dw[0] < 42,
+          "a Deep-Wounded recipient's word is cut (heal_agent's -20 %: 33 here, where "
+          "retail rounds to 34 -- studies/skills 66.6)", f"cut {dw}")
+    pmax = float(authsrv.player_max_health(_state({})))
+    check(dead_other == [] and dead_self == [round(42 / pmax * 480, 3)],
+          "the word follows the spell's OWN recipient (cast_recipient, resolve_heal's "
+          "verdict): Heal Other at a dead ally lands on nobody, Orison at one lands on the "
+          "caster (42 points over the player's own maximum)",
+          f"other {dead_other}, self {dead_self} (player max {pmax})")
+
+
+def section_df_wiring():
+    print("== 14. Divine Favor's switch and its two call sites ==")
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    tree = ast.parse(src)
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    i_main = src.find("\ndef main():")
+    i_flip = src.find("    if a.no_divine_favor:", i_main)
+    i_end = src.find("\n    if a.", i_flip + 1)
+    flipped = None
+    if 0 < i_main < i_flip < i_end:
+        body = "\n".join(line[4:] if line.startswith("    ") else line
+                         for line in src[i_flip:i_end].splitlines())
+        code = "def _df_flip(a):\n" + "\n".join("    " + ln for ln in body.splitlines())
+        saved = authsrv.DIVINE_FAVOR
+        try:
+            exec(compile(code, "<main:no_divine_favor>", "exec"), authsrv.__dict__)
+            with contextlib.redirect_stdout(io.StringIO()):
+                authsrv.__dict__["_df_flip"](argparse.Namespace(no_divine_favor=True))
+            flipped = authsrv.DIVINE_FAVOR
+        finally:
+            authsrv.DIVINE_FAVOR = saved
+            authsrv.__dict__.pop("_df_flip", None)
+    check(authsrv.DIVINE_FAVOR is True and src.count("\nDIVINE_FAVOR = True ") == 1
+          and getattr(ap.parse_args([]), "no_divine_favor", None) is False
+          and getattr(ap.parse_known_args(["--no-divine-favor"])[0], "no_divine_favor",
+                      None) is True
+          and flipped is False,
+          "DIVINE_FAVOR ships ON, --no-divine-favor parses, and main()'s block, executed, "
+          "sets the MODULE's bool to False", f"flip {i_flip} -> {flipped}")
+
+    def _after_heal(name):
+        seg = ast.get_source_segment(src, _func(tree, name))
+        i_heal = seg.find("resolve_heal(")
+        i_df = seg.find("divine_favor_word(")
+        return 0 <= i_heal < i_df and seg.count("divine_favor_word(") == 1
+    check(_after_heal("cast_tick") and _after_heal("land_skill")
+          and not _calls(_func(tree, "pick_skill"), "divine_favor_word"),
+          "one call each in cast_tick (the player) and land_skill (every body), each after "
+          "resolve_heal; pick_skill none")
+
+
+def section_df_tape():
+    print("== 15. the tape: the level-20 Monks' +42 on " + DF_CAPTURE + " :" + DF_CONN + " ==")
+    try:
+        live = vaultpath.require_dir("captures", "live", why="the henchman tape")
+    except SystemExit as exc:
+        LEDGER.skip("Divine Favor on the henchman tape (2 checks)", str(exc).splitlines()[0])
+        return
+    import bufflog
+    import deepwoundjoin
+    import healjoin
+    cap = os.path.join(live, DF_CAPTURE)
+    chans = [c for c in deepwoundjoin.whole_s2c(cap, None) if DF_CONN in c["connection"]]
+    rows = content.load().rows("skills")
+    tally = {"eligible": 0, "carries": 0, "outside": 0, "outside_carries": 0,
+             "with_base": 0, "df_last": 0, "cut": 0}
+
+    maxima = set()
+
+    def pts(f, want):
+        # over a maximum THIS connection sends (its own 0x009F [42] words: the
+        # henchmen's 555, Deep Wound's 455, the observer's 480)
+        return any(abs(f * m - want) < 1e-3 for m in maxima)
+    for ch in chans:
+        seq = deepwoundjoin.sequence(cap, ch["connection"], bufflog.Codec())
+        maxima = {v[3] for _i, _t, op, v in seq
+                  if op == 0x009F and v[1] == 42 and v[3] >= 100}
+        ann = {}
+        for batch in healjoin.batches(seq):
+            words = []
+            for _i, _t, op, v in batch:
+                if op == 0x00A0 and v[1] == 60:
+                    ann[v[2]] = v[4]
+                elif op == 0x009F and v[1] == 60:
+                    ann[v[2]] = v[3]
+                elif op == 0x00A3 and v[1] == 55 and _f(v[4]) > 0:
+                    words.append((v[2], v[3], _f(v[4])))
+            for _i, _t, op, v in batch:
+                if not (op == 0x009F and v[1] == 58) or v[2] not in DF_CASTERS:
+                    continue
+                skill = ann.get(v[2])
+                row = rows.get(str(skill))
+                if row is None or int(row.get("profession", -1)) != 3:
+                    continue
+                c = attribpassive.divine_favor_bonus(DF_RANK, skill)
+                mine = [(tg, f) for tg, cs, f in words if cs == v[2]]
+                hit = [k for k, (_tg, f) in enumerate(mine)
+                       if pts(f, c) or pts(f, round(0.8 * c))]
+                inside = attribpassive.divine_favor_applies(row)
+                tally["eligible" if inside else "outside"] += 1
+                if not hit:
+                    continue
+                tally["carries" if inside else "outside_carries"] += 1
+                tg = mine[hit[0]][0]
+                same = [k for k, (t2, _f2) in enumerate(mine) if t2 == tg]
+                if len(same) > 1:
+                    tally["with_base"] += 1
+                    tally["df_last"] += int(hit[0] == same[-1])
+                tally["cut"] += int(any(pts(f, round(0.8 * c)) and not pts(f, c)
+                                        for _tg, f in mine))
+    check(tally["eligible"] == DF_TAPE["eligible"] and tally["carries"] == tally["eligible"]
+          and tally["outside"] == DF_TAPE["outside"] and tally["outside_carries"] == 0
+          and tally["cut"] == DF_TAPE["cut"],
+          f"every one of the two Monks' {tally['eligible']} Monk spells cast on an ally "
+          f"carries the word attribpassive prices at rank {DF_RANK} (42; Healing Touch's "
+          f"84; {tally['cut']} under the 0.8 cut); their {tally['outside']} resurrections "
+          f"carry none", f"{tally}")
+    check(tally["with_base"] >= DF_TAPE["with_base"] and tally["df_last"] == tally["with_base"],
+          "where the spell has its own heal on the same recipient, the Divine Favor word "
+          "comes LAST, every time", f"{tally['df_last']} of {tally['with_base']}")
+
+
 def main():
     section_rule()
     section_scope()
@@ -647,6 +957,11 @@ def main():
     section_vault_tables()
     section_client()
     section_tape()
+    section_df_rule()
+    section_df_scope()
+    section_df_server()
+    section_df_wiring()
+    section_df_tape()
     return LEDGER.verdict()
 
 

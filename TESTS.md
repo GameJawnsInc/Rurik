@@ -3640,8 +3640,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   switches off in the source redden 5; the gate moved back behind the debit reddens 1.
   Floor 7 bare (§3-5 and §7 skip), 16 with the vault. No socket, no client),
   `toolkit/authsrv/test_attribpassive.py` (**2026-10-07, SKILLS-EX: Expertise's energy
-  discount on every caster, ROUNDED, and the ten primaries read against the client's own
-  descriptions** (studies/skills §66). The Ranger at Expertise 1 on `20260914T005758` :56011
+  discount and Divine Favor's heal word on every caster, both ROUNDED, and the ten
+  primaries read against the client's own descriptions** (studies/skills §66). The Ranger at Expertise 1 on `20260914T005758` :56011
   paid 14 for 392's 15 and the full cost for its two 10s, a 10 and two 5s; `test_pools`
   carried the 14 by name as "floored". §1 the six carried spends through
   `attribpassive.expertise_cost`, the f32 words bit for bit, 6 of 6; KNOWN-BAD arms floor 1
@@ -3661,12 +3661,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   client DIR) `s_attrib`'s ten primaries carry the description ids the leaf commits, and
   each description resolved at run time contains every numeral typed for it (never
   printed). §10 (captures DIR) `test_pools`' own join re-finds the six spends bit for bit at
-  the tape's own `0x003A` rank. Proved red one at a time in a scratch runner: floor
-  rounding (6 checks), an all-skills scope (3), the server sites bypassed (7), Weakness
-  ignored (2), one body site reverted in the source (1), main()'s `global` dropped (1), a
-  wrong numeral (1), a wrong description id (2), a tape word altered (4), a carried cost
-  altered (4). Floor 25 bare (§8-10 skip on their directories), +2 for each of the three
-  directories present: 31 vaulted. No socket, no client),
+  the tape's own `0x003A` rank. DIVINE FAVOR (SKILLS-EX6): §11 round(3.2 x rank) gives
+  retail's 3 / 42 / 58 and Healing Touch's doubled 84 / 116; KNOWN-BAD floor never makes 42
+  or 58, ceil never 3, round(6.4 r) neither doubled word. §12 the scope on carried rows: a
+  Monk spell or enchantment on an ally (byte 3 / 4) or a self enchantment in; an area
+  spell round the caster, a hex or spell on a foe, a resurrection, a signet out. §13 the
+  REAL `ally_cast_tick` -> `land_skill` on a fake clock: a Monk hero at Divine Favor 2
+  heals with Orison's own word THEN [55, ally, hero, 6/max]; `--no-divine-favor` sends the
+  first alone; Weakened, the word is 3; the player at 13: +42, Healing Touch +84, a foe
+  spell nothing, rank 0 nothing; Deep Wound cuts it (33; retail 34, §66.6); the word
+  follows the spell's own recipient (Heal Other at a dead ally: nobody; Orison: the
+  caster). §14 the switch (main()'s block executed) and one call each in `cast_tick` and
+  `land_skill`, after `resolve_heal`. §15 (captures DIR) `20260817T231139` :54071: the two
+  Monk henchmen's 52 ally casts all carry the word at rank 13 (2 under the cut), their 2
+  resurrections none, and the word is LAST on all 43 casts with a heal of their own.
+  Proved red one at a time in a scratch runner: Expertise floor rounding (6 checks), an
+  all-skills scope (3), the server sites bypassed (7), Weakness ignored (3), one body site
+  reverted in the source (1), main()'s `global` dropped (1), a wrong numeral (1), a wrong
+  description id (2), a tape word altered (4), a carried cost altered (4); Divine Favor
+  floored (6), the doubling dropped (4), an all-skills scope (3), the word off (5), the
+  word sent BEFORE the spell's heal (6), the body call removed from the source (1), its
+  `global` dropped (1). Floor 39 bare (§8-10 and §15 skip on their
+  directories), +2 content, +2 client, +4 captures: 47 vaulted. No socket, no client),
   `toolkit/authsrv/test_deadbout.py` (**2026-09-30, MONSTERAI-W: a hostile's bout ends with
   its last target -- once nobody it could fight is alive in range it stands a beat and walks
   home.** The owner's report on `20260930T231034`: the Bandit Raider held aggro through the

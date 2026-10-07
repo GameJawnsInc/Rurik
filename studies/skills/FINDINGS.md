@@ -10013,7 +10013,7 @@ the client's own sentence.
 | 0 Fast Casting | Mesmer | 2079 | shortens spell and signet activation (no number stated; no effect on non-Mesmer skills under 2 s); PvE: Mesmer-spell recharge −3 % a rank | no | the `[61]` word, §66.5 |
 | 6 Soul Reaping | Necromancer | 2093 | +1 energy a rank when a non-spirit creature near you dies, at most 3 times per 15 s (the radius is NOT in the text) | no | none |
 | 12 Energy Storage | Elementalist | 2099 | +3 maximum energy a rank | no | none (no nonzero rank on any tape) |
-| 16 Divine Favor | Monk | 2105 | +3.2 health a rank to an ally you cast a Monk spell on (no rounding stated) | no | §66.4 |
+| 16 Divine Favor | Monk | 2105 | +3.2 health a rank to an ally you cast a Monk spell on (no rounding stated) | **yes, §66.7** | §66.4 |
 | 17 Strength | Warrior | 2113 | 1 % armour penetration a rank on attack skills | yes (combatmath) | the term is unwitnessed (combatmath) |
 | 23 Expertise | Ranger | 2131 | −4 % energy cost a rank of attacks, Rituals, touch skills and Ranger skills (no rounding stated) | **yes, §66.3** | §66.1 |
 | 35 Critical Strikes | Assassin | 2137 | +1 % critical chance a rank; 1 / 2 / 3 energy on a critical at ranks 3 / 8 / 13 | yes (DAGGERS-B7) | rank 8, 26 of 26 (daggers F12) |
@@ -10067,7 +10067,9 @@ property-55 words that caster put in that batch (`healjoin.batches`, the 50 ms
 shoulder), over the whole live corpus (671 Monk-skill completions). A caster CARRIES a
 constant c when a word worth exactly c points (over an integer maximum the connection
 uses) rides its completions of at least two different skills. **28 casters do**: six
-level-20 Monk henchman instances on `20260817T231139` and two on `20260928T103123` with
+Monk-caster instances on the connections of `20260817T231139` that carry the party's
+level-20 Monk henchman (agent 12 on :54071 is that henchman by its own `0x01BF`; agent 7
+there is a second Monk the tape does not name) and two on `20260928T103123` with
 **c = 42**, and the four Smiting Monks of `20260929T100038` (20 connection-instances) with
 **c = 3** — the 3 HP CASTAI-ZF32 counted, and the "constant alongside a varying partner"
 animref §18 left unattributed (0.0757 = 42 / 555) is the same word.
@@ -10075,9 +10077,9 @@ animref §18 left unattributed (0.0757 = 42 / 555) is the same word.
 - **Shape.** A separate `0x00A3 [55, recipient, caster, c / recipient's max]` in the
   completion batch. Where the spell has its own heal on the same recipient, **the spell's
   heal comes first and the Divine Favor word second, every time the pool is
-  unambiguous** (Mend Condition 275 65 of 65, Orison of Healing 281 24, Word of Healing
-  282 27, Heal Other 286 18, Healing Touch 313 13); the only positive words after it are
-  Reversal of Fortune conversions landing in the same batch. A spell with no heal of its
+  unambiguous** — 147 of 147: Mend Condition 275 67, Orison of Healing 281 24, Word of
+  Healing 282 26, Heal Other 286 18, Healing Touch 313 12; the only positive words after
+  it are later heals landing in the same batch (Reversal of Fortune's conversions). A spell with no heal of its
   own carries the word alone (Healing Breeze 288 15, Remove Hex 301 6, Reversal of Fortune
   307 90, Balthazar's Aura 272 27, Zealot's Fire 271 22). On the two batches where the
   observer can see the enchantment's `0x0042`, the word follows it (n = 2).
@@ -10087,22 +10089,27 @@ animref §18 left unattributed (0.0757 = 42 / 555) is the same word.
   tape) carry no property-55 word of any kind — cause NOT FOUND. Of 16 completions
   outside that set — Scourge Healing 251, a hex cast on a FOE (byte 5), 14; Restore Life
   314 (byte 6, a resurrection), 2 — **none carries it**. Heal Area 280 (a spell, byte 0,
-  an area round the caster) was cast once by a henchman whose rank that connection never
-  shows, three base heals and no word: an UNVERIFIED negative (n = 1). Casters with no
-  word on anything (the Zaishen Monks of `20260928T103123` :50295, a profession-1 caster on
-  :50061) have Divine Favor 0. The client's sentence says "Monk spells cast on" an ally:
-  a signet is not a spell (293 / 294 are served, no witness either way).
+  an area round the caster) was cast once, by a profession-3 caster that carries nothing
+  else on its connection (:50527), so its rank is unknown — three base heals and no
+  word: an UNVERIFIED negative (n = 1). Casters with no word on anything (the Zaishen
+  Monks of `20260928T103123` :50295, a profession-1 caster on :50061) have Divine
+  Favor 0. The client's sentence ties the heal to casting a Monk
+  SPELL on the ally: a signet is not one (293 / 294 are served; no Monk signet completion
+  is on tape either way).
 - **The rounding, from the reachable values alone.** The slope is the description's 3.2 a
   rank. round(3.2 r) reaches 3 (r = 1), 42 (r = 13) and 58 (r = 18, below); floor(3.2 r)
   never makes 42 or 58 (41 / 44, 57 / 60); ceil(3.2 r) never makes 3 (4 at r = 1). **ROUND
   is the only one of the three whose image holds every observed constant**, and under it
-  each constant names a UNIQUE rank — 1 for the Smiting Monks, 13 for the henchmen. Those
+  each constant names a UNIQUE rank — 1 for the Smiting Monks, 13 for the 42-casters. Those
   ranks are INFERRED: no `0x003A` for either caster is on the wire.
-- **Healing Touch (313) doubles it.** Its second word is 84 = 2 × 42 on the henchmen and
+- **Healing Touch (313) doubles it.** Its second word is 84 = 2 × 42 on the 42-casters and
   116 = 2 × 58 on a non-party caster that heals itself in town on ten tapes (agents 100 /
   102 / 122 / 123, always 116 beside its own 63 or 84, over maxima 480 / 408 / 210 / 192).
   round(6.4 r) never makes 84 or 116 (83 / 90, 115 / 122): the doubling is of the ROUNDED
-  bonus. OBSERVED, two kinds of caster. 313 is not served.
+  bonus. OBSERVED, two kinds of caster — and CORROBORATED by the client: 313's own
+  description (resolved at run time, not committed) is the one player-corpus template
+  that says its Divine Favor gain is doubled, and its table row's flat bonus slot is 2.
+  313 is not served.
 - **The 34 at max 455 is a healing cut, not an anomaly.** Both witnesses (`20260817T231139`
   :54071 t = 689.05, agent 7; `20260928T103123` :50061 t = 210.26, agent 8) carry the base
   heal cut by the same factor in the same batch: 191 → 153 and 42 → 34, round(0.8 x) both
@@ -10139,3 +10146,38 @@ the same connection (an Elementalist) runs × 0.67 on 30 words — not Fast Cast
   Elementalist with ranks on any tape, and the `0x009F 41` resend), Soul Reaping (its
   radius), Leadership, Mysticism, Spawning Power (families not served).
 - **Fast Casting** (§66.5): a Mesmer with a known rank on tape, then the `[61]` seam.
+- **Divine Favor's edges** (§66.7): skill 1118 (served, a label row) spreads its Divine
+  Favor gain to the party in earshot of its target by its own description — the word
+  lands on the target only here; the byte-0 SPELL exclusion rests on one Heal Area
+  (n = 1); the 4 Smiting-tape completions with no property-55 word at all; the ranks
+  behind 3 and 42 (1, 13) are inferred, so a retail Monk at a KNOWN Divine Favor rank
+  on tape is the first direct witness of the slope.
+
+### 66.7 SKILLS-EX6 — what shipped: Divine Favor on every caster's Monk spell (`DIVINE_FAVOR`, `--no-divine-favor`)
+
+- **The rule** (`attribpassive.divine_favor_bonus`): round(3.2 × rank), integer
+  arithmetic ((32 r + 5) // 10; 32 r is even, so no half), × 2 on Healing Touch (313);
+  nothing at rank 0.
+- **The scope** (`divine_favor_applies`): a Monk (profession 3) spell or enchantment
+  (types 5 / 6) whose target byte is 3 or 4, or a self-cast enchantment (type 6, byte
+  0). OBSERVED per skill (§66.4: 11 skills in, 251 and 314 out); the byte-0 spell
+  exclusion (Heal Area; byte-0 heal spells such as the served 287) is RECONSTRUCTION
+  at n = 1; Monk signets (293 / 294) are out by the description's word, unwitnessed.
+- **One word per completed cast, from every caster**: `divine_favor_word` is called once
+  in `cast_tick` (the player's E5) and once in `land_skill` (every body's spell — hero,
+  henchman, hostile monk), each right AFTER `resolve_heal`, so the spell's own heal goes
+  first and the effect's `0x0042` before both: retail's order (147 of 147; n = 2 for the
+  `0x0042`). It fires whether or not the spell healed (Mend Condition with nothing to
+  cure still sends it on retail, 22 of 22 — §66.4's "alone" rows).
+- **The recipient is the spell's own** (`cast_recipient`, `resolve_heal`'s verdict): an
+  ally spell aimed at a dead or hostile body lands on the caster, an other-ally spell
+  aimed at nobody lands on nobody.
+- **The rank is the caster's own RIGHT NOW** (`passive_rank`, shared with Expertise): the
+  player's live effective rank, a body's `attributes`, one lower under Weakness. The
+  slice's Tahlkora (Divine Favor 2) now sends +6 behind every Orison and Restore
+  Condition; no henchman or hostile row carries rank 16, so they send nothing yet.
+- **It is a HEAL** (`heal_agent`): Deep Wound cuts it, the overheal number rides a full
+  pool, the books take what fits. The cut truncates where retail rounds (§66.6).
+- **`--no-divine-favor`** sends the spell's own heal alone, the server before this.
+- **Owed, a client run**: Tahlkora's heals with and without the switch (the PLAN-LOG
+  entry's runsheet) — two blue numbers over the ally where there was one.
