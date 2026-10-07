@@ -41,8 +41,10 @@ ARGS_SRC = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
 # on the pre-1z-bt build: 81 on the green run.  +8 at NPCTRACK-F14 (sec.15:
 # the obstacle feed reaches both mirrors, and authsrv's provider reads the
 # hostiles' client models): 89 on the 2026-09-06 green run.
-# Each from a real green run, never from a guess.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=91)   # 1z-cy: +2
+# Each from a real green run, never from a guess.  +13 at RANGERLOOP-F9
+# (2026-10-07, sec.16: the player's 0x0028 parks both copies, the scope of the
+# park, the authsrv feed and its flag): 104 on the green run.
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=104)   # 1z-cy: +2; F9: +13
 check = checks.adopt_named(LEDGER)
 
 
@@ -726,7 +728,143 @@ def main():
     check("... and the player is never an obstacle to itself",
           (0, 0) not in by and len(obs) == 2)
 
+    section_stop()
     return LEDGER.verdict()
+
+
+def _walking_guard(t0=3000.0):
+    """A guard whose two copies walk a 1,800 u 0x002A follow at 288 u/s from t0."""
+    g = seeded_guard(t0=t0 - 1.0)
+    g.on_emit(0x2A, 1800.0, 0.0, 0, 0, now=t0)
+    return g
+
+
+def _at(g, which, now):
+    m = g.mirror if which == "mirror" else g.twin
+    return m.sync.position(g._ms(now)), m.sync.velocity(g._ms(now))
+
+
+def section_stop():
+    # ---- 16. RANGERLOOP-F9: the player's 0x0028 parks BOTH copies ---------
+    # The handler 0x005FD7D0 halts both world copies where they stand. Before
+    # 2026-10-07 the feed gave the mirror pair 0x0029/0x002A/0x002C only, so
+    # after RANGERPRE-S16's approach halt the mirror walked the follow into the
+    # target (RUN-T: flights 0.728 -> 0.282 s; the avoid halt re-parked the
+    # model 1,430 u from the body). Each check below inverts on the pre-fix
+    # feed or with on_stop removed.
+    t0 = 3000.0
+    g = _walking_guard(t0)
+    n = g.on_stop(t0 + 1.0)
+    (pm, vm), (pt, vt) = _at(g, "mirror", t0 + 3.0), _at(g, "twin", t0 + 3.0)
+    check("16a. a 0x0028 one second into a 288 u/s leg parks the MIRROR at 288 u, "
+          "velocity zero, and it is still there two seconds later",
+          n == 2 and abs(pm[0] - 288.0) < 0.5 and abs(pm[1]) < 1e-9
+          and vm == (0.0, 0.0) and g.mirror.sync.dest is None
+          and g.mirror.sync.t_arrive == 0)
+    check("16b. ... and the TWIN with it -- the halt is the client's in both worlds "
+          "(the no-resets world differs only in which Clears it applies)",
+          abs(pt[0] - pm[0]) < 1e-9 and abs(pt[1] - pm[1]) < 1e-9
+          and vt == (0.0, 0.0) and g.twin.sync.t_arrive == 0)
+    w = _walking_guard(t0)
+    (pw, vw) = _at(w, "mirror", t0 + 3.0)
+    check("16c. CONTROL, no stop: the same leg has walked 864 u at +3 s, so 16a's "
+          "point is the stop's doing and not the leg's",
+          abs(pw[0] - 864.0) < 0.5 and vw[0] > 0.0)
+    check("16d. on_stop is NOT the avoidance pass's halt: n_avoid_halt stays 0 on both "
+          "copies, so 1z-dj (which parks state['pos'] on that counter) does not fire on "
+          "every 0x0028; the guard counts its own stops",
+          g.mirror.sync.n_avoid_halt == 0 and g.twin.sync.n_avoid_halt == 0
+          and g.n_stop == 1)
+    before = (g.mirror.sync.x78, g.mirror.sync.y78, g.mirror.sync.t_epoch,
+              g.twin.sync.x78, g.twin.sync.t_epoch, g.n_stop)
+    again = g.on_stop(t0 + 4.0)
+    check("16e. a 0x0028 on a PARKED copy is a no-op: nothing parked, the point and "
+          "its epoch untouched, the counter unmoved (the halt is gated on a moving "
+          "body; the cast stop's and the press stop's 0x0028 ride behind their own "
+          "0x002C, which has already parked both)",
+          again == 0 and before == (g.mirror.sync.x78, g.mirror.sync.y78,
+                                    g.mirror.sync.t_epoch, g.twin.sync.x78,
+                                    g.twin.sync.t_epoch, g.n_stop))
+    short = seeded_guard(t0=t0 - 1.0)
+    short.on_emit(0x29, 144.0, 0.0, 0, 0, now=t0)       # a 0.5 s leg
+    due = short.mirror.sync.t_arrive
+    k = short.on_stop(t0 + 0.8)
+    v = short.tick(t0 + 0.8)
+    check("16f. a copy whose arrival is already DUE is left to tick(): on_stop parks "
+          "nothing, and the tick consumes the arrival on its destination WITH the "
+          "arrival's own dispatch (parking it first would have dropped it)",
+          k == 0 and due != 0 and v is not None and v.event == "arrival"
+          and short.mirror.sync.position(short._ms(t0 + 0.8)) == (144.0, 0.0))
+    un = ag.AgTrackGuard()
+    check("16g. an unseeded guard parks nothing and does not raise",
+          un.on_stop(t0) == 0)
+
+    # -- the authsrv feed: player-only, and behind its flag
+    def fed(opcode, values, flag=True):
+        st = {}
+        st["agtrack_guard"] = _walking_guard(t0)
+        saved = authsrv.MIRROR_PARKS_ON_STOP
+        authsrv.MIRROR_PARKS_ON_STOP = flag
+        try:
+            authsrv._agtrack_shadow_emit(st, opcode, values, None, now=t0 + 1.0)
+        finally:
+            authsrv.MIRROR_PARKS_ON_STOP = saved
+        return _at(st["agtrack_guard"], "mirror", t0 + 3.0)[0]
+    stop = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    p_player = fed(stop, [authsrv.PLAYER_AGENT_ID])
+    p_other = fed(stop, [authsrv.PLAYER_AGENT_ID + 9])
+    p_off = fed(stop, [authsrv.PLAYER_AGENT_ID], flag=False)
+    check("16h. authsrv._agtrack_shadow_emit feeds the PLAYER's 0x0028 to on_stop: "
+          "the mirror stands at 288 u two seconds after the stop",
+          abs(p_player[0] - 288.0) < 0.5)
+    check("16i. a 0x0028 naming ANOTHER agent (a hostile's halt, a hero's knock-down) "
+          "is ignored: the player's mirror walks on to 864 u",
+          abs(p_other[0] - 864.0) < 0.5)
+    check("16j. KNOWN-BAD ARM (MIRROR_PARKS_ON_STOP False, --no-mirror-stop): the "
+          "player's own 0x0028 leaves the mirror walking -- the pre-fix walk-in",
+          abs(p_off[0] - 864.0) < 0.5)
+
+    # -- the flag: parsed, flipped by main() for real, recorded
+    import argparse
+    import contextlib
+    import io
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    check("16k. --no-mirror-stop parses, default off",
+          getattr(ap.parse_args([]), "no_mirror_stop", None) is False
+          and getattr(ap.parse_known_args(["--no-mirror-stop"])[0], "no_mirror_stop",
+                      None) is True)
+    # main()'s own block, lifted out of the source and RUN in authsrv's namespace:
+    # without its `global` the assignment would bind a local and the flag would parse
+    # and never take effect, which a text match on the assignment cannot see.
+    i_main = AS_SRC.find("\ndef main():")
+    i_flip = AS_SRC.find("    if a.no_mirror_stop:", i_main)
+    i_end = AS_SRC.find("\n    if a.", i_flip + 1)
+    flipped = None
+    if 0 < i_main < i_flip < i_end:
+        block = AS_SRC[i_flip:i_end]
+        body = "\n".join(line[4:] if line.startswith("    ") else line
+                         for line in block.splitlines())
+        code = "def _f9_flip(a):\n" + "\n".join("    " + ln for ln in body.splitlines())
+        saved = authsrv.MIRROR_PARKS_ON_STOP
+        try:
+            exec(compile(code, "<main:no_mirror_stop>", "exec"), authsrv.__dict__)
+            with contextlib.redirect_stdout(io.StringIO()):
+                authsrv.__dict__["_f9_flip"](argparse.Namespace(no_mirror_stop=True))
+            flipped = authsrv.MIRROR_PARKS_ON_STOP
+        finally:
+            authsrv.MIRROR_PARKS_ON_STOP = saved
+            authsrv.__dict__.pop("_f9_flip", None)
+    check("16l. main()'s --no-mirror-stop block, executed, really sets the MODULE's "
+          "MIRROR_PARKS_ON_STOP to False (its `global` is what makes it bind)",
+          flipped is False, f"main {i_main} flip {i_flip} end {i_end} -> {flipped}")
+    check("16m. the default is ON, and the capture header records which arm ran",
+          authsrv.MIRROR_PARKS_ON_STOP is True
+          and authsrv.capture_flags().get("MIRROR_PARKS_ON_STOP") is True)
 
 
 if __name__ == "__main__":

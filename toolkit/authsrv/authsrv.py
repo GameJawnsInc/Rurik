@@ -8555,6 +8555,38 @@ def _agtrack_maybe_repin(send, state, rec, now=None):
     return True
 
 
+# RANGERLOOP-F9 (2026-10-07): THE PLAYER'S 0x0028 PARKS THE AGTRACK MIRROR. The
+# feed below gave the mirror pair 0x0029/0x002A/0x002C only, so a halt we SENT
+# never reached it: after RANGERPRE-S16's approach halt (attack_tick,
+# APPROACH_START_HALTS) the client's two copies stood at range while the mirror
+# walked the 0x002A follow on into the target. Everything that reads the mirror
+# for a moving player read that walk-in -- _npc_frame, so _reach_frame, so the
+# arrow's flight in launch_player_projectile (RUN-T 20260930T131951, OBSERVED:
+# 0.728 s then 0.282 s, 1,164 u and 451 u from a target the body stood 1,500.8 u
+# from) -- and the mirror's avoidance pass then halted it on the target's disc,
+# where 1z-dj parked state["pos"], 1,430 u from the body (the capture's own
+# `kbd_leg avoid-halt` row, model_moved 1430.0; its next 0x003D read drift
+# 1,432.8 u). The handler 0x005FD7D0 halts BOTH world copies where they stand
+# (agtrack_guard.on_stop: the decode and the scope), so the mirror now does.
+# REPLAYED on that capture through the real guard (test_approachroute section 7):
+# fed every movement send but blind to the halt, the mirror stands 1,443.7 u from
+# the client's first post-halt 0x003D and reproduces all three of the run's
+# flights; parked at the halt's send instant, 8.4 u. The park lands at the SEND
+# instant on the guard's wall clock and the client halts when the message lands,
+# so the mirror can sit a few units short of the client's copies -- the same
+# lag every emit feed here carries.
+#   EVERY PLAYER 0x0028 SENDER reaches this feed, and each is the client's own
+# halt: the approach halt (the case above); serve_pickup's arrival (the copy has
+# arrived, or is a tick short and parks there, as the client's does); the press
+# stop and --cast-stop pin (behind their own 0x002C, which has parked both
+# copies: a no-op); --cast-stop halt and --stop-answer=ack (bare: the copy halts
+# where it stands, which is CANCELWALK-F31's measured client behaviour, the body
+# landing on the sync copy); the transfer (the session ends). No send site is
+# added or moved. on_stop parks only a WALKING copy.
+# --no-mirror-stop reverts: the KNOWN-BAD arm is the walk-in above.
+MIRROR_PARKS_ON_STOP = True   # False (--no-mirror-stop): the mirror walks through our halt.
+
+
 def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
     """The send() choke point's feed: predict the grant's delivery verdict
     (the record row), then apply the emit to the mirror pair.  Player-agent
@@ -8564,6 +8596,12 @@ def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
         return
     if now is None:
         now = time.time()
+    if opcode == GAME_SMSG_AGENT_STOP_MOVING:
+        # RANGERLOOP-F9 (MIRROR_PARKS_ON_STOP, the senders at the flag): both
+        # copies halt where they stand; on_stop parks only a walking copy.
+        if MIRROR_PARKS_ON_STOP:
+            _agtrack_guard_call(state, "on_stop", now)
+        return
     if opcode == GAME_SMSG_AGENT_UPDATE_SPEED:
         if len(values) >= 2:
             _agtrack_guard_call(state, "on_speed", float(values[1]), now)
@@ -49783,6 +49821,13 @@ def main():
         print("APPROACH: --no-approach-start-halt -- a ranged approach's first swing "
               "is [4] alone, no [8, me, 1] and no 0x0028 [me]: KNOWN-BAD against "
               "retail's 12 of 12 [RANGERPRE-S16 revert]", flush=True)
+    if a.no_mirror_stop:
+        global MIRROR_PARKS_ON_STOP
+        MIRROR_PARKS_ON_STOP = False
+        print("APPROACH: --no-mirror-stop -- the AgTrack mirror walks through a 0x0028 "
+              "we send the player: after an approach halt it walks the follow into the "
+              "target while the client stands at range. KNOWN-BAD [RANGERLOOP-F9 "
+              "revert]", flush=True)
     if a.held_interact_at_range:
         global HELD_INTERACT_AT_DISC
         HELD_INTERACT_AT_DISC = False

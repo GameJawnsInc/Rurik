@@ -221,6 +221,7 @@ class AgTrackGuard(object):
         self.n_pass_gates = 0
         self.n_veto = 0
         self.n_not_ready = 0
+        self.n_stop = 0              # 0x0028s that parked a walking copy (F9)
 
     # ---- clock -----------------------------------------------------------
 
@@ -318,6 +319,48 @@ class AgTrackGuard(object):
             self.twin.on_update_position(x, y, plane_first, ms)
             return self.mirror.on_update_position(x, y, plane_first, ms)
         return None
+
+    def on_stop(self, now):
+        """A 0x0028 to the player (RANGERLOOP-F9): BOTH copies halt where the
+        sync copy stands.  The handler 0x005FD7D0 runs the halt-in-place
+        0x00602540 on each world copy, which extrapolates the point to now and
+        teleports the agent to ITS OWN point -- velocity zero, the arrival
+        tick cleared, both target blocks +inf (studies/movecode/FINDINGS.md
+        1d.3 and the write-set table's 0x0028 row, "PARKS both").  So each
+        mirror's sync copy is set where it stands, the shape
+        SyncAgent.avoid_halt already uses -- but NOT through avoid_halt, whose
+        counter authsrv's 1z-dj reads as "the avoidance pass halted the copy".
+
+        Only a WALKING copy is parked (its arrival armed and not yet due).  A
+        parked copy is left alone: the halt is gated on agent+0x20 & 0x20000
+        and changes nothing on a body that is not moving.  A copy whose
+        arrival is already due is left to tick(), whose consumption lands it
+        on the destination WITH that arrival's dispatch; parking it here would
+        drop the dispatch.
+
+        MODEL-CHOICE, stated: the teleport's tail 0x006022A1 is a class-B
+        AgTrack dispatch (studies/movement/FINDINGS.md sec.2.1), and this
+        does not model it -- the same choice avoid_halt makes.  On the path
+        that motivated it (RANGERPRE-S16's approach halt) the fence is closed,
+        so the dispatch would append one node whose seed the next report's
+        record rewrites; with the fence open the halted point lies on segment
+        0 (leg start -> leg destination) and matches.
+
+        Returns how many copies were parked (0, 1 or 2)."""
+        ms = self._ms(now)
+        n = 0
+        for m in (self.mirror, self.twin):
+            s = m.sync
+            if not s.walking(ms):
+                continue
+            p = s.position(ms)
+            if p is None:
+                continue
+            s.set_position(p[0], p[1], s.plane, ms)
+            n += 1
+        if n:
+            self.n_stop += 1
+        return n
 
     def on_speed(self, move_speed, now):
         self.mirror.on_speed(move_speed, self._ms(now))
