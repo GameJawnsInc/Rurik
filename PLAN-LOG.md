@@ -28,6 +28,33 @@ move back.
 
 ---
 
+### RANGERPRE-S22 -- 2026-10-07 -- **An attack skill's own condition now needs a landed strike. A Blind miss or a block inflicts nothing at all four sites: the player's melee strike and skill shot, and a body's melee attack skill and skill shot. OBSERVED for the player's melee attack skill under Blind, n = 1 against a 3-of-3 same-tape control. The live corpus's one failed activation of a conditioned attack skill is a Blind-missed Jagged Strike (20260917T224104 :62557, t=348.996). This is DAGGERS-F16's event, which was read at the time for the chain. It sends `[38, 117, 25, 3]` and no Bleeding, while the same skill's three hits on the same foe all bled. The block at every site, and a miss at the arrow's arrival and at both body sites, rest on WIKI (GWW "Hit" rev 2721374), because no tape shows one. `--no-condition-needs-hit` is the known-bad arm.**
+
+- **Record:** `studies/presearing/RANGERPRE.md` §4 (the S22 row) and §5.
+  - §5 holds the corpus join: 569 activations, of which 116 landed conditioned ones show their own condition 99 times, and each of the other 17 is classified.
+  - It also holds the scope of the witness (all 24 joined attack-skill fails are the observer's melee dagger skills), the WIKI revision ids and the runsheet.
+- **Shipped:** `4cd9172e`; review fixes in `787aa831` (no behaviour change).
+  - `CONDITION_NEEDS_HIT` and `attack_condition_lands` in `authsrv.py`, asked at `cast_tick`'s attack arm, `land_player_skill_shot`, `land_body_skill_shot` and `land_skill`.
+  - Unchanged: spells, non-attacks (WIKI "Blind" rev 2667383: a projectile spell may stray instead, unmodelled), Irresistible Blow's block punishment, and the hit-or-miss clauses.
+  - A None result (a dead target, or `--legacy-attack-finish`'s strike that never happened) also inflicts nothing. This is RECONSTRUCTION. The dead-target wire is unchanged. The legacy arm's bytes do move; adding `--no-condition-needs-hit` restores them, byte-identical to `1a678280` across a 29-scenario differential.
+  - Before the change (re-derived at `1a678280`), a Blind-missed or blocked Sever Artery still left Bleeding 478.
+- **Tests:** `test_condhit.py`, 28 checks with the vault and 4 bare (floor 4).
+  - Verbatim both ways: our Blinded Jagged Strike reproduces retail's 349.147 batch token for token. Unblinded, on a body whose maximum has not been declared, it reproduces retail's 357.240 batch, including MAXHP-1's `[42]`.
+  - Run against `1a678280`'s unfixed server, this file reports 14 reds with no crash.
+- **Triage corrected:** a retail witness exists (Jagged Strike inflicts Bleeding), and the Weakness applies sit on three captures, not four.
+- **Review corrected before landing:**
+  - The control is 99 of 116, not 100: a death bit had been read as a Bleeding.
+  - Retail's `[42, 117, 480]` is MAXHP-1, not a divergence.
+  - The chain half was DAGGERS-F16's.
+  - SANDBOX-F5's level-0 kill counts are 17 + 5, not 17 + 6.
+- **Found in passing, not fixed:**
+  - A body's Blind-missed attack skill closes with `[1]` rather than `[46]`.
+  - `land_swing_on_body` never rolls Blind for an attack skill.
+- **Also recorded, no code:**
+  - `studies/sandbox/PLAN.md` SANDBOX-F5: level-0 swings cannot pick the strike arm, and no level-0 caster lands a word on any tape.
+  - Skills §51.3: no weakened hero or body appears on any tape, and a hero's effects do ride `0x0042`.
+- **Owed:** the client look (RANGERPRE §5's four-arm runsheet). IMMUNE-3 stays open and was not bundled.
+
 ### RANGERLOOP-F9 -- 2026-10-07 -- **Our `0x0028` now reaches both server models of the client's world-0 copy.**
 
 **Summary.** After RANGERPRE-S16's approach halt, the AgTrack mirror walked the `0x002A` follow on into the target. Arrows flew 0.728 then 0.282 s, and 1z-dj re-parked the model 1,430 u from the body. The legacy sync model walked on too, and its walk-in was RUN-T's 688 u `APPROACH RE-PIN`: SLICE-F25's 0x0028 branch had never been reached by `send()`.

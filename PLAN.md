@@ -2050,7 +2050,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   on: a Water hex, a self-snare stance or Deep Freeze, to settle boost × snare on our
   own client (slice §48).
 * **SKILLS-WK, heroes and bodies.** Weakness's −1 reaches a hero's or a body's rank
-  arithmetic and never the wire; only the player gets the `0x003B` batch (skills §51.3).
+  arithmetic and never the wire; no tape weakens one, a live run's question (skills §51.3).
 * **The Frenzy arm is UNSEPARATED** — both orderings of the multipliers fit the four
   observed hits (skills §48.8). Needs a tape where they diverge, not more of the same.
 * **One Javelin for 45**, n = 1, unexplained; an effective +8 armour at that instant and
@@ -2290,8 +2290,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   content row past 255, shipped the same day: PLAN-LOG "R-SANDBOX, the server-load level
   guard"): **the level-0 quirk** — `agent_level` treats 0 as None, so a level-0 hostile
   armours at 0 but strikes as 20 (the fallback 60); level 0 is a real retail value (map
-  146's defs 1428 / 1433 / 1434 / 1442) and the window offers it; which arm is right wants a
-  retail witness of a level-0 foe's damage, not a guess.
+  146's defs 1428 / 1433 / 1434 / 1442) and the window offers it; the corpus's swings cannot
+  pick the arm, a level-0 caster's could (SANDBOX-F5).
 
 **Profession** — [studies/profession/SECONDARY.md](studies/profession/SECONDARY.md)
 
@@ -2305,8 +2305,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **The Reforged pre-Searing run, 2026-09-29** — [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md) §4-§5
 
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
-  owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
-  serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
+  owner's `0x00B6` ruling. Also open there: serving the Reforged effect 3434; a wire-derived
+  game_mode that can contradict a manifest; S22's client look (§5).
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
 * **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
 * **RANGERLOOP-F9:** fixed on the desk 2026-10-07 (PLAN-LOG); owed, the RUN-T re-run
