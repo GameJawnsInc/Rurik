@@ -4873,7 +4873,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   its check value 0xCBF43926; the shift-not-rotate witness; a synthetic cache record and
   its four refusals (another build's count, FFNA type, mask width, table length); the
   24 h constant; the bracket bookkeeping and the three client asserts it mirrors
-  (MsCliMan:457/:472/:487); the request prediction and the kind-0 write rule; and the
+  (MsCliMan:457/:472/:487); the request prediction and the kind-0 write rule (each table
+  entry SEEDED non-zero first, so a zero kind-0 dword written over it reds -- review RV-1:
+  over a zero entry that write was invisible); and the
   38974 numbering trap -- a renumbered stream rebuilds through its own build and the SAME
   bytes read in the schema's numbering do not. §2 (vault): every DONE on every live tape
   (219 kind 3, 121 kind 0, 121 kind 2; 646 buffers) closes to the exact byte with count
@@ -4885,14 +4887,19 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   file id 5 in every vault/client snapshot parses with its OWN build's map count
   (`buildid.of_image` of the snapshot's Gw.exe into `authsrv.MAP_ID_COUNT_BY_BUILD`: 883,
   888 x3, 897, 898) and a stamp that is a FILETIME before the snapshot; KNOWN-BAD: read as
-  a build with one map more, refused. §4 (vault): `20260913T210901`'s `0x0093` set is
+  a build with one map more, refused. §4 (vault): the chain's streams are each direction
+  in WIRE order (`livewire.build_events` + `tape.decode_all`), and every manifest bracket
+  on all 66 chain connections rebuilds; KNOWN-BAD: the same s2c re-sorted by segment
+  clock -- `livewire.decode_conn`'s merge, which the chain used until review RV-2 --
+  breaks a bracket (1 connection, a `0x0196` ahead of its `0x0198`).
+  `20260913T210901`'s `0x0093` set is
   EXACTLY the maps whose `0x019F` hash differs from the snapshot's table, 5 of 142, and
   carried forward over the 18 captures on `run-live/2026-09-01_44fbd68767a8` the
   prediction is exact on 17 of 17 connections (37 requests); KNOWN-BAD: an all-zero
   table, the chain without the kind-0 write (12 of 17) and writing every kind-0 (2 of 17).
   Nothing read from the vault is committed -- no list, no table, no stamp. A 15-mutation
   pass (in-process monkeypatches of the module, one at a time) kills all 15. Floors 23
-  bare (RURIK_VAULT at an empty directory, three declared skips) and 43 vaulted, raised
+  bare (RURIK_VAULT at an empty directory, three declared skips) and 45 vaulted, raised
   once all three vault sections ran, both from green runs. ~30 s, most of it the
   `authsrv` import §3 makes),
   `toolkit/authsrv/test_keepalive.py` (**MOVECODE-K1's keep-alive re-grant, and

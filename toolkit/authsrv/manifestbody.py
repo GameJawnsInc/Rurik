@@ -411,18 +411,37 @@ def captures_on(run_tag, root=None):
 
 
 Link = collections.namedtuple("Link", "capture connection named predicted asked")
+Stream = collections.namedtuple("Stream", "capture connection s2c c2s")
 
 
-def chain_streams(stamps, set_aside, root=None):
-    """[(stamp, connection, merged)] for every game connection of `stamps`, decoded
-    both ways by `livewire.decode_conn` (each in its own build's numbering) and put in
-    capture-clock order. A connection that will not decode RAISES unless its capture's
-    manifest declares it gapped -- then it is set aside by name into `set_aside`."""
+def chain_streams(stamps, set_aside, root=None, codec=None):
+    """[Stream(stamp, connection, s2c, c2s)] for every game connection of `stamps`,
+    each DIRECTION decoded on its own in WIRE order -- `livewire.build_events` (TCP
+    sequence order, the build carried) then `tape.decode_all`, the path `corpus_replies`
+    takes through `load_tape` -- as [(t, opcode, values)] in the schema's numbering.
+    Connections are put in capture-clock order by their earliest message.
+
+    NOT `livewire.decode_conn`'s merged stream, and this is why (review RV-2,
+    2026-10-07): that one is SORTED BY SEGMENT TIME, and a capture's segment clock runs
+    backwards in places (on 41 of 127 live game connections' s2c, measured 2026-10-07), so
+    the merge is not wire order.
+    On two connections of this chain it moved the manifest family itself -- a `0x0196`
+    ahead of its `0x0198`, a kind-0 DONE ahead of the kind-2 bracket -- which `rebuild`
+    refuses (MsCliMan:457). `replay` needs the s2c order of DONE against `0x019F` and
+    nothing of the c2s/s2c interleaving, so the two directions are kept apart.
+
+    A connection that will not decode in BOTH directions to the last byte RAISES unless
+    its capture's manifest declares it gapped -- then it is set aside by name into
+    `set_aside` (the same refusal `decode_conn`'s ok flag made)."""
     _repo_paths()
     import capgaps
     import livewire
+    import tape
     import vaultpath
+    from codec import Codec
+    codec = codec or Codec()
     root = root or vaultpath.require_dir("captures", "live", why="manifestbody reads live captures")
+    ways = (("s2c", "GAME_SMSG", 0), ("c2s", "GAME_CMSG", livewire.CMSG_MASK))
     out = []
     for stamp in stamps:
         capdir = os.path.join(root, stamp)
@@ -431,14 +450,23 @@ def chain_streams(stamps, set_aside, root=None):
         for gf in livewire.connections(capdir):
             if gaps and capgaps.set_aside(capdir, gf, gaps, set_aside):
                 continue
-            conn, merged, ok = livewire.decode_conn(capdir, gf)
-            if not ok:
-                raise ManifestError(f"{stamp} {gf}: does not decode in both directions "
-                                    f"and its manifest declares no gap")
-            if merged:
-                conns.append((merged[0][0], conn, merged))
+            got, conn = {}, None
+            for way, chan, mask in ways:
+                conn, events, err = livewire.build_events(capdir, gf, way)
+                if err is not None:
+                    raise ManifestError(f"{stamp} {gf} {way}: {err}, and its manifest "
+                                        f"declares no gap")
+                msgs, receipt = tape.decode_all(events, codec, chan, mask, strict=False)
+                if receipt.err is not None or receipt.consumed != receipt.total:
+                    raise ManifestError(f"{stamp} {gf} {way}: decoded {receipt.consumed} of "
+                                        f"{receipt.total} bytes ({receipt.err}), and its "
+                                        f"manifest declares no gap")
+                got[way] = msgs
+            times = [t for msgs in got.values() for t, _op, _v in msgs]
+            if times:
+                conns.append((min(times), conn, got["s2c"], got["c2s"]))
         conns.sort(key=lambda c: c[0])
-        out += [(stamp, conn, merged) for _t0, conn, merged in conns]
+        out += [Stream(stamp, conn, s2c, c2s) for _t0, conn, s2c, c2s in conns]
     return out
 
 
@@ -448,29 +476,29 @@ def replay(table, streams, ops, kind0="nonzero"):
     stands when `0x019F` names each map. [Link] for every connection that named a map
     or asked for one; `table` is mutated.
 
-    Per message in order: a `0x019F` entry is compared to the table
-    (`predicted_requests`), a DONE updates it. `kind0` picks the kind-0 rule:
-    "nonzero" (`apply_done`, the observed one) and two KNOWN-BAD arms a test holds red,
-    "none" (kind 3 only) and "all" (every kind-0 DONE written, zero dwords too)."""
+    Per s2c message in WIRE order: a `0x019F` entry is compared to the table
+    (`predicted_requests`), a DONE updates it; the connection's c2s `0x0093`s are what
+    it asked. `kind0` picks the kind-0 rule: "nonzero" (`apply_done`, the observed one)
+    and two KNOWN-BAD arms a test holds red, "none" (kind 3 only) and "all" (every
+    kind-0 DONE written, zero dwords too)."""
     if kind0 not in ("nonzero", "none", "all"):
         raise ValueError(f"kind0={kind0!r}")
     links = []
-    for stamp, conn, merged in streams:
-        named, predicted, asked = 0, set(), []
-        for _t, way, op, v in merged:
-            if way == "s2c" and op == ops["versions"]:
+    for st in streams:
+        named, predicted = 0, set()
+        for _t, op, v in st.s2c:
+            if op == ops["versions"]:
                 named += len(v[1])
                 predicted |= predicted_requests(table, v[1])
-            elif way == "c2s" and op == ops["request"]:
-                asked.append(v[1])
-            elif way == "s2c" and op == ops["done"]:
+            elif op == ops["done"]:
                 kind, m, dword = v[1], v[2], v[3]
                 if kind0 == "nonzero":
                     apply_done(table, kind, m, dword)
                 elif kind == KIND_REPLY or (kind0 == "all" and kind == KIND_INSTANCE):
                     table[m] = dword
+        asked = [v[1] for _t, op, v in st.c2s if op == ops["request"]]
         if named or asked:
-            links.append(Link(stamp, conn, named, predicted, asked))
+            links.append(Link(st.capture, st.connection, named, predicted, asked))
     return links
 
 

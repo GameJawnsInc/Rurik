@@ -16,10 +16,12 @@ and commit nothing out of it -- no decoded list, no hash table, no stamp or mask
      (authsrv.MAP_ID_COUNT_BY_BUILD, keyed by buildid.of_image of the snapshot's own
      Gw.exe) and a stamp that is a FILETIME before the snapshot; KNOWN-BAD: the record
      read with the wrong build's count is refused.
-  4  the join: 20260913T210901's 0x0093 set is EXACTLY the maps whose 0x019F hash differs
-     from the snapshot's table (5 of 142), and carried forward over every capture on that
-     run directory the prediction is exact on every connection; KNOWN-BAD: an all-zero
-     table, the chain without the kind-0 write, and the chain writing EVERY kind-0.
+  4  the join: every chain connection's s2c, read in WIRE order, closes each manifest
+     bracket (KNOWN-BAD: re-sorted by segment clock, one does not); 20260913T210901's
+     0x0093 set is EXACTLY the maps whose 0x019F hash differs from the snapshot's table
+     (5 of 142), and carried forward over every capture on that run directory the
+     prediction is exact on every connection; KNOWN-BAD: an all-zero table, the chain
+     without the kind-0 write, and the chain writing EVERY kind-0.
 
 Each vault section SKIPS, printed, when the vault directory it reads is absent; a
 present directory that will not load is a failure, never a skip.
@@ -40,11 +42,12 @@ import vaultpath  # noqa: E402
 
 # FLOOR: two shapes, test_bit31's arrangement, both from green runs on 2026-10-07 with
 # zero headroom. FLOOR_BARE is section 1 alone, measured with RURIK_VAULT pointed at an
-# empty directory (23, three declared skips); FLOOR_VAULT is the vaulted total (43:
-# section 2 has 10, section 3 has 4, section 4 has 6), raised in main() once all three
-# vault sections ran, so no vaulted check is slack.
+# empty directory (23, three declared skips); FLOOR_VAULT is the vaulted total (45:
+# section 2 has 10, section 3 has 4, section 4 has 8 -- the wire-order bracket check and
+# its segment-clock KNOWN-BAD arm joined it after review RV-2), raised in main() once all
+# three vault sections ran, so no vaulted check is slack.
 FLOOR_BARE = 23
-FLOOR_VAULT = 43
+FLOOR_VAULT = 45
 LEDGER = checks.Ledger("manifest body, hash and cache (divergence D13.4)", floor=FLOOR_BARE)
 check = LEDGER.ok
 
@@ -159,12 +162,18 @@ def section_bare():
     check(mb.predicted_requests(table, [(3, 0xAA), (4, 0xBB), (5, 0)]) == {4}
           and mb.predicted_requests(table, {3: 0xAB}) == {3},
           "predicted_requests: a map is queued exactly when the named hash differs from the table")
+    # Every entry is SEEDED non-zero first: a zero written over a zero entry is invisible,
+    # and that is how this check once stayed green with kind 0 writing its zero dwords
+    # (review RV-1) -- the one rule D13.4.3's 17 of 17 rests on, unguarded off the vault.
+    table[6], table[7], table[8], table[9] = 0xEE, 0xEF, 0xF0, 0xF1
     mb.apply_done(table, 0, 6, 0)
     mb.apply_done(table, 2, 7, 5)
     mb.apply_done(table, 0, 8, 0xCC)
     mb.apply_done(table, 3, 9, 0xDD)
-    check(table[6] == 0 and table[7] == 0 and table[8] == 0xCC and table[9] == 0xDD,
-          "apply_done: kind 3 writes, kind 0 writes only a non-zero dword, kind 2 never")
+    check(table[6] == 0xEE and table[7] == 0xEF and table[8] == 0xCC and table[9] == 0xDD,
+          "apply_done: kind 3 writes, kind 0 writes only a non-zero dword (a zero one leaves "
+          "the entry alone), kind 2 never",
+          f"got {[hex(x) for x in table[6:10]]}")
     # THE NUMBERING TRAP. 38974 moved every GAME_SMSG from 0x0194 up by one, so the
     # manifest family's wire opcodes differ by build; a tape carries its build and the
     # reply must rebuild from the bytes only through THAT build's codec.
@@ -327,7 +336,30 @@ def section_join():
     ok, detail = capgaps.audit(set_aside, capdirs, livewire.refuses)
     check(ok, "the chain steps past only the declared gapped connection, which still refuses",
           detail)
-    first = [st for st in streams if st[0] == mb.CHAIN_FIRST_CAPTURE]
+    # (f)'s premise: replay reads each connection's s2c in WIRE order, so every manifest
+    # bracket on the chain must close the way the client's bookkeeping closes it. Review
+    # RV-2: chain_streams once handed over livewire.decode_conn's merge, sorted by SEGMENT
+    # TIME, and the segment clock runs backwards in places -- the KNOWN-BAD arm below is
+    # that order, and on this chain it puts a 0x0196 ahead of its 0x0198.
+    refused = []
+    for st in streams:
+        try:
+            mb.rebuild(st.s2c, ops)
+        except mb.ManifestError as exc:
+            refused.append((st.capture, st.connection, str(exc)))
+    check(len(streams) >= 66 and not refused,
+          f"every manifest bracket on all {len(streams)} chain connections closes in wire order "
+          f"(rebuild refuses none)", f"{refused[:2]}")
+    clock = []
+    for st in streams:
+        try:
+            mb.rebuild(sorted(st.s2c, key=lambda m: m[0]), ops)
+        except mb.ManifestError:
+            clock.append((st.capture, st.connection))
+    check(len(clock) >= 1,
+          f"KNOWN-BAD: the same s2c re-sorted by segment clock (decode_conn's merge) breaks a "
+          f"bracket on {len(clock)} connection(s) -- the order is not decoration", f"{clock[:2]}")
+    first = [st for st in streams if st.capture == mb.CHAIN_FIRST_CAPTURE]
     head = mb.replay(list(rec.table), first, ops)
     named = [k for k in head if k.named]
     check(stamps[:1] == [mb.CHAIN_FIRST_CAPTURE] and len(named) == 1
