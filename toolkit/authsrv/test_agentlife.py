@@ -8876,12 +8876,19 @@ def section_hold_plane():
         authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
                                st, 1)
         ops = [op for op, _v in sent]
-        dmg = [v for op, v in sent if op == FLOAT_T and v[0] == 16]
+        # RE-AIMED 2026-10-07 (CHAN55, studies/skills 68): Banish is holy damage on a
+        # non-attack, so its word rides property 55 (negative) through hurt_agent_row's
+        # `prop` -- it read [16, foe, body, frac] until then. What this guards is
+        # unchanged: ONE word, onto the hostile, from the body, and the kill pays.
+        dmg = [v for op, v in sent if op == FLOAT_T and (
+            v[0] == 16 or (v[0] == 55 and v[3] & 0x80000000))]     # a 55 heal is not damage
         LEDGER.ok(st["agents"][10]["dead"] and authsrv.GAME_SMSG_AGENT_KILL_REWARD in ops
-                  and len(dmg) == 1 and dmg[0][1] == 10 and dmg[0][2] == 200,
-                  "the party's spell lands on the hostile ([16, foe, body, frac]) "
-                  "and its kill pays the reward -- land_skill's damage site by the "
-                  "row's allegiance", f"dead {st['agents'][10]['dead']}, ops "
+                  and len(dmg) == 1 and dmg[0][0] == 55 and dmg[0][1] == 10
+                  and dmg[0][2] == 200,
+                  "the party's spell lands on the hostile ([55, foe, body, frac] -- "
+                  "Banish's holy damage, CHAN55) and its kill pays the reward -- "
+                  "land_skill's damage site by the row's allegiance",
+                  f"dead {st['agents'][10]['dead']}, ops "
                   f"{[hex(o) for o in ops]}, damage {dmg}")
         # 13. the revert arm: --party-no-fight -- engaged, in reach, nothing.
         authsrv.PARTY_FIGHTS = False

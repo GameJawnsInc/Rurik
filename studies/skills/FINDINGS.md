@@ -9949,3 +9949,92 @@ section records what changes HERE.
 - **The `[61]` word predicts every AI completion with no free parameter** (CASTAI-ZF10):
   485 of 486 within 0.05 s. The Zaishen Mage's casts run at × 0.67, the Degeneration
   Mesmer's at × 0.7236.
+
+## 68. SKILLS-CH — armour-ignoring damage on a NON-ATTACK rides property 55, not "holy" damage; and life steal as a mechanic, OBSERVED both directions (Vampiric Gaze 153 own casts 13 of 13, a hostile's 143 at the player 3 of 3) (2026-10-07; CHAN55, CASTAI-ZF31)
+
+**Status: SHIPPED, behind two revert flags** (`--no-armour-ignoring-on-55`; `--no-life-steal`,
+§68.3). Lock: `toolkit/authsrv/test_chan55.py`. `SKILLS-CH<n>` = a finding of this section;
+convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md). Closes the CASTAI-ZF31
+row of [studies/monsterai/FINDINGS.md](../monsterai/FINDINGS.md) §18.2 ("our server sends
+Holy Strike on 16: an escalation"). ZF18 (Deep Wound re-applied stacks) is NOT this section:
+concurrent condition re-application is the next pass's CONDCONC lane.
+
+### 68.1 SKILLS-CH1 — the rule is "armour-ignoring damage on a non-attack", and the client's own templates are what discriminate it (OBSERVED; the triage's direction CORROBORATED, two of its specifics corrected)
+
+**The census, re-derived 2026-10-07 at 642d8957** (`spellhitjoin.census(named=...)`, whose
+`named_words` reads the wire's own name for the observer's damage, `0x009F [10, obs, S]`, ahead
+of the word). 127 connections; 20260928T103123 :65009 set aside by its own manifest (capgaps),
+nothing else refused. **OBSERVED:**
+
+| channel | skills named ahead of the word (words) |
+|---|---|
+| **55, negative** | 102 (1), 133 (1), 143 (3), 251 (6), 272 (64), 302 (11), 2809 (8) — **94 words, 7 skills** |
+| 16 / 17 | 179, 185, 186, 194, 197, 222, 229, 230, 271, 322, 327, 334, 336, 338, 340, 341, 392, 393, 399, 426 — **20 skills** |
+
+No skill is on both. **The client's own description templates** (`skilldesc.py`'s parse, our
+label names only; build 38797) type the two sides:
+
+| skill | type | labels | | skill | type | labels |
+|---|---|---|---|---|---|---|
+| 102 | 5 | SHADOW_DAMAGE, LIFE_STEAL | | 179 185 186 194 197 271 | 4/5/6 | FIRE_DAMAGE (+ riders) |
+| 133 | 5 | SHADOW_DAMAGE | | 222 229 230 | 4/5 | LIGHTNING_DAMAGE |
+| 143 | 5 | LIFE_STEAL, COUNT | | 322 327 334 336 338 341 426 | 14 | PLUS_DAMAGE (327, 341 also DAMAGE) |
+| 251 272 302 | 4/6/5 | HOLY_DAMAGE | | 340 392 393 | 14 | none / CONDITION_DURATION |
+| 2809 → 219 | 5 | DAMAGE (untyped) | | 399 | 14 | DAMAGE (untyped) |
+
+2809 is the PvP split of 219 (CASTAI-ZF6) and outside the player corpus; it reads through its
+parent, so its untyped reading is **CORROBORATED** (the parent's template, not the split's).
+So **"armour-ignoring label (holy, shadow, steal, untyped) on a skill that is not an ATTACK
+(type 14)" separates the census exactly — 7 of 7 onto 55, 20 of 20 onto 16 / 17** — and is the
+wiki's own split (WIKI, GWW "Damage" sec. Properties, rev. 2020-08-11, already cited at
+`authsrv.ARMOUR_RESPECTING_MEANS`: shadow, holy and untyped skill damage ignore armour). **A
+rule keyed on "holy" fails on 4 of the 7** (102 and 133 shadow, 143 a steal, 2809 untyped).
+The attack exclusion is load-bearing: without it 327, 341 and 399 (untyped DAMAGE on an attack)
+would be predicted on 55, where retail named all three on 16 / 17 (`test_chan55` 8b3, the
+known-bad arm). §63's "UNDISCRIMINATED" is superseded: the wire alone did not discriminate,
+the templates do.
+
+**Where the triage was right and wrong.** Direction and every census number reproduce exactly.
+Two specifics do not: its "399, 4 words" on 16 / 17 counts body victims — the named census
+(observer only) has 399 × 1; and its list of plain single-target steals (153, 156, 1077, 152)
+omits nothing but should say why **1075** is not in it (type 5, target 5, one LIFE_STEAL slot —
+but a radius of 312 and a duration bit, so not plain).
+
+### 68.2 SKILLS-CH2 — the server: one helper keyed on the row, every damage-word door the player's and a body's spells use (RECONSTRUCTION for the casts no tape holds)
+
+`authsrv.spell_damage_prop(skill_id)` → 55 when the **loaded** `skill_effect` row's
+`scale_means` is standalone damage outside `ARMOUR_RESPECTING_MEANS` ("Holy damage",
+"Armor-ignoring damage" today) **and** the skill's `type_code` is not 14; 16 otherwise, for no
+skill, under the flag, or for a skill with no `skills` row (the type is unknown). Never the
+word "holy", never a parsed label string. The doors:
+
+- **`body_spell_word`** — the player branch's word and, through `hurt_agent_row(prop=)`, the
+  body branch's. Every body spell path lands here (`land_skill`, the projectile's arrival, the
+  area, the burst, Mind Burn's adjacent, an area's tick, the hex end's body half). At the
+  player the order is unchanged: the gain, the interrupt run, `[10, player, skill]`, the word.
+  Bodies and foes get no `[10]` (the corpus's [10] names the observer's damage only).
+- **`hit_enemy(exact=…, spell_skill=sid)`** — a new keyword, separate from `skill_id` (which is
+  the ATTACK skill a swing carries and gates the strike's own terms). Threaded explicitly from
+  the eight player-spell sites (`land_player_spell_shot`, `land_player_spell_area`,
+  `burst_player_spell`, `adjacent_player_spell` ×2, `_area_strike`, `burst_player_caster_area`,
+  `cast_tick`'s one-target word). The first-word `[42]` (MAXHP-1) still rides immediately ahead.
+- **Not routed, on purpose:** `hex_end_burst`'s player half (its only row, Incendiary Bonds 179,
+  is fire — 16 OBSERVED, 5 of 5 named) and a blocked attack skill's punishment (an ATTACK's
+  damage, the rule's own exclusion). Both would answer 16 by the rule anyway; the residue is
+  an asymmetry nobody can observe today — a future armour-ignoring HEX END would ride 55 on the
+  body half and 16 on the player half.
+- **Areas over time take the same rule** (decided, RECONSTRUCTION): retail's PERIODIC damage
+  splits by type exactly as a cast's does — Balthazar's Aura 272's pulses 64 of 64 on 55,
+  Zealot's Fire 271's 115 of 115 on 16, each named by `[10]` — and no area-over-time spell of
+  an armour-ignoring type is on any tape. So `_area_strike` threads the spell id (player
+  caster) and goes through `body_spell_word` (body caster). The same pass's desk-aotrows lane
+  adds a "Holy damage" area-over-time row (830); by this rule its ticks ride 55 with no line of
+  its own, and a check there that reads 830's tick words on 16 alone would redden at the merge
+  (the orchestrator re-checks it).
+
+**What moves today.** Hand rows Holy Strike 312 (the fixture Hatcher's bar) and Banish 252 (the
+map-168 corridor Monks' bar, and a party Monk's); on a vault machine the label tier's holy rows
+294, 1113, 2212. The number and the arithmetic are unchanged — only the property. Labels at the
+call sites: OBSERVED for a hostile's armour-ignoring spell at the observer and body-to-body;
+RECONSTRUCTION for the player's own holy cast and a hero's (no tape holds either; the corpus's
+own-cast witness of the channel is the steal, §68.3).

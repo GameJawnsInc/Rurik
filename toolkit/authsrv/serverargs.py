@@ -3242,6 +3242,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "426 on a signet, an attack, nothing). By default the bonus "
                          "lands only on a target activating a spell as the strike "
                          "lands (WIKI; OBSERVED on 20260928T103123's henchman, 2 of 2).")
+    ap.add_argument("--no-armour-ignoring-on-55", action="store_true",
+                    help="CHAN55 REVERT (studies/skills 68): every skill's damage word "
+                         "rides property 16, as this server sent until 2026-10-07 -- "
+                         "Holy Strike 312 and Banish 252 on 16. WRONG on retail's "
+                         "evidence: the words [10, obs, S] names split with no overlap, "
+                         "55 (negative) for exactly the armour-ignoring non-attack skills "
+                         "102 133 143 251 272 302 2809 (94 words) and 16 / 17 for 20 "
+                         "others; by default an armour-ignoring, non-attack skill's word "
+                         "rides 0x00A3 [55, target, source, -fraction].")
     ap.add_argument("--no-interrupt-chain-hold", action="store_true",
                     help="CASTAI-ZF17 REVERT: a cast interrupted under an auto-attack "
                          "chain that resumes sends no [8, player, 1] after the [35], and "

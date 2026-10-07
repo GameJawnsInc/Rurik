@@ -4534,6 +4534,56 @@ def _is_attack_skill(skill_id):
     return int(row["type_code"]) == ATTACK_TYPE_CODE
 
 
+# CHAN55 (studies/skills 68, SKILLS-CH1; CASTAI-ZF31): WHICH PROPERTY A SKILL'S DAMAGE
+# WORD RIDES. Retail names the observer's damage ahead of the word with [10, obs, S]
+# (spellhitjoin.named_words), and over the whole live corpus (127 connections, the
+# manifest-gapped :65009 set aside by name) the skills it names split with NO overlap:
+# property 55, NEGATIVE fraction, for exactly {102, 133, 143, 251, 272, 302, 2809} --
+# 94 words -- and 16 / 17 for 20 others. OBSERVED. The client's own description
+# templates type the 55 side SHADOW (102, 133), a steal slot (143), HOLY (251, 272,
+# 302) and untyped damage (2809, the PvP split of 219); the 16 / 17 side FIRE,
+# LIGHTNING, the attack skills and 399 (untyped, but an ATTACK). So the rule is
+# "armour-ignoring damage on a non-attack" -- WIKI's own split (ARMOUR_RESPECTING_MEANS'
+# banner) -- and NOT "holy": a holy key fails on 4 of the 7 (102, 133, 143, 2809).
+# Keyed on the LOADED ROW, never on a label string's words: a standalone damage label
+# outside ARMOUR_RESPECTING_MEANS ("Holy damage", "Armor-ignoring damage") on a skill
+# whose type is not ATTACK_TYPE_CODE. RECONSTRUCTION for the player's own holy cast and
+# a hero's (no tape holds either); the corpus's own-cast witness of the channel is the
+# steal 153, 13 of 13 on 55 (studies/skills 68). An unknown type (no skills row) keeps
+# 16: the rule cannot say "not an attack" without it. AN AREA'S TICKS TAKE THE SAME RULE
+# (_area_strike, both casters): retail's PERIODIC damage splits by type exactly as a
+# cast's does -- Balthazar's Aura 272's pulses 64 of 64 on 55, Zealot's Fire 271's 115 of
+# 115 on 16, each named by [10] -- so a holy area over time on 55 is RECONSTRUCTION by
+# that split (no area-over-time spell of an armour-ignoring type is on any tape).
+# NOT ROUTED, on purpose: hex_end_burst's player half (Incendiary Bonds 179, fire --
+# 16 OBSERVED, 5 of 5 named) and a blocked attack skill's punishment (an ATTACK's,
+# the rule's own exclusion) keep hit_enemy's 16.
+# --no-armour-ignoring-on-55 reverts: every skill's damage word on 16, as this server
+# sent until 2026-10-07 (Holy Strike, Banish).
+ARMOUR_IGNORING_ON_55 = True
+
+
+def spell_damage_prop(skill_id):
+    """The property a SKILL's damage word rides: GV_ARMOR_IGNORING (55) when the
+    loaded skill_effect row is armour-ignoring damage on a non-attack skill (the
+    banner above), PROP_DAMAGE (16) otherwise -- and always 16 under
+    --no-armour-ignoring-on-55, for no skill, or for a skill with no skills row."""
+    if not ARMOUR_IGNORING_ON_55 or not skill_id:
+        return agents.PROP_DAMAGE
+    means = skill_effect_row(skill_id).get("scale_means")
+    ignoring = (SCALE_MEANS_DAMAGE.get(means) == "standalone"
+                and means not in ARMOUR_RESPECTING_MEANS)
+    if not ignoring:
+        return agents.PROP_DAMAGE
+    try:
+        type_code = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
+    except Exception:                                          # noqa: BLE001
+        return agents.PROP_DAMAGE
+    if type_code == ATTACK_TYPE_CODE:
+        return agents.PROP_DAMAGE
+    return agents.GV_ARMOR_IGNORING
+
+
 # THE INSTANT SKILL (DESKWORK-D5, 2026-09-25; studies/skills 56.9, SKILLS-IA;
 # toolkit/authsrv/instantjoin.py). Retail announces a Stance (3), a Shout (15) or
 # a type-16 skill with `0x009F [48, caster, skill]` -- GV_INSTANT_SKILL_ACTIVATED
@@ -16163,13 +16213,16 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
                     spell_ar, amount, conn_id):
     """The word of a body's spell on `tid` and its bookkeeping: a party body
     or a hostile through hurt_agent_row (SLICE-H3 / H4), the player through
-    its pool -- the gain ahead of the damage, the word, the death."""
+    its pool -- the gain ahead of the damage, the word, the death. The word's
+    property is the skill's row's (CHAN55, spell_damage_prop): 55 for
+    armour-ignoring damage on a non-attack, 16 otherwise, on both branches."""
+    prop = spell_damage_prop(skill_id)                     # CHAN55
     if tbody:
         # SLICE-H3: the spell was at a party body; SLICE-H4: or a party
         # body's spell at a hostile -- the row's allegiance decides the
         # reward inside.
         hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id,
-                       f"skill {skill_id}")
+                       f"skill {skill_id}", prop=prop)
         # DESKWORK-D5 step 2: the spell's interrupt on a BODY -- RECONSTRUCTION.
         interrupt_body(send, state, tid, state.get("agents", {}).get(tid), conn_id,
                        skill_id, agent_id)
@@ -16200,8 +16253,9 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
     # [16], 16 + 10 + 9 of the 92 (adrenjoin's order census).
     skill_damage_word(send, skill_id, f"a body's skill {skill_id} at the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
-         f"skill {skill_id} deals {dealt:.0f} to the player")
+         [prop, PLAYER_AGENT_ID, agent_id, frac],
+         f"skill {skill_id} deals {dealt:.0f} to the player"
+         + (" (armour-ignoring, CHAN55)" if prop == agents.GV_ARMOR_IGNORING else ""))
 
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
@@ -16699,7 +16753,8 @@ def land_player_spell_shot(send, state, conn_id, shot, connected=True):
     _res = hit_enemy(send, state, tid, conn_id,
                      exact=player_spell_amount(state, sid, tid, spell["amount"]), swing=False,
                      armed=True, projectile=True,
-                     label=f"skill {sid}'s projectile lands", before_damage=before)
+                     label=f"skill {sid}'s projectile lands", before_damage=before,
+                     spell_skill=sid)                                  # CHAN55
     if _res == "landed":
         # DESKWORK-D5 step 2: the player's interrupting SPELL (Lightning
         # Javelin 230) on a body -- RECONSTRUCTION; at the player retail puts
@@ -16845,7 +16900,8 @@ def land_player_spell_area(send, state, conn_id, shot, radius, connected=True):
         res = hit_enemy(send, state, foe, conn_id,
                         exact=player_spell_amount(state, sid, foe, spell["amount"]), swing=False,
                         armed=True, projectile=True,
-                        label=f"skill {sid}'s burst reaches agent {foe}")
+                        label=f"skill {sid}'s burst reaches agent {foe}",
+                        spell_skill=sid)                               # CHAN55
         if res == "landed":
             landed += 1
         if vis is not None and res == "landed":
@@ -17118,7 +17174,8 @@ def burst_player_spell(send, state, conn_id, cast, amount, rank, radius):
     for foe in foes:
         res = hit_enemy(send, state, foe, conn_id,
                         exact=player_spell_amount(state, sid, foe, float(amount)), swing=False,
-                        armed=True, label=f"skill {sid} bursts on agent {foe}")
+                        armed=True, label=f"skill {sid} bursts on agent {foe}",
+                        spell_skill=sid)                               # CHAN55
         if res != "landed":
             continue
         landed += 1
@@ -17998,13 +18055,14 @@ def adjacent_player_spell(send, state, conn_id, cast, amount, rank, radius):
     landed, twins = [], []
     for foe in sorted(foes):
         res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False, armed=True,
-                        label=f"skill {sid} on agent {foe}")
+                        label=f"skill {sid} on agent {foe}", spell_skill=sid)   # CHAN55
         if res != "landed":
             continue
         landed.append(foe)
         if bonus and energy_bonus_holds(state, PLAYER_AGENT_ID, foe, target):
             res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False,
-                            armed=True, label=f"skill {sid}'s energy bonus on agent {foe}")
+                            armed=True, label=f"skill {sid}'s energy bonus on agent {foe}",
+                            spell_skill=sid)                           # CHAN55
             if res != "landed":
                 continue
             twins.append(foe)
@@ -18150,7 +18208,8 @@ def _area_strike(send, state, conn_id, area, now):
         for foe in foes:
             res = hit_enemy(send, state, foe, conn_id,
                             exact=player_spell_amount(state, sid, foe, area["amount"]), swing=False,
-                            armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}")
+                            armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}",
+                            spell_skill=sid)            # CHAN55: the tick takes the cast's rule
             if res == "landed":
                 struck.append(foe)
     else:
@@ -18307,7 +18366,8 @@ def burst_player_caster_area(send, state, conn_id, cast, found, inflicted, rank,
         if amount is not None:
             res = hit_enemy(send, state, foe, conn_id,
                             exact=player_spell_amount(state, sid, foe, amount), swing=False,
-                            armed=True, label=f"skill {sid} bursts from the caster on agent {foe}")
+                            armed=True, label=f"skill {sid} bursts from the caster on agent {foe}",
+                            spell_skill=sid)                           # CHAN55
             if res != "landed":
                 continue
             landed += 1
@@ -23524,8 +23584,14 @@ def ground_items_tick(send, state, conn_id):
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
               skill_strike=False, skill_id=None, before_damage=None,
-              projectile=False, damage_mult=1.0):
+              projectile=False, damage_mult=1.0, spell_skill=None):
     """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `spell_skill` names the SPELL an `exact` amount belongs to, for its word's
+    property only (CHAN55: spell_damage_prop -- 55 for armour-ignoring damage on
+    a non-attack). It is not `skill_id`, which is the ATTACK skill a swing
+    carries and gates the strike's own terms; an `exact` with no spell_skill
+    keeps 16 (the hex end, the block punishment).
 
     `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
     weapon strike -- the roll, the armour exponent, the critical, the
@@ -23718,6 +23784,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                                             # this against each foe's OWN armour
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
+    if exact is not None and spell_skill is not None:
+        prop = spell_damage_prop(spell_skill)            # CHAN55: 55 or 16, by the row
     frac = _damage_fraction(dealt, agent["max_health"], prop,
                             ("one critical" if critical else label)
                             + (f" +{bonus_damage:.0f}" if bonus_damage else ""))
@@ -27702,7 +27770,8 @@ def cast_tick(send, state, conn_id):
                     _st_res = hit_enemy(send, state, target, conn_id, exact=player_spell_amount(
                                             state, cast["skill_id"], target, float(found[0])),
                                         swing=False, armed=True,
-                                        label=f"skill {cast['skill_id']}")
+                                        label=f"skill {cast['skill_id']}",
+                                        spell_skill=cast["skill_id"])  # CHAN55
                     if _st_res == "landed":
                         # SKILLS-LV: the row's knock-down on the one target the
                         # word landed on (231, 294) -- after the word, the
@@ -32631,9 +32700,12 @@ def hostile_target(state, agent_id, agent, now):
     return best[1]
 
 
-def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
+def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what,
+                   prop=None):
     """`dealt` health off agent row `tid`, on the same property-16 channel a
-    hit on any agent rides ([16, TARGET, cause, fraction]). A PARTY body
+    hit on any agent rides ([16, TARGET, cause, fraction]) -- or on `prop`
+    when the caller names one (CHAN55: body_spell_word's 55 for an
+    armour-ignoring skill; the fraction is the same either way). A PARTY body
     (SLICE-H3) dies through kill_agent with no kill reward -- a party death
     pays nobody; a HOSTILE (SLICE-H4, the party's own hit) dies with the
     reward, the objective and the morale the player's hit pays: the party's
@@ -32664,7 +32736,7 @@ def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
         agent_adrenaline(row).on_damage_taken(
             dealt / float(row["max_health"] or 1.0), now)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, tid, attacker_id, frac],
+         [agents.PROP_DAMAGE if prop is None else prop, tid, attacker_id, frac],
          f"{what}: {dealt:.0f} to {'agent' if hostile else 'party agent'} {tid}")
     print(f"[c{conn_id}] {'agent' if hostile else 'party agent'} {tid} "
           f"({row.get('name', '?')}) takes {dealt:.0f} from agent "
@@ -50585,6 +50657,14 @@ def main():
         print("NO BONUS REQUIRES SPELL: Savage Shot 426's +13..28 lands on every hit, "
               "whatever the target is doing (WIKI and retail: only on a spell, "
               "CASTAI-ZF21).", flush=True)
+
+    if a.no_armour_ignoring_on_55:
+        global ARMOUR_IGNORING_ON_55
+        ARMOUR_IGNORING_ON_55 = False
+        print("NO ARMOUR-IGNORING ON 55: every skill's damage word rides property 16, "
+              "Holy Strike and Banish included, as until 2026-10-07 (retail: an "
+              "armour-ignoring non-attack skill's word rides 55, negative -- 94 words, "
+              "7 skills, no overlap; CHAN55).", flush=True)
 
     if a.no_interrupt_chain_hold:
         global INTERRUPT_CHAIN_RETAKES_HOLD

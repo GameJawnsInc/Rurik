@@ -709,7 +709,7 @@ def _sections(carry):
     # The cast itself, at rank 0 so Flare's 20 scales to 36.68 and does not
     # kill the 100-pool player (at rank 12 the 56 becomes 102.7, an overkill
     # the wire would carry as 1.0 -- the wiki's "below 60 takes MORE").
-    def _cast(skill_id, **flags):
+    def _cast(skill_id, _props=None, **flags):
         saved = {k: getattr(authsrv, k) for k in flags}
         saved_rank = authsrv.ENEMY_SKILL_RANK
         out = []
@@ -738,7 +738,7 @@ def _sections(carry):
         dmg = [struct.unpack("<f", struct.pack("<I", v[3] & 0xFFFFFFFF))[0]
                for op, v, _l in out
                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
-               and v[0] == agents.PROP_DAMAGE]
+               and v[0] in (_props or (agents.PROP_DAMAGE,))]
         return st, dmg
 
     mult = authsrv.armour_multiplier(25.0)          # 2^((60-25)/40) = 1.834
@@ -772,11 +772,17 @@ def _sections(carry):
           "and so does `--no-armour-term`, the general control",
           f"sent {dmg} -- a session that drops the swing's armour maths "
           f"drops the spell's with it")
-    st, dmg = _cast(312)
-    check(len(dmg) == 1 and abs(dmg[0] + 0.10) < 1e-6,
+    # RE-AIMED 2026-10-07 (CHAN55, studies/skills 68): Holy Strike's word now rides
+    # property 55 (an armour-ignoring non-attack, retail's channel for it), so the
+    # control reads BOTH channels and requires the one word to be the 55 -- the
+    # number it guards (exactly 10, no armour term) is unchanged. It read 16 alone
+    # until then; test_chan55 holds the channel itself.
+    st, dmg = _cast(312, _props=(agents.PROP_DAMAGE, agents.GV_ARMOR_IGNORING))
+    _, dmg16 = _cast(312)
+    check(len(dmg) == 1 and abs(dmg[0] + 0.10) < 1e-6 and dmg16 == [],
           "CONTROL: Holy Strike's 10 at rank 0 is still exactly 10 with the "
-          "term ON",
-          f"sent {dmg} -- armour-ignoring by type, untouched by this default")
+          "term ON (on property 55 since CHAN55, none on 16)",
+          f"sent {dmg}, on 16 {dmg16} -- armour-ignoring by type, untouched by this default")
 
     print("\n11b. whose connection it is: spellhitjoin.observer_of (bare "
           "machine, studies/skills 43.8)")
@@ -2120,6 +2126,10 @@ def _sections(carry):
     # [10] is on both channels: what ignores armour (holy, life stealing) goes out on 55, what
     # respects it (fire, lightning, a swing) on 16 / 17 -- RECONSTRUCTION; every 55 word here
     # is holy or a life steal, so holy-vs-armour-ignoring is UNDISCRIMINATED on this corpus.
+    # 2026-10-07 (CHAN55, studies/skills 68): the client's own templates DO discriminate --
+    # 102 / 133 are SHADOW, 143 a steal slot, 2809's parent untyped DAMAGE -- so the rule is
+    # "armour-ignoring, non-attack" and not "holy" (4 of the 7 are not holy). The server
+    # now sends it (authsrv.spell_damage_prop); test_chan55 section 6 holds the census exact.
     nw_z2, nw_pin, nw_all = collections.Counter(), collections.Counter(), collections.Counter()
     for stamp, _conn, d in named_census:
         for k, n in d.items():
@@ -2138,7 +2148,8 @@ def _sections(carry):
           "ride property 55 with a NEGATIVE fraction and Zealot's Fire's 271 x115 rides 16; at "
           "the pin the 55 side is exactly {102: 1, 133: 1, 143: 3, 2809: 8}; and corpus-wide no "
           "named skill is on both channels (>= 10 on 16 / 17, >= 5 on 55) -- what ignores armour "
-          "goes out as a negative health gain (RECONSTRUCTION; this server sends Holy Strike on 16)",
+          "goes out as a negative health gain (RECONSTRUCTION; this server sends Holy Strike on 55 "
+          "since CHAN55, 2026-10-07)",
           str((dict(nw_z2), {s: n for (s, p), n in nw_pin.items() if p == 55}, sorted(on16),
                sorted(on55))))
     check(sc["swing_pairs"] >= 5 and sc["swing_pairs_3plus"] == sc["swing_pairs"],
