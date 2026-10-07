@@ -23248,3 +23248,28 @@ agent-driven launches on the owner's go-ahead.
 follows 1z-ds.50's retail rule on our client. It does not measure how retail's client draws
 the batch, and the rule's two RECONSTRUCTION cases (chain disturbed; the hold already down)
 were not exercised, because the plan pressed no skills and every start held.
+
+### 1z-ds.54 DEATHWALK-E4: the stop-disc fix CONFIRMED on the client -- 0 inside-stop re-paths and 0 C1 against 5 and 5
+
+**What ran** ([RUN-DEATHWALK.md](RUN-DEATHWALK.md) §3e): TRAILPIN's rig, flags and plan; one
+launch with `STOP_DISC_ENDS_FOLLOW` on (harness `20261006T215033`) and one with
+`--repath-inside-stop` (`20261006T215821`), agent-driven. Scored by `review/e4_score.py`,
+whose selftest reproduces TRAILPIN's 7 / 10 off real pre-D1 tapes.
+
+**Result** (OBSERVED):
+
+| | fixed | known-bad |
+|---|---|---|
+| re-paths | 156 | 163 |
+| inside-stop re-paths | 0 | 5 |
+| same-tick C1 swings | 0 | 5: run 0.0, 60.8-76.1 u from the target, each in its re-path's call |
+| C2 / C3 | 0 / 0 | 0 / 0 |
+
+- The known-bad arm reproduces 1z-ds.51's mechanism on the client: every inside-stop re-path
+  opened a swing in its own call, 5 of 5.
+- The fixed arm sends neither, at an unchanged rate of ordinary re-paths.
+
+**DEATHWALK-H5 HELD**; STOP_DISC_ENDS_FOLLOW stays ON.
+
+**Limits:** one pair, n = 5 vs 0; the fixed arm's exposure is the identical plan's, not
+counted; retail inside its stop disc is UNVERIFIED; C2 / C3 were unexercised and remain open.

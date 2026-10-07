@@ -325,6 +325,47 @@ reach its floor.
 cover is unchanged from §3b. This is retail's rule replayed on our wire, scored against the
 schedule the rule defines; how retail's client draws it is not measured here.
 
+### 3e. E4 RAN and CLOSED (2026-10-06): the stop-disc fix removes the zero-run re-path and its swing
+
+**What ran:** TRAILPIN's rig (`followpin-g`), flags, unlocks (byte-identical) and plan, without
+agenttap. Interleaved arms: F = the default (`STOP_DISC_ENDS_FOLLOW` on) and K =
+`--repath-inside-stop`. Agent-driven, on the owner's go-ahead.
+
+**Pre-registered at launch:**
+- **The stopping rule:** stop after the first pair in which K's pooled inside-stop re-paths
+  reach 5, with a cap of 4 per arm.
+- **H5:** F has 0 inside-stop re-paths and 0 C1; K has C1 at 1-6 a launch.
+- **Also:** C2 / C3 are counted, not held to 0, and ordinary re-paths must appear on both arms.
+- **The aborts:** an assert, or a launch with no re-paths.
+
+**The scorer:** `studies/movecode/review/e4_score.py`. Its selftest reproduces TRAILPIN's
+published 7 / 10 same-tick re-path swings off the real pre-D1 tapes, all C1 -- and caught
+its own row-filter bug doing so.
+
+| | F1 (`20261006T215123`) | K1 (`20261006T215856`) |
+|---|---|---|
+| arm read off the tape | fixed | known-bad |
+| re-paths | 156 | 163 |
+| **inside-stop re-paths** | **0** | **5** |
+| **same-tick C1** | **0** | **5**: run 0.0, 60.8-76.1 u from the target, each opening the swing in the re-path's call |
+| C2 / C3 | 0 / 0 | 0 / 0 |
+
+Both launches: RUN VERDICT PASS, no assert. The stopping rule fired after ONE pair: K
+reached 5.
+
+**DEATHWALK-H5 HELD.**
+- On the known-bad arm every inside-stop re-path made a same-tick swing (5 of 5), which is
+  the mechanism D1 derived, reproduced on the client.
+- On the fixed arm neither happened, while ordinary re-paths ran at the same rate (156 vs
+  163), so the fix touches only the disc case.
+
+**Limits:**
+- n = 5 against 0, one pair, on one plan.
+- The fixed arm's own exposure is inferred from the identical plan, not counted, because
+  nothing on the fixed arm logs a re-path it declined to send.
+- Whether retail ever re-paths inside its stop disc stays UNVERIFIED (1z-ds.51).
+- C2 and C3 were not exercised on this plan; they stay open.
+
 ## 4. Predictions — to be filled by the desk steps
 
 | | Prediction | Retail | Known-bad arm |
