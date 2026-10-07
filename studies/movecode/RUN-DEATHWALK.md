@@ -366,6 +366,59 @@ reached 5.
 - Whether retail ever re-paths inside its stop disc stays UNVERIFIED (1z-ds.51).
 - C2 and C3 were not exercised on this plan; they stay open.
 
+### 3f. The E1 and E2 scorers (2026-10-06), and what the corpus already says
+
+**`review/e1_score.py`** reads each PLAYER death off the wire: the status word gaining 0x10.
+- **Open windup:** the player's last start has no landing and no stop before the death; a
+  door's `[3]` already on the wire closes it.
+- **The batch:** the sends within 5 ms after the KILL.
+- **The arm:** read off `flags.DEATH_STOPS_WINDUP`.
+- **Verdicts:** open windup on the fixed arm `PASS` / `FAIL` on a `[3]` in the batch, on the
+  known-bad / pre-fix arms `old-shape` / `UNEXPECTED`; no open windup, `control-ok` /
+  `CONTROL-FAIL` on every arm.
+- **Floor:** 5 open-windup deaths on the fixed arm.
+- **Selftest:** synthetic cases; three tapes written by the real `kill_player` (fixed in the
+  windup PASS, known-bad old-shape, fixed after the landing control-ok); and the real
+  corpus.
+
+**The corpus (`--corpus`, every tape since 2026-09-20; OBSERVED):**
+- **Pre-fix:** 89 player deaths -- the census's number. 11 had the windup open, all 11
+  `old-shape`; 78 clean controls.
+- **Fixed:** 4 deaths, 1 with the windup open, and it **PASSES** -- the first real-client
+  witness of 1z-ds.27 -- plus 3 clean controls.
+- E1's fixed arm is therefore at 1 of 5: a run is still owed.
+
+**`review/e2_score.py`** reads each player RISE off the wire: the status word losing 0x10.
+- **Shrine rises:** a rise with the wipe's own `0x002C` within 1 s before it is reported, not
+  judged.
+- **The window:** from the rise to the client's first movement report (c2s 0x003D / 0x0047 /
+  0x003E, each of which re-stamps the latch), the next death, or 30 s.
+- **Exposed:** a client press (decoded c2s 0x0026) inside the window.
+- **The defect:** a player `0x002C` labelled `PRESS ENDS THE WALK` / `PRESS STOP PIN` after
+  that press.
+- **The arm:** read off `flags.RISE_ENDS_LEGS`.
+- **Verdicts:** the fixed arm `PASS` / `FAIL`; the known-bad / pre-D3 arms `old-shape` /
+  `no-repin`.
+- **Floors:** 5 exposed in-place rises per arm, and at least 1 `old-shape` on the known-bad
+  arm.
+- **Selftest:** synthetic cases; two tapes written by the real `kill_player`,
+  `revive_player` and `_press_supersedes` (fixed PASS, `--rise-keeps-legs` old-shape); and
+  the real corpus.
+
+**The corpus has NO exposed in-place rise at all** (OBSERVED, 81 rises: 31 shrine, 50
+unexposed). After every in-place rise on our tapes, the client moved (which retires the
+stale latch the honest way) or never pressed within 30 s. The seven post-rise press re-pins
+the first census found are all on shrine rises or on fresh legs after a move -- for example
+`20261001T201838`, a shrine rise, then moves, a click and a press at +5.43 s. **So E2's plan
+must manufacture the exposure:**
+- **Client presses only:** `C:0.1 space:0.2`, never `attack:N`. The mailbox calls
+  `begin_attack` and never `_press_supersedes`, so it cannot reach the defect.
+- **No movement keys at all,** so that after each death the first input is a press.
+- **The rig:** revheal3, where the player dies often and the heroes' signets raise it in
+  place.
+
+E1 can be scored on the same launches.
+
 ## 4. Predictions — to be filled by the desk steps
 
 | | Prediction | Retail | Known-bad arm |
