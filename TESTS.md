@@ -4917,7 +4917,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   - agent 10's 399 crit is bit-identical to agent 8's;
   - the observer's Healing Signet took 36 = 2 x 18 with no bonus room.
   Ten plants, each red. Floor 19 from the bare green run; 24 with the vault. ~5 s),
-  `toolkit/authsrv/test_livewire.py` (**2026-09-28, CASTAI-Z1: the first GAPPED live
+  `toolkit/authsrv/test_livewire.py` (**2026-10-07, WIREORDER-A1: decode_conn keeps each direction in WIRE order (it used to sort the merge by segment time, and the s2c clock steps back on 41 of 127 live connections). 1b builds a capture whose second s2c segment was captured 10 ms EARLIER and holds the wire order, with a known-bad time-sort arm (bare); section 6 holds every closing live connection's merge to build_events + decode_all per direction (127/127; the time sort differs on >= 41, a floor) and the two DIVERGENCE-D13.4 manifest connections to manifestbody.rebuild closing every body byte (:51534 refused, :55934 stranded under the time sort). Red 4 of 5 against the pre-fix decode_conn, measured. Floor 18 -> 23, green 23; bare 7.** (**2026-09-28, CASTAI-Z1: the first GAPPED live
   connection (20260928T103123 :65009, 38 + 20 s2c bytes at offsets 38045 / 38548), which
   `decode_conn` refuses by design, is NAMED, not absorbed. `declared_gaps` reads it from
   the capture's own manifest (+4, floor 12 → 16: two bare doors; §5, declared, still
@@ -7220,7 +7220,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   client assert was un-attributable because our ticker talked over ArenaNet's
   recording. Its control is that guard REVERSED, which is one character from
   correct and would contaminate every tape run. No vault, no socket, no client),
-  `toolkit/authsrv/test_tape.py` (**2026-10-01, build 38974: section 10 -- a tape decodes in ITS build's numbering (tape.Events carries the connection's build; decode_all / transfer_of / stop_before_transfer / rewrite_transfer read it through Codec.for_build), on captures it builds itself, each check with a pin-numbering control; and the authsrv --tape / --client-build refusals locked as text. Floor 30 -> 41, green 41, bare too.** R1.5's tape loader: the events ARE the recorded
+  `toolkit/authsrv/test_tape.py` (**2026-10-07, WIREORDER-B1: section 11 -- the four readers that RE-TIME a tape (deepwoundjoin.sequence, speedwords.sequence, bufflog.read_effects, damagepass.read_events) hand decode_all an Events that still names 38974, on a capture it builds itself from a SHAPE-ALIKE opcode (38974's 0x01C4 is wire 0x01C5, a [word] in the pin too, so the pin frames whole and mislabels silently); a known-bad arm reverts Events.of to a bare list and must read 0x01C5. Red 4 of 6 against the pre-fix readers, measured. Floor 41 -> 47, green 47.** (**2026-10-01, build 38974: section 10 -- a tape decodes in ITS build's numbering (tape.Events carries the connection's build; decode_all / transfer_of / stop_before_transfer / rewrite_transfer read it through Codec.for_build), on captures it builds itself, each check with a pin-numbering control; and the authsrv --tape / --client-build refusals locked as text. Floor 30 -> 41, green 41, bare too.** R1.5's tape loader: the events ARE the recorded
   stream whole and in order, and a tape whose wire bytes do not account for the
   plaintext -- or that came from our own server -- is refused. Section 6 is the
   straddle: a tape event is a TCP segment, so it builds a capture that splits one

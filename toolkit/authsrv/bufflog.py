@@ -116,7 +116,9 @@ def read_effects(capture_dir, connection, codec=None):
     codec = codec or Codec()
     info, events = tape.load_tape(capture_dir, connection)
     t_base = info.get("t0") or 0.0
-    events = [(round(t + t_base, 6), payload) for t, payload in events]
+    # Events.of keeps the tape's build through the rebase (WIREORDER-B1).
+    events = tape.Events.of([(round(t + t_base, 6), payload) for t, payload in events],
+                            events)
     msgs, receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
     consumed, total, err = receipt
     if err is not None or consumed != total:

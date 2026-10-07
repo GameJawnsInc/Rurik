@@ -44,7 +44,10 @@ import vaultpath  # noqa: E402
 # particular capture and should be refutable on a bare machine.
 # 41 from the green run of 2026-10-01: section 10 (a tape decodes in its own build's
 # numbering, build 38974) adds 11, all on captures it builds itself.
-LEDGER = checks.Ledger("tape", floor=41)
+# 47 from the green run of 2026-10-07: section 11 (the four readers that re-time a tape
+# keep its build, WIREORDER-B1) adds 6 -- a premise, four readers and a known-bad arm, on
+# a capture it builds itself. Red 4 of 6 against the pre-fix readers, measured.
+LEDGER = checks.Ledger("tape", floor=47)
 
 LIVE_CAPTURE = "20260807T143055"
 
@@ -312,7 +315,76 @@ def main():
     section_decode_all()
     section_repacketized_retransmit()
     section_build_numbering()
+    section_retimed_tapes_keep_build()
     return LEDGER.verdict()
+
+
+def section_retimed_tapes_keep_build():
+    """11. A reader that RE-TIMES a tape keeps its build (WIREORDER-B1, 2026-10-07).
+
+    `deepwoundjoin.sequence`, `speedwords.sequence`, `bufflog.read_effects` and
+    `damagepass.read_events` each rebase load_tape's events onto the capture clock, and
+    each did it with a bare list comprehension -- which drops `Events.build`, so their
+    decode_all read the tape in the CALLER's numbering. Latent (no 38974 live tape on
+    2026-10-07), and the dangerous kind: the message here is schema 0x01C4 [word], whose
+    38974 wire number 0x01C5 is ALSO a [word] in the pin, so the pin decode frames to the
+    last byte and mislabels without a word said. Built on its own capture, so it is
+    refutable on a bare machine; a KNOWN-BAD arm reverts the fix and must read 0x01C5.
+    """
+    print("\n11. a re-timed tape keeps its build (WIREORDER-B1)")
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+    import codec as C                                        # noqa: PLC0415
+    import bufflog                                           # noqa: PLC0415
+    import damagepass                                        # noqa: PLC0415
+    import deepwoundjoin                                     # noqa: PLC0415
+    import speedwords                                        # noqa: PLC0415
+    pin = C.Codec()
+    b74 = C.Codec(client_build=38974)
+    msg = b74.encode("GAME_SMSG", 0x01C4, [0x1234])
+    pin_ops = [op for op, _v in pin.decode_stream("GAME_SMSG", msg)[0]]
+    LEDGER.ok(msg[:2] == b"\xc5\x01" and pin_ops == [0x01C5],
+              "PREMISE: 38974's 0x01C4 goes on the wire as 0x01C5, which the pin frames "
+              "whole as ITS 0x01C5 -- a silent mislabel, not a framing error",
+              f"wire {msg[:2].hex()}, pin reads {[hex(o) for o in pin_ops]}")
+
+    real = tape.decode_all
+    seen = []
+
+    def spy(events, *a, **kw):
+        msgs, receipt = real(events, *a, **kw)
+        seen.append((getattr(events, "build", None), [op for _t, op, _v in msgs]))
+        return msgs, receipt
+
+    readers = (
+        ("deepwoundjoin.sequence", lambda r, c: deepwoundjoin.sequence(r, c, pin)),
+        ("speedwords.sequence", lambda r, c: speedwords.sequence(r, c, pin)),
+        ("bufflog.read_effects", lambda r, c: bufflog.read_effects(r, c, pin)),
+        ("damagepass.read_events", lambda r, c: damagepass.read_events(r, c, pin)),
+    )
+    with tempfile.TemporaryDirectory() as root:
+        conn = write_capture(root, s2c_pieces=(msg,), build=38974)
+        tape.decode_all = spy
+        try:
+            for name, read in readers:
+                del seen[:]
+                read(root, conn)
+                LEDGER.ok(seen == [(38974, [0x01C4])],
+                          f"{name} hands decode_all a tape that still names 38974, and "
+                          f"reads 0x01C4 through a PLAIN Codec()",
+                          f"decode_all saw (build, ops) {seen}")
+            keep_of = tape.Events.__dict__["of"]               # the classmethod itself
+            tape.Events.of = classmethod(lambda cls, items, like: list(items))
+            try:
+                del seen[:]
+                bad = [op for _i, _t, op, _v in deepwoundjoin.sequence(root, conn, pin)]
+            finally:
+                tape.Events.of = keep_of
+            LEDGER.ok(bad == [0x01C5] and seen == [(None, [0x01C5])],
+                      "KNOWN-BAD: with the rebase back to a bare list, the same tape frames "
+                      "whole and reads 0x01C5 -- the mislabel the checks above refuse",
+                      f"{[hex(o) for o in bad]}, decode_all saw {seen}")
+        finally:
+            tape.decode_all = real
 
 
 def section_build_numbering():

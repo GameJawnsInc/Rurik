@@ -47,6 +47,35 @@ move back.
   - All four are filed in PLAN.md §8.1 as test-fixture work, not fixed here.
 - **Re-run on the merge with main at dbae872a (RANGERPRE-S23 and S24):** test_barecondition 13 vaulted, 12 + 1 bare (an empty directory and a nonexistent path); test_condhit 38 vaulted and 7 + 2 bare, its own growth on that arc; test_srclint 26, test_citelint 50, test_identlint 28, test_provlint 19. All green.
 
+### WIREORDER-A1 and B1 -- 2026-10-07 -- **`livewire.decode_conn` now keeps each direction in WIRE order. It used to sort its merge by segment time, and that time steps back inside s2c on 41 of 127 live connections (51 of the 53 steps fall in the first second's load burst), so 3,495 s2c messages sat out of wire order. Measured with the predictions registered first: all 29 tests that reach it keep every verdict and every check. Two printed details move: one correction, and one change in print order only. 36 of 38 untested CLI consumers print byte-identical output. The one published table that moves is `retail_c2s.json`'s reply columns, which lose their time-sort artefacts. Separately, four readers that re-time a tape now keep its client build, so a 38974 tape no longer decodes in the pinned build's numbering. That defect was latent: no 38974 live tape exists.**
+
+- **Record:** [studies/tape/WIREORDER.md](studies/tape/WIREORDER.md) (WIREORDER-A1..A6, B1, P1..P3). DIVERGENCE-D13.4, where both defects were found, now points there.
+- **A1, the fix:** `livewire.interleave`.
+  - Each direction is kept as `build_events` + `tape.decode_all` hand it over (TCP sequence), and the heads are interleaved by `t`, c2s first on a tie.
+  - `t` stays verbatim, so it may dip by a reordering's width. The capture's own arrival order shows the segments reached it out of sequence (OBSERVED, 9 of 9 steps checked); whether the network or the capture layer reordered them is UNVERIFIED.
+  - Clamping `t` to a running maximum was measured too (same order, same test results) and refused: it invents a time and fuses two segments' `t`, which about a dozen readers take to mean "same segment".
+  - The committed `decode_conn` equals the measured arm on 128 of 128 connections. Every c2s message keeps the same set of s2c messages ahead of it on every connection.
+- **A1, the differential:** a shim over the 29 tests, with arms old / old2 (noise floor) / raw / clamp.
+  - P1 (no verdict moves) HELD. P2 (at most three load-burst readers move a printed line, no combat join) HELD. P3 (clamp moves a superset of raw) was WRONG, harmlessly: it moved exactly the same lines.
+  - `test_skillloadorder`: on :59969 the first 0x00DA/0x00DB sit at index 145/151, not 252/258 (CORRECTION; the claim holds either way).
+  - `test_visstatus`: the same four counts in a different print order.
+  - `test_playerswing`: an unseeded damage roll, shown to be noise (97, 97, 95, 96 under the old order).
+  - The CLI sweep: `tick_pairing_census`'s uncited CONTROL line moves 37.12 % -> 36.92 %.
+  - `retail_c2s.json`: requests 0x000A / 0x000B / 0x0090 / 0x0091 lose "first replies" that were later-segment messages (0x0196 / 0x0197 / 0x0057 / 0x006D / 0x015E / 0x009F).
+- **A1, siblings:**
+  - `zaishenrun.prefix_decode` had its own time sort and now uses `interleave`; `--prefix --rows` output is byte-identical.
+  - `retail_conns` warns that a `RURIK_LIVE_CACHE` pickle written before today holds the old order.
+  - `manifestbody` / `test_manifestbody` wording now describes the sort in the past tense.
+- **B1:** `tape.Events.of` in `deepwoundjoin.sequence`, `speedwords.sequence`, `bufflog.read_effects` and `damagepass.read_events`.
+  - The same drop is fixed in `test_damagepass`, `test_henchparty`, `test_codec`'s whole-corpus round trip (now `tape.codec_for`) and `zaishenrun.prefix_decode`'s codec.
+  - All are no-ops today: `Codec.for_build` is the identity for every build off the renumber table.
+  - Named and left: five blob decoders over named pre-38974 captures, and `wiresplit`, which would fail loudly rather than silently.
+- **Tests:**
+  - `test_livewire` 1b (a synthetic reordered capture, runs on a bare machine) and section 6 (the corpus, 127/127; the two D13.4 manifest connections through `manifestbody.rebuild`). Floor 18 -> 23. 4 of the 5 new checks red against the pre-fix code.
+  - `test_tape` section 11 (a shape-alike 0x01C4 on a 38974-stamped capture, the four readers, and a known-bad arm). Floor 41 -> 47. Red 4 of 6 against the pre-fix readers.
+  - Suite: 271 green / 0 red / 0 suspect of 271, 17,953 checks (full run, this worktree, 2298 s wall).
+- **Owed:** `python toolkit/authsrv/c2striage.py --write`. Its reply columns carry the time-sort artefacts until it is regenerated. It was deliberately not run here: the file is 11 connections behind the corpus, and a regeneration would fold that growth into this change.
+
 ### RANGERPRE-S23 and S24 -- 2026-10-07 -- **A body's attack skill under Blind, the two defects RANGERPRE-S22 found in passing. S23: `land_swing`'s Blind arm closed a body's ATTACK SKILL with the plain swing's `[1, body, 0]`; it now closes with the skill's own `[46, body, 0]` ahead of `[38, T, body, 3]`. Retail's close follows the ACTION, not the outcome: over the live corpus both attack-skill misses close `[46]` (20260917T224104 :62557 349.147, Jagged Strike, and 443.448, the 775 dual's first strike) and the other 55 misses, all plain swings, close `[1]` (29 the observer's, 26 a body's). Both `[46]` misses are the observer's, so a body's is RECONSTRUCTION. S24: `land_swing_on_body` rolled Blind only for a plain swing, so a Blinded body's attack skill on another body always landed, condition and all; it now rolls for attack skills too (WIKI: GWW "Blind" rev 2667383, "Hit" rev 2721374), as the same skill at the player already did. `BLIND_MISS_SKILL_CLOSE` and `BODY_SKILL_BLIND` ship ON; `--no-blind-miss-skill-close` and `--no-body-skill-blind` revert, separately. UNRUN on the client.**
 
 - **Record:** [studies/presearing/RANGERPRE.md](studies/presearing/RANGERPRE.md) §4 (rows S23, S24) and §5 (the record and the runsheet); the banner at `authsrv.BLIND_MISS_SKILL_CLOSE`. The BLIND banner's "RECONSTRUCTION by analogy" for a plain swing's `[1]` now says it is OBSERVED.

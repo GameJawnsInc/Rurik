@@ -151,25 +151,60 @@ def build_events(capdir, conn_file, direction):
     return conn, events, None
 
 
+def interleave(c2s, s2c):
+    """Two directions' [(t, "c2s"|"s2c", opcode, values)] rows as ONE list, each
+    direction kept in the order it was handed over (its WIRE order) and the two
+    interleaved by time: at every step the head with the smaller t goes first, c2s on
+    a tie. Never a sort -- a sort is what moved messages inside a direction
+    (WIREORDER-A1, decode_conn's docstring)."""
+    out, i, j = [], 0, 0
+    while i < len(c2s) and j < len(s2c):
+        if c2s[i][0] <= s2c[j][0]:
+            out.append(c2s[i])
+            i += 1
+        else:
+            out.append(s2c[j])
+            j += 1
+    return out + c2s[i:] + s2c[j:]
+
+
 def decode_conn(capdir, conn_file):
     """(conn, merged, ok) -- both directions of one connection, decoded.
 
-    merged is [(t, "c2s"|"s2c", opcode, values)] in time order (c2s first on
-    a tie, matching the send-before-answer reality of a request). ok is False
-    when EITHER direction's receipt failed to consume every byte -- the
-    stream is still returned so a consumer can look at what decoded, but a
-    census built on ok=False data must say so.
+    merged is [(t, "c2s"|"s2c", opcode, values)]: each direction in WIRE order
+    (TCP sequence, as `build_events` and `tape.decode_all` hand it over), the
+    two interleaved by time with c2s first on a tie (the send-before-answer
+    reality of a request) -- `interleave`. ok is False when EITHER direction's
+    receipt failed to consume every byte -- the stream is still returned so a
+    consumer can look at what decoded, but a census built on ok=False data must
+    say so.
+
+    `t` IS THE SEGMENT'S OWN CAPTURE TIME, VERBATIM, AND IT CAN STEP BACKWARDS.
+    This used to sort the merge by `t` (WIREORDER-A1, studies/tape/WIREORDER.md,
+    2026-10-07). A segment that arrived EARLIER than the one before it in TCP
+    sequence -- they reached the capture out of order -- carries the earlier time,
+    so on 41 of 127 live game connections the s2c clock steps back, by 0.04-14 ms,
+    51 of the 53 steps inside the first second's map-load burst. The sort moved 3,495
+    s2c messages out of wire order: a 0x0196 body ahead of its 0x0198 phase
+    (DIVERGENCE-D13.4), and four load-time c2s requests credited with a manifest
+    message as their "first reply" (c2striage). Measured before the change:
+    every c2s message has the SAME set of s2c messages ahead of it under both
+    orders, so only s2c-internal order moved; all 29 tests that reach here keep
+    every verdict and every check. Raising `t` to a running maximum instead was
+    measured too and REFUSED: it invents a time and gives two segments one, and a
+    dozen readers take equal `t` to mean "same segment". So a reader that needs a
+    non-decreasing clock (a bisect, an early break) owns that need: inside a
+    direction, wire order is the truth and `t` may dip by a reordering's width.
     """
     conn, c2s_events, _c2s_err = build_events(capdir, conn_file, "c2s")
     _, s2c_events, _s2c_err = build_events(capdir, conn_file, "s2c")
-    merged = []
+    rows = {"c2s": [], "s2c": []}
     ok = True
     cod = _get_codec(conn_build(capdir, conn_file))
     if c2s_events:
         msgs, receipt = tape.decode_all(c2s_events, cod, channel="GAME_CMSG",
                                         mask=CMSG_MASK, strict=False)
-        for t, op, vals in msgs:
-            merged.append((t, "c2s", op, vals))
+        rows["c2s"] = [(t, "c2s", op, vals) for t, op, vals in msgs]
         if receipt.err is not None or receipt.consumed != receipt.total:
             ok = False
     else:
@@ -177,14 +212,12 @@ def decode_conn(capdir, conn_file):
     if s2c_events:
         msgs, receipt = tape.decode_all(s2c_events, cod, channel="GAME_SMSG",
                                         mask=0, strict=False)
-        for t, op, vals in msgs:
-            merged.append((t, "s2c", op, vals))
+        rows["s2c"] = [(t, "s2c", op, vals) for t, op, vals in msgs]
         if receipt.err is not None or receipt.consumed != receipt.total:
             ok = False
     else:
         ok = False
-    merged.sort(key=lambda r: (r[0], 0 if r[1] == "c2s" else 1))
-    return conn, merged, ok
+    return conn, interleave(rows["c2s"], rows["s2c"]), ok
 
 
 # `conn_name` and `declared_gaps` live in the leaf `capgaps.py` now (it sits below both
