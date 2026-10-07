@@ -16328,6 +16328,7 @@ def launch_player_projectile(send, state, conn_id, swing, how):
           shot["handle"], how["arrow"]],
          f"projectile {how['projectile']} at agent {swing['target']}: "
          f"{flight:.3f} s in the air (handle {shot['handle']})")
+    natural_reset(state, PLAYER_AGENT_ID, "its own ranged release", now)   # SKILLS-RG
     return shot
 
 
@@ -17521,17 +17522,156 @@ def hex_target_dead(state, agent_id):
     return bool(row and row.get("dead"))
 
 
+# SKILLS-RG (2026-10-07, studies/skills/FINDINGS.md 64; toolkit/authsrv/
+# regenjoin.py is the referee, every number below re-derived there off the live
+# corpus): HEALTH REGENERATION, the half of property 44 this server never sent.
+#   * HEALTH_REGEN -- net_pips is SIGNED (positive a loss, negative a gain): the
+#     conditions' RAW sum plus the hex rows' degeneration, minus every `Health
+#     regeneration` row (episodemods.regen_pips) and the player's natural level,
+#     clamped ONCE to [-10, +10]. OBSERVED, regenjoin P1: 28 of 28 apply words,
+#     and 288 on 20260928T103123 :50061 read -13 + 8 = -5, which the old cap-
+#     then-add (-10 + 8 = -2) cannot give. push_regen sends the positive rate;
+#     degen_tick integrates the gain, capped at the maximum, never a kill,
+#     never on a dead agent. --no-health-regen is the degeneration-only server.
+#   * NATURAL_REGEN -- the PLAYER's natural ramp: 0 until NATURAL_DELAY after
+#     the last reset, then +1 pip every NATURAL_STEP up to NATURAL_CAP while
+#     health is below the maximum. OBSERVED: P2 19 of 19 observer first steps
+#     at 5.00 +- 0.10 s, P3 45 of 45 observer steps at 2.00 +- 0.10 s, and the
+#     cap +7 (five hostile runs stop at 7 with health still below the maximum;
+#     nothing on the corpus reaches 8). The natural term is ZERO while the
+#     effects alone are a loss (P5: 6 of 6 degeneration landings on a running
+#     ramp read the effects alone; 0 natural steps above a negative word) and it
+#     RUNS while they are not (:50061, natural +1, +2 under hex 31 with the
+#     effects at +3) -- "zero while any degeneration is live" is refuted, n=1.
+#     THE RESETS, each OBSERVED binding at least one on-time first step: a
+#     health LOSS -- read as the deficit (max - health) GROWING between world
+#     ticks, so damage at every site and degeneration while it lasts count with
+#     no hook at the damage sites, and a Deep Wound, which drops the maximum and
+#     the health together, does not (studies/isle 8.4 saw no fresh ramp from
+#     one); the player's own swing start ([4]), melee strike and ranged release
+#     (0x00A4 -- NOT the arrow's arrival: a hostile's ramp ran 4.40 s from its
+#     hit and 5.00 from its launch, 20260914T005758); its own cast's completion
+#     at a foe (not at itself or an ally: Healing Signet never reset a ramp);
+#     and any body's cast AIMED AT the player, activation through landing
+#     (retail's four witnesses are an Isle NPC's Windborne Speed -- a FRIENDLY
+#     cast; that a hero's heal resets the player's ramp too is RECONSTRUCTION by
+#     that rule). Retail sends the reset's zero in the event's own batch; ours
+#     goes out on the next world tick (natural_tick), a divergence of one tick.
+#     Heroes', henchmen's and hostiles' ramps are NOT shipped (combat balance;
+#     regenjoin measures them -- hostiles ramp on the same 5.0 / 2.0 law).
+#     --no-natural-regen reverts.
+#   * MAX_HP_REACHED -- a POSITIVE rate that ends on a FULL agent ends with
+#     0x009F [32, agent, 0] instead of the [44] zero. OBSERVED: 113 of 113 [32]s
+#     on the corpus follow a positive word; 6 of 6 regen closes at full carry one
+#     (the "silent" regen closes of the triage are these); and the client's own
+#     handler (build 38797, the int record path 0x00818170, case 32 at
+#     0x008181E5) sets the health fraction to 1.0 (0x009215F0, property 34's
+#     setter) and the health regen to 0.0 (0x00921780, property 44's setter at
+#     0x008182C5) -- a static read. --no-max-hp-reached sends the [44] zero.
+HEALTH_REGEN = True
+NATURAL_REGEN = True
+MAX_HP_REACHED = True
+NATURAL_DELAY = 5.0          # s, regenjoin P2
+NATURAL_STEP = 2.0           # s, regenjoin P3
+NATURAL_CAP = 7              # pips, regenjoin's cap witnesses (NOT the net clamp of 10)
+
+
 def net_pips(state, agent_id, live=None):
-    """The agent's degeneration pips: the conditions' (effects.pips_from) plus
-    the hex rows' (episodemods.hex_pips) under ONE cap of 10 (B2). `live` is
-    the episode list when the caller already has it."""
+    """The agent's NET pips: positive degenerates, negative regenerates.
+
+    Under HEALTH_REGEN (SKILLS-RG, the banner above): the conditions' RAW sum
+    (effects.pips_from) plus the hex rows' (episodemods.hex_pips), minus the
+    `Health regeneration` rows (episodemods.regen_pips), minus the player's
+    natural level while the effects alone are not a loss, clamped ONCE to
+    [-10, +10]. With --no-health-regen: the degeneration alone under ONE cap
+    of 10 (B2), the server before 2026-10-07. `live` is the episode list when
+    the caller already has it."""
     if live is None:
         table = state.get("effects")
         live = table.on_agent(agent_id) if table else []
-    pips = effects.pips_from(live)
+    pips = effects.pips_from(live, cap=not HEALTH_REGEN)
     if HEX_DEGENERATION:
-        pips = min(pips + hex_pips(state, agent_id), effects.MAX_PIPS)
-    return pips
+        pips += hex_pips(state, agent_id)
+    if not HEALTH_REGEN:
+        return min(pips, effects.MAX_PIPS)
+    pips -= regen_pips(state, agent_id)
+    if pips <= 0:
+        pips -= natural_level(state, agent_id)     # zero while the effects are a loss (P5)
+    return max(-effects.MAX_PIPS, min(effects.MAX_PIPS, pips))
+
+
+def natural_level(state, agent_id):
+    """The agent's natural-regeneration pips as natural_tick last set them:
+    the PLAYER's only, and 0 with either flag off."""
+    if not (HEALTH_REGEN and NATURAL_REGEN) or agent_id != PLAYER_AGENT_ID:
+        return 0
+    row = (state.get("natural_regen") or {}).get(agent_id)
+    return int(row["level"]) if row else 0
+
+
+def natural_reset(state, agent_id, why, now=None):
+    """Restart the agent's natural ramp at `now`: its level goes to 0 on the
+    next natural_tick, which sends the change. The player's only (SKILLS-RG,
+    the banner above HEALTH_REGEN); a no-op for anybody else."""
+    if not (HEALTH_REGEN and NATURAL_REGEN) or agent_id != PLAYER_AGENT_ID:
+        return
+    row = state.setdefault("natural_regen", {}).setdefault(
+        agent_id, {"anchor": 0.0, "level": 0, "deficit": None})
+    row["anchor"] = time.time() if now is None else now
+    row["why"] = why
+
+
+def natural_tick(send, state, conn_id, now=None):
+    """The player's natural ramp, once per world tick (from degen_tick).
+
+    The level is a pure function of the time since the last reset (0 before
+    NATURAL_DELAY, then 1 + one per NATURAL_STEP, capped at NATURAL_CAP) and
+    is 0 at full health, while dead, and before the pools exist. A reset is a
+    growing deficit since the last tick (every loss, degeneration included), a
+    body casting AT the player, or a call to natural_reset from the player's
+    own attack and cast sites. A changed level goes out through push_regen,
+    which rides its send-on-change -- and ends a positive rate at full health
+    with property 32 (MAX_HP_REACHED)."""
+    if not (HEALTH_REGEN and NATURAL_REGEN) or "player_health" not in state:
+        return None
+    now = time.time() if now is None else now
+    book = state.setdefault("natural_regen", {})
+    row = book.setdefault(PLAYER_AGENT_ID, {"anchor": now, "level": 0, "deficit": None})
+    maximum = player_max_health(state)
+    health = float(state["player_health"])
+    deficit = maximum - health
+    if state.get("player_dead"):
+        # No natural term on a corpse. A killing blow on a running ramp is a
+        # reset retail sends with the hit (below the maximum: a [44] zero); ours
+        # lands here a tick later, after the death batch, so the zero goes out
+        # then -- strip_effects' own push_regen at a death is the precedent.
+        was = row["level"]
+        row.update(anchor=now, level=0, deficit=deficit)
+        if was:
+            push_regen(send, state, PLAYER_AGENT_ID, conn_id)
+        return None
+    if row["deficit"] is not None and deficit > row["deficit"] + 1e-6:
+        row["anchor"], row["why"] = now, "health loss"
+    row["deficit"] = deficit
+    for aid, body in (state.get("agents") or {}).items():
+        if (isinstance(body, dict) and not body.get("dead")
+                and body.get("casting") is not None
+                and body.get("cast_target") == PLAYER_AGENT_ID):
+            row["anchor"], row["why"] = now, f"agent {aid}'s cast at the player"
+            break
+    level = 0
+    if health < maximum - 1e-6:
+        elapsed = now - row["anchor"]
+        if elapsed >= NATURAL_DELAY:
+            level = min(NATURAL_CAP, 1 + int((elapsed - NATURAL_DELAY) / NATURAL_STEP))
+    if level == row["level"]:
+        return None
+    was, row["level"] = row["level"], level
+    print(f"[c{conn_id}] natural regeneration {was} -> {level} pip(s) on the player "
+          f"({row.get('why', 'start')} {now - row['anchor']:.1f} s ago) [SKILLS-RG]",
+          flush=True)
+    push_regen(send, state, PLAYER_AGENT_ID, conn_id)
+    return level
 
 
 def adrenaline_blocked(state, agent_id):
@@ -22945,6 +23085,7 @@ def attack_tick(send, state, conn_id, rec=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    natural_reset(state, PLAYER_AGENT_ID, "its own swing")   # SKILLS-RG: the swing's start resets
     # RANGERPRE-S16 (APPROACH_START_HALTS, the evidence at the flag): the first
     # start after OUR follow arrived, with a ranged weapon in hand, holds the
     # walk gate and halts the body -- [4], [8, me, 1], 0x0028 [me], retail's
@@ -23584,6 +23725,10 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         return
     if swing:
         leader_engaged(state, target_id, now, "swing")    # SLICE-H4
+    if not projectile:
+        # SKILLS-RG: the player's own strike resets its natural ramp; an
+        # arrow's ARRIVAL does not (the release did, launch_player_projectile).
+        natural_reset(state, PLAYER_AGENT_ID, "its own strike", now)
 
     # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
     # the health is bookkept, before the first send. Until 2026-08-14 the
@@ -27323,6 +27468,12 @@ def cast_tick(send, state, conn_id):
                 print(f"[c{conn_id}] skill {cast['skill_id']}: recharge 0 -- no "
                       f"E5, no E6 [SLICE-F52 52.8]", flush=True)
             cast["e5_sent"] = True
+            # SKILLS-RG: a cast COMPLETING at a foe resets the player's natural
+            # ramp (retail's hostile 117: 5.000 s from its [58]); one at itself or
+            # an ally does not (Healing Signet never reset a ramp on the corpus).
+            if ((state.get("agents", {}).get(cast.get("target")) or {}).get("allegiance")
+                    == agents.ALLEGIANCE_HOSTILE):
+                natural_reset(state, PLAYER_AGENT_ID, "its own cast at a foe", now)
             # THE FINISHED PROPERTY RIDES THE NEXT SLOT, and its position is
             # MEASURED: all five [58, agent, 0] in the live corpus are the
             # message IMMEDIATELY after a cast end -- four right behind the
@@ -29358,14 +29509,26 @@ def push_regen(send, state, agent_id, conn_id):
         return None
     table = state.get("effects")
     live = table.on_agent(agent_id) if table else []
-    pips = net_pips(state, agent_id, live)      # conditions + hex rows (B2), one cap
+    pips = net_pips(state, agent_id, live)      # conditions + hex rows (B2); signed under HEALTH_REGEN
     rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
     if REGEN_ZERO_POSITIVE and not pips:
         rate = 0.0                              # retail's +0.0, 561/561 (above)
     seen = state.setdefault("regen_rate", {})
     if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
         return None
+    was = seen.get(agent_id, 0.0)
     seen[agent_id] = rate
+    if (MAX_HP_REACHED and HEALTH_REGEN and not pips and was > 0
+            and agent_at_full(state, agent_id)):
+        # SKILLS-RG: a positive rate ending on a FULL agent is retail's [32],
+        # never a [44] zero -- the client's handler zeroes its regen itself
+        # (the banner above HEALTH_REGEN; 113 of 113, 6 of 6 regen closes).
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MAX_HP_REACHED, agent_id, 0],
+             f"max hp reached on agent {agent_id}: the regen ends at full")
+        print(f"[c{conn_id}] agent {agent_id} is at full health: [32] ends its "
+              f"regeneration [SKILLS-RG]", flush=True)
+        return rate
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
          [agents.GV_CHANGE_HEALTH_REGEN, agent_id,
           _fraction(rate, agents.GV_CHANGE_HEALTH_REGEN,
@@ -29374,6 +29537,16 @@ def push_regen(send, state, agent_id, conn_id):
     print(f"[c{conn_id}] agent {agent_id} degeneration: {pips:.0f} pip(s), "
           f"{rate * pool * 1:+.1f} health/s", flush=True)
     return rate
+
+
+def agent_at_full(state, agent_id):
+    """True when the server's book has the agent at (or over) its maximum."""
+    if agent_id == PLAYER_AGENT_ID:
+        if "player_health" not in state:
+            return False
+        return float(state["player_health"]) >= player_max_health(state) - 1e-6
+    row = state.get("agents", {}).get(agent_id)
+    return bool(row) and float(row.get("health", 0.0)) >= float(row.get("max_health", 0.0)) - 1e-6
 
 
 def agent_status_word(state, agent_id):
@@ -29561,6 +29734,13 @@ def degen_tick(send, state, conn_id):
     the sequence copied out longhand. An agent row goes through `kill_agent`,
     the door every other health loss on a row uses; until 2026-09-26 this half
     only clamped, and a body degenerated to 0 stood at 0 and kept fighting.
+
+    AND IT REGENERATES (SKILLS-RG, 2026-10-07; the banner above HEALTH_REGEN):
+    net_pips is signed, so a negative net is a GAIN -- capped at the maximum,
+    never a kill, never on a dead agent, still silent (the rate went out once,
+    the client animates it). The player's natural ramp is stepped here first
+    (natural_tick), and an agent with no live episode is spent only when its
+    natural level is up -- the player alone.
     """
     if not EFFECTS:
         return
@@ -29575,13 +29755,20 @@ def degen_tick(send, state, conn_id):
     now = time.time()
     last = state.get("degen_at")
     state["degen_at"] = now
+    # SKILLS-RG: the player's natural ramp first -- its resets read the deficit
+    # BEFORE this tick spends, so the previous tick's degeneration is a loss.
+    natural_tick(send, state, conn_id, now)
+    natural = natural_level(state, PLAYER_AGENT_ID) > 0
     table = state.get("effects")
-    if not table or not table.live:
+    if (not table or not table.live) and not natural:
         return
     dt = now - (last if last is not None else now)
     if dt <= 0:
         return
-    for agent_id in sorted({ep["agent"] for ep in table.live.values()}):
+    if table is None:
+        table = effect_table(state)          # natural regeneration on an effect-less state
+    for agent_id in sorted({ep["agent"] for ep in table.live.values()}
+                           | ({PLAYER_AGENT_ID} if natural else set())):
         pips = net_pips(state, agent_id, table.on_agent(agent_id))     # B2: hex rows too
         if not pips:
             continue
@@ -29590,12 +29777,22 @@ def degen_tick(send, state, conn_id):
             if state.get("player_dead"):
                 continue
             player_pools(state)
+            if lost < 0:
+                # SKILLS-RG: a GAIN (signed pips) -- capped at the maximum, and
+                # never a kill (a book below zero under Deep Wound climbs back
+                # silently, as the client's own does).
+                state["player_health"] = min(player_max_health(state),
+                                             state["player_health"] - lost)
+                continue
             state["player_health"] = max(0.0, state["player_health"] - lost)
             if state["player_health"] <= 0.0:
                 kill_player(send, state, conn_id, "bled out")
         else:
             agent = state.get("agents", {}).get(agent_id)
             if not agent or agent.get("dead"):
+                continue
+            if lost < 0:
+                agent["health"] = min(float(agent["max_health"]), agent["health"] - lost)
                 continue
             agent["health"] = max(0.0, agent["health"] - lost)
             if agent["health"] > 0.0:
@@ -30289,6 +30486,7 @@ from episodemods import (attack_interval_factor, move_speed_percent,  # noqa: F4
                          move_speed_factor,   # push_speed / speed_tick (SLICE-F48)
                          move_speed_terms,    # agent_status_word's snare bit (weapons 43)
                          hex_pips, blocks_adrenaline, signet_activation_factor,
+                         regen_pips,          # net_pips' `Health regeneration` rows (SKILLS-RG); test_mechanics reads authsrv.regen_pips
                          is_signet)           # net_pips / adrenaline_blocked / signet_activation (43, B2); test_mechanics 35-37 read them as authsrv.*
 
 
@@ -50513,6 +50711,24 @@ def main():
         STATUS_WORD = False
         print("NO STATUS WORD: no 0x00F1 rides an effect apply or close "
               "(--no-status-word, the known-bad arm).", flush=True)
+    if a.no_health_regen:
+        global HEALTH_REGEN
+        HEALTH_REGEN = False
+        print("HEALTH REGEN: --no-health-regen -- property 44 is degeneration "
+              "only; no regeneration row counts, no positive rate, no natural "
+              "ramp, the conditions capped before the hex rows [SKILLS-RG "
+              "revert]", flush=True)
+    if a.no_natural_regen:
+        global NATURAL_REGEN
+        NATURAL_REGEN = False
+        print("NATURAL REGEN: --no-natural-regen -- the player's health never "
+              "recovers over time except by a heal [SKILLS-RG revert]", flush=True)
+    if a.no_max_hp_reached:
+        global MAX_HP_REACHED
+        MAX_HP_REACHED = False
+        print("MAX HP REACHED: --no-max-hp-reached -- a positive rate ending at "
+              "full health sends the [44] zero, not retail's [32] [SKILLS-RG "
+              "known-bad arm]", flush=True)
     if a.regen_zero_signed:
         global REGEN_ZERO_POSITIVE
         REGEN_ZERO_POSITIVE = False

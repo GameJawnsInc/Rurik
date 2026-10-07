@@ -441,10 +441,12 @@ def is_signet(skill_id):
     return int(row.get("type_code") or 0) == SIGNET_TYPE_CODE
 
 
-def hex_pips(state, agent_id):
-    """Degeneration pips the agent's open NON-condition episodes name
-    (`Health degeneration` in either slot), uncapped -- the caller caps the
-    sum with the conditions' pips. 0.0 with no such episode."""
+def _rate_pips(state, agent_id, means, field):
+    """The pips the agent's open episodes name under `means` in either slot,
+    one per skill, uncapped: a row's explicit `<field>0/15` endpoints when it
+    carries them (interpolated by the client's formula at the episode's rank),
+    else the slot through skill_scale_value. A slot that reader refuses and no
+    explicit endpoints count nothing, said once per skill."""
     table = state.get("effects")
     if not table:
         return 0.0
@@ -455,21 +457,46 @@ def hex_pips(state, agent_id):
         except Exception:                                      # noqa: BLE001
             continue
         for which, key in (("scale", "scale_means"), ("bonus_scale", "bonus_scale_means")):
-            if row.get(key) != HEX_DEGEN_MEANS:
+            if row.get(key) != means:
                 continue
-            lo, hi = row.get("health_degeneration0"), row.get("health_degeneration15")
+            lo, hi = row.get(f"{field}0"), row.get(f"{field}15")
             if lo is not None and hi is not None:
                 total += effects.interp(int(lo), int(hi), ep.get("rank", 0))
                 continue
             try:
                 total += skill_scale_value(ep["skill"], ep.get("rank", 0), which)
-            except ValueError as ex:
-                if ep["skill"] not in _HEX_DEGEN_UNREADABLE:
-                    _HEX_DEGEN_UNREADABLE.add(ep["skill"])
-                    print(f"[effects] {ep['skill']} names a health degeneration "
-                          f"with an UNREADABLE slot and no health_degeneration0/15 "
-                          f"on its row, so it degenerates nothing: {ex}", flush=True)
+            except Exception as ex:                        # noqa: BLE001 -- a refused slot OR no skills row
+                if not isinstance(ex, ValueError):
+                    ex = f"no client record to read ({type(ex).__name__})"
+                if (means, ep["skill"]) not in _HEX_DEGEN_UNREADABLE:
+                    _HEX_DEGEN_UNREADABLE.add((means, ep["skill"]))
+                    print(f"[effects] {ep['skill']} names a {means.lower()} "
+                          f"with an UNREADABLE slot and no {field}0/15 on its "
+                          f"row, so it counts nothing: {ex}", flush=True)
     return float(total)
+
+
+def hex_pips(state, agent_id):
+    """Degeneration pips the agent's open NON-condition episodes name
+    (`Health degeneration` in either slot), uncapped -- the caller caps the
+    sum with the conditions' pips. 0.0 with no such episode."""
+    return _rate_pips(state, agent_id, HEX_DEGEN_MEANS, "health_degeneration")
+
+
+# SKILLS-RG (2026-10-07, studies/skills 64): the other sign. `Health
+# regeneration` in either slot (Troll Unguent 446's scale 3..10, Healing Breeze
+# 288's 4..9; skilldesc's HEALTH_REGEN label) is pips the wearer GAINS, read with
+# hex_pips' endpoint rules and summed by authsrv.net_pips under ONE clamp with
+# every degeneration -- OBSERVED on retail's apply words (regenjoin.py P1: 446
+# +3 at rank 0, 3 of 3; 288 +8 at rank 13, and -13 + 8 = -5 under degeneration).
+REGEN_MEANS = "Health regeneration"
+
+
+def regen_pips(state, agent_id):
+    """Regeneration pips the agent's open episodes name (`Health regeneration`
+    in either slot, or a row's explicit `health_regeneration0/15`), one per
+    skill, uncapped. 0.0 with none."""
+    return _rate_pips(state, agent_id, REGEN_MEANS, "health_regeneration")
 
 
 def blocks_adrenaline(state, agent_id):

@@ -3053,6 +3053,51 @@ This field's reader also lights up Faintheartedness 135's `Health degeneration` 
 SET, read from the slot), dormant since 2026-08-22. --no-hex-degeneration reverts both. The hex \
 draws [6, foe, 1] alone (a Necromancer hex, no class id observed: NOT FOUND)."""
 
+# HEALTH REGENERATION (SKILLS-RG, 2026-10-07; studies/skills/
+# FINDINGS.md 64; toolkit/authsrv/regenjoin.py is the referee). Each number is the client's own
+# record (skilltable.py, the same on builds 38797, 38888 and 38974 -- run on all three the same
+# day) and each row is WITNESSED on retail's wire: regenjoin P1 joins every apply to the [44] word
+# in its batch, and the word is the one-clamp signed sum of the wearer's live episodes, 28 of 28.
+# Read by episodemods.regen_pips and summed by authsrv.net_pips (HEALTH_REGEN). Conjure Phantasm
+# 31's flat -5 waits (studies/skills 64.7): it is a plain SERVED row, so a hand row moves the
+# label overlay's exclusions, which another lane re-pins this pass.
+[skill_effect.446]
+scale_means = "Health regeneration"              # the 3..10 in the SCALE slot (its bit set)
+opens_episode = "skill"                          # type 10, not definitionally a timed effect -- "Charge!" 364's door
+[skill_effect.446.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38974
+verified = """s_skill row 446 (Troll Unguent, the name WIKI as studies/castmech cites it, read
+2026-07-05), identical on builds 38797, 38888 and 38974: type_code 10 (Skill), TARGET BYTE 0
+(self), attribute 24, profession 2, scale 3 / 15 -> 10 with skill_arguments 2 (the scale bit set,
+the duration bit clear), duration 13 / 13 (resolve_duration: 13 s at every rank). OBSERVED on
+retail (regenjoin P1): 3 applies, every one a 13.0 s 0x0042 at field3 0 whose batch carries
+[44, wearer, +3 x 2/H] -- +3 pips = interp(3, 10, 0) -- 20260914T005758 agent 29 (H 120) and
+20260929T150923 :55934 / :56025 agent 31 (H 100, 120); every close at full carries 0x009F [32,
+wearer, 0] and no [44] (3 of 3). Type 10 is outside effects.EFFECT_TYPES, so the episode needs
+this row's `opens_episode` door; the family name is ours. What the skill does beyond the rate is
+not modelled (no other clause on the record). CORROBORATED by the client's own description
+template: skilldesc reads its str1 as HEALTH_REGEN, so this hand label AGREES with the parse."""
+
+[skill_effect.288]
+scale_means = "Health regeneration"              # the 4..9 in the SCALE slot (its bit set)
+[skill_effect.288.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38974
+verified = """s_skill row 288 (Healing Breeze, WIKI-named in studies/monsterai/review/zaishenrun.py),
+identical on builds 38797, 38888 and 38974: type_code 6 (Enchantment Spell -- an episode by
+type), TARGET BYTE 3, attribute 13, profession 3, scale 4 / 15 -> 9 with skill_arguments 2,
+duration 15 / 15. OBSERVED on retail (regenjoin P1), both on the Zaishen tape 20260928T103123,
+agent 7, H 480, field3 13 (rank 13: interp(4, 9, 13) = round(8.33) = 8): on :50295 at 464.822
+the word is +8 (493 and 3443 also live and adding nothing there -- regenjoin leaves it unscored
+because 3443's batches elsewhere carry words); on :50061 at 199.553 (SCORED) the word is -5 with Burning
+(-7), Faintheartedness 135 at rank 11 (-2) and Phantom Pain 44 at rank 15 (-4) live -- -13 + 8
+under ONE clamp, where a cap on the degeneration first would read -2. Its close on :50295 at
+full carries [32] and no [44]; on :50061, under degeneration, the [44] of what remains.
+skilldesc reads the template's str1 as HEALTH_REGEN: the hand label AGREES with the parse."""
+
 [skill_effect.56]
 blocks_adrenaline = true                         # "cannot gain adrenaline" -- no client slot
 [skill_effect.56.provenance]

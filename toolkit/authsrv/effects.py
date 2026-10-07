@@ -409,16 +409,22 @@ def status_word(episodes, dead=False):
     return word
 
 
-def pips_from(episodes):
+def pips_from(episodes, cap=True):
     """Net degeneration pips from a set of live episodes, capped at 10.
 
     Capped because GWW caps it, and the cap is reachable: Burning alone is 7
     and Bleeding takes it to 10. A sum without the cap would out-degenerate
     retail the moment two conditions land together, which is exactly the sort
     of number that looks principled and is not.
+
+    `cap=False` is the RAW sum, for a caller that clamps ONCE over a signed
+    total (authsrv.net_pips under HEALTH_REGEN, SKILLS-RG): retail's 288 on
+    20260928T103123 :50061 read -13 + 8 = -5, which a sum capped here first
+    (-10 + 8 = -2) cannot produce (regenjoin.py P1, OBSERVED). Per-episode
+    counting is unchanged.
     """
     total = sum(CONDITION_PIPS.get(ep["skill"], 0) for ep in episodes)
-    return min(float(total), MAX_PIPS)
+    return min(float(total), MAX_PIPS) if cap else float(total)
 
 
 def condition_id(label):
