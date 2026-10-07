@@ -5232,6 +5232,49 @@ def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
     return bonus, inflicted, kd
 
 
+# ---- RANGERPRE-S22 (2026-10-07): AN ATTACK SKILL'S CONDITION RIDES THE HIT ------------
+#
+# An ATTACK skill's own condition -- the `inflicted` attack_skill_terms returns (Sever
+# Artery's and Jagged Strike's Bleeding, Pin Down's Crippled) -- lands only when the
+# strike LANDED. A strike that misses ([38, T, A, 3], Blind) or is blocked ([38, T, A, 0])
+# deals nothing and inflicts nothing. Until today the four apply sites (cast_tick's melee
+# strike, land_player_skill_shot, land_body_skill_shot, land_skill's attack arm) gated the
+# knock-down and the random condition on a landed hit and the condition on nothing, so a
+# Blind-missed or blocked Sever Artery still bled the foe (studies/presearing/RANGERPRE.md
+# section 5, found by S14's reviewer).
+#
+# OBSERVED, one miss and its control (test_condhit section 1): 20260917T224104 :62557,
+# the observer (25) under a live Blind presses Jagged Strike (782) at agent 117 at
+# t=348.996 -- [38, 117, 25, 3] and nothing naming 117 with a condition (no [6, 117, 23],
+# no 0x00F1 bleeding bit, no [44]) on a 117 that was not bleeding; the same skill on
+# the same foe once the Blind is gone draws [6, 117, 23], 0x00F1 [117, 0x83] and [44],
+# 3 of 3 on that tape. THE BLOCK has no retail witness (no attack skill is blocked on any
+# tape) and rests on WIKI: GWW "Hit" rev 2721374, "Any time an attack is blocked or
+# misses, there is no hit", and each row's own sentence, "If this attack hits" (GWW
+# "Sever Artery" rev 2738479, "Jagged Strike" rev 2731014). A DODGED shot already
+# inflicted nothing (projectile_tick: retail 7 of 7). UNTOUCHED: a spell's and a
+# non-attack's condition (neither rolls Blind or a block -- WIKI "Block": no effect
+# against spells), the knock-down and random condition (landed-gated already), Irresistible
+# Blow's block punishment (hit_enemy's block arm), and the hit-or-miss clauses (Desperation
+# Blow's self knock-down, Final Thrust's wipe). The rule is `res == "landed"`, so a None
+# (a dead target, or --legacy-attack-finish's interval-gated strike, which dealt nothing)
+# inflicts nothing either. --no-condition-needs-hit is the known-bad arm: the condition
+# lands whatever the strike did, this server's bytes until 2026-10-07.
+CONDITION_NEEDS_HIT = True    # False (--no-condition-needs-hit): a miss or block still inflicts
+
+
+def attack_condition_lands(res, skill_id, target_id, conn_id, who):
+    """RANGERPRE-S22: may an ATTACK skill's own condition follow a strike whose result
+    (hit_enemy / land_swing) is `res`? Only a landed one; any under the revert arm. A
+    refusal is printed, so a log says why no condition followed the strike."""
+    if res == "landed" or not CONDITION_NEEDS_HIT:
+        return True
+    print(f"[c{conn_id}] {who}'s skill {skill_id} on agent {target_id}: the strike "
+          f"{res or 'did not land'} -- no condition (an attack skill's condition rides "
+          f"the hit) [RANGERPRE-S22]", flush=True)
+    return False
+
+
 def attack_fixed_damage(state, attacker_id, attacker, skill_id):
     """CASTAI-ZF21: the amount an ATTACK skill deals IN PLACE OF its weapon's
     number -- a row whose scale is armour-ignoring ("Armor-ignoring damage",
@@ -15726,7 +15769,8 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
     through land_swing -- the bonus after armour, its 46 filtered out beside
     melee's close (retail's body skill shots carry neither) -- then the
     knock-down and the random condition on a landed hit, then the skill's
-    own condition on a live target: land_skill's order, a flight later."""
+    own condition on a live target that hit landed on (RANGERPRE-S22):
+    land_skill's order, a flight later."""
     who, tid, sid = shot["shooter"], shot["target"], strike["skill_id"]
     first = strike.get("first", True)
     # WEAPONS-W2f: each arrow of a several-arrow skill lands its share of the
@@ -15742,7 +15786,10 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
         if _rc is not None:
             apply_condition(send, state, tid, _rc[0], _rc[1], strike["rank"],
                             conn_id, sid)
-    if strike["inflicted"] and first and not target_dead(state, tid):
+    # RANGERPRE-S22: the condition rides the arrow's HIT -- a Blind miss or a block
+    # at the arrival inflicts nothing (the banner at CONDITION_NEEDS_HIT).
+    if strike["inflicted"] and first and not target_dead(state, tid) \
+            and attack_condition_lands(_res, sid, tid, conn_id, f"agent {who}"):
         apply_condition(send, state, tid, strike["inflicted"][0],
                         strike["inflicted"][1], strike["rank"], conn_id, sid)
     return _res
@@ -16299,8 +16346,9 @@ def launch_player_skill_shot(send, state, conn_id, cast, how, strike):
 def land_player_skill_shot(send, state, conn_id, shot):
     """A skill's arrow arrives: the strike the E5 announced -- the roll with
     the skill's bonus, then on a landed hit the adjacent damage, the
-    knock-down and the random condition, then the skill's own condition --
-    the E5 block's order, a flight later. `hit_enemy` re-reads the target."""
+    knock-down and the random condition, then (on that hit too, RANGERPRE-S22)
+    the skill's own condition -- the E5 block's order, a flight later.
+    `hit_enemy` re-reads the target."""
     strike = shot["strike"]
     sid, rank, tid = strike["skill_id"], strike["rank"], shot["target"]
     first = strike.get("first", True)
@@ -16320,7 +16368,10 @@ def land_player_skill_shot(send, state, conn_id, shot):
                 apply_condition(send, state, tid, _rc[0], _rc[1], rank,
                                 conn_id, sid)
     inflicted = strike["inflicted"]
-    if inflicted and first and victim and not victim.get("dead"):
+    # RANGERPRE-S22: only on the arrow's HIT -- a Blind miss or a block at the
+    # arrival inflicts nothing (the banner at CONDITION_NEEDS_HIT).
+    if inflicted and first and victim and not victim.get("dead") \
+            and attack_condition_lands(_res, sid, tid, conn_id, "the player"):
         apply_condition(send, state, tid, inflicted[0], inflicted[1], rank,
                         conn_id, sid)
     return _res
@@ -27405,6 +27456,15 @@ def cast_tick(send, state, conn_id):
                         apply_condition(send, state, target, _rc[0], _rc[1],
                                         rank, conn_id, cast["skill_id"],
                                         by_agent=PLAYER_AGENT_ID)
+                # RANGERPRE-S22: the skill's own condition rides the HIT too. A
+                # Blind miss or a block leaves the shared apply below nothing to
+                # put on the foe (the banner at CONDITION_NEEDS_HIT). A skill shot
+                # ("launched") and a chain fail ("failed") cleared it above
+                # already; this arm is the only one that sets `_res`, so the
+                # non-attack arms never read it.
+                if inflicted and not attack_condition_lands(
+                        _res, cast["skill_id"], target, conn_id, "the player"):
+                    inflicted = None
                 if skill_self_knocks_down(cast["skill_id"]):
                     knock_down(send, state, PLAYER_AGENT_ID, conn_id,
                                f"skill {cast['skill_id']} (its own price)",
@@ -27527,7 +27587,9 @@ def cast_tick(send, state, conn_id):
             # skill's condition rides the hit landing -- and if the hit
             # killed the target, `apply_condition` would be putting bleeding
             # on a corpse, which the guard below refuses the same way
-            # `land_swing` refuses to re-kill one.
+            # `land_swing` refuses to re-kill one. A strike that did NOT land
+            # (missed, blocked) reaches here with `inflicted` already None:
+            # the attack arm above cleared it (RANGERPRE-S22).
             if inflicted and target:
                 victim = state.get("agents", {}).get(target)
                 if victim and not victim.get("dead"):
@@ -38800,7 +38862,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
             knock_down(send, state, agent_id, conn_id,
                        f"its own skill {skill_id}",
                        skill_knock_down_seconds(skill_id))
-        if inflicted and not target_dead(state, _tid):
+        # RANGERPRE-S22: the condition rides the HIT -- a Blind miss or a block
+        # inflicts nothing (the banner at CONDITION_NEEDS_HIT); a ranged body's
+        # rides its arrow (land_body_skill_shot), `inflicted` cleared above.
+        if inflicted and not target_dead(state, _tid) and attack_condition_lands(
+                _res, skill_id, _tid, conn_id, f"agent {agent_id}"):
             apply_condition(send, state, _tid, inflicted[0],
                             inflicted[1], _rank, conn_id, skill_id, by_agent=agent_id)
         resolve_heal(send, state, skill_id, _rank, agent_id,
@@ -49907,6 +49973,12 @@ def main():
               "non-fleshy body (content creature_trait) takes Bleeding, Disease and "
               "Poison and no #1957 goes out, this server's bytes until 2026-09-29 "
               "[RANGERPRE-S14 revert]", flush=True)
+    if a.no_condition_needs_hit:
+        global CONDITION_NEEDS_HIT
+        CONDITION_NEEDS_HIT = False
+        print("CONDITIONS: --no-condition-needs-hit -- an attack skill's condition lands "
+              "on a Blind miss or a block too (the known-bad arm), this server's bytes "
+              "until 2026-10-07 [RANGERPRE-S22 revert]", flush=True)
     if a.no_snare_status_bit:
         global SNARE_STATUS_BIT
         SNARE_STATUS_BIT = False

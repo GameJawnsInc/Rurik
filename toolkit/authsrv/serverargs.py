@@ -2848,6 +2848,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "player's Sever Artery on a non-fleshy creature with "
                          "0x005D #1957 + 0x005E [1, 7] and no Bleeding "
                          "(20260929T150923 :53756 t=1057.415; WIKI 'Fleshy').")
+    ap.add_argument("--no-condition-needs-hit", action="store_true",
+                    help="RANGERPRE-S22 REVERT: an ATTACK skill's own condition lands "
+                         "whatever its strike did -- a Blind-missed ([38, T, A, 3]) or "
+                         "blocked ([38, T, A, 0]) Sever Artery still bleeds the foe, at "
+                         "all four sites (the player's melee strike and skill shot, a "
+                         "body's melee skill and skill shot), this server's bytes until "
+                         "2026-10-07. Known-bad: retail's Blind-missed Jagged Strike "
+                         "inflicted nothing (20260917T224104 :62557 t=348.996) where the "
+                         "same skill's hits on the same foe bled it 3 of 3; WIKI 'Hit': "
+                         "a blocked or missed attack is no hit.")
     ap.add_argument("--no-snare-status-bit", action="store_true",
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "
