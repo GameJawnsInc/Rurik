@@ -11,7 +11,7 @@ strongest retail evidence for any of it is Aura of Restoration (180, an Elementa
 enchantment, 5 energy, 0.25 s, 60 s at every rank, scale 200..500 %): while it is up, the
 bearer's every spell completion carries a self-heal word. Before a server line was written
 for it, the triage's scratch census was re-derived here so the server's `on_cast_triggers`
-rests on a committed reader that can go red. test_trigcast.py section 6 locks what it
+rests on a committed reader that can go red. test_trigcast.py section 9 locks what it
 prints.
 
 METHOD. Captures and connections are `hexjoin.census()`'s -- livewire.live_captures
