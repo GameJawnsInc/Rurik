@@ -28,6 +28,39 @@ move back.
 
 ---
 
+### The four empty-vault test reds -- 2026-10-07 -- **`test_daggers`, `test_mechanics`, `test_skilldamage` and `test_agentlife` now pass with `RURIK_VAULT` at an empty directory and at a nonexistent path alike. On the vault they still pass, with every old check in place plus one new check each. No red was a server defect: every one was a fixture reading the vault-only `skills` or attribute tables. Each file now carries the record's rows for the sections that exercise server behaviour, REPLACED so a vault run takes the same path, and one vault-only check holds those rows to the vault's own. What IS the vault skips on its directory: a client-table number pinned, the live corpus, a pristine client image. Each floor is now per machine, decided on directories and never on what loaded (`test_codescan`'s shape), so a vault whose skills.toml fails to load still owes the whole floor. Test-only: no server change. Closes PLAN.md §8.1's "Four tests are red on an empty vault", filed in the entry below.**
+
+- **Who did what.** test_daggers here. test_mechanics, test_skilldamage and test_agentlife were each done by an Opus agent in an isolated worktree, one file apiece, then reviewed and merged into this branch. Those worktrees were created at 12251eda, 55 commits behind, and each fast-forwarded to 30e34a66 before starting. None had commits of its own.
+- **test_daggers.** A bare run ran 28 of its 109 floor and FAILED §3's weapon rank: None, because `attribute_state` refuses without the attribute tables. §3 now runs on test_weapons' attribute tables, replaced for the section. New §13, vault-only, holds them to the vault's. Floors 110 (vault) / 28 (bare). Proven:
+  - bare, both fixtures: 28 checks + 10 declared skips;
+  - vaulted: 110;
+  - a vault holding every content table but skills.toml: RED, 29 of 110;
+  - emptying the carried cost curve: §3 and §13 red on the vault run.
+- **test_mechanics.** A bare run died at module level in §1 (`no skills row '346'`), under a docstring promising "no vault". It now carries the 41 skills rows a vault run reads, traced section by section, plus the attribute tables, all REPLACED for the whole run. 99999 stays rowless on purpose. The live-corpus sections 19, 20, 23 and 32, and §37's pristine-image check, skip on their directories. Sections 19, 20 and 23 had caught only `Exception`, so `require_dir`'s SystemExit would have killed a bare run once §1 was fixed. New §42 holds the carried rows to the vault's. Floors 385 / 343. Proven:
+  - bare: 343 + 6 skips;
+  - vaulted: 385;
+  - the no-skills vault: RED (§42 FAIL, 344 of 385);
+  - dropping 283 or 317, or moving 346's energy: each reddens the vault run.
+- **test_skilldamage.** A bare run died in §1 (`no skills row '312'`), which its floor comment had recorded as accepted. §1 (the client's endpoints) and §5 (the tie-break over every effect-table skill) are the vault's subject and skip on vault/content. §2–4 and §6–11d run on 15 carried rows plus the tracked override rows; RECORD alone took 382 away and reddened §10. §12–13's corpus skip used to return the verdict early, silently dropping §14; it now declares its 42 checks and returns to `main()`. New §15 holds the carried rows to the vault's. THREE floors: 136 with vault/content and captures/live, 94 with content alone, 76 bare. Proven:
+  - bare: 76 + 5 skips;
+  - vaulted: 136;
+  - the no-skills vault: RED (11 FAIL);
+  - 11 of the 15 single-row drops redden the vault run. The other four (135, 316, 318, 321) are kept on purpose: they stop §9/§10's Faintheartedness checks passing vacuously and keep the default bar whole.
+  - Recorded, not fixed: §5 passes vacuously on a vault whose skills.toml failed to load. That vault still goes red through §1 and §15.
+- **test_agentlife.** A bare run died in `section_hold_plane` on 252's row after 12 fails, and its floor comment said "there is no bare-machine number for this file". Seven sections now run on carried rows. Each is wrapped at its call in `main()` with exactly the rows it read on a vault run, as traced. The carried data:
+  - 32 skills rows;
+  - two `skill_effect` label rows, 191 and 286. They hold short labels only, as the tracked hand rows do.
+  - the attribute tables.
+  - Hidden behind the traceback were two more fixture reds. SLICE-H8's own `attribute_state({})` raises without the attribute tables. `caster_held_slot`'s planted touch row, written over no base row, lacked `type_code`.
+  - Three skips were decided on an empty result: SLICE-B3, and two in `enemy_skill`, 18 checks in all. They now run, and a missing row is a FAIL.
+  - These skip on their directories: the client-table constants (5), the unlocks corpus (4), check F (1) and the new record check (1).
+  - Floors 704 / 694. Proven:
+    - bare: 694 + 6 skips;
+    - vaulted: 705, with 704's labels identical and in order plus the record check;
+    - the no-skills vault: RED;
+    - 9 of 10 targeted drops redden the vault run. 194 is read, but no check depends on it.
+- **Tests (the merged tree):** vaulted: test_daggers 110, test_mechanics 385, test_skilldamage 136, test_agentlife 705 + 1 declared skip. Empty directory, and a nonexistent path, identically: 28 + 10, 343 + 6, 76 + 5, 694 + 6. The no-skills scratch vault (every vault/content table but skills.toml), re-run here: test_mechanics 1 FAIL with 344 of 385; test_skilldamage 11 FAIL; test_agentlife 1 FAIL with 695 of 704. Also green: test_srclint 26, test_checks 20, test_citelint 50, test_identlint 28, test_provlint 19, test_derivlint 32, test_seclint 26, and test_buildpins 66 (the carried rows' 38974 literals).
+
 ### A bare server's condition read takes its siblings' fallback -- 2026-10-07 -- **On a machine with no vault, `skill_condition` no longer raises. It used to raise `ContentError` for 8 of the 72 tracked hand rows (167, 320, 337, 352, 392, 782, 799, 2059). 179 and 185 raised out of the three direct `_condition_terms` callers. Pressing the default bar's 320 at a foe killed the world tick in `cast_tick`. `_condition_terms` now takes `skill_damage`'s narrow catch around its `skills` read: no row means no condition. The slot is skipped and the skill inflicts nothing, the inert direction rather than a guessed duration. The missing row is announced once per id through `skill_timing`. A vaulted server is unchanged, since every row resolves there. No flag: the old arm is a crash. New `test_barecondition.py`, proven red against the unfixed code. Closes PLAN.md §8.1's "A bare server dies on 320", filed in the entry below.**
 
 - **Prediction, written before the first run.** `skill_condition` would raise for exactly the eight, at every rank. The other 64 would not: 179 and 185 leave early on `on_end`/`bonus_if`, and 382 and 384 read the 14 tracked override rows. `_condition_terms` called directly would raise for 10, the eight plus 179 and 185. The 320 press would die at `cast_tick`'s completion read. Of the other call sites, `attack_skill_terms`, `burst_player_spell`, `open_area` and `land_skill` (a body's cast) would raise. `live_effect_hold` would not, because it already catches `ContentError` around its call. The direct callers `hex_end_burst` (179) and `adjacent_player_spell`/`adjacent_body_spell` (185) would raise. `episode_condition_riders` could not be reached on a bare machine, because no tracked row is a rider. **Scored with `RURIK_VAULT` at a nonexistent path:** exact on all three, 8, 10 and the traceback at `cast_tick` → `skill_condition` → `_condition_terms` → `skill_scale_value`.

@@ -2055,10 +2055,6 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
-* **Four tests are red on an empty vault, all on their own fixtures** (found 2026-10-07,
-  PLAN-LOG "A bare server's condition read"): `test_mechanics` and `test_skilldamage` die
-  in §1 reading vault-only skills rows themselves; `test_daggers` runs 28 of its floor's
-  109; `test_agentlife` dies in `section_hold_plane` on 252's row, past 12 vault-row reds.
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
