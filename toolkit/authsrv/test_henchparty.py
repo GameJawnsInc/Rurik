@@ -182,7 +182,8 @@ if os.path.exists(os.path.join(capdir, CONN)):
         if chunk is None:
             led.skip(f"§1 add at t={tt}", "chunk not found")
             continue
-        msgs, _r = tapemod.decode_all([(tt, chunk)], COD, channel="GAME_SMSG",
+        msgs, _r = tapemod.decode_all(tapemod.Events.of([(tt, chunk)], events), COD,
+                                      channel="GAME_SMSG",
                                       mask=0, strict=False)
         row = next((v for _t, op, v in msgs if op == 0x01BF), None)
         led.ok(row is not None and row[1] == party and row[2] == agent,

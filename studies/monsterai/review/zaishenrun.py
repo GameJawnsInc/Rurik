@@ -588,7 +588,9 @@ def prefix_decode(capdir, conn_file):
         t_last = t
     if gap is None:
         raise ValueError("no seq discontinuity: not a gapped connection")
-    cod = livewire._get_codec()
+    # The connection's OWN build's numbering: `events` is a plain list, so nothing else
+    # would carry it (WIREORDER-B1, studies/tape/WIREORDER.md).
+    cod = livewire._get_codec(livewire.conn_build(capdir, conn_file))
     msgs, rc = tape.decode_all(events, cod, channel="GAME_SMSG", mask=0, strict=False)
     if rc.err is not None or rc.consumed != rc.total:
         raise ValueError(f"the prefix does not frame whole: {rc.consumed}/{rc.total} {rc.err}")
@@ -599,8 +601,11 @@ def prefix_decode(capdir, conn_file):
                               strict=False)
     if rc2.err is not None or rc2.consumed != rc2.total:
         raise ValueError(f"c2s does not frame whole: {rc2.consumed}/{rc2.total}")
-    merged = [(t, "s2c", op, v) for t, op, v in msgs] + [(t, "c2s", op, v) for t, op, v in cm]
-    merged.sort(key=lambda r: (r[0], 0 if r[1] == "c2s" else 1))
+    # Each direction in WIRE order, interleaved head by head: livewire.interleave, the
+    # merge decode_conn makes. A time sort moved a segment that reached the capture out
+    # of order -- one in this prefix, 0.16 ms back, at segment 545 of 709 (WIREORDER-A1).
+    merged = livewire.interleave([(t, "c2s", op, v) for t, op, v in cm],
+                                 [(t, "s2c", op, v) for t, op, v in msgs])
     cut = {"plain_bytes": off, "plain_total": len(plain), "gap_seq_expected": gap[0],
            "gap_seq_got": gap[1], "gap_bytes": gap[2], "t_last": t_last, "t_gap": gap[3],
            "messages": len(msgs), "c2s_messages": len(cm)}

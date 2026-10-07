@@ -79,7 +79,8 @@ def sequence(capture_dir, connection, codec):
     """[(t, op, values)] for one game connection, framed once, whole."""
     info, events = tape.load_tape(capture_dir, connection)
     t0 = info.get("t0") or 0.0
-    events = [(round(t + t0, 6), p) for t, p in events]
+    # Events.of keeps the tape's build through the rebase (WIREORDER-B1).
+    events = tape.Events.of([(round(t + t0, 6), p) for t, p in events], events)
     msgs, (consumed, total, err) = tape.decode_all(events, codec, "GAME_SMSG", 0)
     if err is not None or consumed != total:
         raise bufflog.BuffLogError(

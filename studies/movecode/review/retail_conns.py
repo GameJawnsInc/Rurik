@@ -29,6 +29,8 @@ sys.path.insert(0, HERE)
 import livewire  # noqa: E402
 import pressstopjoin  # noqa: E402
 
+# A pickle written before 2026-10-07 holds decode_conn's OLD time-sorted merge, not wire
+# order (WIREORDER-A1, studies/tape/WIREORDER.md): delete it, and it rebuilds on first use.
 CACHE = os.environ.get("RURIK_LIVE_CACHE")
 _C = None
 

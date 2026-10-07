@@ -960,7 +960,7 @@ row. No server behaviour changed.
 in WIRE order. (Not `livewire.decode_conn`'s merge: it sorts by segment time, which runs
 backwards in places and on two chain connections moves the manifest family itself — a
 `0x0196` ahead of its `0x0198`. The 17 of 17 below comes out the same under both orders,
-measured; the test now reads wire order and holds the merge's order red.)
+measured; the test now reads wire order and holds the merge's order red. **Fixed at the source the same day:** `decode_conn` keeps each direction in wire order since `WIREORDER-A1`, [../tape/WIREORDER.md](../tape/WIREORDER.md).)
 **No decoded file-id list, hash table, cache stamp or mask is committed**: the test reads
 them out of the vault at run time and asserts shapes, counts and relations.
 
