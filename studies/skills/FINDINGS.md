@@ -9949,3 +9949,179 @@ section records what changes HERE.
 - **The `[61]` word predicts every AI completion with no free parameter** (CASTAI-ZF10):
   485 of 486 within 0.05 s. The Zaishen Mage's casts run at × 0.67, the Degeneration
   Mesmer's at × 0.7236.
+
+## 65. SKILLS-AC — a body waits out its spell's AFTERCAST: retail never starts anything sooner than 0.704 s after the `[58]` of a 0.75-aftercast spell (1,477 of 1,477), our server chained the next action a tick later, and an instant skill is the one exception the wire shows (2026-10-07)
+
+DESKWORK-D5's last "unmeasured" residual, "NPC aftercast proper", is measured and shipped.
+The reader is `toolkit/authsrv/npcaftercast.py` (predictions in its docstring, registered
+before the run, its "AS RUN" block beside them). The server change is `authsrv.NPC_AFTERCAST`
+(`--no-npc-aftercast` reverts it). The test is `toolkit/authsrv/test_npcaftercast.py`.
+
+| token | what | label |
+|---|---|---|
+| SKILLS-AC1 | the floor: no next start under 0.70 s after a 0.75 completion (P1), the mass at the end (P2), the aftercast-0 control (P3) | OBSERVED |
+| SKILLS-AC2 | the survey's n = 872 reproduced exactly, then corrected to 1,477 (the un-targeted `[60]`) | OBSERVED |
+| SKILLS-AC3 | an instant skill is NOT held: 3 of 7 instants after a 0.75 completion fall inside the window | OBSERVED, n = 3; CONTESTED with WIKI |
+| SKILLS-AC4 | a body's E3 against its E5 for an aftercast spell (P5) | UNDECIDABLE on the corpus; the survey's witness refuted as evidence |
+| SKILLS-AC5 | the server: a completed cast stamps `aftercast_until`, and the three body ticks hold the next cast or swing | the rule CORROBORATED; the pieces labelled below |
+| SKILLS-AC6 | what this lane did not do, one line each | open |
+| SKILLS-AC7 | the D5 line's other clauses, re-checked before the re-stamp | per clause |
+
+### 65.1 SKILLS-AC1 — the instrument and the floor
+
+**The instrument.** The reader takes every agent other than the connection's own player
+(`spellhitjoin.observer_of`), split per INCARNATION at each `0x0020` create (rechargeprobe's
+rule). It takes every completion `0x009F [58, agent, 0]` whose most recent start was a
+spell's `[60]` with no other close in between. It measures the gap to that incarnation's
+next START: property 60 (a cast), 50 (an attack skill) or 4 (a swing), on either channel.
+The completed skill's aftercast is read off the table on the connection's OWN build: the
+client's VERSION frame names the build, and `skilltable.py` reads the vault's exe of it at
+`+0x40`. Gapped connections are set aside by name: the one is `20260928T103123 :65009`.
+
+**OBSERVED, 2026-10-07, 127 connections on six builds (38519, 38797, 38833, 38849, 38888,
+38974):**
+
+- **P1 HOLDS.** 1,477 completions of table-aftercast-0.75 spells. The next start is
+  **never under 0.70 s**: min 0.704, p5 0.741, p10 0.748, median 1.135. A cast, a swing
+  and an attack skill floor alike: 1,108 casts (min 0.704), 352 swings (0.704) and 17
+  attack skills (0.735).
+- **P2 HOLDS.** 527 of 1,477 (35.7 %) fall within [0.70, 0.80). Bodies with something
+  ready act AT the end of the aftercast. An AI that is merely slow would not pile up there.
+- **P3 HOLDS.** The aftercast-0 control re-starts under 0.70 s **49 of 95** times, down to
+  0.000. It spans five skills: 2 (Resurrection Signet), the Ranger preparations 432 / 433 /
+  435 (activation 2.0) and 769. So the floor is the table's `+0x40` and not a general pause
+  between a body's actions. CORROBORATED by the observer's own E5 → E3, which sits on the
+  same column (castmech §9: 1, 105, 153, 814, 858 at 0.732–0.765).
+- **P4 HOLDS. Our server is the known-bad arm, from a real capture.** On
+  `authsrv-20260928T002701-c1` the Hatcher chains 253 → 289 at **0.025 s** (n = 13, 2 under
+  0.70). On `authsrv-20261001T100807-c1` the heroes 200 / 201 swing **0.000 s** after their
+  281 lands (90 of 90).
+- Other aftercast classes (0.25, 1.0, 1.5, 0.6 and so on in the table): **no completion of
+  one is on any tape** (0 rows). They are RECONSTRUCTION wherever the server applies them.
+
+### 65.2 SKILLS-AC2 — the survey's 872, and why it is 1,477
+
+The survey counted 872 rows (355 in the mass, a control of 56 rows from skill 2 alone with
+28 under). Its two simplifications were switched off in a scratch copy (`triage_mode.py`):
+read only the targeted `0x00A0 [60]`, and walk back from a `[58]` across other closes.
+**That reproduced 872 / 355 / 56 / 28 exactly.**
+
+The un-targeted `0x009F [60, caster, skill]` is a start too. It is the self cast: CASTAI-R2's
+shape, and castethogram L1's 417 of 417 self-kind casts. With it read, the count is 1,477.
+
+Reading only targeted starts but stopping at a close gives 745. So **127 of the survey's
+872 rows** were a `[58]` that closed an un-targeted cast, scored against the targeted cast
+before it.
+
+Split by channel (start → next), every class floors at 0.704 or above: targeted → targeted
+653, targeted → un-targeted 100, un-targeted → targeted 245, un-targeted → un-targeted 479.
+
+### 65.3 SKILLS-AC3 — an instant skill goes inside the window
+
+Registered before the run (P6): no instant's `[48]` falls inside a 0.75 aftercast, because
+WIKI (GWW "Aftercast delay", castmech §6) says the caster "cannot ... activate other
+skills".
+
+**REFUTED.** 7 instants sit between a 0.75 completion and the next start, and **3 of the 7
+are inside the window: 0.000, 0.499 and 0.501 s.** All three are stance 11 (type 3, table
+aftercast 0), by agent 4 on `20260928T103123` (:50061, :58544). OBSERVED, n = 3, one
+stance, one body.
+
+So the hold is a CLOCK gate on the PICKED slot, which an instant passes. It is not a stop
+ahead of `pick_skill`. This is the one place the server departs from the brief's
+"before pick_skill" placement, and the wire is why.
+
+### 65.4 SKILLS-AC4 — the hero's E3 is not on tape for an aftercast spell
+
+The survey cited "retail's hero E5 → E3 is 0.000 (322 11/11, 346 17/17, 348 7/7 on
+`20260914T005758`)" as the reason the hero's E3 must stay at its E5. **All three are table
+aftercast 0 on all six builds**: 322 is an attack (type 14), 346 a stance (3) and 348 a
+shout (15). Their 0.000 cannot tell "the E3 rides the E5" from "the E3 waits the aftercast".
+
+No non-observer agent completes an aftercast > 0 skill with an E5 / E3 on any tape, so P5
+is **UNDECIDABLE**. The server does not move the hero's E3 (`hero_skill_messages` is
+untouched, and the test pins it at the E5's own tick). That placement is **UNVERIFIED** for
+a spell, not OBSERVED.
+
+### 65.5 SKILLS-AC5 — the server
+
+**The mechanism (CORROBORATED: the §65.1 floor plus the table column):**
+
+- `npc_aftercast(skill_id)` sits beside `npc_recharge_anchor` and reads
+  `skill_timing(skill_id)`'s aftercast.
+- `land_skill` is the completion: every caller fires it when `cast_lands_at` falls due. It
+  stamps `agent["aftercast_until"] = landing + aftercast`.
+- `npc_aftercast_holds(agent, skill_id, now)` holds:
+  - in `enemy_attack_tick`, inside the gate loop **after the reach gate and before the
+    pay gate**. That is a CLOCK gate after the WORLD gates, RV-1's order: a slot that cannot
+    be cast from here is never waited on, and the aftercast is the body's clock, not the
+    slot's price. Test_castgate §6's order lock, target → live-effect → reach → pay, is
+    unchanged around it;
+  - in `enemy_attack_tick` again, **ahead of the plain swing's interval gate**;
+  - in `ally_cast_tick`, right after the slot unpacks, which also covers the resurrection
+    pick;
+  - in `ally_attack_tick`, after the cast-in-flight check.
+- A clock hold keeps the round-robin cursor where it is, so `pick_skill` is untouched (Q19).
+
+**RECONSTRUCTION, each said at its site:**
+
+- A party body takes the hostile's rule. The tapes' 1,477 are "other agents", not split by
+  allegiance.
+- An interrupt, a cancel, a scatter cancel and a RESSIG `[59]` stop are not completions
+  and stamp nothing.
+- An attack skill and an instant stamp nothing. That is the wiki's two classes; the table's
+  17 ranged-attack rows at 0.6–1.5 and its 15 instant rows at 0.75 stay CONTESTED
+  (castmech §9).
+
+**`--no-npc-aftercast` is 642d8957's arm.** The fixtures' 63 sends are byte-identical to a
+`git archive 642d8957` export driven through the same fixture. The test pins the start ticks
+(`START_642`, `HERO_642`).
+
+**Owed: a client A/B run** (the runsheet in the 2026-10-07 PLAN-LOG entry).
+
+### 65.6 SKILLS-AC6 — not done here, one line each
+
+- **The attack-skill strike anchor** (both body cast sites arm an attack skill's recharge
+  at the START). Re-derived with the survey's `atk_cadence.py`: one binding body, 327 by
+  agent 9 on `20260817T231139`, start-to-start 8.671 / 8.689 against a recharge of 8 and a
+  0.565 windup, strike-to-next 8.086 / 8.103. n = 2, so it does not separate from the AI's
+  wait.
+- **`half_recharge_roll` at the HOSTILE cast site.** It is inert by default:
+  `ENEMY_WEAPON_ITEM` is None.
+- **Fast Casting's recharge** belongs to DESKWORK-D7. No tape carries an NPC's attribute
+  ranks.
+- **A body's MOVEMENT during its aftercast** is not read: the reader times starts, not
+  `0x002A` / `0x0029`.
+- **The non-0.75 classes**, which have 0 rows on tape (§65.1).
+
+### 65.7 SKILLS-AC7 — the D5 line's other clauses, verified before the re-stamp
+
+- **The `[8]` hold pair for an instant** was closed by MOVECODE-1z-ds.25 (`912afe82`,
+  `INSTANT_LEAVES_BODY`) and confirmed on the client by ds.34 (`456e5d30`).
+- **A hero's E4** was closed by PENDSKILL (`f56a13d9`; its client run is `01351dcd`).
+- **A hero's debit** was closed by HEROENERGY (`050f8b4d`, `[62]` behind the E4).
+- **The zero-recharge E5** was closed by SLICE-F52 52.8 (`a6a3d34b`, merged in
+  `4804b835`).
+- **Still open, and NOT on the line:** a HERO's adrenaline debit. `ally_cast_tick` skips
+  adrenal skills outright, while retail's hero sends E4 + `0x00D2` for 348.
+- **229's recharge anchor, "HSR proc vs start", is explained without a campaign.** The
+  survey's join was re-run from this tree with `weaponcensus.hands_timeline` /
+  `items_of`, and its output is identical:
+  - exactly three groups re-cast under the recharge: 229 by agent 85 on
+    `20260917T090355`, 229 by agent 117 on `20260917T224104`, and 102 by agent 4 on
+    `20260928T103123`;
+  - **all three hold a type-26 staff carrying word 570**, with args 15, 16 and 16;
+  - 570 holders are 24 of the 127 groups with at least 2 pairs (24 of the 77 staff
+    groups), so three of three by chance is about 0.007, or 0.03 among staves;
+  - every short gap is at or above the halved recharge, rounded half up as
+    `combatmath.halved_recharge` rounds: 229's 4.497 / 3.251 against 3, and 102's 8.739
+    against 8.
+
+  CORROBORATED: the 570 word and the WIKI HSR rule already cited at `authsrv.py`'s
+  WEAPONS-W5b block.
+
+  `rechargeprobe.py`, re-run on 2026-10-07, finds 10 discriminating skills: 9 are
+  completion-anchored, and 229 is start-like only through these two proc pairs. n is
+  three groups, so this is not to be quoted as a large OBSERVED. (The same run shows Flare
+  194, table recharge 0, re-cast at a minimum of 0.741 s after its completion: §65.1's
+  floor from the other side.)

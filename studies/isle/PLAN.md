@@ -579,7 +579,7 @@ shows six spells re-casting at recharge + activation from the start — the rech
 the cast's COMPLETION, and the server now arms it there (`npc_recharge_anchor`,
 `--no-npc-recharge-from-completion`). AFTERCAST proper is still not added to the NPC cycle;
 the anchor is completion, not completion + aftercast — the wire's min completion-to-next sits
-at the recharge, not recharge + aftercast.)**
+at the recharge, not recharge + aftercast.)** **(2026-10-07, DESKWORK-D5: AFTERCAST proper is added -- not to the recharge, which stays completion-anchored, but as a hold on the body's NEXT action of any slot: retail's other agents never start anything sooner than 0.704 s after a 0.75-aftercast spell's [58], 1,477 of 1,477; `NPC_AFTERCAST`, studies/skills §65.)**
 
 **What the skeptic refuted:**
 
