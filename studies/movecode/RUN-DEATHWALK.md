@@ -261,6 +261,44 @@ client closed cleanly after the hold.
 launches (the same command with the flag) until that arm's cells reach 5. The cap of 8
 launches is not needed: one launch per arm meets the floor.
 
+### 3c. The known-bad E5 launch RAN (2026-10-06): old-shape 8 of 8, its in-flight cell UNEXPOSED
+
+**What ran:** the pilot's command plus `--target-death-releases-now`, on the owner's
+go-ahead, agent-driven. Harness `20261006T195712`; tape `authsrv-20261006T195807-c1`. RUN
+VERDICT PASS, no assert.
+
+**Pre-registered before launch:**
+- the abort: no chain-target death;
+- the arm read off the tape as `known-bad`;
+- every judged death `old-shape` -- `[8, 0]` within 0.06 s of the death, no `[3]` -- with any
+  `UNEXPECTED` or `PASS` refuting the control;
+- a cell under 5 is UNEXPOSED.
+
+**What it showed** (`e5_score.py --check 20261006T195807`, exit 0; OBSERVED):
+- **All 16 died, every killing blow a hero's** (200: 5, 201: 11). 8 died as the chain's
+  target; 8 died to the heroes before the plan named them, more than the pilot's 5. Which
+  raiders die early is the rig's own randomness.
+- **The arm, read off the flags row:** `known-bad`.
+- **Next start: 6 judged, 6 `old-shape`.**
+- **In flight: 2 judged, 2 `old-shape` -- UNEXPOSED (floor 5).**
+- **The shape, every judged death:** `[8, 0]` alone, 1-3 ms after the death -- in the
+  death's own tick -- and never a `[3]`. Against the D4 schedule those releases are 0.10-0.47 s
+  EARLY (`err` -0.101 to -0.474).
+
+**The two arms side by side, same rig, same plan:**
+
+| | D4 (`20261006T194028`) | known-bad (`20261006T195807`) |
+|---|---|---|
+| in flight | 5 judged, 5 `PASS`: `[8, 0]` `[3]` at the due landing | 2 judged, 2 `old-shape`: `[8, 0]` at the death, no `[3]` (UNEXPOSED) |
+| next start | 6 judged, 6 `PASS`: `[8, 0]` at the next due start | 6 judged, 6 `old-shape`: `[8, 0]` at the death |
+
+**Status of E5:** D4's arm is exposed in both cells and passes 11 of 11. The known-bad arm
+reproduces the old shape 8 of 8, and is exposed in the next-start cell only. Its in-flight
+cell needs about three more deaths: the plan's "+2 per arm if a floor misses" allows up to
+two more launches, and the pilot's rate (~2-5 in flight per launch) says one or two would do.
+The old in-flight shape is also OBSERVED on September's tapes (4 `old-shape`, §3a's
+baseline), but on other rigs, so it is not pooled into this cell.
+
 ## 4. Predictions — to be filled by the desk steps
 
 | | Prediction | Retail | Known-bad arm |
