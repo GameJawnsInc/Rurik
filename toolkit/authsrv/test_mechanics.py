@@ -12,7 +12,10 @@ wiki-sourced content row; the checks pin the values GWW itself publishes
 134-damage example), so a drift in either the rule or the row goes red
 against a number nobody here invented.
 
-Offline: fabricated state, a send collector, no vault and no client.
+Offline: fabricated state, a send collector, no vault and no client. The skills rows
+and attribute tables it needs are carried (RECORD, 2026-10-07); what stays vault-only is
+what IS the vault -- the live corpus (sections 19, 20, 23, 32), one read of a pristine
+client image (section 37) and the carried rows' comparison (42) -- each a declared skip.
 """
 import os
 import sys
@@ -30,13 +33,134 @@ import authsrv      # noqa: E402
 import agents       # noqa: E402
 import effects      # noqa: E402
 import combatmath   # noqa: E402
+import vaultpath    # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=384)  # 2026-09-30 (RANGERPRE-S10, MAXHP-1): +1 -- sec.29(b) the foe's SECOND punished swing carries no 42 (the first still declares, its tracker marked stale as create_agent_world marks it); measured 384; before that 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+# 2026-10-07 (the bare machine): TWO floors, decided on the vault's content DIRECTORY --
+# test_codescan's FLOOR_WITH_CAPSTONE / FLOOR_STDLIB_ONLY pattern -- and never on what
+# loaded, so a vault whose skills.toml did not load still demands FLOOR_VAULT and goes red.
+FLOOR_BARE = 343   # 2026-10-07 (the bare machine): MEASURED 343 checks, 0 failed, 6 declared skips (42 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path -- sections 19 (13), 20 (17), 23 (6) and 32 (4), the live corpus; section 37's record against its build's client row (1), the pristine image; section 42 (1), the vault's table. Every other section runs on the carried rows (RECORD, the attribute tables). Before this the bare run died at section 1's module level (ContentError: no skills row '346') and reached no verdict
+FLOOR_VAULT = 385  # 2026-10-07 (the bare machine): +1 -- sec.42 the 41 carried skills rows and the two attribute tables against the vault's own, column for column (vault-only); measured 385 with the vault; before that 2026-09-30 (RANGERPRE-S10, MAXHP-1): +1 -- sec.29(b) the foe's SECOND punished swing carries no 42 (the first still declares, its tracker marked stale as create_agent_world marks it); measured 384; before that 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+HAVE_VAULT = os.path.isdir(vaultpath.vault_path("content"))
+LEDGER = checks.Ledger("effect mechanics", floor=FLOOR_VAULT if HAVE_VAULT else FLOOR_BARE)
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
 PLAYER = authsrv.PLAYER_AGENT_ID
+
+
+# THE BARE MACHINE (2026-10-07). The docstring says "no vault", and with RURIK_VAULT at an
+# empty directory (or a nonexistent one) this file reached no verdict: it died at section
+# 1's module level, `skill_flat_constant(346)` -> ContentError: no skills row '346'. The
+# tracked content carries 14 skills rows (content/overrides/skills_38888.toml) and no
+# attribute tables, and every section that exercises a mechanic reads the vault's: not one
+# red was a server defect. So the rows are carried here as the record's own (measured
+# numbers -- CLAUDE.md's gate: skilltable.py's rows as vault/content/skills.toml holds them,
+# build 38974, and the attribute tables as attribpoints.py / attribtable.py read them,
+# test_weapons' copies) and REPLACE those three tables for the whole run, so a vault run
+# takes exactly the bare path and cannot pass on a row a bare machine lacks. RECORD is
+# exactly the 41 ids a vault run reads out of the skills table (MEASURED 2026-10-07: every
+# read traced, section by section; 99999 stays rowless on purpose -- sections 37 and 40's
+# "a rowless id no"). Section 42 holds every carried row to the vault's own, column for
+# column and build for build, and skips only on an absent vault/content DIRECTORY. What
+# stays vault-only is what IS the vault: the live corpus (sections 19, 20, 23, 32) and the
+# pristine client image section 37 reads, each skip decided on its directory.
+RECORD_BUILD = 38974
+RECORD_PROVENANCE = {"source": "client-table", "extractor": "toolkit/clientscan/skilltable.py",
+                     "build": RECORD_BUILD}
+SKILL_COLUMNS = ("activation", "aftercast", "recharge", "energy", "adrenaline",
+                 "adrenaline_units", "attribute", "profession", "type_code", "target", "combo",
+                 "combo_req", "weapon_req", "aoe_range", "skill_arguments", "duration0",
+                 "duration15", "scale0", "scale15", "bonus_scale0", "bonus_scale15",
+                 "projectile", "impact_visual", "touch_range", "half_range")
+RECORD = {
+    "1": (2.0, 0.75, 4, 0, 0, 0, 21, 1, 7, 0, 0, 0, 0, 0.0, 2, 0, 0, 82, 172, 0, 0, 2077, 2077, False, False),  # Healing Signet
+    "2": (3.0, 0.0, 0, 0, 0, 0, 51, 0, 7, 6, 0, 0, 0, 0.0, 6, 0, 0, 100, 100, 25, 25, 2077, 2077, False, False),  # Resurrection Signet
+    "26": (2.0, 0.75, 10, 10, 0, 0, 2, 5, 4, 5, 0, 0, 0, 0.0, 7, 5, 15, 10, 55, 1, 15, 2077, 2077, False, False),  # Empathy
+    "40": (1.0, 0.75, 8, 5, 0, 0, 3, 5, 5, 5, 0, 0, 0, 0.0, 4, 0, 0, 3, 3, 20, 65, 2077, 2077, False, False),  # Ether Feast
+    "52": (1.0, 0.75, 15, 10, 0, 0, 2, 5, 4, 16, 0, 0, 0, 240.0, 5, 1, 10, 2, 2, 10, 82, 2077, 2077, False, False),  # Panic
+    "56": (2.0, 0.75, 8, 15, 0, 0, 1, 5, 4, 16, 0, 0, 0, 156.0, 3, 8, 20, 0, 0, 0, 0, 2077, 2077, False, False),  # Soothing Images
+    "108": (1.0, 0.75, 10, 15, 0, 0, 7, 4, 4, 16, 0, 0, 0, 240.0, 1, 6, 30, 0, 3, 0, 0, 2077, 2077, False, False),  # Suffering
+    "135": (1.0, 0.75, 8, 10, 0, 0, 7, 4, 4, 5, 0, 0, 0, 0.0, 5, 4, 18, 50, 50, 1, 3, 2077, 2077, False, False),  # Faintheartedness
+    "136": (2.0, 0.75, 5, 10, 0, 0, 7, 4, 4, 16, 0, 0, 0, 156.0, 1, 5, 30, 50, 50, 0, 0, 2077, 247, False, False),  # Shadow of Fear
+    "160": (0.75, 0.75, 5, 10, 0, 0, 8, 6, 6, 3, 0, 0, 0, 0.0, 1, 5, 13, 33, 33, 0, 0, 2077, 2077, False, False),  # Windborne Speed
+    "194": (1.0, 0.75, 0, 5, 0, 0, 10, 6, 5, 5, 0, 0, 0, 156.0, 2, 0, 0, 20, 65, 1800, 1800, 343, 344, False, False),  # Flare
+    "200": (1.0, 0.75, 30, 5, 0, 0, 12, 6, 12, 0, 0, 0, 0, 0.0, 0, 15, 15, 10, 18, 2, 2, 2077, 2077, False, False),  # the glyph
+    "204": (1.0, 0.75, 8, 10, 0, 0, 11, 6, 4, 16, 0, 0, 0, 156.0, 1, 5, 20, 1, 10, 10, 85, 2077, 2077, False, False),  # Rust
+    "230": (1.0, 0.75, 5, 5, 0, 0, 8, 6, 5, 5, 0, 0, 0, 100.0, 2, 0, 0, 15, 50, 1, 10, 405, 404, False, False),  # Lightning Javelin
+    "234": (2.0, 0.75, 15, 25, 0, 0, 11, 6, 4, 16, 0, 0, 0, 312.0, 2, 10, 10, 10, 85, 66, 66, 2077, 414, False, False),  # a hex (sections 37 and 40's spell controls)
+    "253": (1.0, 0.75, 5, 5, 0, 0, 14, 3, 4, 5, 0, 0, 0, 156.0, 1, 8, 20, 100, 100, 0, 0, 2077, 463, False, False),  # Scourge Sacrifice
+    "275": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 5, 70, 0, 0, 2077, 2077, False, False),  # Mend Condition
+    "276": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 10, 70, 0, 0, 2077, 2077, False, False),  # Restore Condition
+    "277": (0.75, 0.75, 5, 5, 0, 0, 15, 3, 5, 3, 0, 0, 0, 0.0, 2, 0, 0, 5, 70, 0, 0, 2077, 2077, False, False),  # Mend Ailment
+    "278": (0.25, 0.75, 20, 5, 0, 0, 51, 3, 5, 3, 0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0, 2077, 2077, False, False),  # Purge Conditions
+    "282": (0.75, 0.75, 3, 5, 0, 0, 13, 3, 5, 3, 0, 0, 0, 0.0, 6, 0, 0, 5, 100, 30, 115, 2077, 2077, False, False),  # Word of Healing
+    "283": (1.0, 0.75, 3, 5, 0, 0, 13, 3, 5, 4, 0, 0, 0, 0.0, 6, 0, 0, 20, 65, 15, 40, 2077, 2077, False, False),  # Dwayna's Kiss
+    "286": (0.75, 0.75, 3, 10, 0, 0, 13, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 35, 180, 0, 0, 2077, 2077, False, False),  # Heal Other
+    "292": (0.25, 0.75, 0, 10, 0, 0, 13, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 100, 136, 0, 0, 2077, 2077, False, False),  # Infuse Health
+    "301": (1.0, 0.75, 8, 5, 0, 0, 51, 3, 5, 3, 0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0, 2077, 2077, False, False),  # Remove Hex
+    "303": (1.0, 0.75, 12, 15, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 1, 8, 20, 10, 10, 0, 0, 2077, 2077, False, False),  # Convert Hexes
+    "307": (0.25, 0.75, 2, 5, 0, 0, 15, 3, 6, 3, 0, 0, 0, 0.0, 2, 8, 8, 15, 80, 0, 0, 2077, 2077, False, False),  # Reversal of Fortune
+    "311": (0.25, 0.75, 4, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 6, 26, 0, 0, 2077, 2077, False, False),  # Draw Conditions
+    "316": (0.0, 0.0, 10, 5, 0, 0, 21, 1, 15, 0, 0, 0, 0, 1000.0, 7, 10, 20, 10, 60, 1, 6, 2077, 2077, False, False),  # the default bar (TEST_SKILLBAR, 316..323)
+    "317": (0.0, 0.0, 0, 0, 4, 80, 17, 1, 3, 0, 0, 0, 0, 0.0, 1, 5, 20, 33, 33, 0, 0, 2077, 2077, False, False),  # the default bar's adrenal stance
+    "318": (0.0, 0.0, 0, 0, 5, 120, 17, 1, 16, 0, 0, 0, 0, 20.0, 7, 20, 20, 90, 300, 1, 10, 2077, 2077, False, False),  # the default bar
+    "319": (0.0, 0.0, 0, 0, 4, 80, 17, 1, 3, 0, 0, 0, 0, 0.0, 1, 8, 20, 25, 25, 0, 0, 2077, 2077, False, False),  # Rush (the default bar)
+    "320": (0.0, 0.0, 10, 5, 0, 0, 20, 1, 14, 5, 0, 0, 128, 0.0, 4, 0, 0, 0, 0, 3, 15, 2077, 2077, False, False),  # the default bar
+    "321": (0.0, 0.0, 8, 5, 0, 0, 51, 1, 14, 5, 0, 0, 185, 0.0, 0, 0, 0, 0, 0, 0, 0, 2077, 2077, False, False),  # the default bar
+    "322": (0.0, 0.0, 3, 5, 0, 0, 17, 1, 14, 5, 0, 0, 185, 0.0, 2, 0, 0, 10, 40, 0, 0, 2077, 2077, False, False),  # Power Attack (the default bar)
+    "323": (0.0, 0.0, 7, 5, 0, 0, 21, 1, 14, 5, 0, 0, 185, 0.0, 2, 2, 2, 10, 40, 0, 0, 2077, 2077, False, False),  # the default bar
+    "346": (0.0, 0.0, 4, 5, 0, 0, 17, 1, 3, 0, 0, 0, 0, 0.0, 0, 8, 8, 33, 33, 175, 125, 2077, 2077, False, False),  # Frenzy
+    "364": (0.0, 0.0, 20, 5, 0, 0, 21, 1, 15, 0, 0, 0, 0, 1000.0, 1, 5, 13, 33, 33, 0, 0, 2077, 2077, False, False),  # "Charge!"
+    "431": (2.0, 0.0, 12, 10, 0, 0, 24, 2, 19, 0, 0, 0, 0, 156.0, 2, 24, 24, 3, 18, 0, 0, 735, 734, False, False),  # Ignite Arrows
+    "799": (0.25, 0.75, 20, 10, 0, 0, 31, 7, 5, 5, 0, 0, 0, 0.0, 2, 3, 9, 3, 9, 0, 0, 2077, 2077, False, False),  # Beguiling Haze
+    "2059": (1.0, 0.75, 8, 5, 0, 0, 8, 6, 5, 5, 0, 0, 0, 156.0, 6, 0, 0, 10, 30, 5, 20, 2077, 2077, False, False),  # Shell Shock
+}
+# The attribute tables: the cost curve (clientscan/attribpoints.py) and each attribute's
+# profession and primary flag (clientscan/attribtable.py) -- the columns attribute_state
+# reads, and the only reader of either table. Without them it refuses and every rank a
+# check reads is None (sections 16, 16b, 31, 33, 36, 39, 40). test_weapons' copies; the
+# vault's rows record build 38974, and section 42 holds these to them.
+ATTRIBUTE_COST = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 9, 9: 11, 10: 13, 11: 16, 12: 20}
+ATTRIBUTE_PROFESSION = {0: 5, 1: 5, 2: 5, 3: 5, 4: 4, 5: 4, 6: 4, 7: 4, 8: 6, 9: 6, 10: 6,
+                        11: 6, 12: 6, 13: 3, 14: 3, 15: 3, 16: 3, 17: 1, 18: 1, 19: 1,
+                        20: 1, 21: 1, 22: 2, 23: 2, 24: 2, 25: 2, 26: 11, 27: 11, 28: 11,
+                        29: 7, 30: 7, 31: 7, 32: 8, 33: 8, 34: 8, 35: 7, 36: 8, 37: 9,
+                        38: 9, 39: 9, 40: 9, 41: 10, 42: 10, 43: 10, 44: 10, 45: 11,
+                        46: 11, 47: 11, 48: 11, 49: 11, 50: 11}
+ATTRIBUTE_PRIMARY = {0, 6, 12, 16, 17, 23, 35, 36, 40, 44}
+
+
+def carried_tables():
+    """The three tables as this file carries them: the skills rows as content Rows with
+    the provenance the vault's rows record (sections 35 and 37 key on its build), and the
+    two attribute tables' columns."""
+    return {
+        "skills": {k: agents.content.Row(dict(zip(SKILL_COLUMNS, v)), "skills", k,
+                                         dict(RECORD_PROVENANCE))
+                   for k, v in RECORD.items()},
+        "attribute_cost": {str(k): {"points": v} for k, v in ATTRIBUTE_COST.items()},
+        "attribute": {str(k): {"profession": v, "is_primary": k in ATTRIBUTE_PRIMARY}
+                      for k, v in ATTRIBUTE_PROFESSION.items()},
+    }
+
+
+class _Unmeasured(Exception):
+    """A section whose SUBJECT is a vault directory, raised at its top when that directory
+    is absent -- the skip is decided on the directory, before anything reads it."""
+
+
+def need_dir(*parts, why):
+    """vaultpath.require_dir, as an _Unmeasured naming the path it looked at."""
+    try:
+        return vaultpath.require_dir(*parts, why=why)
+    except SystemExit as exc:
+        raise _Unmeasured(str(exc).splitlines()[0]) from None
+
+
+# REPLACED for the whole run, and put back only for section 42's comparison.
+_LOADED_TABLES = {k: agents.WORLD.tables.get(k) for k in ("skills", "attribute_cost", "attribute")}
+agents.WORLD.tables.update(carried_tables())
 
 
 def collector():
@@ -1010,6 +1134,7 @@ check(not _tool_bad and deepwoundjoin.predicted_max(64) == 52
 
 print("== 19. the corpus, with no free parameter (deepwoundjoin) ==")
 try:
+    need_dir("captures", "live", why="section 19, the live corpus deepwoundjoin reads")
     import deepwoundjoin
     rows = deepwoundjoin.census()
     n, joined, exact, cj, ce, stray, orders = deepwoundjoin.score(rows)
@@ -1103,6 +1228,8 @@ try:
     check(newly(179) == {0x800}, "the hex 179 sets 0x800")
     check(sc["no_status"].get(364, 0) >= 40 and not newly(364) - {0},
           "the shout 364 moves no bit (40+ applies with no word)")
+except _Unmeasured as exc:
+    LEDGER.skip("section 19 (corpus, 13 checks)", str(exc))
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 19 (corpus)", f"{type(exc).__name__}: {exc}")
 
@@ -1162,6 +1289,7 @@ def _heal_tokens():
 
 print("== 20. the heal batch on retail's wire, and the overheal (healjoin) ==")
 try:
+    need_dir("captures", "live", why="section 20, the live corpus healjoin reads")
     import healjoin
     _hrows = healjoin.census()
     hs = healjoin.score(_hrows)
@@ -1308,6 +1436,8 @@ try:
           "P4: and most heals exceed the loss the ledger still owes "
           "(a floor -- the ledger is regen-blind)",
           f"{hs['exceeds_loss']} of {hs['non_virgin']}")
+except _Unmeasured as exc:
+    LEDGER.skip("section 20 (corpus, 17 checks)", str(exc))
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 20 (corpus)", f"{type(exc).__name__}: {exc}")
 
@@ -1505,6 +1635,7 @@ finally:
 print("== 23. the corpus: retail's swings close WITH damage, a blinded swing "
       "misses nine in ten, and property 38 rides with no damage (missjoin) ==")
 try:
+    need_dir("captures", "live", why="section 23, the live corpus missjoin reads")
     import missjoin
     ms = missjoin.score(missjoin.census())
     check(ms["closes"] >= 1000,
@@ -1539,6 +1670,8 @@ try:
           "the batch shape [close, 38] this server sends is OBSERVED, not "
           "reconstructed",
           f"reasons={ms['fail_reasons']} blind={ms['fail_blind']}")
+except _Unmeasured as exc:
+    LEDGER.skip("section 23 (corpus, 6 checks)", str(exc))
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 23 (corpus)", f"{type(exc).__name__}: {exc}")
 
@@ -2458,6 +2591,7 @@ finally:
 print("== 32. the corpus: retail's Weakness batch (deepwoundjoin."
       "weakness_attributes) ==")
 try:
+    need_dir("captures", "live", why="section 32, the live corpus deepwoundjoin reads")
     import deepwoundjoin
     wk = deepwoundjoin.score_weakness(deepwoundjoin.weakness_attributes())
     check(wk["applies_declared"] >= 2 and wk["closes_declared"] >= 2,
@@ -2489,6 +2623,8 @@ try:
     check(lifts and all(r["attrs_before_heal"] for r in lifts),
           "WKL2 and every one carries its 0x003B restores AHEAD of the 55 word",
           f"{len(lifts)} lifts")
+except _Unmeasured as exc:
+    LEDGER.skip("section 32 (corpus, 4 checks)", str(exc))
 except (Exception, SystemExit) as exc:                           # noqa: BLE001
     LEDGER.skip("section 32 (corpus)", f"{type(exc).__name__}: {exc}")
 
@@ -3048,10 +3184,19 @@ try:
     rust_record = (row.get("damage0"), row.get("damage15"))
     rust_build = rec.provenance.get("build")
     rust_loaded = (int(rec["bonus_scale0"]), int(rec["bonus_scale15"]))
+    # THE BARE MACHINE (2026-10-07): the record's build is not the loaded row's (38888 vs
+    # the carried 38974), so this check's subject is the PRISTINE CLIENT IMAGE of the
+    # record's build -- the vault's, and nothing a bare machine holds. Without the vault's
+    # client directory it is a declared skip; decided on that directory, before pinned.find.
+    rust_record_unmeasured = None
     if rust_build == rust_record_build:
         rust_record_src, rust_record_slot = f"the loaded build-{rust_build} row", rust_loaded
     elif rust_record_build not in rust_slot_by_build:
         rust_record_src, rust_record_slot = f"NO EXPECTATION for record build {rust_record_build}", None
+    elif not os.path.isdir(vaultpath.vault_path("client")):
+        rust_record_src, rust_record_slot = "no vault client directory", None
+        rust_record_unmeasured = (f"vault fixture missing: {vaultpath.vault_path('client')} -- "
+                                  f"the pristine build-{rust_record_build} image pinned.find reads")
     else:
         try:
             sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
@@ -3067,25 +3212,29 @@ try:
         except (SystemExit, OSError, KeyError, ValueError) as exc:
             rust_record_src, rust_record_slot = (f"UNREADABLE build-{rust_record_build} table: "
                                                  f"{exc}", None)
-    check(row.get("bonus_scale_means") == "Cold damage" and row.get("hits_on_cast") is True
-          and rust_record_build in rust_slot_by_build
-          and rust_record == rust_slot_by_build[rust_record_build]
-          and rust_record_slot == rust_record
-          and rust_build in rust_slot_by_build
-          and rust_loaded == rust_slot_by_build[rust_build]
-          and int(rec["skill_arguments"]) == 1 and row.get("signet_activation_multiplier") == 2,
-          "the row: `Cold damage` in the BONUS slot with the client's own endpoints carried "
-          "explicitly (args = 1: both slots bit-clear and differing), hits_on_cast, x2 signets "
-          "-- the record is its provenance build's (38797: 10..70, 38888: 10..85, the wiki's) "
-          "and equals THAT build's client row exactly; the loaded row's slot is its own build's",
-          f"record {rust_record} of build {rust_record_build} (expected "
-          f"{rust_slot_by_build.get(rust_record_build)}) vs {rust_record_slot} from "
-          f"{rust_record_src}; loaded build {rust_build} slot {rust_loaded}, expected "
-          f"{rust_slot_by_build.get(rust_build)}"
-          + ("" if rust_record_build in rust_slot_by_build else
-             f" -- NO EXPECTATION for record build {rust_record_build}")
-          + ("" if rust_build in rust_slot_by_build else
-             f" -- NO EXPECTATION for build {rust_build}"))
+    if rust_record_unmeasured:
+        LEDGER.skip("section 37, the Rust record against its build's client row (1 check)",
+                    rust_record_unmeasured)
+    else:
+        check(row.get("bonus_scale_means") == "Cold damage" and row.get("hits_on_cast") is True
+              and rust_record_build in rust_slot_by_build
+              and rust_record == rust_slot_by_build[rust_record_build]
+              and rust_record_slot == rust_record
+              and rust_build in rust_slot_by_build
+              and rust_loaded == rust_slot_by_build[rust_build]
+              and int(rec["skill_arguments"]) == 1 and row.get("signet_activation_multiplier") == 2,
+              "the row: `Cold damage` in the BONUS slot with the client's own endpoints carried "
+              "explicitly (args = 1: both slots bit-clear and differing), hits_on_cast, x2 signets "
+              "-- the record is its provenance build's (38797: 10..70, 38888: 10..85, the wiki's) "
+              "and equals THAT build's client row exactly; the loaded row's slot is its own build's",
+              f"record {rust_record} of build {rust_record_build} (expected "
+              f"{rust_slot_by_build.get(rust_record_build)}) vs {rust_record_slot} from "
+              f"{rust_record_src}; loaded build {rust_build} slot {rust_loaded}, expected "
+              f"{rust_slot_by_build.get(rust_build)}"
+              + ("" if rust_record_build in rust_slot_by_build else
+                 f" -- NO EXPECTATION for record build {rust_record_build}")
+              + ("" if rust_build in rust_slot_by_build else
+                 f" -- NO EXPECTATION for build {rust_build}"))
     # hex_cast_damage at rank 0 / 12 / 15, keyed on the RECORD's build. The rank-12
     # middle is the check's own interpolation, 10 + (e15 - 10) x 12 / 15, exact on
     # both builds (no rounding question): 38797 10 + 60 x 0.8 = 58, 38888 10 + 75 x
@@ -4086,5 +4235,48 @@ try:
           "main() flips CAST_TIME_WORD = False under --no-cast-time-word")
 finally:
     authsrv.skill_cost, authsrv.weapon_satisfies, authsrv.CAST_TIME_WORD = _saved41
+
+# ---- 42. THE CARRIED ROWS AGAINST THE VAULT'S (2026-10-07, the bare machine) -----------------------
+# The one vault-only check the carrying adds. Its SUBJECT is the vault's tables, so it skips
+# without one -- decided on the vault/content DIRECTORY and on nothing that loaded: with the
+# directory there and a table absent (a skills.toml that did not load), every row reads
+# "absent" and the check FAILS.
+print("\n== 42. the rows this file carries, against the vault's own ==")
+for _k, _t in _LOADED_TABLES.items():          # the loaded tables back, for the comparison
+    if _t is None:
+        agents.WORLD.tables.pop(_k, None)
+    else:
+        agents.WORLD.tables[_k] = _t
+try:
+    need_dir("content", why="the vault's skills and attribute tables, which this file's rows copy")
+    _off, _builds = {}, {}
+    for _kind, _rows in carried_tables().items():
+        _loaded = agents.WORLD.rows(_kind)
+        for _key, _row in _rows.items():
+            _got = _loaded.get(_key)
+            if _got is None:
+                _off[f"{_kind}.{_key}"] = "absent"
+                continue
+            _builds.setdefault(_kind, set()).add(getattr(_got, "provenance", {}).get("build"))
+            _cols = [c for c, v in _row.items() if _got.get(c, "absent") != v]
+            if _kind == "skills":                   # the whole row: no column left behind
+                _cols += [c for c in _got if c not in _row]
+                if _got.provenance != _row.provenance:
+                    _cols.append(f"provenance {_got.provenance}")
+            if _cols:
+                _off[f"{_kind}.{_key}"] = _cols
+        if _kind != "skills":                       # attribute_state reads the WHOLE table
+            for _key in sorted(set(_loaded) - set(_rows), key=str):
+                _off[f"{_kind}.{_key}"] = "not carried"
+    check(not _off,
+          f"every one of the {len(RECORD)} skills rows RECORD carries, and every row of the two "
+          f"attribute tables, is the vault's own, column for column (a skills row whole, its "
+          f"provenance build {RECORD_BUILD} included) -- so the run on them took the path the "
+          f"vault's rows would",
+          f"off={_off}, loaded builds={ {k: sorted(v, key=str) for k, v in _builds.items()} } (a "
+          f"regenerated table that moves a carried column reds this, and the fix is to re-copy "
+          f"that row with its build)")
+except _Unmeasured as exc:
+    LEDGER.skip("section 42, the carried rows against the vault's (1 check)", str(exc))
 
 sys.exit(LEDGER.verdict())
