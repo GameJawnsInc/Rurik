@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### DEATHWALK-E4 CLOSED -- 2026-10-06 -- **D1's stop-disc fix is confirmed on the client. TRAILPIN's rig and plan, one pair: the fixed arm (`20261006T215123`) sent 156 re-paths, 0 from inside the stop and 0 same-tick C1 swings; the `--repath-inside-stop` arm (`20261006T215856`) sent 163, 5 from inside the stop, each opening a C1 swing in its own call (run 0.0, 61-76 u). The stopping rule (K's inside-stop re-paths >= 5) fired after one pair. DEATHWALK-H5 HELD; STOP_DISC_ENDS_FOLLOW stays ON.**
+
+- **Record:** FINDINGS §1z-ds.54; `studies/movecode/RUN-DEATHWALK.md` §3e.
+- **Scorer:** `studies/movecode/review/e4_score.py`. Its selftest reproduces TRAILPIN's 7 / 10 off real pre-D1 tapes; it caught its own row-filter bug the first time it ran.
+- **Limits:** n = 5 vs 0 in one pair; C2 / C3 unexercised.
+
 ### DEATHWALK-E5 CLOSED -- 2026-10-06 -- **D4 is confirmed on the client. A second known-bad launch (harness `20261006T200722`, tape `authsrv-20261006T200803-c1`) judged 9 deaths, all `old-shape` (4 in flight, 5 next start), which brings the known-bad arm's in-flight cell to 6. The final table: D4 5 in flight + 6 next start, 11 of 11 PASS; known-bad 6 + 11, 17 of 17 old-shape. Every cell is at or over its floor of 5, and 28 of 28 judged deaths have their arm's shape. DEATHWALK-H6 HELD; TARGET_DEATH_HOLDS stays ON.**
 
 - **Record:** FINDINGS §1z-ds.53; `studies/movecode/RUN-DEATHWALK.md` §3d.
