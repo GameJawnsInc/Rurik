@@ -8151,6 +8151,35 @@ def _rect_bound_wire_point(state, opcode, values):
     return out, (float(point[0]), float(point[1]))
 
 
+# RANGERLOOP-F9's second model (2026-10-07): THE LEGACY SYNC MODEL HEARS OUR 0x0028.
+# SLICE-F25 (2026-09-12) wrote _note_wire_move's 0x0028/0x002D branch -- "the mirror
+# stops where the client's copy stops" -- but send() only ever handed it 0x0029,
+# 0x002A and 0x002C (its filter predates F25 by three weeks), so the branch never ran
+# on a real send; the test that pins it drives _note_wire_move by hand. After
+# RANGERPRE-S16's approach halt the legacy model therefore walked the 0x002A onto the
+# TARGET's own point, and the approach's snap guard reads that model alone
+# (GUARD_BOTH_WORLD0 off since 1z-ds.41). REPLAYED on RUN-T (20260930T132022-c1)
+# through _note_wire_move with send()'s filter: at the re-press (20.2872) the model
+# sat 687.9 u from the client's stop -- the run's "688 u" APPROACH RE-PIN -- and 0.0 u
+# with the 0x0028s let through (test_approachroute section 7). Now send() asks
+# _legacy_model_hears(), and a player 0x0028 parks the model where it stands.
+# 0x002D's half of F25 stays as it was (the death path is not this change).
+# --no-legacy-stop reverts: the KNOWN-BAD arm is the walk-in and the re-pin above.
+LEGACY_MODEL_PARKS_ON_STOP = True   # False (--no-legacy-stop): the legacy model walks through.
+
+
+def _legacy_model_hears(opcode):
+    """The opcodes send() hands to _note_wire_move (its pre-lock hook): the three that
+    name a point, and -- RANGERLOOP-F9, LEGACY_MODEL_PARKS_ON_STOP -- the 0x0028 that
+    halts the copy where it stands. send() calls THIS, so a test of it is a test of
+    the live filter rather than of the hook driven past it."""
+    if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
+                  GAME_SMSG_AGENT_UPDATE_DESTINATION,
+                  GAME_SMSG_AGENT_UPDATE_POSITION):
+        return True
+    return LEGACY_MODEL_PARKS_ON_STOP and opcode == GAME_SMSG_AGENT_STOP_MOVING
+
+
 def _note_wire_move(state, opcode, values, now, rec=None):
     """Update the SYNC model from a message we are about to put on the wire.
 
@@ -8173,6 +8202,10 @@ def _note_wire_move(state, opcode, values, now, rec=None):
         # zeroes the copy's velocity where it is (studies/enemy PLAN 6h);
         # 0x0028 halts both copies where the sync copy stands (schema 40).
         # Either way the copy is where the model puts it NOW, and it stays.
+        # CORRECTED 2026-10-07 (RANGERLOOP-F9): send() never handed this branch
+        # either opcode -- its filter named the three point messages only -- so
+        # it ran in tests alone. _legacy_model_hears() now lets the 0x0028 in
+        # (LEGACY_MODEL_PARKS_ON_STOP); a 0x002D still does not reach it.
         state["sync_from"] = _sync_position(state, now)
         state["sync_to"] = None
         state["sync_at"] = now
@@ -8555,6 +8588,42 @@ def _agtrack_maybe_repin(send, state, rec, now=None):
     return True
 
 
+# RANGERLOOP-F9 (2026-10-07): THE PLAYER'S 0x0028 PARKS THE AGTRACK MIRROR. The
+# feed below gave the mirror pair 0x0029/0x002A/0x002C only, so a halt we SENT
+# never reached it: after RANGERPRE-S16's approach halt (attack_tick,
+# APPROACH_START_HALTS) the client's two copies stood at range while the mirror
+# walked the 0x002A follow on into the target. Everything that reads the mirror
+# for a moving player read that walk-in -- _npc_frame, so _reach_frame, so the
+# arrow's flight in launch_player_projectile (RUN-T 20260930T131951, OBSERVED:
+# 0.728 s then 0.282 s, 1,164 u and 451 u from a target the body stood 1,500.8 u
+# from) -- and the mirror's avoidance pass then halted it on the target's disc,
+# where 1z-dj parked state["pos"], 1,430 u from the body (the capture's own
+# `kbd_leg avoid-halt` row, model_moved 1430.0; its next 0x003D read drift
+# 1,432.8 u). The handler 0x005FD7D0 halts BOTH world copies where they stand
+# (agtrack_guard.on_stop: the decode and the scope), so the mirror now does.
+# REPLAYED on that capture through the real guard (test_approachroute section 7):
+# fed every movement send but blind to the halt, the mirror stands 1,443.7 u from
+# the client's first post-halt 0x003D and reproduces all three of the run's
+# flights; parked at the halt's send instant, 8.4 u. The park lands at the SEND
+# instant on the guard's wall clock and the client halts when the message lands,
+# so the mirror can sit a few units short of the client's copies -- the same
+# lag every emit feed here carries.
+#   EVERY PLAYER 0x0028 SENDER reaches this feed, and each is the client's own
+# halt: the approach halt (the case above); serve_pickup's arrival (the copy has
+# arrived, or is a tick short and parks there, as the client's does); the press
+# stop and --cast-stop pin (behind their own 0x002C, which has parked both
+# copies: a no-op); --cast-stop halt and --stop-answer=ack (bare: the copy halts
+# where it stands, which is CANCELWALK-F31's measured client behaviour, the body
+# landing on the sync copy); the transfer (the session ends); and the operator's
+# --probe moving_die (probecombat._moving_die_steps: two bare 0x0028s while the
+# character runs, through run_probe's send -- the copy halts where it stands, the
+# decoded halt). No send site is added or moved. on_stop parks a WALKING copy, or
+# one standing on a due sidestep waypoint, which the tick would otherwise re-bake
+# toward the target after our halt.
+# --no-mirror-stop reverts: the KNOWN-BAD arm is the walk-in above.
+MIRROR_PARKS_ON_STOP = True   # False (--no-mirror-stop): the mirror walks through our halt.
+
+
 def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
     """The send() choke point's feed: predict the grant's delivery verdict
     (the record row), then apply the emit to the mirror pair.  Player-agent
@@ -8564,6 +8633,12 @@ def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
         return
     if now is None:
         now = time.time()
+    if opcode == GAME_SMSG_AGENT_STOP_MOVING:
+        # RANGERLOOP-F9 (MIRROR_PARKS_ON_STOP, the senders at the flag): both
+        # copies halt where they stand; on_stop parks a walking copy (or a due waypoint).
+        if MIRROR_PARKS_ON_STOP:
+            _agtrack_guard_call(state, "on_stop", now)
+        return
     if opcode == GAME_SMSG_AGENT_UPDATE_SPEED:
         if len(values) >= 2:
             _agtrack_guard_call(state, "on_speed", float(values[1]), now)
@@ -42359,9 +42434,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # nothing when --resync is off -- _maybe_resync is the only reader.
             # MOVECODE-1z-ds.39: the speed pair the client last received (FOLLOW_RESETS_RATE).
             _note_speed_pair(state, opcode, values)
-            if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
-                          GAME_SMSG_AGENT_UPDATE_DESTINATION,
-                          GAME_SMSG_AGENT_UPDATE_POSITION):
+            if _legacy_model_hears(opcode):      # RANGERLOOP-F9: and the player's 0x0028
                 _note_wire_move(state, opcode, values, time.time(), rec=rec)
             if AGTRACK_SHADOW and state.get("agtrack_guard") is not None:
                 # Shadow only: predicts + records what the derived rule
@@ -49783,6 +49856,20 @@ def main():
         print("APPROACH: --no-approach-start-halt -- a ranged approach's first swing "
               "is [4] alone, no [8, me, 1] and no 0x0028 [me]: KNOWN-BAD against "
               "retail's 12 of 12 [RANGERPRE-S16 revert]", flush=True)
+    if a.no_mirror_stop:
+        global MIRROR_PARKS_ON_STOP
+        MIRROR_PARKS_ON_STOP = False
+        print("APPROACH: --no-mirror-stop -- the AgTrack mirror walks through a 0x0028 "
+              "we send the player: after an approach halt it walks the follow into the "
+              "target while the client stands at range. KNOWN-BAD [RANGERLOOP-F9 "
+              "revert]", flush=True)
+    if a.no_legacy_stop:
+        global LEGACY_MODEL_PARKS_ON_STOP
+        LEGACY_MODEL_PARKS_ON_STOP = False
+        print("APPROACH: --no-legacy-stop -- send() hands the legacy sync model the three "
+              "point messages only: after an approach halt it walks onto the target, and "
+              "the next approach's snap guard re-pins (RUN-T's 688 u). KNOWN-BAD "
+              "[RANGERLOOP-F9 revert, the legacy half]", flush=True)
     if a.held_interact_at_range:
         global HELD_INTERACT_AT_DISC
         HELD_INTERACT_AT_DISC = False

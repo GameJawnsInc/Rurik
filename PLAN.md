@@ -2115,9 +2115,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the melee disc is the client's own arithmetic. W2g (the leg moved to the disc) was
   built, tested at 115 checks, REGRESSED on the client -- first shot 1.17 s -> 6.03 s,
   every arrow at 80 u -- and is WITHDRAWN: the leg's END is what the reach gate reads,
-  so the leg at the range is the mechanism that opens the swing there. One internal
-  inaccuracy remains (`state["pos"]` parks at the range while the body walks on) and it
-  is a MOVECODE change to `_reach_frame`'s sourcing, not a weapons rung.** Eleven player types and the hostile-only ranged
+  so the leg at the range is the mechanism that opens the swing there. Its one internal
+  inaccuracy is now RANGERLOOP-F9 / F11 (section 23.3).** Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
@@ -2310,8 +2309,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
 * **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
-* **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
-  late, inside range.
+* **RANGERLOOP-F9:** fixed on the desk 2026-10-07 (PLAN-LOG); owed, the RUN-T re-run
+  (CONFIRM-2026-09-30 §12.3).
+* **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
+  arrival lets the body walk on. Retail's order UNVERIFIED (CONFIRM §12.2).
+* **SLICE-F25's `0x002D` half** never reaches `_note_wire_move` (CONFIRM §12.4).
 * **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a
   flags-0 quest's heading; our accept re-unlocks skills the account holds.
 

@@ -1224,6 +1224,28 @@ that jumps at leg ends -- **a MOVECODE change to `_reach_frame`'s sourcing, with
 waiting behind it**, not a weapons rung. Registered here, not started, and nothing ships
 until it is.
 
+**UPDATED 2026-10-07 (RANGERLOOP-F9; [CONFIRM-2026-09-30](../presearing/CONFIRM-2026-09-30.md)
+§12).** The paragraph above inverted at RANGERPRE-S16 (2026-09-30). The first start after a
+ranged approach now carries `[4]`, `[8, me, 1]`, `0x0028`, and the client's body parks at range:
+OBSERVED, CONFIRM §8 Q2, 2.8 u from `to`. So on the auto-attack path `state["pos"]` at the range
+point and the body now AGREE.
+
+The copy that walked on after S16 was the server's own AgTrack mirror. `_reach_frame` reads the
+mirror during a follow, which gave RUN-T's 0.728 -> 0.282 s flights. The legacy sync model
+walked on as well, which gave the 688 u re-pin. Both now park on our `0x0028`. They are fixed on
+the desk, `--no-mirror-stop` and `--no-legacy-stop` are the known-bad arms, and the client run
+is still owed.
+
+W2g's split does not come back. The leg's end still opens the swing at range:
+`test_approachroute.py` 6a pins the first start at the leg's eta, on the first tick the parked
+mirror is inside range.
+
+What is left of the inaccuracy is RANGERLOOP-F11: a ranged approach whose start the swing clock
+holds past the arrival, so the body walks on until the start's halt. It does not need
+`_reach_frame` re-sourced. That re-sourcing (DESKWORK item 6, w0replica) is no longer what the
+auto-attack path waits on. The mechanism is OBSERVED (S16 plus the tape replays); "no longer
+waits on" is a RECONSTRUCTION until the client run.
+
 
 
 ## 25. RUN-WEAPONS-1A -- run and scored 2026-09-19: the martial clocks, the scythe's extras and the spear

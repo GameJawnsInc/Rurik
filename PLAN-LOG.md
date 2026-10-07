@@ -28,6 +28,29 @@ move back.
 
 ---
 
+### RANGERLOOP-F9 -- 2026-10-07 -- **Our `0x0028` now reaches both server models of the client's world-0 copy.**
+
+**Summary.** After RANGERPRE-S16's approach halt, the AgTrack mirror walked the `0x002A` follow on into the target. Arrows flew 0.728 then 0.282 s, and 1z-dj re-parked the model 1,430 u from the body. The legacy sync model walked on too, and its walk-in was RUN-T's 688 u `APPROACH RE-PIN`: SLICE-F25's 0x0028 branch had never been reached by `send()`.
+
+Replayed on RUN-T's capture:
+- **Mirror:** 1,443.7 u off the client's next `0x003D` when blind to the halt; 8.4 u when parked.
+- **Legacy model:** 687.9 u when blind; 0.0 u when it hears the halt.
+
+Both are flagged (`--no-mirror-stop`, `--no-legacy-stop`) and tested. Fixed on the desk; the client run is pre-registered. The re-approach's late halt was neither model: it is RANGERLOOP-F11, the 2026-09-30 swing clock, which 1z-ds.11/13 already removed for RUN-T's sequence.
+
+- **Record:** `studies/presearing/CONFIRM-2026-09-30.md` §12 (§10's F9 row annotated, F11's row added). RANGERPRE.md's S16 row and F9 bullet. `studies/weapons/PLAN.md` §23.3 updated (the "one internal inaccuracy" inverted at S16).
+- **Code:**
+  - `b5316ab2`: `AgTrackGuard.on_stop` (models no AgTrack dispatch); the player's 0x0028 in `_agtrack_shadow_emit`; `MIRROR_PARKS_ON_STOP`.
+  - `e9df994a`: `_legacy_model_hears`, now send()'s filter; `LEGACY_MODEL_PARKS_ON_STOP`.
+  - Review fixes `8b871c73` and `abb78466`: on_stop parks a walking copy and also one standing on a DUE sidestep waypoint. Without that, the tick's `consume_waypoint` re-baked both copies toward the target after our halt, 576 u in 2 s, inside a one-tick window. The client's halt clears the target.
+  - Every player 0x0028 sender is enumerated at the flag, the operator's `--probe moving_die` included. No send site was added.
+- **Tests:**
+  - `test_agtrack_guard.py` §16 (floor 91 -> 105; 16n is the due waypoint).
+  - `test_approachroute.py` §6 (+11 on any machine) and §7 (+5, vault-gated): floor 32 -> 43, 62 with captures.
+  - In review, §6's 6b-6d (and 6h) were re-anchored to a halt point dead-reckoned from the follow's own send, not read off the mirror on_stop had just moved. A park on the target's point now reddens each of them.
+  - Every new check reddens on its own inversion.
+- **Owed:** the RUN-T re-run with its two known-bad arms (CONFIRM §12.3). RANGERLOOP-F11's retail census. SLICE-F25's `0x002D` half, still unreachable from `send()`, whose test drives the hook by hand (CONFIRM §12.4).
+
 ### DESKWORK-D13 steps 1–2 -- 2026-10-07 -- **The suite's two quadratic costs are gone, and both fixes are proved exact rather than assumed.**
 - **Step 1:** `buildpins` now splits each file once (`buildpins.SourceSlicer`). HEAD's census and the new one over the whole tree both give 3,749 rows, 328 live, 0 problems and 2 skipped, row-identical. `scan_file(authsrv.py)` went from 128.1 to 8.7 s.
 - **Step 2:** `test_scrub`'s leak-search tail is now an aligned-block pigeonhole (`block_search`, B = 18). Before the old tail was deleted, old and new returned identical sets on the FULL corpus for all four texts searched: 16,512 / 0 / 330 / 4. Per call: 3.3–5.3 s against 313–541 s for the three texts the test searches with every secret; the originals, 259.7 s, are a desk calibration.
