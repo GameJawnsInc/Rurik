@@ -3639,6 +3639,34 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   once, 17 of 17; the observer's modal pips per profession are the rule's. Proved red: both
   switches off in the source redden 5; the gate moved back behind the debit reddens 1.
   Floor 7 bare (§3-5 and §7 skip), 16 with the vault. No socket, no client),
+  `toolkit/authsrv/test_attribpassive.py` (**2026-10-07, SKILLS-EX: Expertise's energy
+  discount on every caster, ROUNDED, and the ten primaries read against the client's own
+  descriptions** (studies/skills §66). The Ranger at Expertise 1 on `20260914T005758` :56011
+  paid 14 for 392's 15 and the full cost for its two 10s, a 10 and two 5s; `test_pools`
+  carried the 14 by name as "floored". §1 the six carried spends through
+  `attribpassive.expertise_cost`, the f32 words bit for bit, 6 of 6; KNOWN-BAD arms floor 1
+  of 6, ceil and no-Expertise 5 of 6 (each misses 392 only); rank 12, rank 15 and the
+  edges. §2 the scope: attacks of any profession and Ranger skills; a Warrior stance, a Monk
+  spell and a Monk touch skill are out (the touch clause OPEN). §3 the REAL
+  `energy_cost_for` at the live rank (Weakness one lower; discounted to 0 is (0, None, 0));
+  `--no-expertise` prices every row at its table cost. §4 `body_skill_cost` equals the
+  player's price at ranks 0 / 1 / 12, and a body's Weakness cuts its own rank. §5 the REAL
+  `ally_cast_tick`: a Ranger hero's 392 sends E4 then [62, hero, -14/max]; a 1-energy attack
+  at rank 15 casts on an empty pool with no [62]; the arm sends -15/max. §6 the REAL
+  `enemy_attack_tick` on a fake clock: a hostile archer at Expertise 1 pays 14, the arm 15.
+  §7 the switch: ON at import, parses, main()'s block EXECUTED flips the module's bool; the
+  three body sites read `body_skill_cost`, `energy_cost_for` the discount, `pick_skill`
+  neither; the leaf imports nothing. §8 (vault content DIR) the carried rows are the vault's
+  own; no skills row is both a spell and in scope (the glyph order is moot). §9 (vault
+  client DIR) `s_attrib`'s ten primaries carry the description ids the leaf commits, and
+  each description resolved at run time contains every numeral typed for it (never
+  printed). §10 (captures DIR) `test_pools`' own join re-finds the six spends bit for bit at
+  the tape's own `0x003A` rank. Proved red one at a time in a scratch runner: floor
+  rounding (6 checks), an all-skills scope (3), the server sites bypassed (7), Weakness
+  ignored (2), one body site reverted in the source (1), main()'s `global` dropped (1), a
+  wrong numeral (1), a wrong description id (2), a tape word altered (4), a carried cost
+  altered (4). Floor 25 bare (§8-10 skip on their directories), +2 for each of the three
+  directories present: 31 vaulted. No socket, no client),
   `toolkit/authsrv/test_deadbout.py` (**2026-09-30, MONSTERAI-W: a hostile's bout ends with
   its last target -- once nobody it could fight is alive in range it stands a beat and walks
   home.** The owner's report on `20260930T231034`: the Bandit Raider held aggro through the

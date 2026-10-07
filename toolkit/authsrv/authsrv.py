@@ -24741,6 +24741,59 @@ def glyph_energy_amount(skill_id, rank):
         return None
 
 
+# ---- EXPERTISE (SKILLS-EX, studies/skills 66; the rule is attribpassive.py) --
+#
+# The Ranger's primary takes 4 % a rank off the energy cost of an attack skill
+# or a Ranger skill, ROUNDED to nearest: the slope and the scope from the
+# client's own description 2131 (OBSERVED, 38797), the rounding from the six
+# spends of the Ranger at Expertise 1 on 20260914T005758 :56011 (OBSERVED,
+# round 6 of 6, floor 1 of 6). One rule for the player (energy_cost_for) and
+# every body (body_skill_cost: the hostile's gate and debit, the hero's gate
+# and debit -- so a hero's [62] carries the discounted cost, HEROENERGY). A
+# cost discounted to 0 is FREE: no property 62 and no gate, the existing rule
+# for a 0-cost row.
+import attribpassive  # noqa: E402
+EXPERTISE = True                 # False (--no-expertise): every cast pays its table cost.
+
+
+def expertise_rank(state, agent_id):
+    """The caster's Expertise rank RIGHT NOW: a body's from its own
+    `attributes` (agent_attributes -- a hero's are its spend state's), the
+    player's from the live attribute state (player_rank_of: spent points and
+    gear), and either one lower under Weakness (SKILLS-WK). The player is not a
+    row in state["agents"], the asymmetry episodemods.taker_rank reads too."""
+    attr = attribpassive.EXPERTISE_ATTRIBUTE
+    rows = state.get("agents") or {}
+    if agent_id in rows:
+        rank = agent_attributes(rows[agent_id] or {}).get(attr, 0)
+    else:
+        rank = player_rank_of(attr, state)
+    return int(weakened_rank(state, agent_id, int(rank or 0)) or 0)
+
+
+def expertise_energy_cost(state, agent_id, skill_id, base):
+    """`base` after the caster's Expertise; `base` unchanged with the flag off,
+    for a free row, or for a skill outside the scope (a row we cannot read is
+    outside it -- the table cost, what every cast paid before)."""
+    if not EXPERTISE or base <= 0:
+        return base
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return base
+    if not attribpassive.expertise_applies(row):
+        return base
+    return attribpassive.expertise_cost(base, expertise_rank(state, agent_id))
+
+
+def body_skill_cost(state, agent_id, skill_id):
+    """skill_cost for a BODY's cast -- (energy after Expertise, adrenaline
+    units). The hostile's gate and debit and the hero's read this, so a body
+    pays what the same build would pay as the player."""
+    cost, units = skill_cost(skill_id)
+    return expertise_energy_cost(state, agent_id, skill_id, cost), units
+
+
 def energy_cost_for(state, caster_id, skill_id, rank):
     """(cost, glyph episode, discount) for one cast. Consumes nothing.
 
@@ -24762,6 +24815,17 @@ def energy_cost_for(state, caster_id, skill_id, rank):
         # one this server can observe the difference of -- the wire carries
         # nothing for a free cast (44 of 44).
         return base, None, 0
+    # SKILLS-EX: Expertise FIRST, on the table cost, then the glyph's flat
+    # amount off what is left. The ORDER is RECONSTRUCTION and today it is
+    # moot: the glyph cheapens spells (types 4/5/6) and the shipped scope is
+    # attack skills and Ranger skills, and none of the 1,334 `skills` rows is
+    # both (no Ranger spell; an attack is not a spell -- test_attribpassive
+    # counts it on the vault table). It starts to matter
+    # when touch spells or binding rituals join the scope (OPEN, section 66).
+    # Discounted to 0 is free, and a free cast burns no glyph charge (below).
+    base = expertise_energy_cost(state, caster_id, skill_id, base)
+    if base <= 0:
+        return 0, None, 0
     row_type = None
     try:
         row_type = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
@@ -26756,9 +26820,12 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                  [agents.GV_ENERGY_SPENT, PLAYER_AGENT_ID, frac],
                  f"energy -{cost} of {pool.maximum:.0f} for skill {skill_id}")
+            _ex_off = skill_cost(skill_id)[0] - discount - cost      # SKILLS-EX
             print(f"[c{conn_id}] skill {skill_id} costs {cost} energy"
                   + (f" (glyph {glyph_ep['skill']} took off {discount})"
                      if discount else "")
+                  + (f" (Expertise took off {_ex_off}) [SKILLS-EX]"
+                     if _ex_off > 0 else "")
                   + f": {pool.current:.2f}/{pool.maximum:.0f} left", flush=True)
 
     # The cast animation, in the OBSERVED player shape: 0x00A0
@@ -31689,7 +31756,7 @@ def enemy_attack_tick(send, state, conn_id):
             # it refuses is a slot the agent could cast from here if it could
             # pay -- never a heal nobody needs or a touch skill at 300 u.
             if ENERGY:
-                _cost, _units = skill_cost(_sid)
+                _cost, _units = body_skill_cost(state, agent_id, _sid)     # SKILLS-EX
                 _pool = agent_energy(agent)
                 _pool.tick(now)
                 _short = None
@@ -31741,7 +31808,7 @@ def enemy_attack_tick(send, state, conn_id):
             # added later -- Koss's [62] behind his E4, 17 of 17 -- and it is
             # sent from ally_cast_tick, HEROENERGY; a hostile never is one.)
             if ENERGY:
-                _cost, _units = skill_cost(skill_id)
+                _cost, _units = body_skill_cost(state, agent_id, skill_id)  # SKILLS-EX
                 if _units > 0:
                     agent_adrenaline(agent).use(skill_id)
                 agent_energy(agent).spend(_cost)
@@ -32065,7 +32132,7 @@ def ally_cast_tick(send, state, conn_id):
             continue
         _debit = None                       # HEROENERGY: (cost, fraction) for [62]
         if ENERGY:
-            cost, units = skill_cost(skill_id)
+            cost, units = body_skill_cost(state, agent_id, skill_id)   # SKILLS-EX: [62] too
             pool = agent_energy(agent)
             pool.tick(now)
             if units > 0:
@@ -50435,6 +50502,12 @@ def main():
         CRITICAL_STRIKES = False
         print("NO CRITICAL STRIKES: attribute 35 adds no critical chance and "
               "a critical pays no energy (the pre-DAGGERS-B7 arm).")
+    if a.no_expertise:
+        global EXPERTISE
+        EXPERTISE = False
+        print("NO EXPERTISE: attribute 23 takes nothing off an attack or Ranger "
+              "skill's energy cost (the pre-SKILLS-EX arm; retail charged 14 "
+              "for a 15 at Expertise 1).", flush=True)
     if a.no_chain_state:
         global CHAIN_STATE
         CHAIN_STATE = False
