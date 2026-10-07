@@ -1100,6 +1100,18 @@ criterion.
    `vault/run-live/2026-09-01_44fbd68767a8/Gw.dat` to answer D13.3's 5-of-17; redo the
    digest check over all 136 kind-3 replies; the M half (0x0196's body layout) waits until
    an archive needs a 0x0093 answer.
+   **DONE 2026-10-07, both halves — divergence D13.4, `toolkit/authsrv/manifestbody.py`.**
+   The record is not a RIFF file: it is an **FFNA type-4 record at MFT file id 5** (loader
+   0x00851CE0; chunks 12 B / the mission mask / 4 B per map), read out of
+   `vault/client/2026-09-01_44fbd68767a8/Gw.dat` — snapshotted from the install a minute
+   before the session's run directory was copied from it — and not out of `run-live/`,
+   which has been played since.
+   It answers the 5 exactly (5 of 142 differ from the table) and predicts 17 of 17
+   connections carried forward; the digest is CRC-32 of the phase-1 body (193 of 193) with
+   a fitted phase-0 term (26 of 26); the body layout is read and round-trips 646 of 646
+   buffers. **Before this step ever adds `0x019F` to the burst, read D13.4.4**: a named
+   hash that differs from the run directory's own record queues that map and the client
+   asks for it, and nothing here answers `0x0093`.
 5. **0x008A**: read the predicate at 0x0084EA20 (the ONE caller of wrapper 0x00852710,
    between MsCliApi:821 and :1900) against what our login/load sets vs retail's; propose
    one field change with the prediction "the 138s disappear" for a later run.
@@ -1108,7 +1120,8 @@ criterion.
 of 71 sessions before the first c2s 0x0090), not absences, and files 0x003C and 0x00B6 as
 flag-gated. (b) The ratchet goes red when a currently-sent reply is removed and green when
 a missing one is added. (c) The RIFF read yields {map, hash} pairs accounting for the 5 of
-17, or records why it cannot. **FAILS** if the 38-opcode template cannot be re-derived
+17, or records why it cannot. (c) MET 2026-10-07 (divergence D13.4: the record is file id
+5, FFNA type 4, not RIFF; 5 of 5 exact). **FAILS** if the 38-opcode template cannot be re-derived
 consistently over ~90 loads (order variance refutes "fixed order").
 
 **Value.** Retail fidelity of the load and of NPC and quest interaction (0x003B's missing
@@ -1433,7 +1446,8 @@ runsheets.
   zone yields one exact pair; D11 step 8 is the desk alternative.
 - **Map 888 on a 38888 client, arm A** (quests §11.4).
 - **Manifest D13.3's 5 of 17**: a live session with known archive state, unless D3 step 4's
-  RIFF read answers it.
+  RIFF read answers it. **Answered at the desk 2026-10-07** (divergence D13.4): no run
+  needed.
 - **Monster skill selection at 30 casts per type** (monsterai Q13), scatter (Q14), absolute
   max health from life steal (§7.5), 0x01BF's trailing bytes and the henchman outpost UI
   (heroes Q5/Q8).
@@ -1484,7 +1498,11 @@ All nine were founded and all nine are LOW-VALUE; none was "not desk" or "unfoun
 
 - **REX-8** decode the 0x0196 manifest body through MsCliMan — D13.3 itself prices it:
   "the gap costs nothing today"; 0 loopback requests in September. (D3 step 4 keeps the S
-  half.)
+  half.) **Its premise was half wrong, and the decode was done anyway (2026-10-07,
+  divergence D13.4.1):** reading the layout never needed an archive that asks — 646 of
+  646 retail bodies decode and re-encode byte for byte from the tapes alone. The kill
+  stands for the half it was about: a server arm for `0x0093` still has nothing to
+  exercise it, since our server sends no `0x019F`.
 - **REX-9** name 0x0191 from its handler — confirmed (0x0084EB30) but 0 of 96 live
   connections carry it and retail's travel uses 0x01A5, which we send; only the stale
   wording at `PLAN.md:2170` remains (Q1).
