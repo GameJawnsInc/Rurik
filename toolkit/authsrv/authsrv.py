@@ -6077,7 +6077,10 @@ DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 # (agents.GV_ATTACK_FAIL), and the one retail witness rides beside the
 # attacker's close with no damage in the batch. That a plain swing's close
 # (prop 1) accompanies it the way the witness's prop 46 did is RECONSTRUCTION
-# by analogy, said plainly. A missed swing deals nothing and grants nothing
+# by analogy, said plainly. (OBSERVED since: 55 of 55 plain-swing misses on
+# the live corpus close [1], both attack-skill misses [46] -- the close is
+# the action's; RANGERPRE-S23, the banner at BLIND_MISS_SKILL_CLOSE.)
+# A missed swing deals nothing and grants nothing
 # (GWW "Adrenaline": a strike per SUCCESSFUL hit); the swing timer is spent,
 # because the swing happened. `--no-blind` is the known-bad arm: 479 is an
 # icon and every swing under it lands.
@@ -29890,6 +29893,54 @@ def blind_miss(state, agent_id):
     return episodemods.blind_miss(state, agent_id, BLIND, BLIND_MISS_CHANCE)
 
 
+# ---- RANGERPRE-S23 / S24 (2026-10-07): A BODY'S ATTACK SKILL UNDER BLIND ---------------
+#
+# Two defects RANGERPRE-S22 found in passing (studies/presearing/RANGERPRE.md section 5),
+# both in the body's half of the strike.
+#
+# S23, THE CLOSE. land_swing's Blind arm closed a body's ATTACK SKILL with the plain
+# swing's [1, body, 0], where its block arm one branch below sends the skill's own
+# [46, body, 0]. Retail's close follows the ACTION, not the outcome. OBSERVED over the
+# live corpus (missjoin.fails: every [38] with its attacker's close in the batch): both
+# attack-skill misses on tape close [46] ahead of [38, T, A, 3] -- 20260917T224104
+# :62557 349.147 (Jagged Strike 782, DAGGERS-F16) and 443.448 (the 775 dual's first
+# strike, DAGGERS-F17) -- and the other 55 misses, every one a plain swing, close [1]
+# (29 the observer's under Blind; 26 a body's, agent 120 on 20260916T213125 :57894,
+# whose cause is UNVERIFIED -- bufflog reads no 479 on it). Both [46] misses are the
+# OBSERVER's; no tape shows a body's attack skill missed, so a body's [46] then
+# [38, T, body, 3] is RECONSTRUCTION: the player's miss shape on the body's own close,
+# which is [46] on its landed attack skills (land_skill's attack arm, SLICE-F24: 124 of
+# 124 that closed) and [1] on its missed plain swings (the 26). A body's SKILL SHOT
+# carries neither close (_without_melee_close filters both), so its bytes do not move.
+# --no-blind-miss-skill-close is the known-bad arm: [1] again, the bytes until 2026-10-07.
+#
+# S24, THE ROLL. land_swing_on_body rolled Blind only for a plain swing (`skill_id is
+# None`, since SLICE-H4's first cut, 652db099, with no reason written), so a Blinded
+# body's attack skill on another body always landed -- where the same body's skill at
+# the PLAYER rolls (land_swing's player branch) and the player's own does (hit_enemy).
+# WIKI: GWW "Blind" rev 2667383, a 90% chance to miss with melee and missile attacks,
+# and an attack skill is an attack; GWW "Hit" rev 2721374, "Any time an attack is
+# blocked or misses, there is no hit" -- so its condition does not follow either
+# (attack_condition_lands, S22). No tape shows a body's attack skill on a body under
+# Blind: the roll is WIKI and the shape S23's. Unblinded nothing moves: blind_miss draws
+# no random number for an agent with no live 479. --no-body-skill-blind is the known-bad
+# arm: a body's attack skill on a body never misses, as until 2026-10-07. The two flags
+# are separate; together they restore every pre-2026-10-07 byte of both sites.
+BLIND_MISS_SKILL_CLOSE = True  # False (--no-blind-miss-skill-close): a body's missed skill closes [1]
+BODY_SKILL_BLIND = True        # False (--no-body-skill-blind): a body's skill on a body never misses
+
+
+def blind_miss_close(send, agent_id, skill_id):
+    """A body's Blind-missed strike closes ahead of its [38]: an attack skill with its
+    own [46, body, 0], a plain swing with [1, body, 0] (RANGERPRE-S23, the banner)."""
+    skill = skill_id is not None and BLIND_MISS_SKILL_CLOSE
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_ATTACK_SKILL_FINISHED if skill else agents.GV_MELEE_ATTACK_FINISHED,
+          agent_id, 0],
+         f"attack_skill_finished: agent {agent_id}'s skill {skill_id} misses" if skill
+         else "melee_attack_finished")
+
+
 # ---- SLICE-H12: knock-down and block (the constants' comment near BLIND) ----
 
 def _effect_rows_on(state, agent_id):
@@ -32638,19 +32689,19 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     row's own armour (its rating, else the creature formula from its level
     and profession), the skill's bonus after armour, retail's [finished,
     damage] order. A BLINDED body misses nine in ten (SKILLS-BL) like the
-    player's and the hostile's swing do."""
+    player's and the hostile's swing do -- its attack skill too (RANGERPRE-S24)."""
     row = state.get("agents", {}).get(tid)
     if row is None or row.get("dead"):
         return
     party = agent.get("allegiance") == agents.ALLEGIANCE_PLAYER
-    if skill_id is None and blind_miss(state, agent_id):
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
-             "melee_attack_finished")
+    # RANGERPRE-S23 / S24: the roll and the close at BLIND_MISS_SKILL_CLOSE's banner.
+    if (skill_id is None or BODY_SKILL_BLIND) and blind_miss(state, agent_id):
+        blind_miss_close(send, agent_id, skill_id)
         attack_fails(send, state, agent_id, tid, agents.ATTACK_FAIL_MISS,
                      conn_id, "Blind")
         print(f"[c{conn_id}] agent {agent_id} swung BLIND at agent {tid} and "
-              f"missed", flush=True)
+              f"missed" + (f" (skill {skill_id})" if skill_id is not None else ""),
+              flush=True)
         return "missed"
     if blocks(state, tid):                                    # SLICE-H12
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -38558,13 +38609,14 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # no pool movement. Rolled before the arithmetic so a miss cannot leave a
     # half-computed swing anywhere.
     if blind_miss(state, agent_id):
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
-             "melee_attack_finished")
+        # RANGERPRE-S23: an attack skill's miss closes with its own 46, a plain
+        # swing's with 1 (the banner at BLIND_MISS_SKILL_CLOSE).
+        blind_miss_close(send, agent_id, skill_id)
         attack_fails(send, state, agent_id, PLAYER_AGENT_ID,
                      agents.ATTACK_FAIL_MISS, conn_id, "Blind")
         print(f"[c{conn_id}] agent {agent_id} swung BLIND and missed the "
-              f"player", flush=True)
+              f"player" + (f" (skill {skill_id})" if skill_id is not None else ""),
+              flush=True)
         return "missed"
     # SLICE-H12: THE PLAYER BLOCKS (a stance's chance): the swing closes, the
     # attack-fail word names the block, nothing lands and nothing is gained.
@@ -50248,6 +50300,18 @@ def main():
         print("CONDITIONS: --no-condition-needs-hit -- an attack skill's condition lands "
               "on a Blind miss or a block too (the known-bad arm), this server's bytes "
               "until 2026-10-07 [RANGERPRE-S22 revert]", flush=True)
+    if a.no_blind_miss_skill_close:
+        global BLIND_MISS_SKILL_CLOSE
+        BLIND_MISS_SKILL_CLOSE = False
+        print("CONDITIONS: --no-blind-miss-skill-close -- a body's Blind-missed attack "
+              "skill closes with the swing's [1], not its own [46] (the known-bad arm), "
+              "this server's bytes until 2026-10-07 [RANGERPRE-S23 revert]", flush=True)
+    if a.no_body_skill_blind:
+        global BODY_SKILL_BLIND
+        BODY_SKILL_BLIND = False
+        print("CONDITIONS: --no-body-skill-blind -- a Blinded body's attack skill on "
+              "another body never misses (the known-bad arm), this server's bytes until "
+              "2026-10-07 [RANGERPRE-S24 revert]", flush=True)
     if a.no_snare_status_bit:
         global SNARE_STATUS_BIT
         SNARE_STATUS_BIT = False
