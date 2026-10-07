@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### DEATHWALK-E1 and E2 scorers -- 2026-10-06 -- **`studies/movecode/review/e1_score.py` (the death stop) and `e2_score.py` (the rise in place) score off the wire, with each tape's arm read off its flags. Each has a selftest over tapes written by the real server code in both arms and over the real corpus. On the corpus, E1 finds all 11 pre-fix open-windup deaths `old-shape`, and its first real-client witness on the fixed arm (1 open windup, PASS). E2 finds no exposed in-place rise in 81 (31 shrine, 50 unexposed), so its run must press on the client (`C:0.1 space:0.2`) with no movement keys; `attack:N` never reaches the defect.**
+
+- **Record:** `studies/movecode/RUN-DEATHWALK.md` §3f.
+- **Owed:** an E1 + E2 plan on revheal3 (client presses, no moves) and its launches.
+
 ### DEATHWALK-E4 CLOSED -- 2026-10-06 -- **D1's stop-disc fix is confirmed on the client. TRAILPIN's rig and plan, one pair: the fixed arm (`20261006T215123`) sent 156 re-paths, 0 from inside the stop and 0 same-tick C1 swings; the `--repath-inside-stop` arm (`20261006T215856`) sent 163, 5 from inside the stop, each opening a C1 swing in its own call (run 0.0, 61-76 u). The stopping rule (K's inside-stop re-paths >= 5) fired after one pair. DEATHWALK-H5 HELD; STOP_DISC_ENDS_FOLLOW stays ON.**
 
 - **Record:** FINDINGS §1z-ds.54; `studies/movecode/RUN-DEATHWALK.md` §3e.
