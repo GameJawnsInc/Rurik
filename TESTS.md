@@ -15822,4 +15822,14 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   swings, the one gapped connection set aside by name, P5 UNDECIDABLE, P6 refuted, and P4
   (authsrv-20260928T002701-c1 FAILS P1 inside one tick). Floors MEASURED and decided on
   directories: 38 bare (an empty RURIK_VAULT and a nonexistent one), + 1 with
-  vault/content, + 7 with vault/captures/live, + 1 with the P4 capture = 47. ~35 s)
+  vault/content, + 7 with vault/captures/live, + 1 with the P4 capture = 47. PROVEN RED
+  by 18 scratch mutants, each a copy of one module PRE-LOADED by path (a plain sys.path
+  copy is shadowed: agents / content put the tree's authsrv dir first, and the first pass's
+  four 'survivors' were never loaded), against a green unmutated control: the stamp
+  removed (9 red), halved (7), the hostile cast gate (3), its swing hold (4), the party
+  cast hold (2) and swing hold (1) removed, instants held (1), attacks and instants
+  stamped (4), an interrupt stamping (1), the RESSIG take-back removed (1), main()'s
+  `global` removed (2), the flag renamed in serverargs (1), the gate moved ahead of the
+  reach gate (1), the hero's E3 withheld (1), the default off (2); in the reader, the
+  un-targeted start dropped (10), the walk back crossing closes (3, on the orphan-58
+  literal), the floor at 0 (6). ~35 s)
