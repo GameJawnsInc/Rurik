@@ -2746,6 +2746,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "walk-in shrank the arrows' flights 0.73 -> 0.28 s and the "
                          "mirror's avoidance halt re-parked the position model "
                          "1,430 u from the body.")
+    ap.add_argument("--no-legacy-stop", action="store_true",
+                    help="RANGERLOOP-F9 REVERT, the legacy sync model's half: send() "
+                         "hands _note_wire_move the three point messages only, so a "
+                         "0x0028 we send the player never stops the legacy model. "
+                         "KNOWN-BAD: after RANGERPRE-S16's approach halt it walks the "
+                         "0x002A onto the target's own point, and the approach's snap "
+                         "guard (which reads that model alone) re-pins the next "
+                         "approach -- RUN-T's 688 u APPROACH RE-PIN (replayed: 687.9 u "
+                         "blind, 0.0 u with the halt let through).")
     ap.add_argument("--held-interact-at-range", action="store_true",
                     help="RANGERPRE-S17 REVERT (ROUTE-B): a HELD interact is "
                          "served as soon as the model is inside INTERACT_RANGE "

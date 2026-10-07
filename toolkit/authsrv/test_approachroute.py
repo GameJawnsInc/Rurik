@@ -49,6 +49,13 @@ the press, the walk driven tick by tick in world_tick's order, where it is serve
 known-bad arm (--held-interact-at-range), the slack cases, the controls, the flag.
 5 ROUTE-B's TAPES: the two exact-start witnesses, ours against retail's dialog instant,
 and the immediate range -- a declared skip like section 3.
+6 RANGERLOOP-F9 on our server, offline, on a fake clock with the REAL AgTrack guard and
+legacy sync model fed as send() feeds them: after S16's halt both models park where the
+halt found them (the arrows fly from range; no avoid-halt re-park; no APPROACH RE-PIN at
+a re-press), the first swing still opens at range (the W2g guard), each known-bad arm
+(--no-mirror-stop, --no-legacy-stop) reads RUN-T's walk-in, and RANGERLOOP-F11's
+re-approach on today's swing clock against 2026-09-30's. 7 S16 RUN-T's capture replayed
+through both models -- a declared skip with no captures/gamesrv directory.
 """
 import contextlib
 import io
@@ -74,10 +81,10 @@ import vaultpath                                               # noqa: E402
 # Floor from the green run of 2026-09-30 with RURIK_VAULT at an EMPTY directory (sections 3
 # and 5 declared skips): 32 -- 21 for ROUTE-A (20 until the review follow-up added 1r) and
 # 11 for ROUTE-B's section 4 (RANGERPRE-S17). With the captures present section 3 adds 9
-# and section 5 adds 5 (46). 2026-10-07, RANGERLOOP-F9: section 6 adds 7 on any machine
-# (39 on the empty-vault green run, sections 3, 5 and 7 declared skips) and section 7 adds
-# 4 with the gamesrv captures present (57 on the full green run).
-LEDGER = checks.Ledger("the approach (ROUTE-A, ROUTE-B, RANGERLOOP-F9)", floor=39)
+# and section 5 adds 5 (46). 2026-10-07, RANGERLOOP-F9: section 6 adds 11 on any machine
+# (43 on the empty-vault green run, sections 3, 5 and 7 declared skips) and section 7 adds
+# 5 with the gamesrv captures present (62 on the full green run).
+LEDGER = checks.Ledger("the approach (ROUTE-A, ROUTE-B, RANGERLOOP-F9)", floor=43)
 check = checks.adopt(LEDGER)
 
 PLAYER, FOE, OTHER = authsrv.PLAYER_AGENT_ID, 10, 11
@@ -997,9 +1004,10 @@ def section_route_b_tape():
 # clock (authsrv's `time` swapped for the block, as test_bodywindup does).
 F9_T0 = 50000.0
 F9_STEP = 0.05
-F9_FLAGS = ("MIRROR_PARKS_ON_STOP", "SWING_CLOCK_CHARGES_MOVING",
-            "CANCELLED_SWING_FREES_CLOCK")
+F9_FLAGS = ("MIRROR_PARKS_ON_STOP", "LEGACY_MODEL_PARKS_ON_STOP",
+            "SWING_CLOCK_CHARGES_MOVING", "CANCELLED_SWING_FREES_CLOCK")
 F9_CAP = ("captures", "gamesrv", "authsrv-20260930T132022-c1.jsonl")   # S16 RUN-T, 131951
+SRC_F9 = open(authsrv.__file__, encoding="utf-8").read()
 
 
 class F9Clock:
@@ -1043,19 +1051,21 @@ def f9_rig(**flags):
 
 
 def f9_world():
-    """A bow, FOE 1800 u out on +x, the guard seeded at the origin, and a send that feeds
-    _note_wire_move and _agtrack_shadow_emit as send()'s pre-lock hooks do.
+    """A bow, FOE 1800 u out on +x, the guard and the legacy model seeded at the origin,
+    and a send that feeds _note_wire_move (through send()'s own _legacy_model_hears) and
+    _agtrack_shadow_emit as send()'s pre-lock hooks do.
     -> (state, rec, sent [(t, op, values)], send)"""
     authsrv.apply_party_character({"player_weapon": "starter_bow"})
     st = world(1800.0)
     st["plane"] = 0
     authsrv._agtrack_guard_seed(st, (0.0, 0.0), 0, 1)
+    st["sync_from"], st["sync_to"], st["sync_at"] = (0.0, 0.0), None, F9_T0   # placement
     rec, sent = F9Rec(), []
 
     def send(op, v, label="", quiet=False):
         v = list(v)
         sent.append((authsrv.time.t - F9_T0, op, v))
-        if op in (0x0029, OP_FOLLOW, OP_REPIN):
+        if authsrv._legacy_model_hears(op):        # send()'s own filter (6j locks it)
             authsrv._note_wire_move(st, op, v, authsrv.time.t, rec=rec)
         if authsrv.AGTRACK_SHADOW and st.get("agtrack_guard") is not None:
             authsrv._agtrack_shadow_emit(st, op, v, rec)
@@ -1075,10 +1085,10 @@ def f9_flight(v):
     return struct.unpack("<f", struct.pack("<I", int(v[3]) & 0xFFFFFFFF))[0]
 
 
-def f9_drive(park):
+def f9_drive(park, legacy=True):
     """The press, the approach, S16's halt, then 6.5 s of chain. -> dict of readings."""
-    out = {"track": [], "probe": {}}
-    with f9_rig(MIRROR_PARKS_ON_STOP=park):
+    out = {"track": [], "probe": {}, "legacy": []}
+    with f9_rig(MIRROR_PARKS_ON_STOP=park, LEGACY_MODEL_PARKS_ON_STOP=legacy):
         st, rec, sent, send = f9_world()
         authsrv.begin_attack(send, st, FOE, 1, rec=rec)
         how = authsrv.player_ranged(st)
@@ -1092,6 +1102,7 @@ def f9_drive(park):
             p = authsrv._npc_mirror_pos(st, now)
             out["track"].append((t, p, authsrv._reach_frame(st, now),
                                  g.twin.sync.position(g._ms(now)) if g else None))
+            out["legacy"].append((t, authsrv._sync_position(st, now)))
             if halt_t is None:
                 h = [s for s in sent if s[1] == OP_HALT]
                 if h:
@@ -1117,13 +1128,16 @@ def f9_drive(park):
 def f9_reapproach(**flags):
     """RUN-T's re-approach on THIS tree, on the desk. After the third start, a keyboard
     move 33 ms into its windup (RUN-T's 0x003D came 33 ms after 16.8829), a 1.512 s
-    back-pedal 281.7 u, the stop, and the re-press 1.86 s later. The keyboard arms' state
-    writes are EMULATED (RECONSTRUCTION of the 0x003D/0x0047 arms: the latches, the stop
-    report, and a 0x002C at the stop standing in for RUN-T's APPROACH RE-PIN); the cancel
-    is the real cancel_on_move, and the swing clock is the real attack_tick. The body's
-    point at the move is read off the mirror, so the drive needs MIRROR_PARKS_ON_STOP: under
-    --no-mirror-stop that "body" is the walked-in mirror and the re-press is in reach.
-    -> (late s past the re-approach's own eta, the mirror's distance to FOE at its halt)"""
+    back-pedal 281.7 u, the stop, and the re-press 1.86 s later. The keyboard arms are
+    EMULATED (RECONSTRUCTION of the 0x003D/0x0047 arms): the latches, RUN-T's own sends --
+    0x002B [0.66, 4] + a 520 u KBD LEAD 0x0029 at the move, 0x002B [1.0, 9] + the
+    zero-distance STOP-ECHO 0x0029 at the stop -- and the stop report. The cancel is the
+    real cancel_on_move, the swing clock the real attack_tick, and the re-approach's snap
+    guard the real _approach_send. The body's point at the move is read off the mirror, so
+    the drive needs MIRROR_PARKS_ON_STOP: under --no-mirror-stop that "body" is the
+    walked-in mirror and the re-press is in reach.
+    -> (late s past the re-approach's own eta, the mirror's distance to FOE at its halt,
+        [the snap guard's 0x002C re-pins at the re-press], its separation)"""
     with f9_rig(MIRROR_PARKS_ON_STOP=True, **flags):
         st, rec, sent, send = f9_world()
         authsrv.begin_attack(send, st, FOE, 1, rec=rec)
@@ -1137,6 +1151,8 @@ def f9_reapproach(**flags):
         body = authsrv._npc_mirror_pos(st, authsrv.time.t)
         st["kbd_moving_at"], st["click_moving_at"] = authsrv.time.t, None
         authsrv.cancel_on_move(send, st, 1, moved=50.0)
+        send(0x002B, [PLAYER, 0.66, 4], "KBD SPEED-TRUTH (emulated)")
+        send(0x0029, [PLAYER, [body[0] - 520.0, body[1]], 0, 0], "KBD LEAD (emulated)")
         stop_at = t + 1.512
         while t < stop_at:
             t = round(t + F9_STEP, 6)
@@ -1144,7 +1160,8 @@ def f9_reapproach(**flags):
         stop = (body[0] - 281.7, body[1])
         st["kbd_moving_at"], st["dest"], st["pos"] = None, None, stop
         st["last_report"] = (stop[0], stop[1], True, authsrv.time.t)
-        send(OP_REPIN, [PLAYER, list(stop), 0], "the stop, re-pinned (RUN-T's RE-PIN)")
+        send(0x002B, [PLAYER, 1.0, 9], "kbd-stop (emulated)")
+        send(0x0029, [PLAYER, list(stop), 0, 0], "KBD STOP-ECHO (emulated)")
         press_at = t + 1.86
         while t < press_at:
             t = round(t + F9_STEP, 6)
@@ -1159,13 +1176,15 @@ def f9_reapproach(**flags):
                 break
         fol = [s for s in sent if s[1] == OP_FOLLOW and s[0] > pressed]
         halt = [s for s in sent if s[1] == OP_HALT and s[0] > pressed]
+        pins = [s for s in sent if s[1] == OP_REPIN and s[0] >= pressed]
         row = [r for r in rec.rows if r["kind"] == "approach" and r.get("act") == "send"
                and r["t"] > pressed - 1e-9]
+        sep = ((row[0].get("guard") or {}).get("sep_guard") if row else None)
         if not (fol and halt and row):
-            return None, None
+            return None, None, pins, sep
         m = authsrv._npc_mirror_pos(st, F9_T0 + halt[0][0])
         late = (halt[0][0] - fol[0][0]) - float(row[0]["run"]) / authsrv.DEFAULT_RUN_SPEED
-        return late, math.hypot(1800.0 - m[0], m[1])
+        return late, math.hypot(1800.0 - m[0], m[1]), pins, sep
 
 
 def section_mirror_stop():
@@ -1232,9 +1251,9 @@ def section_mirror_stop():
           {"walked_u": round(walked, 1), "probes": {d: round(v, 3) for d, v in bp.items()},
            "flights": [round(f, 3) for f in bfl],
            "avoid": [(r.get("model_moved"), r.get("point")) for r in bad["avoid"]]})
-    today, today_d = f9_reapproach()
-    then, then_d = f9_reapproach(SWING_CLOCK_CHARGES_MOVING=True,
-                                 CANCELLED_SWING_FREES_CLOCK=False)
+    today, today_d, today_pins, _s = f9_reapproach()
+    then, then_d, _p, _s2 = f9_reapproach(SWING_CLOCK_CHARGES_MOVING=True,
+                                          CANCELLED_SWING_FREES_CLOCK=False)
     check(today is not None and 0.0 <= today <= F9_STEP + 1e-6
           and reach - 15.0 <= today_d <= reach,
           "6f. RANGERLOOP-F11 on this tree: the RE-APPROACH after a move that cancelled a "
@@ -1250,6 +1269,85 @@ def section_mirror_stop():
           "range -- RUN-T's 1.207 s against 0.742, 134 u in, the late halt F9 recorded",
           {"late_s": None if then is None else round(then, 3),
            "mirror_d": None if then_d is None else round(then_d, 1)})
+    # -- the legacy sync model: send()'s own filter now lets our 0x0028 reach it
+    lg = [(t, p) for t, p in on["legacy"] if ht is not None and ht <= t <= ht + 5.0 + 1e-6]
+    lg_worst = max((math.hypot(p[0] - hx[0], p[1] - hx[1]) for _t, p in lg if p is not None),
+                   default=math.inf)
+    lbad = f9_drive(True, legacy=False)
+    lb = [p for t, p in lbad["legacy"]
+          if lbad.get("halt_t") is not None and abs(t - (lbad["halt_t"] + 5.0)) < 0.026]
+    lb_walk = (math.hypot(lb[0][0] - lbad["halt_at"][0], lb[0][1] - lbad["halt_at"][1])
+               if lb and lb[0] is not None else 0.0)
+    check(len(lg) >= 100 and lg_worst <= 15.0 and lb_walk > 1000.0,
+          "6h. THE LEGACY SYNC MODEL parks on the halt too: for 5 s after it _sync_position "
+          "stays within 15 u of the halt point; under --no-legacy-stop it walks the 0x002A "
+          "on toward the TARGET's own point, over 1,000 u past the halt in 5 s (SLICE-F25's "
+          "branch, which send() never reached before)",
+          {"worst_u": round(lg_worst, 2), "known_bad_walk_u": round(lb_walk, 1)})
+    _l, _d, bad_pins, bad_sep = f9_reapproach(LEGACY_MODEL_PARKS_ON_STOP=False)
+    check(not today_pins and len(bad_pins) == 1 and bad_sep is not None and bad_sep > 100.0,
+          "6i. RUN-T's 688 u APPROACH RE-PIN, on the desk: the re-press after the emulated "
+          "back-pedal sends NO re-pin -- and under --no-legacy-stop the snap guard (which "
+          "reads the legacy model alone, GUARD_BOTH_WORLD0 off) fires one 0x002C at the "
+          "re-press, its separation past the 100 u reprieve",
+          {"pins_today": len(today_pins), "pins_known_bad": len(bad_pins),
+           "known_bad_sep": bad_sep})
+    i_def = SRC_F9.find("        def send(opcode, values, label, quiet=False):")
+    i_hook = SRC_F9.find("            if _legacy_model_hears(opcode):", i_def)
+    i_note = SRC_F9.find("                _note_wire_move(state, opcode, values, time.time(), rec=rec)",
+                         i_def)
+    i_enc = SRC_F9.find("            blob = codec.encode(smsg, opcode, values)", i_def)
+    pred = {op: authsrv._legacy_model_hears(op) for op in (0x0029, OP_FOLLOW, OP_REPIN, OP_HALT,
+                                                          0x002D, 0x002B)}
+    saved = authsrv.LEGACY_MODEL_PARKS_ON_STOP
+    authsrv.LEGACY_MODEL_PARKS_ON_STOP = False
+    try:
+        pred_off = authsrv._legacy_model_hears(OP_HALT)
+    finally:
+        authsrv.LEGACY_MODEL_PARKS_ON_STOP = saved
+    check(0 < i_def < i_hook < i_note < i_enc
+          and SRC_F9.count("_note_wire_move(state, opcode, values, time.time(), rec=rec)") == 1
+          and pred == {0x0029: True, OP_FOLLOW: True, OP_REPIN: True, OP_HALT: True,
+                       0x002D: False, 0x002B: False}
+          and pred_off is False,
+          "6j. LOCK: send()'s one _note_wire_move call is gated by _legacy_model_hears -- the "
+          "function this section drives -- which passes the three point messages and the "
+          "0x0028, the 0x0028 only under the flag; a 0x002D still does NOT reach the hook "
+          "(SLICE-F25's death half, unchanged here and pinned as unchanged)",
+          {"order": (i_def, i_hook, i_note, i_enc), "pred": pred, "off": pred_off})
+    import argparse
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    i_main = SRC_F9.find("\ndef main():")
+    i_flip = SRC_F9.find("    if a.no_legacy_stop:", i_main)
+    i_end = SRC_F9.find("\n    if a.", i_flip + 1)
+    flipped = None
+    if 0 < i_main < i_flip < i_end:
+        body = "\n".join(ln[4:] if ln.startswith("    ") else ln
+                         for ln in SRC_F9[i_flip:i_end].splitlines())
+        code = "def _f9_legacy_flip(a):\n" + "\n".join("    " + ln for ln in body.splitlines())
+        saved = authsrv.LEGACY_MODEL_PARKS_ON_STOP
+        try:
+            exec(compile(code, "<main:no_legacy_stop>", "exec"), authsrv.__dict__)
+            with contextlib.redirect_stdout(io.StringIO()):
+                authsrv.__dict__["_f9_legacy_flip"](argparse.Namespace(no_legacy_stop=True))
+            flipped = authsrv.LEGACY_MODEL_PARKS_ON_STOP
+        finally:
+            authsrv.LEGACY_MODEL_PARKS_ON_STOP = saved
+            authsrv.__dict__.pop("_f9_legacy_flip", None)
+    check(getattr(ap.parse_args([]), "no_legacy_stop", None) is False
+          and getattr(ap.parse_known_args(["--no-legacy-stop"])[0], "no_legacy_stop",
+                      None) is True
+          and flipped is False and authsrv.LEGACY_MODEL_PARKS_ON_STOP is True
+          and authsrv.capture_flags().get("LEGACY_MODEL_PARKS_ON_STOP") is True,
+          "6k. --no-legacy-stop parses (default off), main()'s own block EXECUTED really sets "
+          "the module's LEGACY_MODEL_PARKS_ON_STOP to False (its `global`), and the default "
+          "ships ON in the capture header",
+          {"main": i_main, "flip": i_flip, "flipped": flipped})
 
 
 # --------------------------------------------------------------------------- 7
@@ -1345,6 +1443,41 @@ def section_mirror_stop_tape():
           "~0.93, 0.93 and 0.85 s -- the flights the runsheet scores",
           {"tape": [round(f, 3) for f in tape], "blind": [round(p, 3) for p in pred_bad],
            "parked": [round(p, 3) for p in pred_on]})
+    # The legacy sync model on the same sends, through send()'s own filter: RUN-T's
+    # "688 u" APPROACH RE-PIN was that model walking the first 0x002A onto the target
+    # past our halt, because send() never handed it the 0x0028.
+    pins = [(t, v, r.get("label", "")) for r in rows if r.get("kind") == "sent"
+            and r.get("opcode") == OP_REPIN
+            for t, v in [(r["t"], authsrv.codec.decode_one(
+                "GAME_SMSG", bytes.fromhex(r["plain"]))[1][1:])] if v[0] == PLAYER]
+
+    def legacy_at_repin(on_flag):
+        st_l = {"sync_from": origin, "sync_to": None, "sync_at": folls[0][0] - 1.0}
+        saved = authsrv.LEGACY_MODEL_PARKS_ON_STOP
+        authsrv.LEGACY_MODEL_PARKS_ON_STOP = on_flag
+        try:
+            for t, op, v in moves:
+                if t >= pins[0][0] - 1e-9:
+                    break
+                if authsrv._legacy_model_hears(op):
+                    authsrv._note_wire_move(st_l, op, list(v), t)
+        finally:
+            authsrv.LEGACY_MODEL_PARKS_ON_STOP = saved
+        p = authsrv._sync_position(st_l, pins[0][0] - 1e-6)
+        q = pins[0][1][1]
+        return math.hypot(p[0] - q[0], p[1] - q[1])
+    blind_l = legacy_at_repin(False) if pins else None
+    heard_l = legacy_at_repin(True) if pins else None
+    check(len(pins) == 1 and "688 u" in pins[0][2]
+          and blind_l is not None and abs(blind_l - 688.0) <= 5.0
+          and heard_l is not None and heard_l <= 15.0,
+          "7e. the tape's 688 u APPROACH RE-PIN is the LEGACY model's walk-in: replayed through "
+          "_legacy_model_hears + _note_wire_move, blind to the 0x0028 it sits 688 u (to 5 u) "
+          "from the re-pin's point at the re-press -- the label's own figure -- and hearing it, "
+          "within 15 u",
+          {"blind_u": None if blind_l is None else round(blind_l, 1),
+           "heard_u": None if heard_l is None else round(heard_l, 1),
+           "label": pins[0][2][:60] if pins else None})
     # RANGERLOOP-F11 re-derived from the same rows: the re-approach's start is the swing
     # clock's, not the leg's -- last start + interval + the chain-pause charge.
     starts = [r["t"] for r in rows if r.get("kind") == "sent" and r.get("opcode") == OP_START
