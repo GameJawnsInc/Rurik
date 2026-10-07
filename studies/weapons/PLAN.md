@@ -360,7 +360,7 @@ could not hold — `starter_axe` (8–28), `starter_bow` (5–9, `609` = 1, no `
 `starter_wand` (3–5, `617` = 0), `starter_scythe` (4–7), `starter_spear` (5–7),
 `starter_focus` (energy +5) — each named by the `0x006D` of the body that held it, each
 ONE distinct row across every declaration in the corpus, each carrying the generic name
-id 8582 and a file both run archives bind (`archive.binds_plainly`).
+unit `0x2186` (string id 8326 -- 8582 was the raw word; corrected 2026-10-07, RANGERLOOP-F2) and a file both run archives bind (`archive.binds_plainly`).
 `combatmath.weapon_damage_range` reads `634` beside `584` (WEAPONS-C7), so a
 retail-shaped weapon with a requirement has a range.
 

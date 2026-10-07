@@ -1982,24 +1982,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   day, PLAN-LOG: the dress cell keyed by location, the merchant's purchases in the item
   store, off hands' homes alone reserved, storage bags refused), and world-map travel
   (step 7, `maptravel.py`, PLAN-LOG: the landing and its fix pass, both 2026-09-23).
-  **CONFIRMED on our client 2026-09-23** (studies/deskwork/CONFIRM-2026-09-23.md): kick,
-  add, kick-add-kick-add, the kick held across a relaunch, the suppress circle on and off
-  and the body skipping a suppressed skill, move, stored-cell restore, equip and swap;
-  and after the owner's-answer fixes (PLAN-LOG: the doll order, the display mode
-  `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
-  Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
-  **CONFIRM-2 ran 2026-09-24** (studies/deskwork/CONFIRM-2026-09-24.md, PLAN-LOG): the
-  henchman add HELD on the client. The town weapon's carrier fix
-  CONFIRMED on the client (CONFIRM-2 §7, PLAN-LOG): our load's player `0x006D` was the
-  carrier — withheld in a town the body is empty-handed at load and after F2, and
-  `--town-player-weapons` reproduces the stale hammer (OBSERVED). The owner's answer
-  (2026-09-24): on retail no weapon is shown on the body in a town, only on the doll — the fix's
-  picture. The field shield's fix CONFIRMED on the client (CONFIRM-2 §8, PLAN-LOG): the
-  player's own `0x006D` withheld in a field too, the shield standing at load and through a swing.
-  The henchman kick CONFIRMED on the client (CONFIRM-2 §9: the row leaves, the count drops, a
-  re-add restores both, `--no-henchman-kick` keeps the row). The town armour CONFIRMED on the client (CONFIRM-2 §10,
-  2026-09-25, the harness's `drag:` / `dclick:`: in a town the body's helm follows the equip,
-  `--no-town-armour-visuals` leaves it on, a field is unchanged). **Open**: **the refusal at the cap** (PLAN-LOG
+  **CONFIRMED on the client 2026-09-23 to 09-25**, every step above but travel: kick, add,
+  suppress, move, equip, swap, the doll's order, the display mode and the drag, the henchman
+  add and kick, the town weapon and field shield carriers, the town armour
+  (studies/deskwork/CONFIRM-2026-09-23.md; CONFIRM-2026-09-24.md §2-§10; PLAN-LOG). **Open**: **the refusal at the cap** (PLAN-LOG
   "DESKWORK-D1, the refusal at the cap", 2026-09-25): retail's reply is NOT FOUND on 96 live
   connections, the client's party error table (81 rows at `0x00B97968`, carriers `0x01B8` /
   `0x01BC` / `0x01D6` / `0x01E3`) has no "party is full" row, and the sentence a player expects

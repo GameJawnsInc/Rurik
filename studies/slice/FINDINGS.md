@@ -1681,7 +1681,7 @@ the 12 bodies is followed, in its create batch, by one `0x0161` CREATE_NAMED_ITE
 `0x006D` NPC_UPDATE_WEAPONS `[agent, leadhand, offhand]` naming them** — the Monk `[8, 20, 0]`, the
 Warrior `[9, 22, 23]` (a sword and a shield), the Elementalist `[10, 25, 0]`. The Monk's item 20:
 file **112081**, type **26** (a staff, by the ItemType enum whose sword 27 and shield 24 the
-Warrior's pair confirms), flags `0x22200100`, model 6462, name id 8582 and four modifier words; the
+Warrior's pair confirms), flags `0x22200100`, model 6462, name unit `0x2186` (string id 8326, the generic name -- 8582 was the raw word; corrected 2026-10-07, RANGERLOOP-F2) and four modifier words; the
 Elementalist carried 94937/26 with the same words but one; another player's own staff was
 112081/26 with a value and a requirement word. Their `0x0035` attack speed came only at their
 first swing (1.75 for the casters, 1.33 for the Warrior — F30's cadences). The slice run's own
@@ -1830,7 +1830,7 @@ goes to **3,016 non-party agents** across the corpus against 21 henchman bodies 
 wand (22) in 57, an axe (2) in 46, a bow (5) in 127 — so a hostile body holding a hammer is retail's
 shape, not an extension of it. Second, the **level-3 Warrior henchman of 20260819T132414** (the
 low-level session F34 was measured on) carried item 99, a sword — file 175958, type 27, flags
-`0x22000100`, model 7937, name id 8582, words `0x24B80200` (587: slashing) and `0xA4880303` (584:
+`0x22000100`, model 7937, name unit `0x2186` (string id 8326; see above), words `0x24B80200` (587: slashing) and `0xA4880303` (584:
 range 3–3) — and item 100, a shield — file 176078, type 24, flags `0x20000200`, model 7938, one
 word `0xA3C80000` (572: armour 0). Both files **bind in the slice's own archive**
 (`archive.binds_plainly`, rows 76203 and 76325); the owner's own level-20 sword and shield
