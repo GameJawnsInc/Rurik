@@ -86,12 +86,26 @@ WHAT THE FIRST RUN SHOWED (registered after it; the predictions above are NOT re
   completion after a strip counted as a miss; read per episode the corpus holds the
   `p1_n` live completions and `p3_not_live` not-live ones printed below.
 
+THE FIX PASS (2026-10-07, the review's RV-3 / RV-6 / RV-8; the predictions above untouched):
+  a Deep Wound word is judged by `dw_verdict` against EVERY (M, rank) of its bearer's clean
+  fit -- True when one predicts it, False when none does, None (UNDECIDED, printed, outside
+  P2c's all()) with no clean word to fit. The first cut scored any word over a non-unique
+  fit False, so a CONFIRMING word on a bearer like :62557 b117 (five fits, 192..576)
+  reddened P2c -- the sentence below forbids that. The fits are printed as counted: of the
+  17 bearers with clean words, `p2c_fits_unique` fit ONE (M, rank) -- 14, all (555, 13) --
+  and `p2c_fits_multi` several (3: :60877 b15 11 fits 75..225; :53310 b85 and :62557 b117
+  5 each, 192..576); this reader reads no profession. Every witnessed heal_points product
+  is whole (costs 5 / 10, scale 200 + 20 x rank), so the ROUNDING of `heal_points` is
+  UNDISCRIMINATED here. --json now writes the census's chatter to stderr and the dump alone
+  to stdout.
+
 Corpus totals are FLOORS (a later capture is confirming evidence, never a red);
 per-capture counts are printed. Standard library only; reads the vault through
 `vaultpath` (via hexjoin).
 """
 import argparse
 import collections
+import contextlib
 import json
 import os
 import sys
@@ -139,7 +153,8 @@ def interp_half_up(lo, hi, rank):
 
 
 def heal_points(energy, percent):
-    """P2's amount: `percent` of the paid `energy`, whole points, half-up."""
+    """P2's amount: `percent` of the paid `energy`, whole points, half-up (UNDISCRIMINATED
+    on the corpus: every witnessed product is whole)."""
     return int(float(energy) * float(percent) / 100.0 + 0.5)
 
 
@@ -314,6 +329,29 @@ def bearer_fit(words, lo, hi):
     return fits
 
 
+def dw_verdict(fit, cost, f, lo, hi, rule="round"):
+    """One Deep Wound word `f` (a cost-`cost` completion) judged against a bearer's clean
+    `fit` (bearer_fit's [(M, ranks)]): (h, pts, predicted_max, f x predicted_max, verdict).
+    THREE-VALUED (the fix pass's RV-3): True when some (M, rank) of the fit predicts the word
+    -- round(0.8 x h) (`rule` "trunc": ARM-TRUNC's int) over deepwoundjoin.predicted_max(M)
+    -- False when NONE does (the word refutes every fit), None (UNDECIDED, printed, out of
+    P2c's all()) when the bearer has no fit to judge it by. A word over a fit that is not
+    unique used to score False -- a later capture's CONFIRMING word reddened P2c, which line
+    89's "confirming evidence, never a red" forbids. The numbers returned are the first
+    agreeing (M, rank)'s, else the first candidate's."""
+    cands = []
+    for m, ranks in fit or ():
+        for k in ranks:
+            h = heal_points(cost, interp_half_up(lo, hi, k))
+            pts = cut_points(h, rule)
+            mm = deepwoundjoin.predicted_max(m)
+            cands.append((h, pts, mm, round(f * mm, 3), abs(f * mm - pts) <= WHOLE_TOL))
+    if not cands:
+        return (None, None, None, None, None)
+    agree = [x for x in cands if x[-1]]
+    return agree[0] if agree else cands[0][:4] + (False,)
+
+
 def score(c, arm=None):
     """The numbers the predictions are judged on. `arm` "fixed" / "after58" / "trunc"
     scores that known-bad model in place of the reading (the reader's own refutation)."""
@@ -376,7 +414,7 @@ def score(c, arm=None):
                                                      for (e, dw), v in sorted(by.items())}
                           for k, by in sorted(words.items())}
     # P2c's amount: each bearer's clean (M, rank) fit, then its Deep Wound words predicted
-    fits, dw_rows, declared = {}, [], []
+    fits, dw_rows, dw_cands, declared = {}, [], [], []
     tables = {}
     for key, by in sorted(words.items()):
         r0 = next(r for r in p1c_ok if (r["capture"], r["port"], r["bearer"]) == key)
@@ -395,22 +433,26 @@ def score(c, arm=None):
                 declared.append((key, r["max"], [m for m, _k in fit]))
             if not r["deep_wound"]:
                 continue
-            if len(fit) != 1 or len(fit[0][1]) != 1:
-                # a Deep Wound word is predicted only from a UNIQUE clean fit
-                dw_rows.append((key, round(r["t"], 3), r["energy"], None, None, None, None, False))
-                continue
-            m, ranks = fit[0]
-            h = heal_points(r["energy"], interp_half_up(lo, hi, ranks[0]))
-            pts = cut_points(h, "trunc" if arm == "trunc" else "round")
-            mm = deepwoundjoin.predicted_max(m)
-            f = r["before"][0]
-            dw_rows.append((key, round(r["t"], 3), r["energy"], h, pts, mm, round(f * mm, 3),
-                            abs(f * mm - pts) <= WHOLE_TOL))
+            # judged against EVERY (M, rank) of the clean fit (dw_verdict, three-valued):
+            # the unique-fit bearers decide alone, a multi-fit bearer's word confirms
+            # when some fit predicts it, a bearer with no clean fit is UNDECIDED
+            f = (r["after"] if arm == "after58" else r["before"])[0]
+            dw_rows.append((key, round(r["t"], 3), r["energy"])
+                           + dw_verdict(fit if clean else [], r["energy"], f, lo, hi,
+                                        "trunc" if arm == "trunc" else "round"))
+            dw_cands.append(sum(len(k) for _m, k in fit) if clean else 0)
     s["p2c_fits"] = {f"{k[0]} :{k[1]} b{k[2]}": v for k, v in fits.items()}
     s["p2c_unfit"] = [k for k, v in fits.items() if not v]
     s["p2c_declared"] = sorted(set((k, mx, tuple(ms)) for k, mx, ms in declared))
     s["p2c_declared_off"] = [x for x in s["p2c_declared"] if x[1] not in x[2]]
     s["p2c_dw"] = dw_rows
+    # how many (M, rank) candidates judged each Deep Wound word: 1 = a unique fit decided
+    # it alone; > 1 = "some fit predicts it"; 0 = UNDECIDED (no clean word to fit)
+    s["p2c_dw_cands"] = dw_cands
+    s["p2c_dw_undecided"] = [x[:3] for x in dw_rows if x[-1] is None]
+    s["p2c_fits_unique"] = sum(1 for v in fits.values() if len(v) == 1 and len(v[0][1]) == 1)
+    s["p2c_fits_multi"] = sorted((f"{k[0]} :{k[1]} b{k[2]}", len(v), v[0][0], v[-1][0])
+                                 for k, v in fits.items() if v and (len(v) > 1 or len(v[0][1]) > 1))
     # P3: completions under NO live episode carry no word
     gone = [r for r in comp if r["spell"] and r["skill"] != AURA_OF_RESTORATION and not r["live"]
             and r["why"] != "none yet"]
@@ -432,7 +474,8 @@ def score(c, arm=None):
     s["p1c"] = bool(live) and not unexplained and all(len(r["before"]) <= 1 for r in live)
     s["p2"] = s["p2_pairs"] > 0 and not s["p2_off"]
     s["p2c"] = (s["p2c_pairs"] > 0 and not s["p2c_off"] and not s["p2c_unfit"]
-                and not s["p2c_declared_off"] and bool(dw_rows) and all(x[-1] for x in dw_rows))
+                and not s["p2c_declared_off"] and any(x[-1] is True for x in dw_rows)
+                and not any(x[-1] is False for x in dw_rows))
     s["p3"] = s["p3_not_live"] > 0 and not s["p3_with_word"]
     s["q4"] = bool(s["q4_refresh"]) and all(x == (0, 0) for x in s["q4_refresh"])
     s["q5"] = bool(s["q5_nonspell"]) and all(x[2:] == (0, 0) for x in s["q5_nonspell"])
@@ -468,9 +511,12 @@ def main():
     ap.add_argument("--rows", action="store_true", help="one line per bearer cast end")
     ap.add_argument("--stamp", action="append", default=None, help="only this capture (repeatable)")
     a = ap.parse_args()
-    c = census(stamps=a.stamp)
-    s = score(c)
-    fx, af, tr = score(c, "fixed"), score(c, "after58"), score(c, "trunc")
+    # --json's stdout is the dump and nothing else: hexjoin.census prints its SET ASIDE
+    # line, so the reading's own chatter goes to stderr under --json (the fix pass's RV-8)
+    with contextlib.redirect_stdout(sys.stderr) if a.json else contextlib.nullcontext():
+        c = census(stamps=a.stamp)
+        s = score(c)
+        fx, af, tr = score(c, "fixed"), score(c, "after58"), score(c, "trunc")
     v = verdicts(s, fx, af, tr)
     if a.json:
         print(json.dumps({"score": s, "verdicts": v}, indent=1, default=str))
@@ -498,9 +544,11 @@ def main():
           f"{s['p2_pairs']}, off {len(s['p2_off'])} {s['p2_off'][:3]}")
     print(f"     per bearer, cost -> f32 ('DW' = the bearer's 0x00F1 carries 0x20): {s['p2_per_bearer']}")
     print(f"[{_v(s['p2c'])}] P2c clean ratio pairs {s['p2c_pairs']} off {s['p2c_off']}; (M, ranks) per "
-          f"bearer {s['p2c_fits']} (no fit {s['p2c_unfit']}); a declared [42] max vs the fit "
-          f"{s['p2c_declared']} (off {s['p2c_declared_off']}); Deep Wound words (bearer, t, cost, h, "
-          f"round(0.8 h), predicted_max, f x max, whole) {s['p2c_dw']}")
+          f"bearer {s['p2c_fits']} (no fit {s['p2c_unfit']}); {s['p2c_fits_unique']} bearers fit ONE "
+          f"(M, rank), several fit (bearer, n, lowest M, highest M) {s['p2c_fits_multi']}; a declared "
+          f"[42] max vs the fit {s['p2c_declared']} (off {s['p2c_declared_off']}); Deep Wound words "
+          f"(bearer, t, cost, h, round(0.8 h), predicted_max, f x max, verdict) {s['p2c_dw']} judged "
+          f"by {s['p2c_dw_cands']} (M, rank) candidates each; UNDECIDED {s['p2c_dw_undecided']}")
     print(f"[{_v(s['p3'])}] P3 spell completions under NO live episode {s['p3_not_live']} "
           f"{s['p3_not_live_by_why']} per capture {s['p3_by_capture']}; with a word {s['p3_with_word']}; "
           f"before the bearer's first 180 {s['before_first_aura']} (with a word "
@@ -514,7 +562,7 @@ def main():
     print(f"[{_v(v['arm_after58_reddens'])}] ARM-AFTER58 (the word after the 58) reddens P1c: "
           f"{af['p1c_ok']} of {af['p1_n']}")
     print(f"[{_v(v['arm_trunc_reddens'])}] ARM-TRUNC (heal_agent's truncation after the Deep Wound "
-          f"cut) reddens P2c: {[x for x in tr['p2c_dw'] if not x[-1]]}")
+          f"cut) reddens P2c: {[x for x in tr['p2c_dw'] if x[-1] is False]}")
     ok = all(v.values())
     print(f"trigjoin: {'THE READING HOLDS' if ok else 'THE READING FAILS'} -- {v}")
     return 0 if ok else 1

@@ -20,6 +20,12 @@ a failed chain step, a stripped or expired episode, the bearer's own re-cast, a 
 caster WEARS NOTHING of (the hexer's side), or under --no-hex-cast-triggers; a killing
 payoff ends the cast; Empathy's swing path byte-identical with the hook on and off; the
 flag and main()'s wiring; the source sites; and the reader's numbers on the live corpus.
+THE FIX PASS (2026-10-07, the review's RV-1..RV-5) added: ONE payoff per trigger skill per
+completion however many live episodes of it the caster holds (a refresh, two hexers --
+the newest fires; 3e, 4d, 5e); the dead-target exit's payoff (4e); the Deep Wound cut
+through heal_agent (4f); the rounding the server chose (4g); the player's PAID cost (5f);
+the bearer's book A/B (2c); the kill stopping a second payoff in the hook (5d); and the
+reader's three-valued Deep Wound verdict on its own, bare (11a).
 KNOWN-BAD ARMS, each shown to redden its check: the payoff emitted AFTER the [58] (the
 order check), the Backfire episode on the HEXER (nothing may fire), a fixed heal and the
 word-after-58 model on the corpus (trigjoin's own arms).
@@ -29,7 +35,7 @@ tables it reads are CARRIED (skilltable.py's rows as vault/content/skills.toml h
 build 38974; the attribute tables test_mechanics carries) and replace the loaded ones for
 the run, so a bare machine takes the same path; section 10 holds them to the vault's own.
 Vault-only, each a declared skip decided on its DIRECTORY: section 9 (the live corpus)
-and section 10 (the vault's content).
+and section 10 (the vault's content). Section 11 is pure arithmetic and runs bare.
 """
 import argparse
 import ast
@@ -49,8 +55,8 @@ import vaultpath    # noqa: E402
 
 # Floors from a real green run, decided on the vault's DIRECTORIES (test_mechanics'
 # pattern): FLOOR_BARE with RURIK_VAULT at an empty directory, FLOOR_VAULT with the vault.
-FLOOR_BARE = 22     # 2026-10-07: MEASURED 22 checks, 0 failed, 2 declared skips (sections 9 and 10, 7 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path
-FLOOR_VAULT = 29    # 2026-10-07: MEASURED 29 checks, 0 failed, with the vault (its content and its live captures)
+FLOOR_BARE = 30     # 2026-10-07 (the fix pass: +3e 4d 4e 4f 4g 5e 5f 11a; was 22): MEASURED 30 checks, 0 failed, 2 declared skips (sections 9 and 10, 7 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path
+FLOOR_VAULT = 37    # 2026-10-07 (the fix pass; was 29): MEASURED 37 checks, 0 failed, with the vault (its content and its live captures)
 HAVE_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
 LEDGER = checks.Ledger("trigger-on-cast payoffs (SKILLS-CT)",
@@ -216,9 +222,25 @@ try:
           "2b. the cost-5 Orison draws 23 / 555 (5 x 460 %) -- and then its OWN heal behind the 58 "
           "-- the cost-10 Empathy 46 / 555 (10 x 460 %): the tape's 0.04144 / 0.08288",
           (w5, w10))
+    # The book half, A/B (the fix pass's RV-5): Orison heals its own caster on the same
+    # completion, so "health >= 323" passed with the payoff's book write removed and with no
+    # payoff at all (393 / 370 / 370). The same completion from the same state under
+    # --no-hex-cast-triggers must leave the bearer EXACTLY 23 lower.
+    authsrv.HEX_CAST_TRIGGERS = False
+    try:
+        st_off = fresh_state()
+        ele_off = body(st_off, 11, [(ORISON, 1.0, 2), (EMPATHY, 2.0, 10)], 0, 11, health=300.0)
+        episode(st_off, 11, AURA, 13, caster=11)
+        _sink, send = collector()
+        authsrv.land_skill(send, st_off, 11, ele_off, 0)
+    finally:
+        authsrv.HEX_CAST_TRIGGERS = True
+    hp_off5 = st_off["agents"][11]["health"]
     ratio = (w10[0][1] / w5[0][1]) if (w5 and w10 and w5[0][1]) else None
-    check(ratio is not None and abs(ratio - 2.0) < 1e-6 and hp_after5 >= 323.0,
-          "2c. the ratio is exactly 2 and the bearer's book took the 23", (ratio, hp_after5))
+    check(ratio is not None and abs(ratio - 2.0) < 1e-6 and abs((hp_after5 - hp_off5) - 23.0) < 1e-9,
+          "2c. the ratio is exactly 2 and the bearer's book took the 23: the same cost-5 "
+          "completion under --no-hex-cast-triggers leaves it exactly 23 lower (A/B -- Orison's "
+          "own self-heal rides both arms)", (ratio, hp_after5, hp_off5))
     # KNOWN-BAD ARM: the payoff emitted AFTER the 58 -- the order check must redden
     real = authsrv.on_cast_triggers
     st = fresh_state()
@@ -274,6 +296,24 @@ try:
           and st["agents"][12]["health"] >= 80.0 and st["player_health"] == 100.0,
           "3d. KNOWN-BAD ARM: the monk is the HEXER (its Backfire sits on the player): its own "
           "completion fires nothing -- the hook reads episodes ON the caster, never BY it", sent[:3])
+    # TWO Backfires on the monk from two hexers (the fix pass's RV-1): ONE punishment, the
+    # NEWEST episode's -- its hexer, its rank (EffectTable.apply stacks a second episode;
+    # retail's one-word-per-completion is OBSERVED for 180, newest-wins is RECONSTRUCTION)
+    st = fresh_state()
+    body(st, 10, [], None, PLAYER, health=100.0, maximum=100.0)
+    monk = body(st, 12, [(ORISON, 1.0, 2)], 0, 12, health=250.0, maximum=300.0)
+    episode(st, 12, BACKFIRE, 3, caster=PLAYER, seconds=10.0, applied=time.time() - 2.0)
+    episode(st, 12, BACKFIRE, 12, caster=10, seconds=10.0, applied=time.time() - 1.0)
+    sent, send = collector()
+    authsrv.land_skill(send, st, 12, monk, 0)
+    pun = [w for w in words(sent, AI55, 12) if w[1] < 0]
+    fin = finished_at(sent, 12)
+    check(len(pun) == 1 and pun == words(sent, AI55, 12, 10)
+          and abs(pun[0][1] - f32(-authsrv.skill_scale_value(BACKFIRE, 12) / 300.0)) < 1e-7
+          and len(fin) == 1 and pun[0][0] == fin[0] - 1,
+          "3e. two hexers' Backfires on one monk: ONE [55, monk, hexer, -f] ahead of its [58], "
+          "the NEWER episode's (agent 10 at rank 12, 119) -- not one per episode, not the older "
+          "hexer's 56", (pun, fin))
 
     # ------------------------------------------------------------------ 4
     print("== 4. nothing fires: an attack skill, a signet, a stripped / expired / re-cast "
@@ -323,10 +363,89 @@ try:
           "4c. an INTERRUPTED cast ([59] / [35]) fires nothing -- retail's stopped casts under a live "
           "180: 0 of 13", (res, sent[:3]))
 
+    print("== 4b. the fix pass: a refreshed 180, a dead target, Deep Wound, the rounding ==")
+    # RV-1: a bearer holding TWO live 180 episodes (a re-cast stacks one: EffectTable.apply)
+    # draws ONE heal per completion -- retail, 11 of 11 completions after a refresh
+    st = fresh_state()
+    ele = body(st, 11, [(ORISON, 1.0, 2)], 0, 11)
+    episode(st, 11, AURA, 13, caster=11, applied=time.time() - 30.0)
+    episode(st, 11, AURA, 13, caster=11, applied=time.time() - 5.0)
+    sent, send = collector()
+    authsrv.land_skill(send, st, 11, ele, 0)
+    ahead = [x for x in words(sent, HEAL55, 11, 11) if finished_at(sent, 11) and x[0] < finished_at(sent, 11)[0]]
+    check(len(st["effects"].on_agent(11)) == 2 and payoff_ahead(sent, 11, 11) and len(ahead) == 1
+          and abs(ahead[0][1] - f32(23 / 555.0)) < 1e-7,
+          "4d. a bearer holding two live 180 episodes (a refresh) completing Orison: ONE 23 / 555 "
+          "ahead of its [58], not one per episode (retail 11 of 11 after a refresh, "
+          "20260928T103123 :50061 / :58544)", ahead)
+    # RV-2: the cast's TARGET died during the cast -- land_skill's dead-target exit still
+    # sends the bearer's [58], and retail's payoff rides it (3 of 3 live completions)
+    st = fresh_state()
+    corpse = body(st, 13, [], None, PLAYER, health=0.0, maximum=100.0)
+    corpse["dead"] = True
+    ele = body(st, 11, [(EMPATHY, 2.0, 10)], 0, 13)
+    episode(st, 11, AURA, 13, caster=11)
+    sent, send = collector()
+    authsrv.land_skill(send, st, 11, ele, 0)
+    fin = finished_at(sent, 11)
+    died_ok = (payoff_ahead(sent, 11, 11) and len(fin) == 1 and "(its target died)" in sent[fin[0]][2]
+               and abs(words(sent, HEAL55, 11, 11)[0][1] - f32(46 / 555.0)) < 1e-7)
+    # ...and a Backfire that KILLS the caster at that exit ends it there too: no [58]
+    st = fresh_state()
+    corpse = body(st, 13, [], None, PLAYER, health=0.0, maximum=100.0)
+    corpse["dead"] = True
+    monk = body(st, 12, [(ORISON, 1.0, 2)], 0, 13, health=50.0, maximum=100.0)
+    episode(st, 12, BACKFIRE, 3, caster=PLAYER, seconds=10.0)
+    sent2, send = collector()
+    authsrv.land_skill(send, st, 12, monk, 0)
+    killed_ok = (monk["dead"] and not finished_at(sent2, 12) and len(words(sent2, AI55, 12, PLAYER)) == 1)
+    check(died_ok and killed_ok,
+          "4e. a 180 bearer whose spell's TARGET died mid-cast: its [58] '(its target died)' still "
+          "carries the heal IMMEDIATELY ahead of it (OBSERVED 3 of 3: 20260817T231139 :54071 b10 / "
+          "b14, :50286 b10); a Backfire that kills the caster there ends the cast, no [58]",
+          ([(hex(o), v, l) for o, v, l in sent][:3], [(hex(o), v) for o, v, _l in sent2][:4]))
+    # RV-4 (a): the 180 heal is HEALING -- a Deep-Wounded bearer's word is cut through
+    # heal_agent's door (healing=True), never the uncut 46; the twin is heal_agent itself
+    st = fresh_state()
+    ele = body(st, 11, [(EMPATHY, 2.0, 10)], 0, PLAYER)
+    episode(st, 11, AURA, 13, caster=11)
+    st["deep_wound"] = {11: 111.0}
+    sent, send = collector()
+    authsrv.land_skill(send, st, 11, ele, 0)
+    st_twin = fresh_state()
+    body(st_twin, 11, [], None, PLAYER)
+    st_twin["deep_wound"] = {11: 111.0}
+    twin, send = collector()
+    authsrv.heal_agent(send, st_twin, 11, 11, 46, 0, healing=True)
+    got = [round(f * 555.0, 3) for _i, f in words(sent, HEAL55, 11, 11)]
+    want = [round(dec(v[3]) * 555.0, 3) for op, v, _l in twin if op == FLOAT_T]
+    check(payoff_ahead(sent, 11, 11) and len(got) == 1 and got == want and got[0] in (36.0, 37.0),
+          "4f. a Deep-Wounded 180 bearer's cost-10 completion: the word is heal_agent's Deep Wound "
+          "cut of 46 (healing=True; 36 by HEAL-INT's truncation, where retail's six words round to "
+          "37 -- CONTESTED, skills 69.4), never the uncut 46", (got, want))
+    # RV-4 (c): the rounding the server CHOSE (half-up; the tape cannot discriminate -- every
+    # witnessed product is whole): 7 x 240 % = 16.8 -> 17 (truncation 16), 7 x 220 % = 15.4 -> 15
+    # (ceiling 16)
+    rounded = {}
+    for rank in (2, 1):
+        st = fresh_state()
+        body(st, 11, [], None, PLAYER)
+        episode(st, 11, AURA, rank, caster=11)
+        sent, send = collector()
+        authsrv.on_cast_triggers(send, st, 11, ORISON, 0, paid=7)
+        rounded[rank] = [round(f * 555.0, 3) for _i, f in words(sent, HEAL55, 11, 11)]
+    check(rounded == {2: [17.0], 1: [15.0]},
+          "4g. a paid 7 at rank 2 (240 %) heals 17 and at rank 1 (220 %) heals 15 -- half-up, the "
+          "server's CHOICE (UNDISCRIMINATED on tape: costs 5 / 10 make every product whole)", rounded)
+
     # ------------------------------------------------------------------ 5
     print("== 5. the player: the real press and cast_tick's E5 ==")
 
-    def press_and_land(sid, target, st):
+    def press_and_land(sid, target, st, paid=None, close=False):
+        """The real press, then cast_tick's E5. `paid`: the cast PAID that much (a glyph's
+        discount, written onto the pending cast) and the completion runs under ENERGY, the
+        arm that hands `cast["cost"]` to the payoff. `close`: the E3 / E6 run out too and the
+        caster frees, so the next press is a fresh cast (the RV-1 re-cast)."""
         saved = (authsrv.skill_cost, authsrv.weapon_satisfies)
         authsrv.skill_cost = lambda s: (0, 0)          # the press's gates; the payoff reads the row
         authsrv.weapon_satisfies = lambda s: True
@@ -338,8 +457,22 @@ try:
         for c in st.get("pending_casts") or ():
             for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
                 c[k] -= 30.0
+            if paid is not None:
+                c["cost"] = paid
         sent, send = collector()
-        authsrv.cast_tick(send, st, 0)
+        _energy = authsrv.ENERGY
+        authsrv.ENERGY = _energy or paid is not None
+        try:
+            authsrv.cast_tick(send, st, 0)
+        finally:
+            authsrv.ENERGY = _energy
+        if close:
+            for c in st.get("pending_casts") or ():
+                for k in ("e3_at", "e6_at"):
+                    c[k] -= 60.0
+            _sink2, send2 = collector()
+            authsrv.cast_tick(send2, st, 0)
+            st["cast_busy_until"] = 0.0
         return sent
 
     st = fresh_state(player_health=50.0)
@@ -386,14 +519,47 @@ try:
     check(not words(sent, HEAL55, PLAYER, PLAYER) and not finished_at(sent, PLAYER),
           "5c. a CANCELLED cast releases ([59] / E2) and fires nothing", sent[:3])
     # a Backfire that kills the player ends the completion
+    # The player ALSO wears its own 180, opened after the Backfire (the higher buff id, so it
+    # would fire second): the killing payoff must stop the hook itself, or a dead player is
+    # "healed" -- heal_agent has no dead-player door (the fix pass made 5d carry the 180)
     st = fresh_state(player_health=20.0)
     body(st, 10, [], None, PLAYER, health=100.0, maximum=100.0)
     episode(st, PLAYER, BACKFIRE, 3, caster=10, seconds=10.0)
+    episode(st, PLAYER, AURA, 12, caster=PLAYER)
     sent = press_and_land(ORISON, PLAYER, st)
     check(st.get("player_dead") and len(words(sent, AI55, PLAYER, 10)) == 1
           and not finished_at(sent, PLAYER) and not words(sent, HEAL55, PLAYER, PLAYER),
           "5d. a foe's Backfire (56) killing the player at its E5 ends the completion: the "
-          "punishment, the death, no [58], no heal", [(hex(o), v) for o, v, _l in sent][:4])
+          "punishment, the death, no [58], no heal -- not even its own live 180's payoff, which "
+          "would have fired next", [(hex(o), v) for o, v, _l in sent][:4])
+    # RV-1 on the player's own path (no AI gate holds its re-cast): 180 cast TWICE through the
+    # real press and cast_tick stacks two episodes; the next Orison draws ONE heal, not two
+    st = fresh_state(player_health=50.0)
+    body(st, 10, [], None, PLAYER, health=100.0, maximum=100.0)
+    with contextlib.redirect_stdout(io.StringIO()):
+        press_and_land(AURA, PLAYER, st, close=True)
+        press_and_land(AURA, PLAYER, st, close=True)
+        n_aura = len([e for e in st["effects"].on_agent(PLAYER) if e["skill"] == AURA])
+        sent = press_and_land(ORISON, PLAYER, st)
+    fin = finished_at(sent, PLAYER)
+    ahead = [x for x in words(sent, HEAL55, PLAYER, PLAYER) if fin and x[0] < fin[0]]
+    check(n_aura == 2 and payoff_ahead(sent, PLAYER, PLAYER) and len(ahead) == 1,
+          "5e. the player re-casts 180 (two live episodes) and completes Orison: ONE heal ahead of "
+          "its [58] -- one payoff per trigger skill per completion (retail 11 of 11 after a refresh)",
+          (n_aura, ahead))
+    # RV-4 (b): the player is healed on the energy the cast PAID (`cast["cost"]` under ENERGY),
+    # not the record's 5: a glyph-discounted 3 at 440 % = 13.2 -> 13, never 22
+    st = fresh_state(player_health=50.0)
+    body(st, 10, [], None, PLAYER, health=100.0, maximum=100.0)
+    episode(st, PLAYER, AURA, 12, caster=PLAYER)
+    with contextlib.redirect_stdout(io.StringIO()):
+        sent = press_and_land(ORISON, PLAYER, st, paid=3)
+    pool = authsrv.player_max_health(st)
+    w = words(sent, HEAL55, PLAYER, PLAYER)
+    check(payoff_ahead(sent, PLAYER, PLAYER) and abs(w[0][1] - f32(13 / float(pool))) < 1e-7,
+          "5f. the player's paid cost: Orison discounted to 3 energy (written onto the cast, as "
+          "a glyph does) under rank-12 180 heals 13 = 3 x 440 %, not the record's 22",
+          (round(w[0][1] * pool, 3) if w else None, pool))
 
     # ------------------------------------------------------------------ 6
     print("== 6. Empathy's swing path: byte-identical with the cast hook on and off ==")
@@ -465,20 +631,26 @@ try:
         return "\n".join(src.splitlines()[n.lineno - 1:n.end_lineno])
 
     ls, ct = body_of("land_skill"), body_of("cast_tick")
-    i_ls = ls.find("if on_cast_triggers(send, state, agent_id, skill_id, conn_id) and agent.get(\"dead\"):")
+    # RE-AIMED by the fix pass (RV-2): land_skill holds TWO calls now -- the dead-target
+    # exit's (retail fires the payoff there, 3 of 3) and the main exit's -- each ahead of
+    # its own [58] send; the first cut held one and labelled the dead-target exit silent
+    hook = "if on_cast_triggers(send, state, agent_id, skill_id, conn_id) and agent.get(\"dead\"):"
+    i_dt = ls.find(hook)
+    i_dt58 = ls.find("f\"agent {agent_id} finishes casting {skill_id} (its target died)\")", i_dt)
+    i_ls = ls.find(hook, i_dt + 1)
     i_ls58 = ls.find("f\"agent {agent_id} finishes casting {skill_id}\")", i_ls)
     i_ct = ct.find("and on_cast_triggers(send, state, PLAYER_AGENT_ID, cast[\"skill_id\"], conn_id,")
     i_ct58 = ct.find("f\"skill_finished: skill {cast['skill_id']} completes\")", i_ct)
     order = [funcs[n].lineno for n in ("signet_activation", "hex_skill_use_chain",
                                        "on_attack_triggers", "on_cast_triggers")]
-    check(i_ls > 0 and i_ls58 > i_ls and i_ct > 0 and i_ct58 > i_ct
-          and ls.count("on_cast_triggers(") == 1 and ct.count("on_cast_triggers(") == 1
+    check(0 < i_dt < i_dt58 < i_ls < i_ls58 and i_ct > 0 and i_ct58 > i_ct
+          and ls.count("on_cast_triggers(") == 2 and ct.count("on_cast_triggers(") == 1
           and src.count("if not _na_fail:") == 2
           and order[0] < order[1] < order[2] < order[3],
-          "8a. one call in land_skill and one in cast_tick, each before its [58] send; "
-          "test_labelconsumers' `if not _na_fail:` count still 2; on_cast_triggers sits after "
-          "on_attack_triggers, outside test_mechanics' signet_activation..hex_skill_use_chain slice",
-          (i_ls, i_ls58, i_ct, i_ct58, order))
+          "8a. two calls in land_skill (the dead-target exit's, then the main exit's) and one in "
+          "cast_tick, each before its own [58] send; test_labelconsumers' `if not _na_fail:` count "
+          "still 2; on_cast_triggers sits after on_attack_triggers, outside test_mechanics' "
+          "signet_activation..hex_skill_use_chain slice", (i_dt, i_dt58, i_ls, i_ls58, i_ct, i_ct58, order))
 
     # ------------------------------------------------------------------ 9
     print("== 9. the reader on the live corpus (trigjoin.py) ==")
@@ -500,21 +672,31 @@ try:
               "9b. P1c: one word IMMEDIATELY ahead of the bearer's 58 on >= 256 of >= 257 live "
               "completions (FLOORS); every miss has a Drain Enchantment onto its bearer",
               (s["p1c_ok"], s["p1_n"], s["misses"]))
+        # RE-AIMED by the fix pass (RV-3): the law checked PER ROW -- f x predicted_max ==
+        # round(0.8 h), h the bearer's fit's heal -- where the first cut matched the two literal
+        # tuples (46, 37, 455) / (23, 18, 455), so a later capture's confirming Deep Wound word
+        # at any other cost or maximum would have reddened it. The counts stay FLOORS; an
+        # UNDECIDED word (a bearer with no clean fit) is printed by the reader, never scored.
         ele = {k: v for k, v in s["p2c_fits"].items() if v == [(555, [13])]}
-        check(len(ele) >= 12 and len(s["p2c_dw"]) >= 6 and all(x[3:6] in ((46, 37, 455), (23, 18, 455))
-                                                               for x in s["p2c_dw"]),
-              "9c. P2c: >= 12 bearers fit (555, rank 13) alone -- 23 / 46, the server's 460 % -- and "
-              "every Deep Wound word is round(0.8 h) over 455", (len(ele), s["p2c_dw"][:2]))
+        dw = [x for x in s["p2c_dw"] if x[-1] is not None]
+        law = [x for x in dw if x[-1] is True and x[4] == int(0.8 * x[3] + 0.5)
+               and abs(x[6] - x[4]) <= 0.003]
+        sharp = [x for x in law if int(0.8 * x[3] + 0.5) != int(0.8 * x[3])]
+        check(len(ele) >= 14 and len(dw) >= 6 and len(law) == len(dw) and len(sharp) >= 4,
+              "9c. P2c: >= 14 bearers fit (555, rank 13) alone -- 23 / 46, the server's 460 % -- and "
+              "every decided Deep Wound word is round(0.8 h) over predicted_max (>= 6, >= 4 of them "
+              "where round and truncation differ: 37 from 46)",
+              (len(ele), len(dw), len(law), len(sharp), s["p2c_dw"][:2]))
         check(s["p3_not_live"] >= 74 and not s["p3_with_word"]
               and s["q4"] and s["q5"] and s["q6"],
               "9d. no word on >= 74 completions under no live 180, the 180 re-cast, a signet or a "
               "stopped cast -- the four 'nothing fires' the server copies",
               (s["p3_not_live"], s["q4_refresh"], len(s["q5_nonspell"]), len(s["q6_stopped"])))
         check(len(fx["p2c_off"]) == fx["p2c_pairs"] > 0 and af["p1c_ok"] == 0
-              and [x for x in tr["p2c_dw"] if not x[-1]],
+              and [x for x in tr["p2c_dw"] if x[-1] is False],
               "9e. the arms: a fixed heal is off on every ratio pair, the word-after-58 model "
               "places 0, the truncating cut misses the 37s",
-              (fx["p2c_pairs"], af["p1c_ok"], len([x for x in tr["p2c_dw"] if not x[-1]])))
+              (fx["p2c_pairs"], af["p1c_ok"], len([x for x in tr["p2c_dw"] if x[-1] is False])))
         check(s["p1_mixed"] >= 1 and not s["p1"] and not s["p2"],
               "9f. and the two predictions FAILED as registered stay printed as failed (a mixed "
               "instant; the Deep Wound words) -- never re-worded", (s["p1_mixed"], s["p1"], s["p2"]))
@@ -550,6 +732,31 @@ try:
                     off[f"{kind}.{key}"] = "not carried"
         check(not off, f"10a. every one of the {len(RECORD)} carried skills rows and both attribute "
               f"tables are the vault's own, column for column (build {RECORD_BUILD})", off)
+
+    # ------------------------------------------------------------------ 11
+    print("== 11. the reader's Deep Wound verdict on its own (trigjoin.dw_verdict; bare) ==")
+    # The fix pass's RV-3: a Deep Wound word over a bearer whose clean words fit SEVERAL
+    # (max, rank) pairs -- 20260917T224104 :62557 b117's shape, 25 / 480 and 50 / 480 at cost
+    # 5 / 10, five fits 192..576 -- used to score False whatever it said, so a CONFIRMING word
+    # reddened P2c. Now: True when some fit predicts it, False when none does, None (UNDECIDED)
+    # with no fit at all. Pure arithmetic, no vault.
+    import trigjoin
+    multi = trigjoin.bearer_fit([(5, f32(25 / 480.0)), (10, f32(50 / 480.0))], 200, 500)
+    unique = trigjoin.bearer_fit([(5, f32(23 / 555.0)), (10, f32(46 / 555.0))], 200, 500)
+    verdict = {
+        "confirming": trigjoin.dw_verdict(multi, 5, f32(20 / 384.0), 200, 500)[-1],
+        "refuting": trigjoin.dw_verdict(multi, 5, f32(19 / 384.0), 200, 500)[-1],
+        "no fit": trigjoin.dw_verdict([], 5, f32(20 / 384.0), 200, 500)[-1],
+        "37 round": trigjoin.dw_verdict(unique, 10, f32(37 / 455.0), 200, 500)[-1],
+        "37 trunc": trigjoin.dw_verdict(unique, 10, f32(37 / 455.0), 200, 500, "trunc")[-1],
+    }
+    check(len(multi) == 5 and unique == [(555, [13])]
+          and verdict == {"confirming": True, "refuting": False, "no fit": None,
+                          "37 round": True, "37 trunc": False},
+          "11a. a confirming Deep Wound word over a five-fit bearer (20 / 384 = round(0.8 x 25) over "
+          "predicted_max(480)) is CONFIRMING, a 19 / 384 refutes every fit, no fit is UNDECIDED; "
+          "on the unique (555, 13) bearer 37 / 455 holds by round and fails by truncation",
+          (multi, unique, verdict))
 finally:
     for _n, _v in _SAVED.items():
         setattr(authsrv, _n, _v)

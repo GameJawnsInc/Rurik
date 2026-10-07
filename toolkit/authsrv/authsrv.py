@@ -28312,12 +28312,24 @@ def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
     this runs right AHEAD of its [58] -- the slot retail puts the payoff in,
     IMMEDIATELY before the bearer's [58, b, 0] on 256 of 257 live completions
     (trigjoin.py P1c; OBSERVED for bodies, RECONSTRUCTION for the player).
-    Every live episode ON the caster whose row says `triggers_on_cast` fires:
+    Each trigger SKILL on the caster fires ONCE per completion, however many
+    live episodes of it the caster holds -- EffectTable.apply gives a re-cast
+    a new episode beside the old one (effects.py: retail's own allocator),
+    and retail sends ONE word on 11 of 11 spell completions under two
+    unexpired, unstripped 180s (20260928T103123 :50061 x7, :58544 x4;
+    OBSERVED, the fix pass's RV-1). The NEWEST live episode is the one that
+    fires (its rank, its caster) -- the one a re-cast leaves: RECONSTRUCTION,
+    no tape holds two episodes of one trigger skill at different ranks or
+    from two casters.
 
       * CAST_TRIGGER_HEAL (Aura of Restoration 180) -- the BEARER is healed for
-        `paid` x the episode's scale % / 100, half-up, whole points: OBSERVED
-        (trigjoin P2c: cost 5 -> 23 and 10 -> 46 over 555 at rank 13, every
-        bearer one (max, rank) fit). It is HEALING, so Deep Wound cuts it --
+        `paid` x the episode's scale % / 100, whole points: OBSERVED (trigjoin
+        P2c: cost 5 -> 23 and 10 -> 46 over 555 at rank 13 -- 14 of the 17
+        bearers with clean words fit (555, 13) alone, the other 3 fit several
+        (max, rank) pairs, every one consistent). The ROUNDING is
+        UNDISCRIMINATED: every witnessed product is whole (the costs on tape
+        are 5 and 10, the scale 200 + 20 x rank), so half-up here is a
+        choice, not a measurement. It is HEALING, so Deep Wound cuts it --
         OBSERVED, 6 words at 0x00F1 bit 0x20 over 455 (heal_agent's door;
         retail rounds the cut, 37 from 46, where heal_agent truncates to 36 --
         HEAL-INT's rule, named in skills 69.4, not changed here). `paid` is the
@@ -28334,7 +28346,13 @@ def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
     attack skill), for an episode already past its expiry (one completion at
     age 60.031 drew none), or for the bearer re-casting the episode's own
     skill (180 under a live 180, 0 of 2). A stopped / interrupted / cancelled /
-    failed cast never reaches a call site. Returns the number of payoffs fired;
+    failed cast never reaches a call site. A spell whose TARGET died during
+    the cast still completes and still fires (land_skill's dead-target exit
+    calls this too): OBSERVED 3 of 3 -- the live 180 completions whose
+    0x00A0 target was alive at the announce and carried the death bit
+    before the bearer's [58] (20260817T231139 :54071 b10 764.549 and b14
+    769.736, :50286 b10 376.744) each carry the word (the fix pass's RV-2).
+    Returns the number of payoffs fired;
     a caller whose caster died of one aborts the rest of its completion batch
     (land_swing's rule for on_attack_triggers)."""
     if not HEX_CAST_TRIGGERS or not EFFECTS or not _is_spell_skill(skill_id):
@@ -28343,10 +28361,8 @@ def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
     if not table:
         return 0
     now = time.time()
-    fired = 0
-    for ep in list(table.on_agent(caster_id)):
-        if target_dead(state, caster_id):
-            break                       # a payoff before this one killed the bearer
+    newest = {}                         # trigger skill -> its newest live episode (RV-1)
+    for ep in table.on_agent(caster_id):
         what = skill_effect_row(ep["skill"]).get("triggers_on_cast")
         if what not in (CAST_TRIGGER_HEAL, CAST_TRIGGER_DAMAGE):
             continue
@@ -28355,6 +28371,13 @@ def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
         hexer = ep.get("caster") or PLAYER_AGENT_ID
         if ep["skill"] == skill_id and hexer == caster_id:
             continue                    # the bearer re-casting its own: 0 of 2 (trigjoin Q4)
+        was = newest.get(ep["skill"])
+        if was is None or float(ep.get("applied_at", 0.0)) >= float(was[0].get("applied_at", 0.0)):
+            newest[ep["skill"]] = (ep, what, hexer)
+    fired = 0
+    for ep, what, hexer in sorted(newest.values(), key=lambda x: x[0]["buff"]):
+        if target_dead(state, caster_id):
+            break                       # a payoff before this one killed the bearer
         try:
             scale = skill_scale_value(ep["skill"], ep.get("rank", 0))
         except Exception as exc:                                # noqa: BLE001
@@ -39157,6 +39180,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
                        is not None) else None)
     if _tid != agent_id and target_dead(state, _tid) and _aot_corpse is None:
         agent["casting"] = None
+        # SKILLS-CT (studies/skills 69.6): the on-cast payoff rides this [58] too,
+        # IMMEDIATELY ahead of it -- OBSERVED 3 of 3 live 180 completions whose
+        # target died during the cast (the fix pass's RV-2); a payoff that kills
+        # the caster ends the cast here as at the main exit below.
+        if on_cast_triggers(send, state, agent_id, skill_id, conn_id) and agent.get("dead"):
+            return
         if _inst:
             # SKILLS-IA: the close an instant skill sends for every finished
             # cast is the [48] (the rule the [58] line below states for a
@@ -39408,8 +39437,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # of its [58]: OBSERVED for bodies, 256 of 257 live 180 completions (a hero's
     # E5 / E3 above stay first, RECONSTRUCTION: no hero bearer is on tape). A
     # payoff that KILLS the caster ends the cast here, nothing of it lands --
-    # land_swing's rule for on_attack_triggers (RECONSTRUCTION). Only this exit:
-    # the dead-target, chain-gated and resurrection exits above fire none.
+    # land_swing's rule for on_attack_triggers (RECONSTRUCTION). The dead-target
+    # exit above fires it too (OBSERVED 3 of 3, RV-2); the chain-gated and
+    # resurrection exits fire none (UNWITNESSED: the player's failed chain step
+    # and its resurrection fire none either, so the two paths agree).
     if on_cast_triggers(send, state, agent_id, skill_id, conn_id) and agent.get("dead"):
         agent["casting"] = None
         return

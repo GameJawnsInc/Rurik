@@ -542,10 +542,14 @@ verified = """OBSERVED, toolkit/authsrv/trigjoin.py over the live corpus 2026-10
 every spell completion of the bearer carries ONE 0x00A3 [55, b, b, +f] IMMEDIATELY ahead \
 of its [58, b, 0], 256 of 257 (the one miss after a Drain Enchantment 68 onto the bearer); \
 none on 74 completions where 180 is gone, on a signet (0 of 5), a stopped cast (0 of 13) \
-or the 180 re-cast itself (0 of 2). The amount is the paid energy x the client's own scale \
-slot as a percent (200..500, bit set; 38797 / 38833 / 38849 / 38888 / 38974 alike), half-up: \
-cost 5 -> 23 and cost 10 -> 46 over a 555 maximum (rank 13, the one fit of every Elementalist \
-bearer; the declared [42] 555 and 480 both inside the fits). Deep Wound cuts it (6 words \
+or the 180 re-cast itself (0 of 2); ONE word per completion under two live 180s (a refresh, \
+11 of 11), and the word still rides a completion whose target died mid-cast (3 of 3). The \
+amount is the paid energy x the client's own scale slot as a percent (200..500, bit set; \
+38797 / 38833 / 38849 / 38888 / 38974 alike): cost 5 -> 23 and cost 10 -> 46 over a 555 \
+maximum at rank 13 -- 14 of the 17 bearers with clean words fit (555, 13) alone, the other \
+3 several (max, rank) pairs, all consistent; the declared [42] 555 and 480 are inside the \
+fits. The rounding is UNDISCRIMINATED (every witnessed product is whole; the server's \
+half-up is a choice). Deep Wound cuts it (6 words \
 under 0x00F1 bit 0x20: 37 / 18 over 455). The client's own template numbers two slots: a \
 HEAL at str1 (the scale, AGREE_PROGRESSION) and an ENERGY at str2 (the bonus slot, 0..1 bit \
 clear: INDETERMINATE) -- template sha16 3ddf258356bb54b7 on 38797 (skilldesc.py)."""
