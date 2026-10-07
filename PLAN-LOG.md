@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### DEATHWALK-E5 CLOSED -- 2026-10-06 -- **D4 is confirmed on the client. A second known-bad launch (harness `20261006T200722`, tape `authsrv-20261006T200803-c1`) judged 9 deaths, all `old-shape` (4 in flight, 5 next start), which brings the known-bad arm's in-flight cell to 6. The final table: D4 5 in flight + 6 next start, 11 of 11 PASS; known-bad 6 + 11, 17 of 17 old-shape. Every cell is at or over its floor of 5, and 28 of 28 judged deaths have their arm's shape. DEATHWALK-H6 HELD; TARGET_DEATH_HOLDS stays ON.**
+
+- **Record:** FINDINGS §1z-ds.53; `studies/movecode/RUN-DEATHWALK.md` §3d.
+- **Not exercised:** the two RECONSTRUCTION cases (a chain disturbed by a skill press; the hold already down).
+- **DEATHWALK still open:** E1-E4 and the C2 / C3 same-tick leftovers.
+
 ### DEATHWALK-E5 known-bad launch -- 2026-10-06 -- **The same rig and plan with `--target-death-releases-now` (harness `20261006T195712`, tape `authsrv-20261006T195807-c1`): all 16 died to the heroes, 8 as the chain's target. All 8 judged deaths are `old-shape`: `[8, 0]` alone, 1-3 ms after the death, no `[3]`, 0.10-0.47 s ahead of D4's schedule. The next-start cell is exposed (6); the in-flight cell is UNEXPOSED (2 of 5).**
 
 - **Record:** `studies/movecode/RUN-DEATHWALK.md` §3c, with both arms side by side.
