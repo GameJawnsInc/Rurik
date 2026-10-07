@@ -173,8 +173,8 @@ run (`bc8f409b`). **S19 is not built.**
 | RANGERPRE-S20 | QUESTFLOW-H4 | reward item + quest-item removal via one shared grant helper | L | **landed** `1c512339`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §3) |
 | RANGERPRE-S21 | WEAPONREFUSE-B | persist hand changes across loads (default ON since the run) | L | **landed** `3ab6b017`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §1); the default flipped ON in `bc8f409b` |
 | RANGERPRE-S22 | CONDHIT | an attack skill's condition needs a landed strike (§5, found by S14's reviewer) | D | **landed** `4cd9172e` (2026-10-07, lane `desk-condhit`; §5); the client look is owed (a runsheet, not a run) |
-| RANGERPRE-S23 | BLINDCLOSE | a body's Blind-missed attack skill closes with its own `[46]`, not the swing's `[1]` (§5, found by S22) | D | **landed** 2026-10-07 (PLAN-LOG "RANGERPRE-S23 and S24"; §5); the client look is owed (a runsheet, not a run) |
-| RANGERPRE-S24 | BODYBLIND | a Blinded body's attack skill on another body rolls Blind's miss (§5, found by S22) | D | **landed** 2026-10-07 (the same commit; §5); the client look is owed (the same runsheet) |
+| RANGERPRE-S23 | BLINDCLOSE | a body's Blind-missed attack skill closes with its own `[46]`, not the swing's `[1]` (§5, found by S22) | D | **landed** `4ab669e0` (2026-10-07; PLAN-LOG "RANGERPRE-S23 and S24"; §5); the client look is owed (a runsheet, not a run) |
+| RANGERPRE-S24 | BODYBLIND | a Blinded body's attack skill on another body rolls Blind's miss (§5, found by S22) | D | **landed** `4ab669e0` (2026-10-07, with S23; §5); the client look is owed (the same runsheet) |
 
 **Deferred, with reasons** (critic's DEFER list): ROUTE-C corner-leg routing (contests
 MOVECODE-1z-dn.5's "no route" closure, conflicts with LOOT's pickup walk, and our A* picks a
