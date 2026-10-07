@@ -28,6 +28,46 @@ move back.
 
 ---
 
+### SLICE-F52 52.8 -- 2026-10-07 -- **A skill whose recharge is 0 now completes with no `0x00E5`, and the player's with no `0x00E6` either. Retail's 56 of 56 recharge-0 completions through the E5 path carry neither; 291 of 291 with a recharge carry an E5. The 56 are the observer's 382 / 384 / 385 x44 and the hero's 382 / 385 x12; skill 2's 3 raises are E7, RESSIG's rule, set aside. 348 is adrenal with a 4 s recharge and carries `E5(4)` 8 of 8, so adrenaline does not suppress the E5. Ours sent `E5 [.., 0]` and an E6 233 times on 382 / 384 / 385. An E5 zeroes both adrenaline halves on the client, so ours could erase a gain our own book kept. `ZERO_RECHARGE_SKIPS_E5`, SHIPPED ON, UNRUN; `--zero-recharge-e5` reverts.**
+
+- **Record:** [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F52 52.8-52.10. 52.5 now points there; the "382/385" in the old §8.1 line were skill ids.
+- **The census** (OBSERVED; `test_zerorecharge.py` §6 re-derives it on every run):
+  - 128 live connections, the observer anchored by `henchjoin.whose_agent`.
+  - Recharge 0: the observer 44 and the hero 12, all with no E5.
+  - With a recharge: the observer 256 and the hero 35, all with an E5.
+  - No E6 names 382 / 384 / 385.
+  - The observer's 17 zero-recharge E5s on 775 / 780 are DAGGERS-B5's failed-chain second E5s, and stay.
+- **What the tape does not separate.** It cannot tell "recharge 0" from "recharge 0 and adrenal": all 56 witnesses are adrenal, and the one non-adrenal witness is CASTAI-ZF17's interrupt (n=1). The 40 non-adrenal recharge-0 rows are therefore RECONSTRUCTION (52.9).
+- **Shipped.** One predicate, `completion_sends_e5(recharge)`, read off the value the E5 would carry. That is the table's 0 on every real row: none is fractional, and `halved_recharge` rounds .5 up. Four sites:
+  - `cast_tick`: no E5 and `no_e6`. The `[58]` / `[46]` / `[48]`, the hit and the E3 still ride the phase.
+  - `player_resurrection_lands`' non-boost arm.
+  - `hero_skill_messages`: the E3 and the E4's close are unchanged.
+  - `interrupt_body`'s hero mirror (RECONSTRUCTION): either revert restores it, so `--interrupt-zero-e5` now also restores the hero's E5(0) (said in its help and banner).
+- **Not this rule, unchanged:** DAGGERS-B5's second E5(0), RESSIG-B's boost repaint E5(0), the RESSIG boost path, and the player's interrupt (ZF17's flag). The pre-2026-10-07 bytes of `--no-player-resurrection` and `--no-resurrection-single-use` now also need `--zero-recharge-e5`.
+- **Tests:**
+  - `test_zerorecharge.py` is new: 24 checks bare (plus 1 declared skip), 31 vaulted. It drives every site in both arms and the negative controls, and runs `main()`'s own flag block, which must be a direct statement ahead of `srv.listen`. §6 skips only on an absent vault directory.
+  - Every guard was reddened in a scratch copy.
+  - Re-aimed, not weakened:
+    - `test_castcycle` §3 PINNED the old shape and now carries it as the revert arm's; floor 57 -> 60.
+    - `test_guards` §11 runs at 1 s and at 0; 45 -> 47.
+    - `test_signetboost` §4 (29 -> 30) and `test_ressig` §5 (20 -> 21) assert the pre-fix bytes under both reverts.
+    - The recharge-0 timing stubs of `test_labelconsumers` and `test_weapons` carry 5 s, because the E5 there was an order anchor.
+  - The lane's affected set, minus the four port-binders, is green: 213 of 213 files, 15,272 checks, vaulted.
+- **Review fix pass (3dc248b9):**
+  - §6 had swallowed load failures as a skip.
+  - The flag check did not prove `main()` reaches the block.
+  - 59 -> 56, and the overstatements about 348 were reworded.
+  - The `--interrupt-zero-e5` and RESSIG revert texts were corrected.
+- **Corrected from the triage:**
+  - Skill 2 does not separate the two readings (E7 explains it).
+  - "Observer 250 / others 41" was a property-41 anchor failing on the hero tape: the split is 256 / 35.
+  - Skill 2's two retail E6s close an `E5 [me, 2, 0, 3]`, one of 11 off-table observer E5(3)s on `20260817T231139`. Each lands where a team-mate uses (likely) the same skill; they are not a morale boost. Cause NOT FOUND.
+- **Owed:**
+  - The client run, per SLICE-F52 52.10.
+  - 976's corner: the one recharge-0 chain row still sends B5's E5(0) with no first E5. It is unwitnessed.
+  - The cause of the 11 E5(3)s.
+  - `adrenreplay` models an E5 only as "recharging" and not as its adrenaline zeroing.
+
 ### RANGERPRE-S22 -- 2026-10-07 -- **An attack skill's own condition now needs a landed strike. A Blind miss or a block inflicts nothing at all four sites: the player's melee strike and skill shot, and a body's melee attack skill and skill shot. OBSERVED for the player's melee attack skill under Blind, n = 1 against a 3-of-3 same-tape control. The live corpus's one failed activation of a conditioned attack skill is a Blind-missed Jagged Strike (20260917T224104 :62557, t=348.996). This is DAGGERS-F16's event, which was read at the time for the chain. It sends `[38, 117, 25, 3]` and no Bleeding, while the same skill's three hits on the same foe all bled. The block at every site, and a miss at the arrow's arrival and at both body sites, rest on WIKI (GWW "Hit" rev 2721374), because no tape shows one. `--no-condition-needs-hit` is the known-bad arm.**
 
 - **Record:** `studies/presearing/RANGERPRE.md` §4 (the S22 row) and §5.

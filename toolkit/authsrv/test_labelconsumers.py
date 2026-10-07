@@ -205,7 +205,12 @@ def main():
     saved_lv = (authsrv.CONDITION_RIDERS, authsrv.LABEL_KNOCKDOWNS, authsrv.CONDITION_FLAT_CONSTANTS)
     tables.setdefault("skills", {}).update(SKILLS)
     tables.setdefault("skill_effect", {}).update(EFFECTS)
-    authsrv.skill_timing = lambda sid: (1.0, 0.75, 0.0)
+    # recharge 5, not 0, since 2026-10-07 (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5): a
+    # 0-recharge cast completes with NO E5 now, and the cast's own E5 is this file's
+    # ORDER ANCHOR (section 4's "a second E5 with recharge 0", "ONE E5 (the cast's own,
+    # its recharge kept)", 974's "between the E5 and the E3"). The recharge is not what
+    # any section here is about; the rewinds put the E6 past due either way.
+    authsrv.skill_timing = lambda sid: (1.0, 0.75, 5.0)
     authsrv.skill_cost = lambda sid: (0, 0)
     authsrv.weapon_satisfies = lambda sid: True
     authsrv.apply_party_character({"player_weapon": "starter_wand"})

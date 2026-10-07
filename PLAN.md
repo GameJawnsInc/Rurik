@@ -2308,7 +2308,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   owner's `0x00B6` ruling. Also open there: serving the Reforged effect 3434; a wire-derived
   game_mode that can contradict a manifest; S22's client look (§5).
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
-* **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
+* **SLICE-F52 52.8** (no E5 / E6 at a recharge-0 completion): SHIPPED ON, UNRUN -- runsheet in studies/slice 52.10.
 * **RANGERLOOP-F9:** fixed on the desk 2026-10-07 (PLAN-LOG); owed, the RUN-T re-run
   (CONFIRM-2026-09-30 §12.3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
