@@ -3143,3 +3143,145 @@ Three close or correct this plan:
   wiki** (2026-09-28, studies/crossbuild §10.5): the 38888 client table reads bonus 10..85,
   and `skill_effect.204` now carries 10 / 85, build 38888 (rank 12: 70). The content overlay
   follows 38888 from that day; the pin stays 38797.
+
+## 45. Areas over time -- 2026-10-07: five more go live, and the caster's death gets its witness (desk pass 9, lane desk-aotrows)
+
+**Why now.** `PLAN.md` §8.1 carried two clauses this section answers: "the other eleven
+areas over time carry no row and are inert" and "whether a caster's death ends its area
+is UNVERIFIED (ours outlives it, an n = 1 lean)". A read-only Sonnet triage (2026-10-07)
+found that four of the eleven need rows only, a fifth one small field, and that a
+caster-death witness sat on disk unread. This section re-derives all of it with the
+repo's own tools; where the triage was wrong it says so (below).
+
+**The predictions, written before any reader ran** (the lane's scratch notes):
+P1 the five records -- 1094 156 u 5 s scale 10..40; 2222 156 u 5 s 30..40; 830 156 u 5 s
+10..50 bonus 1..3; 910 156 u 3 s 25..125 bonus 1..20; 1380 240 u 5 s 5..20 bonus 5..20.
+P2 at rank 12 through the client's interpolator: 34, 38, 42 (+ Burning 3 s), 105
+(+ Cracked Armor 16 s), 17. P3 ticks at +1 .. +5 (910: ONE at +3.0); no ground effect.
+P4 1380 with a ramp: 17, 34, 51, 68, 85. P5 the witness: on `20260929T100038` :51199 a
+Fire Storm announced at 562.188 by agent 10, its death word `0x00F1 [10, 16]` about 8.49 s
+after the COMPLETION and a clean tick at completion + ~10 (k = 10) on foes 4 and 6.
+P6 the twenty Zaishen casts tick only at k = 1..10 within 0.05 s.
+
+| | outcome |
+|---|---|
+| P1 | HELD. OBSERVED, `agents.WORLD` (the vault overlay, stamped build 38974) and the two snapshots in `vault/research/content-38797-2026-09-28` / `content-38888-2026-10-01`: the five records are IDENTICAL on 38797, 38888 and 38974, every column. |
+| P2 | HELD: `skill_damage(sid, 12)` = `skill_scale_value(sid, 12)` = 34 / 38 / 42 / 105 / 17; `skill_condition(830, 12)` = (480, 3.0), `(910, 12)` = (2077, 16.0). |
+| P3 | HELD (the server's schedule; RECONSTRUCTION as a claim about retail -- none of the five was ever cast on a live tape, aotjoin P8). |
+| P4 | HELD, behind the new field (below). |
+| P5 | HELD, with the offsets FROM THE COMPLETION (+2.011 after the announce): WEAPONS-C11 below. |
+| P6 | WRONG in one tick: 97 tick instants inside the reader's 0.05 s gate at k = 1..10 only, and ONE late tick outside it (51090 390.030 k = 2 at +2.068 -- CASTAI-Z2's P5r, inside the registered 0.100). The triage's "all within about 0.05 s" carried the same error. |
+
+**The records and the templates** (OBSERVED; `skilltable.py`, and `skilldesc.py --row`
+over the pinned 38797 client read as a tool -- labels, slots, flags and numbers only, no
+template text in the repo):
+
+| id | radius / duration | scale (rank 12) | bonus (rank 12) | template slots | flags |
+|---|---|---|---|---|---|
+| 1094 Breath of Fire | 156 / 5 | 10..40 (34) | -- | str1 FIRE_DAMAGE, str3 DURATION | AREA_ADJACENT |
+| 2222 Snow Storm | 156 / 5 | 30..40 (38) | -- | str1 COLD_DAMAGE, str3 DURATION | AREA_ADJACENT; attribute 51 (none) |
+| 830 Ray of Judgment | 156 / 5 | 10..50 (42) | 1..3 (3) | str1 HOLY_DAMAGE, str2 CONDITION_DURATION:Burning (governed, every second), str3 DURATION | AREA_ADJACENT |
+| 910 Spirit Rift | 156 / 3 | 25..125 (105) | 1..20 (16) | str1 LIGHTNING_DAMAGE, str2 CONDITION_DURATION:Cracked Armor, str3 DURATION read as a DELAY ("after N seconds") | ALL_FOES, AREA_ADJACENT |
+| 1380 Savannah Heat | 240 / 5 | 5..20 (17) | 5..20 (17), ENABLED, in no slot | str1 FIRE_DAMAGE with FOR_EACH, str3 DURATION | ALL_FOES, AREA_NEARBY |
+
+**What ships** (`content/world.toml` after `skill_effect.167`; `PLAN-LOG.md`):
+- **Five CLIENT-TABLE rows** -- `source = "client-table"`, `extractor =
+  "toolkit/clientscan/skilldesc.py"`, `build = 38797` (content.py's conditions). 1094 and
+  2222 are rows only; 830 adds `bonus_scale_means = "Burning"`, which `open_area` already
+  carries onto EVERY tick (Eruption 167's shape, §42); 910 adds `bonus_scale_means =
+  "Cracked Armor"` and `tick_period = 3.0` -- `tick_instants(t0, 3, 3)` is one strike at
+  +3.0, the word then Cracked Armor once per struck foe; 1380 adds `tick_ramp = "elapsed"`.
+- **The ramp** (`areatime.tick_amount`, re-exported; `authsrv.area_tick_ramp`;
+  `open_area` records it, `_area_strike` computes each tick's amount through it once, for
+  the player's words and a body's alike): tick k deals k x the area's amount (x the period's
+  seconds; Savannah Heat's period is 1), so 17, 34, 51, 68, 85 at rank 12. RECONSTRUCTION
+  from the template's FOR_EACH; the record's ENABLED bonus slot (5..20) equals the scale at
+  every rank and sits in no slot, so "k x scale" and "scale + (k - 1) x bonus" give the same
+  numbers on this record -- nothing here can tell them apart, and only the scale is read.
+  **`--no-area-tick-ramp`** (`AREA_TICK_RAMP`, column 0; main() flips it under a `global`)
+  reverts to the flat 17 a tick (85 over the area against 255), the known-bad reading.
+- **The wire is Fire Storm's OBSERVED shape reused -- RECONSTRUCTION, for all five**: the
+  completion opens the area at the target's position with no word (`[58]` only, no
+  `0x00A1`: no `area_visual` is known for any of them); a clean tick per foe inside the
+  record's radius; a hostile's tick onto the player is the tape's `0x00CF`, `[10, me, sid]`,
+  the word. 830's holy word rides the channel the server gives any standalone holy word --
+  property 16 today; desk-chan55 moves armour-ignoring spell damage to property 55 this
+  pass (CASTAI-ZF31), and `test_aotrows` pins that one check with the cross-lane note.
+  A condition on a FOE still sends no `[6]` id (Burning, Cracked Armor -- §8.1's known gap).
+
+**WEAPONS-C11 -- the area OUTLIVES its caster: OBSERVED, n = 1.** Re-derived with
+`aotjoin.py --rows --stamp 20260928T103123 --stamp 20260929T100038` and a raw read of the
+connection through `deepwoundjoin.sequence`. Cast #17, `20260929T100038` :51199: agent 10
+(the Zaishen Mage) announces Fire Storm at 562.188 on agent 3, completes at +2.011
+(t 564.199), ticks k = 1, 2, 3 (foes 3 and 4, then 3), nothing at k = 4..9; agent 10's
+status word gains the dead bit at completion + 8.487 (`0x00F1 [10, 16]`, t 572.686, the
+body-death flags `0x0026 [10, 8]` behind it) and it is the LAST status word agent 10 gets
+on the connection (no revival, no re-create; the connection runs to +18.261); at +9.989
+(k = 10, phase -0.011) a CLEAN tick lands, `[16, 4, 10, -0.0629]` and `[16, 6, 10,
+-0.0629]` -- 1.502 s after the caster's death. Nothing else of agent 10's can explain it:
+its only other cast in the window is Incendiary Bonds 179 (completed +2.990, on agent 3,
+whose end fires seconds earlier and not on 4 / 6). Three things are said, not resolved:
+the cause of the death is UNOBSERVED (agent 8, the Zaishen Archer, dies in the SAME batch
+with the same flags, and neither has a damage word in the 2 s before on this stream); the
+k = 10 fraction on taker 4 (-0.0629) differs from its k = 1..2 value (-0.0642), which
+aotjoin's `pairs_varied` names and nothing here explains; and positions are leads, so who
+stood inside at k = 4..9 is untestable. **The tally of caster deaths with the area live:
+1 positive, 3 inconclusive of 4** -- §41's two (20260817T231139 #10 +4.676, #13 +6.92, both
+areas empty), and #8 on `20260928T103123` :58544 (agent 9 dead at +8.05, nobody struck
+after k = 4). The server already KEPT the area (§42's RECONSTRUCTION, locked in
+test_weapons 30 (e)); that reading is now OBSERVED, n = 1. Still RECONSTRUCTION: a dead
+caster's ticks at its snapshotted strike level (the tape's takers are PvP players whose
+armour is unknown).
+
+**WEAPONS-C12 -- the eleven, read: what each of the six left needs** (OBSERVED,
+`skilldesc --row` on the pinned 38797 client, labels and flags only; none cast on tape):
+Chaos Storm 77 a bare DAMAGE (5..25, no type) plus ENERGY_LOSS (0..2); Searing Heat 196
+FIRE_DAMAGE (10..40) with a WHEN clause (the end rider), its duration unnumbered; Maelstrom
+215 COLD_DAMAGE (10..25) with CLAUSE_INTERRUPT and WHEN; Churning Earth 844 EARTH_DAMAGE
+(10..40) with CLAUSE_KNOCKDOWN under WHEN (knock-down: foe); Unsteady Ground 1083
+EARTH_DAMAGE (10..40) with CLAUSE_KNOCKDOWN (knock-down: foe); Sandstorm 1372 EARTH_DAMAGE
+in two slots (20..40 and 10..30). Each needs a clause of its own; none ships here.
+
+**Also re-read, not shipped (UNVERIFIED leads).** (a) The record's `+0x80`, a column
+`skilltable.py` does not emit: on the pinned 38797 image it is non-2077 on **16 of 3,443
+raw records** -- five of them areas over time (77: 131, 167: 300, 830: 2061, 1083: 1183,
+2222: 1956) and eleven that are not (488, 1639, 1643, 1646, 1647, 1651, 1705, 2298, 2799,
+2869, 3254). The triage called it "exactly the area-over-time rows plus 488 / 2298 / 2799 /
+3254" and missed seven. It is 2077 on 197, which draws 350 on the wire, so it cannot be the
+whole story for a ground effect; nothing of it ships. (b) Three of the eleven carry a
+RECIPIENT visual at `+0x7c` (196 and 1380: 346; 215: 381) and three a CASTER visual at
+`+0x78` (192: 340; 830: 1017; 1372: 1629); the server's `skill_visual` rows carry none of
+them, so nothing is sent, and whether retail draws them for an area is unknown (Fire
+Storm's are 2077).
+
+**Corrections to the triage** (it was right on direction, wrong on these): the loaded skills
+overlay is build 38974, not 38888 (the five records are identical on all three); the brief's
+"+8.487 / +9.989" are offsets from the COMPLETION, not the announce; the twenty Zaishen
+casts include one late tick (P6 above); the `+0x80` census missed seven records (above);
+and 830's record carries `impact_visual` 1019 (not 2077), which an area does not read.
+
+**The wiki pages are OWED** -- UNVERIFIED until read: GWW "Breath of Fire", "Snow Storm",
+"Ray of Judgment", "Spirit Rift", "Savannah Heat" (no repo document cites them; this lane
+had no browser). The one wiki read on disk that names one is the monster-AI page in
+`vault/research/castai-2026-09-27/wiki-ai-pages.json`, which gives Savannah Heat as an area
+that scatters (MONSTERAI-S1's trigger fires on these rows' ticks with no code change).
+
+**The lock.** `toolkit/authsrv/test_aotrows.py` (24 checks bare, 28 with the vault: section
+1b the carried rows against the vault's, section 6 the corpus). Through the real press and
+E5 over three hostiles inside and one outside: each area opens at the target's position
+with no word and no ground effect, ticks at exactly `tick_instants`, each word -amount /
+max with the amount the interpolator's; 830's Burning on each struck foe every tick; 910
+once at +3.0 with Cracked Armor once; 1380 at k x 17. Known-bad arms that must fail: the
+row deleted, 910 without `tick_period`, 1380 without `tick_ramp`, 830's Burning on the first
+tick only. A hostile's 1094 through `land_skill` onto the player and a hero with the tape's
+tick shape. `--no-area-tick-ramp` parsed, its main() block EXECUTED (and the block without
+its `global` shown not to bind). On the vault: the twenty Zaishen casts, cast #17's
+post-death tick, and the server's hostile Fire Storm with its caster killed after k = 8
+still wording the player at k = 9 and 10 -- against the known-bad arm of an area that ends
+with its caster.
+
+**Left (OUT of this lane, carried on `PLAN.md` §8.1 and here):** Maelstrom 215, Chaos Storm
+77, Searing Heat 196's end rider, 844 / 1083 / 1372's clauses (WEAPONS-C12); bodies'
+adjacent damage and Cyclone Axe (no witness anywhere in the corpus); the `+0x80` and
+visual-column leads (UNVERIFIED); the wiki reads; and a client run of the new rows (the
+owner's, after landing -- the runsheet is in the lane's report).
