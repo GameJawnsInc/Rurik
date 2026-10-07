@@ -4,6 +4,11 @@ Study arc: `studies/divergence/`. Written 2026-08-07 against the first live capt
 Vocabulary per `studies/character/FINDINGS.md`: OBSERVED, UPSTREAM, RECONSTRUCTION,
 CORROBORATED, CONTESTED, UNVERIFIED, NOT FOUND.
 
+**Identifiers.** `DIVERGENCE-D<n>` = a divergence section of this document, sub-sections
+included (`DIVERGENCE-D13.4`). Registered 2026-10-07; the bare `D<n>` headings below are
+grandfathered and mean the same sections. Convention:
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
 ---
 
 ## 1. What was measured
@@ -885,6 +890,19 @@ map]`; the sentinel row is the list-open, not a "no map" placeholder, which shar
 `MAP_ID_COUNT` comment in `authsrv.py` (what the client does with the stored 888 is still
 unread).
 
+**CORRECTED 2026-10-07 (D13.4.1, D13.4.3), three things in the two paragraphs above.**
+(1) The pair is not bare: kind 2 closes a phase-1 body every time (a phase-0 body too on
+55 of 121 loads) and kind 0 a phase-1 body every time (phase 0 on 104 of 121), so "our
+server already sends exactly those two" holds for the DONE rows and not for what they
+close. (2) Kind 0's dword is not always 0: it is non-zero on 58 of the corpus's 121 loads,
+from the first tapes on (20260807T143055), and a non-zero one is written into the
+client's cache. (3) "Its `Gw.dat` had never fetched anything" is too strong: map 416 was
+named and not asked although the queue drained, so by inference (RECONSTRUCTION, D13.4.3's
+last bullet) the cold directory's record already held its hash — most simply because a
+38833 session 23 minutes earlier loaded 416 and was handed that exact hash as its kind-0
+dword, which the client writes into its cache; whether that session ran from the same
+directory is UNVERIFIED.
+
 **So the mask.** A set bit means *the server has named this map's manifest hash to me* — the
 client's acknowledgement of `0x019F`, sent after each batch. It says nothing about completion
 or progress, and `0x0093 [146]` beside a set bit 146 is the client recording the naming and
@@ -892,8 +910,13 @@ then fetching: not a contradiction.
 
 ### D13.3 What this does NOT settle, said plainly
 
+**All three bullets below were settled at the desk on 2026-10-07 — D13.4.** They are kept
+as written; each carries a pointer to what replaced it.
+
 - **The hash function.** Not CRC32 of the `AreaInfo` record. Probably a digest of the
   manifest body; the body's layout is unread, so this stays RECONSTRUCTION.
+  **SETTLED (D13.4.2):** CRC-32 of the raw phase-1 body (193 of 193), with a fitted
+  phase-0 term (26 of 26); the layout is D13.4.1.
 - **The 2026-09-13 session asked for 5 maps while 17 named dwords had changed since its
   archive's last fetch.** 815/816 are new 38888 maps and 787 had flipped; 242 and 285 share
   one dword. The run-live directory was copied from an install that had already played on
@@ -901,13 +924,189 @@ then fetching: not a contradiction.
   cache living in `Gw.dat`, not proven. The model "ask when the archive lacks the hash" is
   CORROBORATED by the cold directory (136 of 137), the warm one (0), and 787 (4 of 4); it is
   not refuted by the 5, but the 5 are not predicted from the corpus alone.
+  **CORRECTED (D13.4.3): the "17" was measured tape against tape, and the client compares
+  against its archive.** The cache is `Gw.dat` file id 5, and against the table the
+  session started from, 5 of the 142 named hashes differ — exactly the 5 asked. Four of
+  those five (242, 285, 815, 816) are NOT among the tape-changed ids at all; only 787 is.
+  The cold directory is not a clean witness either (D13.4.3, last bullet).
+  **And "815/816 are new 38888 maps" is wrong** (OBSERVED, re-derived 2026-10-07 on
+  review): three 38833 tapes (`20260817T183323`, `20260817T183756`, `20260819T132414`)
+  named both in `0x019F`, each time with the very hash the 09-13 session named (3 of 3
+  namings for each, and the same holds for 242 and 285), and the 38519 cache record
+  (the 2026-04-30 snapshot) already counts 883 maps. They were asked because the
+  starting table held a different value, not because they were new (D13.4.3).
 - **The body.** Our server sends the brackets and never a body (D3, unchanged) and has no
   arm for `0x0093`. On loopback the assembled archives are warm and no request arrives
   (0 in the 2026-09 gamesrv captures), so the gap costs nothing today; it becomes real
   work the day a served map is missing from a run directory's archive. `test_dispatch`'s
   `DROPPED_ON_PURPOSE` now carries the row.
+  **LAYOUT READ (D13.4.1); the drop stands.** Composing a body is now possible (the
+  encoder reproduces every retail body byte for byte), but its content is a file-id list
+  this server still does not hold, and nothing on loopback ever asks (D13.4.4).
 
 **Shipped:** `schema/overrides.json` rows — `0x019F MAP_MANIFEST_VERSIONS`, `GAME_CMSG 0x0093
 MAP_MANIFEST_REQUEST`, `0x0196 INSTANCE_MANIFEST_BODY`, `0x0197 INSTANCE_MANIFEST_DONE` (the
 three kinds), `0x0198 INSTANCE_MANIFEST_PHASE` — and the resolution appended to `0x0092`'s
 row. No server behaviour changed.
+
+### DIVERGENCE-D13.4 Settled at the desk: the body, the hash, and the cache that picks the requests (2026-10-07)
+
+**Label:** per claim below. Desk only; nothing was run on a client. The tool is
+`toolkit/authsrv/manifestbody.py` and the test `toolkit/authsrv/test_manifestbody.py`
+(45 checks with the vault, 23 without). Static reads are of the pinned 38797 image
+(`codescan.py --dis`, `asserts.py --at`, `msghandler.py --follow`). Corpus figures come from
+`tape.load_tape` / `decode_all`, and the chain's from `livewire.build_events` /
+`decode_all` per direction, which decode each connection in its own build's numbering and
+in WIRE order. (Not `livewire.decode_conn`'s merge: it sorts by segment time, which runs
+backwards in places and on two chain connections moves the manifest family itself — a
+`0x0196` ahead of its `0x0198`. The 17 of 17 below comes out the same under both orders,
+measured; the test now reads wire order and holds the merge's order red.)
+**No decoded file-id list, hash table, cache stamp or mask is committed**: the test reads
+them out of the vault at run time and asserts shapes, counts and relations.
+
+**DIVERGENCE-D13.4.1 The body (`0x0196`).** RECONSTRUCTION for the mechanism, OBSERVED for the layout.
+
+- Handler chains on 38797: `0x0198` 0x0084EE10 → 0x008522C0; `0x0196` 0x0084EDB0 →
+  0x00852000; `0x0197` 0x0084EDE0 → 0x00852040; `0x019F` 0x0084EF80 → 0x00852320.
+- PHASE (0x008522C0) asserts `MsCliMan:472 Invalid manifest phase` (phase < 2), frees and
+  restarts that phase's buffer (ctx + (phase + 0x11) · 16) and makes it current
+  (ctx+0x138). BODY (0x00852000) asserts `MsCliMan:457 context->download.phase !=
+  MANIFEST_PHASE_NONE` and appends to the current buffer. DONE (0x00852040) asserts
+  `MsCliMan:487 type < MANIFEST_TYPES` (4), parses phase 1 (ctx+0x120) and phase 0
+  (ctx+0x110) with 0x00851A60, stores the dword at ctx+0x130, the map at ctx+0x134 and the
+  kind at ctx+0x168, sets the phase to NONE, and frees both buffers (0x008519F0).
+- 0x00851A60 reads `u16 count, u32 first id`, then one delta per further id **until the
+  buffer ends**: a byte b < 0xFE adds b + 1; 0xFE then a u16 adds the word + 0xFF
+  (`MsCliMan:101 ptr + sizeof(word) <= term`); 0xFF then a u32 adds the dword
+  (`MsCliMan:107`). The count only reserves room. The result is a strictly ascending list
+  of u32 file ids per phase.
+- OBSERVED over every live tape (39 capture directories; one connection set aside by name,
+  `20260928T103123 :65009`, whose manifest declares its gap): 461 DONEs (219 kind 3, 121
+  kind 0, 121 kind 2) close 646 phase buffers. 646 of 646 decode to the exact byte with
+  count == ids decoded, strictly ascending, and `encode_list` (the narrowest escape for
+  each gap) reproduces 646 of 646 byte for byte. Because the loop stops on the buffer,
+  count == ids is a check the bytes could fail; a buffer one byte short fails it 646 of
+  646.
+
+**DIVERGENCE-D13.4.2 The hash.** OBSERVED as a relation; that the client never computes it is
+RECONSTRUCTION.
+
+- `0x0197 [3, map, dword]`: the dword is CRC-32 (zlib's, ISO-HDLC) of the raw phase-1
+  buffer on **193 of 193** replies with no phase-0 body. This is the confirmed core.
+- With a phase-0 body the dword is `crc32(P1) ^ ((crc32(P0) << 1) mod 2^32)`, on **26 of
+  26** replies over four distinct phase-0 bodies. This is a FIT: it was found by noticing
+  that `dword ^ crc32(P1)` is constant per P0 and equals crc32(P0) doubled. It is labelled
+  as a fit and nothing is built on it. Controls: crc32(P0‖P1) and crc32(P1) alone fit 0 of
+  26, and a rotate in place of the shift fits 0 of the 17 replies whose crc32(P0) has bit
+  31 set, so the corpus does tell the two apart. Since crc32 of an empty buffer is 0, one
+  formula covers both cases (`manifest_hash`). One flipped body bit breaks it on 219 of
+  219.
+- The client stores the dword and, on completion, writes it into its cache. Nothing on the
+  DONE path hashes a body (0x00852040's own body; its callees 0x0082D7D0, 0x0082D900 and
+  0x008340C0 are unread). So the function is the server's: a server answering `0x0093`
+  must deliver in the DONE the value its `0x019F` named, or the cache will disagree on the
+  next session. Computing it retail's way is a fidelity choice, not a client check.
+
+**DIVERGENCE-D13.4.3 The cache, and why a session asks for the maps it asks for.** RECONSTRUCTION for
+the mechanism, OBSERVED for the prediction.
+
+- **The record** is `Gw.dat` MFT file id 5, which binds plainly to row 8315 in all six
+  vault/client snapshots. It is an FFNA type-4 file with three chunks: 0 is 12 bytes (a
+  u64 FILETIME and a u32 map count), 1 is the mission mask (4 · ceil(count / 32): 112 or
+  116 bytes), and 2 is one u32 hash per map. OBSERVED on all six snapshots, with the count
+  equal to the build's `MAP_ID_COUNT` read from each snapshot's own `Gw.exe` (883 on
+  38519; 888 on 38797, 38833 and 38849; 897 on 38888; 898 on 38974). Every stamp is a
+  FILETIME in the 400 days before its snapshot was taken.
+- **The loader** 0x00851CE0 opens file id 5 (`push 5`) and requires type 4, a 12-byte chunk
+  0 whose count equals the build's MISSIONS (0x378 on 38797), a 0x70-byte chunk 1 and a
+  0xDE0-byte chunk 2 (= 4 · 888). A record that fails any of these is not taken. So a run
+  directory carrying another build's record (count 897 under a 38797 client) has no cache
+  at all. **Staleness, UNVERIFIED:** when now − stamp > 0xC92A69C000 (864 · 10⁹ × 100 ns =
+  24 h exactly), the MASK is zeroed and re-stamped; the TABLE survives. Its two helpers are
+  identified by argument shape only (0x0046DBF0 forwards (dst, 0, size) to 0x005AFB40;
+  0x0046B740 returns a 64-bit value).
+- **The compare.** `0x019F`'s handler 0x00852320 asserts `MsCliMan:409 mission <
+  MISSIONS`. Then, for each {map, hash}: if cache[map] == hash it calls 0x008524A0, which
+  sets the mask bit and writes nothing when the table already agrees; otherwise it QUEUES
+  the map. The queue drains one `0x0093` at a time (sender 0x008529A0 builds `{0x93,
+  map}`). On a kind-3 DONE, the completion callback 0x00852560 writes (ctx+0x134, ctx+0x130)
+  through 0x008524A0 (table entry and mask bit), saves the record (0x00851BA0), then sends
+  the next queued request, or the `0x0092` mask once the queue is empty. For a kind-0 DONE
+  the same callback writes the same pair when [ctx+0x238] == 1 (0x008525E0; the gate is
+  unread).
+- **The 5 of 17, answered.** `20260913T210901` ran on
+  `run-live/2026-09-01_44fbd68767a8`. `make_run_dir.py` assembled that directory from
+  `C:\gw` (its `Gw.exe` is stamped 01:03Z); it copies `Gw.dat` from the install, not from
+  the vault. A minute earlier, `vault/client/2026-09-01_44fbd68767a8` had been snapshotted from the same source
+  (`snapshot_utc` 01:02:29Z, `Gw.dat` verified against the source, whose copy was last
+  written at 00:53Z), and the capture's plan sealed at 01:08:45Z. That the snapshot is the
+  session's starting archive is CORROBORATED. Against that table, **5 of the 142** hashes
+  named on `:63677` differ: 242, 285, 787, 815 and 816. They are **exactly** the session's
+  `0x0093` set. An all-zero table predicts all 142.
+- **Every later session, carried forward.** Start from the same table and apply each DONE
+  in capture order: kind 3 writes its pair, and kind 0 writes its pair only when the dword
+  is non-zero. The prediction is then exact on **all 17 connections** across the 18
+  captures made on that directory (2026-09-13 to 2026-09-29), 37 requests in all. Both
+  arms of the kind-0 rule could fail and do. Without the kind-0 write, 12 of 17 are exact,
+  and every miss is a map ASKED but not predicted: 146 four times and 430 once, each a map
+  a previous session had loaded and whose kind-0 dword had overwritten the named hash.
+  Writing every kind-0 pair, zeros included, gives 2 of 17. The non-zero dword is the
+  observed proxy for the client's unread gate; the reason for it is RECONSTRUCTION.
+- **So D13.3's "17 changed" was the wrong comparison.** It was measured tape against tape.
+  Re-derived against the latest value any earlier tape named for each id, 18 of the 142
+  differ (D13.3 wrote 17 and did not record its baseline). 17 of those 18 were already in
+  the archive's table at the named value, fetched during the install's twelve days on
+  38888. Meanwhile 4 of the 5 requests (242, 285, 815, 816) are ids whose named hash had NOT
+  changed across tapes but whose table entry held a different value. Only 787 is in both
+  sets.
+- **Map 146 and the "`0x0093 [146]` while bit 146 is set" clue** (`0x0092`'s row). Every
+  session that loads 146 receives a kind-0 DONE whose non-zero dword differs from what
+  `0x019F` names for 146. The client writes it into the table, so the next session's naming
+  differs and the map is fetched again. The bit records an earlier naming (it survives for
+  24 h — the loader's staleness rule, UNVERIFIED, above); the request comes from the
+  table disagreeing.
+- **The cold tape is not a clean witness and is not used.** The run directory of
+  `20260817T183323` (`run-live/2026-08-13_64fae3b1369b`) has since been rewritten by the
+  updater (RUNBOOK), and it was copied from `C:\gw`, not from the 08-13 snapshot. Against
+  that snapshot's table, which is all zero (so is 2026-07-29's), 137 maps are predicted and
+  136 were asked, in naming order, and the queue DRAINED: the `0x0092` mask report follows
+  the last kind-3 reply (70.099 s after 70.066 s on `:49545`), so the one miss is not a
+  request cut off (OBSERVED). Map 416 was named (74th of 137) and not asked. No kind-3
+  reply ever fetched 416 — but 416 was LOADED 23 minutes earlier, on `20260817T180610
+  :53351` (also 38833), and that load's kind-0 DONE carried a non-zero dword equal to the
+  hash the cold tape named for 416 (the corpus names one distinct hash for 416; OBSERVED).
+  Under the kind-0 rule above, that write alone puts 416's hash in the table **if**
+  `20260817T180610` ran from the same directory, which its capture does not record (no
+  `manifest.json`, and nothing in its plan seal or log names a run directory): UNVERIFIED.
+  Otherwise the record came with the copy from `C:\gw`. Either way, "the run directory's
+  own record already held 416's hash" is an INFERENCE (RECONSTRUCTION), not a measurement:
+  the archive that session started from no longer exists.
+
+**DIVERGENCE-D13.4.4 The hazard for a server that sends `0x019F` (DESKWORK-D3).** Our server sends no
+`0x019F` (authsrv's load burst is two PHASE pairs, each closed by a body-less DONE), so
+nothing on loopback is ever queued (0 requests in the 2026-09 gamesrv captures, D13.3). A
+future `0x019F` that names a hash differing from the run directory's file-id-5 table queues
+that map, and the client asks for it serially, one request per completed reply. Nothing on
+our side answers `0x0093`, and what the client does while its queue never drains is
+unknown: the callback sends the `0x0092` mask report only when the queue empties. There are
+two safe options: name exactly the hashes the run directory's own record holds
+(`manifestbody.read_cache`, `predicted_requests` must come back empty), or send no
+`0x019F`. Two related traps: a record written by another build (a different map count) is
+not taken at all, which turns every named map into a request; and a kind-0 DONE with a
+non-zero dword writes the cache (ours sends 0).
+
+**DIVERGENCE-D13.4.5 Still open.**
+
+- What kind 0's dword is. It is non-zero on 58 of 121 loads, and none of seven CRC
+  relations over its own body fits (0 of 58). 34 of the 58 equal a kind-3 hash some session
+  received for that map. It is never non-zero on a connection whose `0x019F` names its own
+  map (58 of 58). NOT FOUND.
+- The [ctx+0x238] gate on the kind-0 write, and on 0x00852040's kind-0 branch: unread.
+- Cross-build addresses: every VA above is from 38797. The only cross-build evidence is the
+  archive side: the records on 38888 and 38974 have the shapes the 38797 loader asserts, at
+  those builds' counts (OBSERVED).
+
+**Shipped:** `toolkit/authsrv/manifestbody.py` and `test_manifestbody.py`; the `0x0092`,
+`0x0093`, `0x0196`, `0x0197` and `0x019F` rows in `schema/overrides.json` carry the
+answers; `test_dispatch`'s `0x0093` reason is re-aimed; DESKWORK-D3 step 4 and REX-8 are
+re-pointed in `studies/deskwork/PLAN.md`. No server behaviour changed.

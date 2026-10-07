@@ -4861,6 +4861,47 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   (a partial decode reported as full is the suite's oldest defect class).
   Vault sections skip loudly on a bare machine. Floor 18 from the green
   run. ~50 s),
+  `toolkit/authsrv/test_manifestbody.py` (**2026-10-07, divergence D13.4: the manifest
+  family settled at the desk -- `0x0196`'s body layout, the hash `0x0197 [3]` carries, and
+  the client's cache record (Gw.dat file id 5) that decides which maps a session asks
+  for.** Guards `toolkit/authsrv/manifestbody.py`. §1 is bare: hand-built bodies with
+  every escape at both edges of its range (1/254 by byte, 255/65790 by word, 65791 by
+  dword), written out byte by byte; a byte PAST the count read as one more id, which is
+  the check that tells the client's end-on-the-buffer loop from an end-on-the-count one
+  (the corpus cannot: count == ids everywhere); the escapes one byte short refused, a
+  byte-delta buffer one byte short decoding to fewer ids than its count; CRC-32 pinned by
+  its check value 0xCBF43926; the shift-not-rotate witness; a synthetic cache record and
+  its four refusals (another build's count, FFNA type, mask width, table length); the
+  24 h constant; the bracket bookkeeping and the three client asserts it mirrors
+  (MsCliMan:457/:472/:487); the request prediction and the kind-0 write rule (each table
+  entry SEEDED non-zero first, so a zero kind-0 dword written over it reds -- review RV-1:
+  over a zero entry that write was invisible); and the
+  38974 numbering trap -- a renumbered stream rebuilds through its own build and the SAME
+  bytes read in the schema's numbering do not. §2 (vault): every DONE on every live tape
+  (219 kind 3, 121 kind 0, 121 kind 2; 646 buffers) closes to the exact byte with count
+  == ids, re-encodes byte for byte, and every kind-3 dword is `manifest_hash` -- counted
+  per arm, 193 single-list (the core) and 26 two-list (a fit over four phase-0 bodies), so
+  a vacuous arm is red; controls (concatenation, P1 alone, a rotate on the 17 whose
+  crc32(P0) has bit 31 set) fit 0; KNOWN-BAD: one flipped body bit breaks 219 of 219, a
+  buffer one byte short fails 646 of 646; the set-aside is `capgaps.audit`ed. §3 (vault):
+  file id 5 in every vault/client snapshot parses with its OWN build's map count
+  (`buildid.of_image` of the snapshot's Gw.exe into `authsrv.MAP_ID_COUNT_BY_BUILD`: 883,
+  888 x3, 897, 898) and a stamp that is a FILETIME before the snapshot; KNOWN-BAD: read as
+  a build with one map more, refused. §4 (vault): the chain's streams are each direction
+  in WIRE order (`livewire.build_events` + `tape.decode_all`), and every manifest bracket
+  on all 66 chain connections rebuilds; KNOWN-BAD: the same s2c re-sorted by segment
+  clock -- `livewire.decode_conn`'s merge, which the chain used until review RV-2 --
+  breaks a bracket (1 connection, a `0x0196` ahead of its `0x0198`).
+  `20260913T210901`'s `0x0093` set is
+  EXACTLY the maps whose `0x019F` hash differs from the snapshot's table, 5 of 142, and
+  carried forward over the 18 captures on `run-live/2026-09-01_44fbd68767a8` the
+  prediction is exact on 17 of 17 connections (37 requests); KNOWN-BAD: an all-zero
+  table, the chain without the kind-0 write (12 of 17) and writing every kind-0 (2 of 17).
+  Nothing read from the vault is committed -- no list, no table, no stamp. A 15-mutation
+  pass (in-process monkeypatches of the module, one at a time) kills all 15. Floors 23
+  bare (RURIK_VAULT at an empty directory, three declared skips) and 45 vaulted, raised
+  once all three vault sections ran, both from green runs. ~30 s, most of it the
+  `authsrv` import §3 makes),
   `toolkit/authsrv/test_keepalive.py` (**MOVECODE-K1's keep-alive re-grant, and
   the file is mostly REFUSALS on purpose.** `--keepalive-grant` is the *sixth*
   candidate in a family that killed five, and the graveyard at `HEADING_GRANT` /

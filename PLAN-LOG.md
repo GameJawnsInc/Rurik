@@ -28,6 +28,24 @@ move back.
 
 ---
 
+### DIVERGENCE-D13.4 -- 2026-10-07 -- **The manifest family is settled at the desk: all three of D13.3's open items.**
+
+**What is settled:**
+- **The body.** `0x0196`'s body is one file-id list per phase: u16 count, u32 first id, then byte, word or dword deltas until the buffer ends, read the way 0x00851A60 reads it. 646 of 646 retail buffers decode to the exact byte and re-encode byte for byte.
+- **The hash.** `0x0197 [3]`'s dword is the CRC-32 of the phase-1 body (193 of 193), with a fitted phase-0 term (26 of 26). The client stores it and never recomputes it.
+- **The 5 of 17.** The client compares `0x019F`'s hashes to its own cache, `Gw.dat` MFT file id 5 (FFNA type 4: a FILETIME and the map count, the mission mask, one hash per map). Against the snapshot `20260913T210901` started from, exactly 5 of 142 differ, and they are its 5 requests. Carried forward in wire order over the 18 captures on that run directory, the prediction is exact on 17 of 17 connections.
+
+**D13.3 was wrong twice:** its "17 changed" was tape against tape, and its "815/816 are new 38888 maps" was false. Three 38833 tapes named both, with the same hash.
+
+- **Record:** `studies/divergence/FINDINGS.md` DIVERGENCE-D13.4; `toolkit/authsrv/manifestbody.py` and `test_manifestbody.py` (23 checks bare, 45 with the vault). Every vaulted claim has a known-bad arm, including the chain read in segment-clock order. 15 of 15 mutations are killed. The review's two surviving inversions were fixed and both now go red: the kind-0 rule had no bare guard (RV-1), and the chain was fed decode_conn's time-sorted merge (RV-2).
+- **Corrected:**
+  - D13.2's unprompted pair carries bodies.
+  - Its kind-0 dword is non-zero on 58 of 121 loads. A non-zero one is written into the cache, which is why map 146 is fetched again on every session that loads it.
+  - "Its Gw.dat had never fetched anything" is too strong. Map 416 was named and not asked, although the queue drained. A 38833 session 23 minutes earlier was handed 416's hash as its kind-0 dword (same directory UNVERIFIED), so the record holding it is an inference.
+  - DESKWORK-D3 step 4's "RIFF fileId" is the file-id-5 FFNA record.
+  - REX-8's premise ("needs an archive that asks") was wrong for the decode.
+- **Owed:** nothing on this item. Before DESKWORK-D3 adds `0x019F` to the load burst, read D13.4.4: a named hash that the run directory's record lacks queues that map, and nothing here answers `0x0093`. The residue lives in the study only (D13.4.5): what kind 0's dword is (NOT FOUND) and the client's [ctx+0x238] gate.
+
 ### DEATHWALK-E1 and E2 scorers -- 2026-10-06 -- **`studies/movecode/review/e1_score.py` (the death stop) and `e2_score.py` (the rise in place) score off the wire, with each tape's arm read off its flags. Each has a selftest over tapes written by the real server code in both arms and over the real corpus. On the corpus, E1 finds all 11 pre-fix open-windup deaths `old-shape`, and its first real-client witness on the fixed arm (1 open windup, PASS). E2 finds no exposed in-place rise in 81 (31 shrine, 50 unexposed), so its run must press on the client (`C:0.1 space:0.2`) with no movement keys; `attack:N` never reaches the defect.**
 
 - **Record:** `studies/movecode/RUN-DEATHWALK.md` §3f.

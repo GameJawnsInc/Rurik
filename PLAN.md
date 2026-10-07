@@ -2234,8 +2234,6 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 * **Map 888 on a 38888 client (arm A)** has never been loaded; the cage it waited on
   was closed 2026-09-16, so it is now only a run (quests §11.4).
-* **The manifest family**: the hash function, `0x0196`'s body layout, and why one
-  session asked for 5 maps when 17 hashes had changed (divergence D13).
 
 **Movement** — [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md),
 [studies/npctrack/FINDINGS.md](studies/npctrack/FINDINGS.md)
