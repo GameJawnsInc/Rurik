@@ -2310,7 +2310,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: an attack skill's condition landing on a miss;
   serving the Reforged effect 3434; a wire-derived game_mode that can contradict a manifest.
-* **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E5 (E5 10-06: D4 11 of 11 PASS; known-bad 8 of 8 old-shape, its in-flight cell 2 of 5); the C2 / C3 same-tick leftovers.
+* **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E4 (E5 CLOSED 10-06, D4 confirmed: 11 of 11 PASS vs 17 of 17 old-shape); the C2 / C3 same-tick leftovers.
 * **Hero E5 on a 0-recharge skill** (SLICE-F52 52.5): retail none (382/385); ours `E5 [.., 0]`.
 * **RANGERLOOP-F9:** after S16's halt the server's mirror walks in, and a re-approach halts
   late, inside range.

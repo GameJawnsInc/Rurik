@@ -23223,3 +23223,28 @@ any release of the hold. A death of the player inside the window goes through `k
 Re-aimed: §3's dies arm (an overdue swing: `[8, 0]` `[3]` at once) and 21i (nothing on the
 target-gone tick). **Client exposure: zero** -- the October rigs' raider never dies. The run is
 DEATHWALK-E5, on a rig whose hostile can die to someone else's damage inside the player's windup.
+
+### 1z-ds.53 DEATHWALK-E5: D4 CONFIRMED on the client -- 11 of 11 PASS against the known-bad arm's 17 of 17 old-shape
+
+**What ran** ([RUN-DEATHWALK.md](RUN-DEATHWALK.md) §3a-§3d): the `deathwalk-e5` rig, three
+agent-driven launches on the owner's go-ahead.
+- **The rig:** sixteen level-20 raiders at 70 health, killed by two level-20 staff heroes at
+  `[10, 15]`, with a player whose sword barely scratches them.
+- **The launches:** one on D4's arm (harness `20261006T193947`) and two on
+  `--target-death-releases-now` (`20261006T195712`, `20261006T200722`).
+- **The scorer:** `review/e5_score.py`, which places each death of the chain target and its
+  expected release instant off the wire, and reads the arm off the tape's flags.
+
+**Result** (OBSERVED):
+- **The rig:** all 48 raiders died, and every judged killing blow was a hero's.
+- **D4's arm:** 5 in flight, `[8, 0]` `[3]` in one batch at the due landing, with no landing;
+  6 next start, `[8, 0]` alone at the next due start. 11 of 11 `PASS`, each within 1 ms of
+  its instant.
+- **The known-bad arm:** 6 in flight and 11 next start, all `old-shape` -- `[8, 0]` 1-3 ms
+  after the death, no `[3]`, 0.08-0.57 s ahead of D4's instant.
+- **Floors:** every cell at or over its floor of 5.
+
+**DEATHWALK-H6 HELD**, and TARGET_DEATH_HOLDS stays ON. **Limit:** this confirms our wire
+follows 1z-ds.50's retail rule on our client. It does not measure how retail's client draws
+the batch, and the rule's two RECONSTRUCTION cases (chain disturbed; the hold already down)
+were not exercised, because the plan pressed no skills and every start held.

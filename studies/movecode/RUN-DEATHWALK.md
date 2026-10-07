@@ -299,6 +299,32 @@ two more launches, and the pilot's rate (~2-5 in flight per launch) says one or 
 The old in-flight shape is also OBSERVED on September's tapes (4 `old-shape`, §3a's
 baseline), but on other rigs, so it is not pooled into this cell.
 
+### 3d. E5 CLOSED (2026-10-06): both arms exposed in both cells; D4 confirmed on the client
+
+**The second known-bad launch:** the same command, on the owner's go-ahead. Harness
+`20261006T200722`; tape `authsrv-20261006T200803-c1`. RUN VERDICT PASS. All 16 died, every
+killing blow a hero's (200: 6, 201: 10). 9 were judged, all `old-shape`: 4 in flight and
+5 next start. Pre-registered as §3c's: the abort, the arm read off the tape, every judged
+death `old-shape`, and the in-flight cell pooled with §3c's launch (same arm, same rig) to
+reach its floor.
+
+**E5, final** (`e5_score.py 20261006T194028 20261006T195807 20261006T200803`; OBSERVED):
+
+| | D4 (1 launch) | known-bad (2 launches) |
+|---|---|---|
+| in flight | **5 judged, 5 `PASS`** -- `[8, 0]` `[3]` at the due landing | **6 judged, 6 `old-shape`** -- `[8, 0]` 1-3 ms after the death, no `[3]` |
+| next start | **6 judged, 6 `PASS`** -- `[8, 0]` alone at the next due start | **11 judged, 11 `old-shape`** -- `[8, 0]` at the death |
+
+- **Every cell is at or over its floor of 5.**
+- **Every judged death is the arm's predicted shape:** 28 of 28. There are no
+  `UNEXPECTED`, `FAIL` or `NO-RELEASE` verdicts.
+- **D4's releases** land within 1 ms of the wire-derived instant.
+- **The known-bad arm's releases** come 0.08-0.57 s ahead of that instant.
+
+**DEATHWALK-H6 HELD.** D4 is confirmed on our client: FINDINGS §1z-ds.53. What it does not
+cover is unchanged from §3b. This is retail's rule replayed on our wire, scored against the
+schedule the rule defines; how retail's client draws it is not measured here.
+
 ## 4. Predictions — to be filled by the desk steps
 
 | | Prediction | Retail | Known-bad arm |
