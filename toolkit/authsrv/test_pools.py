@@ -2670,6 +2670,14 @@ def section_enemy_gate():
             "pos": (40.0, 0.0), "health": 50.0, "max_health": 100.0,
             "armor_rating": 60, "attack_speed": 1.75, "last_swing": 0.0,
             "skills": (), "skill_ready": [], "last_slot": -1}
+        # RE-AIMED 2026-10-07 (CASTAI-RM, studies/monsterai 18.5): 276 is a REMOVAL
+        # slot and is now HELD while nobody on its side carries a condition
+        # (REMOVAL_NEEDS_AFFLICTION) -- which would make 10's "0 energy, no cast"
+        # pass for the wrong reason and 10b's control red. The ally BLEEDS, so the
+        # only thing between this caster and its cast is the POOL, as before.
+        import time as _time
+        authsrv.effect_table(state).apply(8, 478, 0, 30.0, _time.time(), type_code=8,
+                                          caster=99)
         pool = authsrv.agent_energy(agent)
         pool.current = energy
         return agent

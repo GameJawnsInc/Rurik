@@ -39,8 +39,8 @@ import vaultpath    # noqa: E402
 # 2026-10-07 (the bare machine): TWO floors, decided on the vault's content DIRECTORY --
 # test_codescan's FLOOR_WITH_CAPSTONE / FLOOR_STDLIB_ONLY pattern -- and never on what
 # loaded, so a vault whose skills.toml did not load still demands FLOOR_VAULT and goes red.
-FLOOR_BARE = 343   # 2026-10-07 (the bare machine): MEASURED 343 checks, 0 failed, 6 declared skips (42 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path -- sections 19 (13), 20 (17), 23 (6) and 32 (4), the live corpus; section 37's record against its build's client row (1), the pristine image; section 42 (1), the vault's table. Every other section runs on the carried rows (RECORD, the attribute tables). Before this the bare run died at section 1's module level (ContentError: no skills row '346') and reached no verdict
-FLOOR_VAULT = 385  # 2026-10-07 (the bare machine): +1 -- sec.42 the 41 carried skills rows and the two attribute tables against the vault's own, column for column (vault-only); measured 385 with the vault; before that 2026-09-30 (RANGERPRE-S10, MAXHP-1): +1 -- sec.29(b) the foe's SECOND punished swing carries no 42 (the first still declares, its tracker marked stale as create_agent_world marks it); measured 384; before that 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+FLOOR_BARE = 344   # 2026-10-07 (CASTAI-RM): +1 -- sec.26 the CLEAN ally's 276 is HELD (the removal gate; the targeted-cast check re-aimed onto bleeding allies, the old clean-ally landing kept as the known-bad arm); measured 344 bare; before that 2026-10-07 (the bare machine): MEASURED 343 checks, 0 failed, 6 declared skips (42 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path -- sections 19 (13), 20 (17), 23 (6) and 32 (4), the live corpus; section 37's record against its build's client row (1), the pristine image; section 42 (1), the vault's table. Every other section runs on the carried rows (RECORD, the attribute tables). Before this the bare run died at section 1's module level (ContentError: no skills row '346') and reached no verdict
+FLOOR_VAULT = 386  # 2026-10-07 (CASTAI-RM): +1 -- sec.26 the clean ally's 276 HELD; measured 386 with the vault; before that 2026-10-07 (the bare machine): +1 -- sec.42 the 41 carried skills rows and the two attribute tables against the vault's own, column for column (vault-only); measured 385 with the vault; before that 2026-09-30 (RANGERPRE-S10, MAXHP-1): +1 -- sec.29(b) the foe's SECOND punished swing carries no 42 (the first still declares, its tracker marked stale as create_agent_world marks it); measured 384; before that 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 HAVE_VAULT = os.path.isdir(vaultpath.vault_path("content"))
 LEDGER = checks.Ledger("effect mechanics", floor=FLOOR_VAULT if HAVE_VAULT else FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -1931,22 +1931,42 @@ try:
           f"casts={casts(sent)} started={started} ready="
           f"{st['agents'][10]['skill_ready']}")
 
+    # RE-AIMED 2026-10-07 (CASTAI-RM, studies/monsterai 18.5): a removal slot
+    # needs an AFFLICTED target (REMOVAL_NEEDS_AFFLICTION), so the ally that
+    # draws the targeted cast now BLEEDS -- both hostiles do, so the ally still
+    # casts back at 10. The clean ally's cast that "heals NOTHING" is the
+    # known-bad arm below, under --no-removal-needs-affliction.
     st = world(2)
+    for _a in (10, 11):
+        st["effects"].apply(_a, BLEED, 0, 30.0, time.time(), type_code=8)
     sent = tick(st)
     c = [v for v in casts(sent) if v[1] == 10]
     check(len(c) == 1 and c[0] == [agents.GV_SKILL_ACTIVATED, 10, 11, RC]
           and st["agents"][10]["cast_target"] == 11,
-          "with an ally: the cast goes out NAMING THE ALLY -- 0x00A0 [60, 10, "
-          "11, 276] -- not the player (and the ally casts back at 10, the "
-          "same rule from the other side)", f"casts={casts(sent)}")
-    st["agents"][10]["cast_lands_at"] = time.time() - 1.0
+          "with a BLEEDING ally: the cast goes out NAMING THE ALLY -- 0x00A0 "
+          "[60, 10, 11, 276] -- not the player (and the ally casts back at 10, "
+          "the same rule from the other side)", f"casts={casts(sent)}")
+    st = world(2)
     sent = tick(st)
+    check(not [v for v in casts(sent) if v[-1] == RC]
+          and st["agents"][10]["skill_ready"] == [0.0],
+          "with a CLEAN ally the slot is HELD (CASTAI-RM: nobody carries a "
+          "condition) -- no 276 goes out, the slot stays ready",
+          f"casts={casts(sent)}")
+    authsrv.REMOVAL_NEEDS_AFFLICTION = False
+    try:
+        st = world(2)
+        sent = tick(st)
+        st["agents"][10]["cast_lands_at"] = time.time() - 1.0
+        sent = tick(st)
+    finally:
+        authsrv.REMOVAL_NEEDS_AFFLICTION = True
     check([v for op, v, _l in sent if op == INT
            and v[0] == agents.GV_SKILL_FINISHED] == [[58, 10, 0]]
           and not heals(sent) and st["agents"][11]["health"] == 50.0,
-          "the landing: property 58 closes the cast, and with no condition on "
-          "the ally NOTHING is healed -- the ally stays at the 50/100 the "
-          "fixture gave it", f"sent={sent}")
+          "KNOWN-BAD ARM, --no-removal-needs-affliction: 276 goes at the CLEAN "
+          "ally and the landing's property 58 closes a cast that heals NOTHING "
+          "-- the ally stays at the 50/100 the fixture gave it", f"sent={sent}")
 
     st = world(2)
     st["agents"][11]["health"] = 50.0
@@ -2122,7 +2142,15 @@ try:
           f"{authsrv.ally_heal_target(st, 200)}")
 
     RC = 276                      # Restore Condition, target OTHER ally
-    bar = ((RC, 0.75, 2.0),)
+    # RE-AIMED 2026-10-07 (CASTAI-RM, studies/monsterai 18.5): the checks below
+    # measure a party heal DRIVEN BY HEALTH (a hurt player draws the cast, a whole
+    # one does not), and 276 is a REMOVAL slot now -- it needs an afflicted target,
+    # so a hurt CLEAN player draws no 276 at all, by design. Their bar is Orison of
+    # Healing (281, target byte 3), the slice monk's own heal; the landing check at
+    # the end keeps 276 and a bleeding player, the cure it exists for.
+    ORISON = 281
+    bar = ((ORISON, 1.0, 2.0),)
+    rc_bar = ((RC, 0.75, 2.0),)
     authsrv.HERO_SKILLS = bar
 
     sent, send = collector()
@@ -2193,7 +2221,7 @@ try:
     # that the slice needs an UNCONDITIONAL heal wired before a monk hero looks
     # like a monk. Both heals that work today are condition-gated.
     sent, send = collector()
-    st = _party_world(bar)
+    st = _party_world(rc_bar)
     authsrv.apply_condition(send, st, PLAYER, BLEED, 9.0, 12, 0, 382)
     sent, send = collector()
     authsrv.ally_cast_tick(send, st, 0)
@@ -2824,9 +2852,11 @@ def e5_batch(sid, target, st, send):
         authsrv.skill_cost, authsrv.weapon_satisfies = _saved
 
 
-def ally_cast(bar, hexid=None, cond=None, monk_health=100.0):
+def ally_cast(bar, hexid=None, cond=None, monk_health=100.0, player_cond=None):
     """A party monk (200) with `bar` through the REAL ally_cast_tick, the player hurt (40/100):
-    (its landing offset, its cast target, its recharge anchor offset)."""
+    (its landing offset, its cast target, its recharge anchor offset). `player_cond` plants a
+    condition on the PLAYER -- what a removal slot (276) needs to be cast at all since
+    CASTAI-RM (2026-10-07)."""
     _saved = authsrv.HERO_SKILLS
     authsrv.HERO_SKILLS = bar
     try:
@@ -2842,6 +2872,8 @@ def ally_cast(bar, hexid=None, cond=None, monk_health=100.0):
             st["effects"].apply(200, hexid, 12, 30.0, now, type_code=4, caster=10)
         if cond is not None:
             st["effects"].apply(200, cond, 12, 30.0, now, type_code=8)
+        if player_cond is not None:
+            st["effects"].apply(PLAYER, player_cond, 12, 30.0, now, type_code=8)
         sent, send = collector()
         authsrv.ally_cast_tick(send, st, 0)
         a = st["agents"][200]
@@ -3888,6 +3920,8 @@ try:
     lands = {}
     for dz in (False, True):
         st = world(2, bar=((RC, 0.75, 2.0),))
+        # CASTAI-RM (2026-10-07): 276 needs an afflicted target, so the ally bleeds
+        cond_on(st, BLEED, agent=11, seconds=30.0)
         if dz:
             cond_on(st, DAZED_C, agent=10)
         now = time.time()
@@ -4038,7 +4072,9 @@ try:
           "the doubling reaches the real press", f"{got}")
     got = {}
     for dz in (False, True):
-        got[dz] = ally_cast(((RC, 0.75, 2.0),), cond=DAZED_C if dz else None)
+        # CASTAI-RM (2026-10-07): 276 needs an afflicted target, so the player bleeds
+        got[dz] = ally_cast(((RC, 0.75, 2.0),), cond=DAZED_C if dz else None,
+                            player_cond=BLEED)
     check(got[False][:2] == (0.75, PLAYER) and got[True][:2] == (1.5, PLAYER)
           and abs((got[True][2] - got[False][2]) - 0.75) < 1e-6,
           "ally_cast_tick: a party monk's Restore Condition at the hurt player lands at +0.75 "

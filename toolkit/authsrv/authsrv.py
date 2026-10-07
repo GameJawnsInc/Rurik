@@ -29720,6 +29720,54 @@ def remove_conditions(send, state, agent_id, conn_id, why, count=None,
     return gone
 
 
+def remove_hexes(send, state, agent_id, conn_id, why, count=None):
+    """Close HEX episodes on one agent, a hex removal's way (Remove Hex 301): all, or
+    `count`, NEWEST FIRST. CASTAI-RM (studies/monsterai/FINDINGS.md 18.5).
+
+    remove_conditions' sibling and its close path, unchanged: per episode the one
+    0x0044 door (effect_list_send -- shown for the player and a hero; on any wearer it
+    also switches the hex's aura words off, reference-counted, so [7, T, 1] and [7, T,
+    class] go out only when the LAST hex holding them leaves), then the status word
+    (0x800 drops with the last hex), speed, attributes and regen. OBSERVED, retail
+    (CASTAI-RM2, the live corpus's 13 completed 301s off the gapped connection): 11
+    completion batches carry [7, T, 1] [7, T, class] and an 0x00F1 with 0x800 clear; the
+    2 that do not are late removers whose target an earlier 301 had already cleaned --
+    they land nothing, as this returns [] for a bare wearer.
+
+    NO END BURST. A removed hex is not an ended one: hex_end_burst is never called here
+    (an Incendiary Bonds hex removed by its target's Remove Hex fired NOTHING, 4 of 4,
+    studies/skills 61.1 -- OBSERVED, and WIKI GWW "Incendiary Bonds" rev 2733032), and
+    the episode leaves the table, so neither effect_tick nor a death strip can fire it.
+
+    WHICH ONE: the most recently applied first -- the WIKI rule remove_conditions cites
+    (GWW "Effect" / "Cover"). One hex per Remove Hex cast is the row's `removes_hexes =
+    1`, from the skill's name and its client record (no count slot: args 0) --
+    UNVERIFIED on the wire, because a removal that leaves another same-class hex sends a
+    non-observer reader nothing at all.
+    """
+    if not EFFECTS:
+        return []
+    table = effect_table(state)
+    gone = sorted((ep for ep in table.on_agent(agent_id)
+                   if int(ep.get("type_code", 0) or 0) == HEX_TYPE_CODE),
+                  key=lambda ep: (-ep["applied_at"], -ep["buff"]))
+    if count is not None:
+        gone = gone[:max(0, int(count))]
+    for ep in gone:
+        table.close(ep["buff"])
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+                         f"EFFECT_REMOVE(buff {ep['buff']}, hex {ep['skill']}, "
+                         f"REMOVED: {why})")
+    if gone:
+        push_status(send, state, agent_id, conn_id)
+        push_speed(send, state, agent_id, conn_id)
+        push_attributes(send, state, agent_id, conn_id)
+        push_regen(send, state, agent_id, conn_id)
+        print(f"[c{conn_id}] removed {len(gone)} hex(es) from agent {agent_id}: "
+              f"{why} [CASTAI-RM]", flush=True)
+    return gone
+
+
 def energy_feast(send, state, skill_id, rank, caster_id, target_id, conn_id):
     """MANTID: Ether Feast's shape -- the target loses up to `scale` energy and
     the caster is healed `bonus` per point lost. The heal is OBSERVED (0x00A3
@@ -29787,7 +29835,11 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
     # skills FINDINGS 46.3 / 58; no retail witness for any cure's wire).
     heal_if_removed = (bool(erow.get("heal_if_removed"))
                        if CONDITION_HEAL_RULE else False)
-    if not healed and not removes:
+    # CASTAI-RM: Remove Hex's shape -- a HEX removal, no heal (`removes_hexes`, a count
+    # or "all", newest first: remove_hexes). Rides the cure rule's flag: under
+    # --no-condition-heal-rule nothing is removed, as before.
+    removes_hexes = erow.get("removes_hexes") if CONDITION_HEAL_RULE else None
+    if not healed and not removes and not removes_hexes:
         return None
     if CONDITION_HEAL_RULE:
         recipient = cast_recipient(skill_id, caster_id, target_id,
@@ -29830,10 +29882,20 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
         gone = remove_conditions(send, state, recipient, conn_id,
                                  f"skill {skill_id} by agent {caster_id}",
                                  count=removes)
+    hexes_gone = []
+    if episodemods.removes_some(removes_hexes):
+        hexes_gone = remove_hexes(send, state, recipient, conn_id,
+                                  f"skill {skill_id} by agent {caster_id}",
+                                  count=None if removes_hexes == "all" else removes_hexes)
+        if not hexes_gone:
+            print(f"[c{conn_id}] skill {skill_id} by agent {caster_id} removed no hex "
+                  f"from agent {recipient} -- it carries none [CASTAI-RM]", flush=True)
     remaining = sum(1 for ep in effect_table(state).on_agent(recipient)
                     if ep["skill"] in effects.CONDITION_SKILLS)
     out = {"recipient": recipient, "removed": len(gone),
            "remaining": remaining, "healed": 0.0}
+    if removes_hexes:
+        out["hexes_removed"] = len(hexes_gone)
     if not healed:
         return out
     amount = float(healed)
@@ -31133,6 +31195,38 @@ LIVE_EFFECT_REARM = 0.25             # --live-effect-rearm SECONDS; 0 = the clos
 # --hostile-ally-skill-at-player reverts: the player, as every run before 2026-09-28.
 HOSTILE_ALLY_SKILL_SELF = True
 
+# CASTAI-RM (2026-10-07; studies/monsterai/FINDINGS.md 18.5): A REMOVAL SLOT NEEDS AN
+# AFFLICTED TARGET. A slot whose skill_effect row REMOVES something (removes_conditions:
+# Mend Condition 275, Restore Condition 276, Mend Ailment 277; removes_hexes: Remove Hex
+# 301 -- episodemods.removal_class) is aimed at an ally that CARRIES what it removes
+# (episodemods.carries_removable), with NO health floor; with no such ally the slot is
+# HELD the way SLICE-B3's heal hold holds (ready and uncharged, the cursor stepped, a
+# same-tick re-pick). It is a TARGET step in both AI loops (removal_target), not a
+# selector: pick_skill stays round robin, and it is the class PLAN.md sec.7 Q19 names --
+# "can this body legally and usefully cast the slot it picked" -- extended to removals.
+# The defect it closes, both ways: 275-277 carry `scale_means = "Healing"`, so both loops
+# aimed them at the hurt-most ally under HERO_HEAL_AT whether or not it carried a
+# condition (resolve_heal then "removed no condition ... nothing healed"), and never at an
+# afflicted ally at or above 0.9 health; and a hostile's 301 (a byte-3 non-heal) went at
+# itself (HOSTILE_ALLY_SKILL_SELF) and removed nothing, ever.
+#
+# OBSERVED, retail (castethogram --json over the Zaishen tapes; CASTAI-RM1): 106 of 106
+# AI condition cures at a body carrying the condition bit (275 x92 on 20260929T100038, 277
+# x14 on 20260928T103123) and 10 of 10 AI Remove Hex at a hexed body (Zaishen x7, the
+# henchman Healer x3 -- the same AI class as our party bodies; an 11th, on the gapped
+# :65009 prefix, scores the same under zaishenrun --prefix), 0 at a clean one. NO HEALTH
+# FLOOR: 275's targets at 0.035 / median 0.563 / max 1.000 (2 of 92 at >= 0.9), 301's at
+# 0.239 / 0.906 / 1.000 (5 of 10). The caster IS a candidate for the byte-3 kind (277,
+# 301: 6 self-form casts) and never for byte 4 (275: 0 of 92). WIKI (GWW "Hero behavior"
+# rev 2741080): heroes and henchmen cleanse conditions and hexes on allies. Retail's
+# Zaishen tier is CASTAI-W2's hero tier; for a normal-mode monster this is RECONSTRUCTION.
+# WHICH of several carriers: the lowest health fraction, then the lowest id --
+# RECONSTRUCTION (no tape shows a choice among several afflicted allies).
+# --no-removal-needs-affliction reverts: the heal target (the hurt-most under HERO_HEAL_AT)
+# for 275-277 and the caster for a hostile's 301 -- the cast at a clean hurt ally that
+# heals nothing, and no cure for an afflicted ally at full health.
+REMOVAL_NEEDS_AFFLICTION = True
+
 
 def live_effect_hold(state, caster_id, agent, skill_id, cast_target, now=None):
     """(wearer, why) when the live-effect gate holds this slot, else None.
@@ -31585,7 +31679,22 @@ def enemy_attack_tick(send, state, conn_id):
             # sent", which is the wart SLICE-F10 named from the other side.
             if CONDITION_HEAL_RULE:
                 _kind = skill_target_kind(_sid)
-                if _kind in ("ally", "other_ally", "self"):
+                # CASTAI-RM (REMOVAL_NEEDS_AFFLICTION's banner): a REMOVAL slot is aimed
+                # at an ally carrying what it removes, at any health, ahead of the heal
+                # rule below; nobody carrying it holds the slot the heal hold's way.
+                _rm = (removal_slot_class(_sid)
+                       if _kind in ("ally", "other_ally", "self") else None)
+                if _rm is not None:
+                    cast_target = removal_target(state, agent_id, _kind, _rm)
+                    if cast_target is None:
+                        _held.add(slot)
+                        agent["last_slot"] = slot
+                        removal_hold_note(conn_id, "agent", agent_id, agent, _sid, _kind,
+                                          _rm, now)
+                        _next = pick_skill(agent, now)
+                        slot = None if (_next is None or _next in _held) else _next
+                        continue
+                elif _kind in ("ally", "other_ally", "self"):
                     if skill_heal(_sid, agent_skill_rank(agent, _sid)) is None:
                         if _kind == "other_ally":
                             _allies = sorted(allies_of(state, agent_id))
@@ -31908,6 +32017,62 @@ def hostile_heal_target(state, caster_id, kind):
     return caster_id if my_frac < t_frac else target
 
 
+def removal_slot_class(skill_id):
+    """'condition' | 'hex' | None -- the removal a slot's skill_effect row names, read
+    for the AI loops' removal target step (REMOVAL_NEEDS_AFFLICTION's banner). None
+    under --no-removal-needs-affliction, under --no-condition-heal-rule (resolve_heal
+    removes nothing there, so there is nothing to need), and for a skill with no row."""
+    if not (REMOVAL_NEEDS_AFFLICTION and CONDITION_HEAL_RULE):
+        return None
+    return episodemods.removal_class(skill_effect_row(skill_id))
+
+
+def removal_target(state, caster_id, kind, klass):
+    """Who a removal slot should aim at, or None when no candidate carries `klass`.
+
+    CASTAI-RM (REMOVAL_NEEDS_AFFLICTION's banner). The candidates are the client's
+    target byte's: `allies_of` for an other-ally skill (byte 4, 275 / 276), those
+    plus the CASTER for an ally skill (byte 3, 277 / 301), the caster alone for a
+    self skill (byte 0). Only carriers count (episodemods.carries_removable), with NO
+    health floor -- retail cured at 0.035 and at 1.000 alike. Among several: the lowest
+    health fraction, then the lowest id (RECONSTRUCTION: no tape shows the choice).
+    A body whose maximum is unknown sorts as whole (1.0); the player is read from
+    `state`, a row from its own fields -- the same split ally_heal_target makes.
+    """
+    if kind == "self":
+        pool = {caster_id}
+    else:
+        pool = set(allies_of(state, caster_id))
+        if kind == "ally":
+            pool.add(caster_id)
+    table = state.get("effects")
+    best = None
+    for aid in pool:
+        if not episodemods.carries_removable(table, aid, klass):
+            continue
+        if aid == PLAYER_AGENT_ID:
+            cur, mx = state.get("player_health", 0.0), player_max_health(state)
+        else:
+            row = state.get("agents", {}).get(aid)
+            if not row or row.get("dead"):
+                continue
+            cur, mx = row.get("health", 0.0), row.get("max_health", 0.0)
+        frac = float(cur) / float(mx) if mx and mx > 0 else 1.0
+        if best is None or (frac, aid) < best:
+            best = (frac, aid)
+    return None if best is None else best[1]
+
+
+def removal_hold_note(conn_id, who, agent_id, agent, skill_id, kind, klass, now):
+    """The removal hold's rate-limited line: once per 5 s per caster, its own stamp
+    (a heal hold, a reach hold and a removal hold on one tick are three facts)."""
+    if now - agent.get("removal_held_at", 0.0) < 5.0:
+        return
+    agent["removal_held_at"] = now
+    print(f"[c{conn_id}] {who} {agent_id} holds skill {skill_id}: target "
+          f"{kind.replace('_', ' ')}, and nobody carries a {klass} [CASTAI-RM]", flush=True)
+
+
 def ally_cast_tick(send, state, conn_id):
     """The PARTY's own casting -- SLICE-B7c.
 
@@ -32015,10 +32180,19 @@ def ally_cast_tick(send, state, conn_id):
             while slot is not None:
                 _sid = skills[slot][0]
                 _kind = skill_target_kind(_sid)
+                # CASTAI-RM (REMOVAL_NEEDS_AFFLICTION's banner): the hostile loop's
+                # removal target step -- a carrier at any health, else held below.
+                _rm = (removal_slot_class(_sid)
+                       if _kind in ("ally", "other_ally", "self") else None)
                 if skill_resurrects(_sid):
                     target = None                  # nobody is dead: held
                 elif _kind == "foe":
                     target = _foe_t
+                elif _rm is not None:
+                    target = removal_target(state, agent_id, _kind, _rm)
+                    if target is None:
+                        removal_hold_note(conn_id, "party agent", agent_id, agent, _sid,
+                                          _kind, _rm, now)
                 elif _kind in ("ally", "self"):
                     # SLICE-H8 (the owner: "tahlkora doesn't self heal"): an
                     # ALLY skill may land on the caster (the client's byte 3)
@@ -49137,6 +49311,14 @@ def main():
               "Hatcher's Vital Blessing 289) lands on the PLAYER its cast names -- every run "
               "before 2026-09-28; retail's monster lands it on itself (CASTAI-C8).",
               flush=True)
+    if a.no_removal_needs_affliction:
+        global REMOVAL_NEEDS_AFFLICTION
+        REMOVAL_NEEDS_AFFLICTION = False
+        print("[enemy] --no-removal-needs-affliction: a removal slot (275 / 276 / 277, 301) "
+              "aims where it did before 2026-10-07 -- the hurt-most ally under HERO_HEAL_AT "
+              "for a cure (cast at a clean ally, healing nothing; an afflicted ally at full "
+              "health never cured), a hostile's 301 at itself; retail cured only carriers, "
+              "106 of 106 and 10 of 10 (CASTAI-RM1).", flush=True)
     if a.self_cast_names_target:
         global SELF_CAST_FORM
         SELF_CAST_FORM = False
