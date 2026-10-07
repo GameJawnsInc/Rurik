@@ -2055,6 +2055,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
+* **A bare server dies on 320** (found 2026-10-07, PLAN-LOG "`test_guards.py` and
+  `test_labelconsumers.py` run on a bare machine"): `_condition_terms` reads the vault-only
+  `skills` row and catches `ValueError` only, so 8 tracked hand rows raise `ContentError` —
+  the default bar's 320 out of `cast_tick`. Needs the siblings' fallback and its own test.
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
