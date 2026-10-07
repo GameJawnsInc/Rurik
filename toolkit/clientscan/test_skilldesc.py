@@ -79,7 +79,7 @@ TEMPLATES_SHA256_BY_BUILD = {
     38974: "79cc05468b03e598f5f5d945ed7b635d5dda3eec30209dba51518d10919c81d1",
 }
 
-LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults); 169 since the pair binding (+2: the pinned build's registered templates digest is its own; a MIXED exe/archive pair is the PAIR fault, both vaults)
+LEDGER = checks.Ledger("skill description templates", floor=102)   # 102 bare since SKILLS-LW (2026-10-07: +11 in section 1b, the hit-gated reader and gate on invented phrases; MEASURED with RURIK_VAULT at an empty directory and at a nonexistent one, 102 + 1 skip; 189 with the vault and the 115-row emit -- +20, nine of them in section 3); 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults); 169 since the pair binding (+2: the pinned build's registered templates digest is its own; a MIXED exe/archive pair is the PAIR fault, both vaults)
 check = checks.adopt(LEDGER)
 
 
@@ -761,6 +761,182 @@ with tempfile.TemporaryDirectory() as tmp:
           "emit_labels writes the rider fields and the knock-down boolean, tomllib reads them back "
           "typed, and no string leaves the vocabulary", se)
 
+# ---- SKILLS-LW (2026-10-07, skills 67): what a conditional row's NUMBERS are gated on.
+# Every phrase below is INVENTED (a copper lance, a sneeze) -- the skills 60.8 #4 rule:
+# fixtures trip the same patterns and are never a template's clause.
+BH, SG, CRd = LT.bare_hit_clause, LT.sentence_gate, LT.conditional_reading
+check(BH("the copper lance lands") and BH("it hits") and BH("they hit") and BH("the lance hits target foe")
+      and not BH("the lance lands on a sleeping foe") and not BH("you hit")
+      and not BH("the lance fails to hit") and not BH("the lance is blocked")
+      and not BH("it hits a fleeing foe") and not BH("lands") and not BH(""),
+      "bare_hit_clause: a subject and a verb of landing (and at most 'target foe') is a bare hit; "
+      "a predicate on whom it lands on, the caster as subject, a failure, a block, no subject -- not")
+check(SG("the copper lance deals  n  extra damage.") == LT.GATE_NONE
+      and SG("if the copper lance lands, the foe takes  n  damage.") == LT.GATE_HIT
+      and SG("the foe takes  n  damage if it hits.") == LT.GATE_HIT
+      and SG("when the copper lance lands, the foe takes  n  damage.") == LT.GATE_HIT
+      and SG("if the copper lance lands on a sleeping foe, it takes  n  damage.") == LT.GATE_OTHER
+      and SG("whenever the copper lance lands, the foe takes  n  damage.") == LT.GATE_OTHER
+      and SG("if the copper lance lands, the foe takes  n  damage for each coin.") == LT.GATE_OTHER
+      and SG("if you sneeze, the foe takes  n  damage.") == LT.GATE_OTHER
+      and SG("the lance lands and the foe takes  n  damage if they hit and sneeze.") == LT.GATE_OTHER,
+      "sentence_gate: NONE with no compound word; HIT when every if / when opens a bare landing "
+      "(leading or trailing); OTHER for a predicate, an event ('whenever'), a count riding beside "
+      "the hit, the caster's state, and a clause that runs on past the landing ('and ...')")
+lw_tpl = {
+    "hit": "If the copper lance lands, you deal +%str1% damage. The lance cannot be blocked.",
+    "ungated": "The foe takes %str1% damage. If you sneeze, the foe also sneezes.",
+    "gated": "If the copper lance lands on a sleeping foe, you deal +%str1% damage.",
+    "hit_spell": "A copper bolt strikes for %str1% damage if it hits.",
+    "limiting": "The foe takes %str1% damage. The lance deals half damage if the foe wears silver.",
+    "ending": "For %str3% seconds you move %str1%% faster. This posture ends if you sneeze.",
+    "must": "Must strike a sleeping foe. If it hits, you deal +%str1% damage.",
+    "kd_cond": "The foe takes %str1% damage. If the foe was sneezing, that foe is knocked down.",
+    "kd_qual": "Adjacent foes take %str1% damage. Fleeing foes struck by the lance are knocked down. "
+                "If you sneeze, it strikes farther.",
+    "kd_hit": "If the copper lance lands, you deal +%str1% damage and the foe is knocked down. "
+              "If you have 9 copper or more, this knockdown lasts 3 seconds.",
+    "plain": "The foe takes %str1% damage.",
+}
+lw = {k: CRd(LT.normalise(t)) for k, t in lw_tpl.items()}
+check(lw["hit"]["gate_family"] == LT.FAMILY_HIT_ONLY and lw["hit"]["dropped_conditional"] == []
+      and lw["ungated"]["gate_family"] == LT.FAMILY_NUMBER_UNGATED and lw["ungated"]["dropped_conditional"] == [1]
+      and lw["gated"]["gate_family"] == LT.FAMILY_GATED and lw["plain"]["gate_family"] is None
+      and lw["hit_spell"]["gate_family"] == LT.FAMILY_HIT_ONLY
+      and lw["limiting"]["limiting"] and not lw["ungated"]["limiting"]
+      and lw["ending"]["ends_early"] and not lw["ungated"]["ends_early"]
+      and lw["must"]["target_requirement"] and not lw["hit"]["target_requirement"]
+      and lw["kd_cond"]["knockdown_gate"] == LT.GATE_OTHER
+      and lw["kd_qual"]["knockdown_gate"] == LT.GATE_QUALIFIED
+      and lw["kd_hit"]["knockdown_gate"] == LT.GATE_HIT and lw["plain"]["knockdown_gate"] is None,
+      "conditional_reading on invented templates: HIT_ONLY (a bare landing on the number's own "
+      "sentence), NUMBER_UNGATED (the conditional wording only in a number-free sentence, which is "
+      "listed as dropped), GATED (a predicate on the number), None for a plain row; a dropped "
+      "sentence that HALVES the number is limiting, one that ENDS the posture early is ends_early, "
+      "'must strike a <state> foe' a target requirement; the knock-down gate is OTHER behind a "
+      "predicate, QUALIFIED on a state of the foe, HIT behind a bare landing -- and the noun "
+      "'knockdown' in a length clause is not a fall", {k: v for k, v in lw.items()})
+
+
+def lwrow(sid, key, tc, slots, flags):
+    r = srow(sid, tc, slots, flags)
+    r.update(lw[key])
+    r["knockdown"] = LT.knockdown_kind(LT.normalise(lw_tpl[key]))
+    return r
+
+
+PD = (1, Label.PLUS_DAMAGE, "", AP, 5, 20)
+hit_atk = lwrow(60, "hit", 14, [PD], ["IF", "TARGET_FOE", "CLAUSE_UNBLOCKABLE"])
+why_h, det_h, f_h, _v = G(hit_atk, srec(5, tc=14), set())
+ung = lwrow(61, "ungated", 5, [(1, Label.FIRE_DAMAGE, "", AP, 10, 40)], ["IF", "TARGET_FOE"])
+why_u, det_u, f_u, _v = G(ung, srec(5), set())
+check(why_h is None and f_h == {"scale_means": "+ Damage"} and LT.DETAIL_HIT_GATED in det_h
+      and LT.DETAIL_CONDITIONAL_DROPPED not in det_h and "CLAUSE_UNBLOCKABLE" in det_h
+      and why_u is None and LT.DETAIL_CONDITIONAL_DROPPED in det_u and LT.DETAIL_HIT_GATED not in det_u,
+      "SKILLS-LW: a hit-only ATTACK row ships marked HIT_GATED (the attack path lands it on a landed "
+      "strike only); a number-ungated Spell ships marked CONDITIONAL_DROPPED (its number-free "
+      "conditional sentence is dropped)", (why_h, det_h, why_u, det_u))
+lw_arms = {
+    LT.EXCL_HIT_NOT_EVALUATED: G(lwrow(62, "hit_spell", 5, [(1, Label.FIRE_DAMAGE, "", AP, 10, 40)],
+                                       ["IF", "TARGET_FOE"]), srec(5), set())[0],
+    LT.EXCL_LIMITING_CLAUSE: G(lwrow(63, "limiting", 5, [(1, Label.COLD_DAMAGE, "", AP, 10, 40)],
+                                     ["IF", "TARGET_FOE"]), srec(5), set())[0],
+    LT.EXCL_ENDS_EARLY: G(lwrow(64, "ending", 3, [(3, Label.DURATION, "", AP, 5, 10),
+                                                  (1, Label.MOVE_SPEED_UP, "", AP, 10, 33)], ["IF"]),
+                          srec(0, args=3, d=(5, 10), tc=3), set())[0],
+    LT.EXCL_TARGET_REQUIREMENT: G(lwrow(65, "must", 14, [PD], ["IF", "TARGET_FOE"]), srec(5, tc=14), set())[0],
+}
+check(all(k == v for k, v in lw_arms.items()),
+      "KNOWN-BAD ARMS (the gate): a bare 'if it hits' on a SPELL is HIT_NOT_EVALUATED (no strike "
+      "verdict gates a spell's land); a dropped sentence that halves the number is LIMITING_CLAUSE; "
+      "one that ends the posture early is ENDS_EARLY; 'must strike a <state> foe' is "
+      "TARGET_REQUIREMENT -- none ships", lw_arms)
+kd_c_row = lwrow(66, "kd_cond", 7, [(1, Label.HOLY_DAMAGE, "", AP, 10, 40)],
+                 ["IF", "TARGET_FOE", "CLAUSE_KNOCKDOWN"])
+kd_q_row = lwrow(67, "kd_qual", 7, [(1, Label.HOLY_DAMAGE, "", AP, 10, 40)],
+                 ["IF", "AREA_ADJACENT", "CLAUSE_KNOCKDOWN"])
+kd_h_row = lwrow(68, "kd_hit", 14, [PD], ["IF", "TARGET_FOE", "CLAUSE_KNOCKDOWN"])
+kd_lw = {n: G(r, srec(5, tc=r["type_code"]), set()) for n, r in
+         (("cond", kd_c_row), ("qual", kd_q_row), ("hit", kd_h_row))}
+kd_h_spell = G(dict(kd_h_row, type_code=5), srec(5), set())
+check(all(w is None and "knocks_down" not in f and "CLAUSE_KNOCKDOWN" in d
+          for w, d, f, _v in (kd_lw["cond"], kd_lw["qual"]))
+      and kd_lw["hit"][0] is None and kd_lw["hit"][2].get("knocks_down") is True
+      and LT.DETAIL_KNOCKDOWN_APPLIED in kd_lw["hit"][1]
+      and kd_h_spell[0] == LT.EXCL_HIT_NOT_EVALUATED,
+      "SKILLS-LW's knock-down guard: a fall behind a predicate ('if the foe was sneezing', 296 777 "
+      "2135's shape) and a fall on a STATE of the foe ('fleeing foes ... are knocked down', 163's "
+      "shape) keep CLAUSE_KNOCKDOWN and carry no field; a fall behind a bare landing on an ATTACK "
+      "carries knocks_down (355's shape -- the attack path fells on a landed strike only)",
+      {k: (v[0], v[1], v[2]) for k, v in kd_lw.items()})
+_g = LT.KD_SENTENCE_GUARD
+try:
+    LT.KD_SENTENCE_GUARD = False
+    kd_off = {n: G(r, srec(5, tc=r["type_code"]), set()) for n, r in (("cond", kd_c_row), ("qual", kd_q_row))}
+finally:
+    LT.KD_SENTENCE_GUARD = _g
+rep_kd = {"rows": {66: kd_c_row, 67: kd_q_row}, "self_conflicts": []}
+kd_forced = {sid: {"fields": kd_off[n][2], "type_code": 7, "tier": "label", "tier_detail": kd_off[n][1],
+                   "verified": [{"slot": 1}]} for sid, n in ((66, "cond"), (67, "qual"))}
+f_kd = {sid: LT.check_label_rows({sid: r}, rep_kd, set(), {66: srec(5, tc=7), 67: srec(5, tc=7)})
+        for sid, r in kd_forced.items()}
+check(all(kd_off[n][2].get("knocks_down") is True for n in kd_off)
+      and any("conditional knock-down" in x for x in f_kd[66])
+      and any("qualified knock-down" in x for x in f_kd[67]),
+      "KNOWN-BAD ARM (KD_SENTENCE_GUARD = False): with the guard off the emitter writes knocks_down "
+      "on both shapes, and the checker (guard on) names each -- a conditional knock-down, a "
+      "qualified one", (f_kd, {n: kd_off[n][2] for n in kd_off}))
+rep_lw = {"rows": {60: hit_atk, 61: ung, 69: dict(lwrow(69, "gated", 14, [PD], ["IF", "TARGET_FOE"])),
+                   1: fire},
+          "self_conflicts": []}
+check(LT.hit_gated_served(rep_lw) == [60, 61] and LT.plain_served(rep_lw) == [1]
+      and LT.conditional_served(rep_lw) == [60, 61, 69],
+      "hit_gated_served is a PARALLEL set: the hit-only and number-ungated conditional rows, never "
+      "a plain one and never a gated one; plain_served is untouched by it (the owner's definition)")
+good_lw = {60: {"fields": f_h, "type_code": 14, "tier": "label", "tier_detail": det_h, "verified": [{"slot": 1}]},
+           61: {"fields": f_u, "type_code": 5, "tier": "label", "tier_detail": det_u, "verified": [{"slot": 1}]}}
+recs_lw = {60: srec(5, tc=14), 61: srec(5), 69: srec(5, tc=14)}
+check(LT.check_label_rows(good_lw, rep_lw, set(), recs_lw) == [],
+      "the two hit-gated shapes pass the checker with their records",
+      LT.check_label_rows(good_lw, rep_lw, set(), recs_lw))
+
+
+def _lw(sid, rep=None, **mod):
+    r = dict(good_lw.get(sid) or good_lw[60])
+    r.update(mod)
+    return LT.check_label_rows({sid: r}, rep or rep_lw, set(), recs_lw)
+
+
+rep_lw_bad = {"rows": {**rep_lw["rows"],
+                       62: dict(hit_atk, id=62, type_code=5), 63: dict(ung, id=63, limiting=True),
+                       64: dict(ung, id=64, ends_early=True),
+                       65: dict(hit_atk, id=65, target_requirement=True)},
+              "self_conflicts": []}
+arms_lw = {
+    "conditional wording IF": _lw(69, tier_detail=[]),
+    "HIT_GATED mark does not match": _lw(60, tier_detail=["TARGET_FOE", "CLAUSE_UNBLOCKABLE"]),
+    "CONDITIONAL_DROPPED mark does not match": _lw(61, tier_detail=["TARGET_FOE"]),
+    "no mark": _lw(61, tier_detail=["TARGET_FOE"]),
+    "non-attack": _lw(62, rep_lw_bad),
+    "LIMITS": _lw(63, rep_lw_bad, tier_detail=det_u),
+    "ENDS": _lw(64, rep_lw_bad, tier_detail=det_u),
+    "use requirement": _lw(65, rep_lw_bad),
+}
+check(all(f and any(want in x for x in f) for want, f in arms_lw.items()),
+      "KNOWN-BAD ARMS (the checker, SKILLS-LW): a GATED row forced in is named for its conditional "
+      "wording; a hit-only row stripped of HIT_GATED, a number-ungated row stripped of "
+      "CONDITIONAL_DROPPED (and so of every mark), a hit reading on a non-attack, a limiting and an "
+      "early-ending dropped sentence, and a use requirement on the target are each NAMED", arms_lw)
+check({LT.DETAIL_HIT_GATED, LT.DETAIL_CONDITIONAL_DROPPED} <= set(LT.DETAILS) & _content.LABEL_DETAILS_KNOWN
+      & LT.OVERLAY_VOCABULARY
+      and {LT.EXCL_TARGET_REQUIREMENT, LT.EXCL_HIT_NOT_EVALUATED, LT.EXCL_LIMITING_CLAUSE,
+           LT.EXCL_ENDS_EARLY} <= set(LT.EXCLUSIONS)
+      and "UNMODELLED_CLASS" in rf("target demonic foe takes a blow") and "CLAUSE_RANGE" in rf("this spear has melee range")
+      and not {LT.DETAIL_HIT_GATED, LT.DETAIL_CONDITIONAL_DROPPED} & LT.COMPOUND_FLAGS,
+      "the two marks are in DETAILS, content's known set and the overlay vocabulary; the four "
+      "exclusions are in the enum; a 'demonic' recipient is an unmodelled class and 'melee range' "
+      "a range clause (1814, 2210)")
+
 # ---------------------------------------------------------------- section 2
 print("\n== 2. the corpus (pinned exe + Gw.dat) ==")
 try:
@@ -1012,7 +1188,34 @@ if records is not None:
           "the 210 held back, by the wording a label would drop: IF 154, WHEN 37, FOR_EACH 17, "
           "WHILE 9, CHANCE 7, EXCEPTION 6", dict(cf))
     hand_ids = set(hand_rows)
-    lrows, excluded, _p = skilldesc.label_rows(rep, records, hand_ids)
+    # SKILLS-LW (2026-10-07, skills 67): the 210 are FAMILIES by what their NUMBER-bearing
+    # sentences are gated on (conditional_reading, our own patterns). MEASURED on 38797:
+    # HIT_ONLY 67 (48 not hand rows), NUMBER_UNGATED 45 (41), GATED 98 (89). The triage's
+    # 67 / 49 had 438 (a pet clause with no comma: GATED here) and 1403 ("when this attack
+    # hits": HIT here) the other way round, and counted four rows NUMBER_UNGATED whose
+    # number's own sentence carries "when" / "instead" (884 1340 1395, and 1403).
+    fams = collections.Counter(rep["rows"][s]["gate_family"] for s in cond)
+    fams_nh = collections.Counter(rep["rows"][s]["gate_family"] for s in cond if s not in hand_ids)
+    hitset = skilldesc.hit_gated_served(rep)
+    hit_nonattack = sorted(s for s in hitset if s not in hand_ids
+                           and rep["rows"][s]["gate_family"] == skilldesc.FAMILY_HIT_ONLY
+                           and rep["rows"][s]["type_code"] != skilldesc.ATTACK_TYPE)
+    check(fams == {"HIT_ONLY": 67, "NUMBER_UNGATED": 45, "GATED": 98}
+          and fams_nh == {"HIT_ONLY": 48, "NUMBER_UNGATED": 41, "GATED": 89}
+          and len(hitset) == 112 and not set(hitset) & set(plain) and set(hitset) <= set(cond)
+          and all(rep["rows"][s]["gate_family"] is None for s in plain)
+          and hit_nonattack == [171, 237, 824, 1374]
+          and rep["rows"][1403]["gate_family"] == "HIT_ONLY" and rep["rows"][884]["gate_family"] == "GATED",
+          "SKILLS-LW: the 210 by what their numbers are gated on -- HIT_ONLY 67 (48 not hand), "
+          "NUMBER_UNGATED 45 (41), GATED 98 (89); hit_gated_served is those 112, PARALLEL to the "
+          "plain 131 (disjoint, every plain row reads None); four hit-only rows are SPELLS (171 237 "
+          "824 1374); 1403's 'when ... hits' is a hit, 884's 'when' is a predicate (the triage "
+          "counted both the other way)", (dict(fams), dict(fams_nh), len(hitset), hit_nonattack))
+    # The PLAIN set's pins below read the plain-only emit (`hit_gated=False`, the emitter's
+    # --no-hit-gated): SKILLS-LW adds a parallel set and moves none of them. The full emit
+    # (`lrows_all`) is pinned after them and is what the overlay holds.
+    lrows, excluded, _p = skilldesc.label_rows(rep, records, hand_ids, hit_gated=False)
+    lrows_all, excluded_all, _pa = skilldesc.label_rows(rep, records, hand_ids)
     # DESKWORK-D6 (2026-09-26): 167, 192 and 197 are HAND rows now (content/world.toml --
     # areas over time, studies/weapons 42), so the gate excludes them as HAND_ROW and the
     # label set is three rows smaller. The generator's READING of those three descriptions
@@ -1020,7 +1223,7 @@ if records is not None:
     # 192's knock-down clause), so they read a second emit with the three lifted out of the
     # hand set; this check pins that the real set differs from it by exactly those three.
     AOT_HAND = {167, 192, 197}
-    lrows_lift, _xl, _pl = skilldesc.label_rows(rep, records, hand_ids - AOT_HAND)
+    lrows_lift, _xl, _pl = skilldesc.label_rows(rep, records, hand_ids - AOT_HAND, hit_gated=False)
     check(AOT_HAND <= hand_ids and set(lrows_lift) - set(lrows) == AOT_HAND
           and all((sid, skilldesc.EXCL_HAND_ROW) in excluded for sid in AOT_HAND)
           and all(lrows_lift[sid] == lrows[sid] for sid in lrows),
@@ -1153,20 +1356,139 @@ if records is not None:
           "KNOWN-BAD ARMS (SKILLS-LU): 97 forced in with the AREA_CASTER mark is still named for its "
           "corpse (the class fault); 1262 forced in with HEAL_PARTY is named for its EXCLUDES_CASTER "
           "reading", (f97, f1262))
-    forced = None
+    # RE-AIMED 2026-10-07 (SKILLS-LW): this arm took the FIRST conditional row the gate
+    # passes and needed the checker to name it. Since the hit-gated set ships, a passing
+    # conditional row may be a legitimate one, so the arm now forces the GATED rows only --
+    # 334 alone (a +damage behind "a foe suffering from a condition"), then every GATED row
+    # the gate would pass, AS A SET -- and needs each named once for its wording. Still the
+    # same claim: a number behind a predicate or an event never reaches the overlay.
+    gated_pass = {}
     for sid in cond:
+        if rep["rows"][sid]["gate_family"] != skilldesc.FAMILY_GATED or sid in hand_ids:
+            continue
         why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
         if why is None:
-            forced = sid
-            break
-    bad = dict(lrows)
-    bad[forced] = {"fields": fields, "type_code": rep["rows"][forced]["type_code"],
-                   "tier": "label", "tier_detail": det, "verified": ver}
-    faults = skilldesc.check_label_rows(bad, rep, hand_ids)
-    check(forced is not None and len(faults) == 1 and str(forced) in faults[0]
-          and "conditional wording" in faults[0],
-          f"KNOWN-BAD ARM: a conditional SERVED row ({forced}) forced through the gate is the one "
-          f"fault the checker names", faults)
+            gated_pass[sid] = {"fields": fields, "type_code": rep["rows"][sid]["type_code"],
+                               "tier": "label", "tier_detail": det, "verified": ver}
+    bad = dict(lrows_all)
+    bad[334] = gated_pass.get(334)
+    faults = skilldesc.check_label_rows(bad, rep, hand_ids) if bad[334] else ["334 did not pass the gate"]
+    bad_set = {**lrows_all, **gated_pass}
+    faults_set = skilldesc.check_label_rows(bad_set, rep, hand_ids, records)
+    named = collections.Counter(int(x.split(":")[0]) for x in faults_set if "conditional wording" in x)
+    check(len(faults) == 1 and faults[0].startswith("334: conditional wording")
+          and len(gated_pass) == 46 and set(named) == set(gated_pass) and set(named.values()) == {1}
+          and all(int(x.split(":")[0]) in gated_pass for x in faults_set),
+          f"KNOWN-BAD ARM: 334 (a GATED +damage) forced through the gate is the ONE fault the "
+          f"checker names; and all {len(gated_pass)} GATED rows the gate would pass (predicate, event, "
+          f"count, chance rows), forced in as a set, are each named once for their conditional "
+          f"wording and nothing else faults", (faults, len(gated_pass), sorted(gated_pass)[:12],
+                                               [x for x in faults_set if "conditional wording" not in x][:4]))
+    # ---- SKILLS-LW: the full emit -- the plain rows unmoved, the hit-gated rows pinned
+    new = sorted(set(lrows_all) - set(lrows))
+    hit_x = collections.defaultdict(list)
+    for s, w in excluded_all:
+        if s in hitset:
+            hit_x[w].append(s)
+    check(all(lrows_all[s] == lrows[s] for s in lrows) and set(lrows) <= set(lrows_all)
+          and [x for x in excluded_all if x[0] not in hitset] == excluded
+          and len(lrows_all) + len(excluded_all) == len(plain) + len(hitset)
+          and skilldesc.check_label_rows(lrows_all, rep, hand_ids, records) == [],
+          "the full emit = the plain emit, byte for byte on every plain row, PLUS the hit-gated "
+          "rows; its exclusions over the plain set are the plain emit's; the arithmetic closes "
+          "(rows + excluded = plain + hit-gated); and it passes its own checker with the records",
+          (len(lrows_all), len(excluded_all), len(plain), len(hitset)))
+    check(new == [163, 195, 196, 215, 296, 328, 336, 338, 355, 358, 360, 383, 391, 393, 400, 402, 404,
+                  409, 571, 776, 777, 844, 888, 889, 904, 929, 976, 986, 1022, 1068, 1095, 1133, 1135,
+                  1144, 1367, 1402, 1403, 1413, 1415, 1466, 1469, 1474, 1525, 1546, 1547, 1550, 1600,
+                  1637, 1694, 1695, 1696, 1753, 1755, 1784, 2015, 2135, 2146, 2202, 2210, 2238]
+          and {w: sorted(v) for w, v in hit_x.items()} == {
+              "HAND_ROW": [1, 52, 194, 230, 317, 320, 322, 323, 337, 339, 351, 382, 385, 392, 398,
+                           780, 781, 782, 858, 1136, 1191, 1551, 2059],
+              "DURATION_ONLY": [88, 225, 235, 264, 265, 377, 456, 893, 1344],
+              "UNMODELLED_CLASS": [120, 915, 1234, 1814], "PET_ATTACK": [437, 1201, 1206],
+              "CONDITION_ON_EPISODE": [1470], "HEAL_RECIPIENT_CLASS": [460],
+              "TARGET_REQUIREMENT": [778, 1636], "HIT_NOT_EVALUATED": [171, 237, 824, 1374],
+              "LIMITING_CLAUSE": [866], "ENDS_EARLY": [995, 1037, 1514, 1728]},
+          "THE FUNNEL (38797): 112 hit-gated (89 not hand) -> 23 hand rows and the older rules' 18 "
+          "(9 duration-only, 4 unmodelled classes -- 1814's 'demonic' target among them, 3 pet "
+          "attacks, 1470's rider, 460's class heal) leave 71 -> the four new reasons take 11 (778 1636 "
+          "'must strike a <state> foe'; 171 237 824 1374 a hit reading on a SPELL; 866's halving; "
+          "995 1037 1514 1728 ending early) -> 60 ship. The triage's 68 also had 884 (a predicate), "
+          "1814, and those 10 -- 8 rows that over-apply", (new, {w: sorted(v) for w, v in hit_x.items()}))
+    t_new = collections.Counter(lrows_all[s]["type_code"] for s in new)
+    att = [s for s in new if lrows_all[s]["type_code"] == skilldesc.ATTACK_TYPE]
+    prof = collections.Counter(int(records[s]["profession"]) for s in att)
+    check(t_new == {14: 43, 5: 11, 3: 4, 6: 1, 7: 1} and prof == {1: 19, 2: 8, 7: 7, 9: 7, 10: 2}
+          and {391, 393, 400, 402, 404, 409} <= set(att) and {336, 355, 360} <= set(att),
+          "the 60 by type: 43 attacks (Warrior 19, Ranger 8, Assassin 7, Dervish 7, Paragon 2 -- the "
+          "Ranger bow set 391 393 400 402 404 409 among them), 11 Spells, 4 Stances, 1 Enchantment "
+          "(1755), 1 Signet (296)", (dict(t_new), dict(prof)))
+    hg = [s for s in new if skilldesc.DETAIL_HIT_GATED in lrows_all[s]["tier_detail"]]
+    cdr = [s for s in new if skilldesc.DETAIL_CONDITIONAL_DROPPED in lrows_all[s]["tier_detail"]]
+    pre = [s for s in new if not (set(lrows_all[s]["tier_detail"]) & set(skilldesc.DETAILS))
+           - {skilldesc.DETAIL_HIT_GATED, skilldesc.DETAIL_CONDITIONAL_DROPPED}]
+    check(all(set(lrows_all[s]["tier_detail"]) & set(skilldesc.DETAILS) for s in new)
+          and len(hg) == 42 and hg == [s for s in att if s != 1753]
+          and len(cdr) == 35 and len(set(hg) & set(cdr)) == 17
+          and pre == [336, 360, 383, 391, 402, 404, 904, 976, 1068, 1144, 1413, 1466, 1474, 1546,
+                      1600, 1696, 1753, 2015, 2146]
+          and not any(set(lrows[s]["tier_detail"]) & {skilldesc.DETAIL_HIT_GATED,
+                                                      skilldesc.DETAIL_CONDITIONAL_DROPPED} for s in lrows),
+          "EVERY one of the 60 carries a mark: HIT_GATED on the 42 hit-only attacks (every attack "
+          "but 1753, whose number has no hit clause), CONDITIONAL_DROPPED on the 35 with a number-free "
+          "conditional sentence (17 carry both); 19 would carry NO mark without the two (the "
+          "triage's 17), and no plain row carries either", (len(hg), len(cdr), pre))
+    kd_new = sorted(s for s in new if lrows_all[s]["fields"].get("knocks_down"))
+    ckd_new = sorted(s for s in new if "CLAUSE_KNOCKDOWN" in lrows_all[s]["tier_detail"])
+    check(kd_new == [355] and ckd_new == [163, 296, 358, 777, 844, 1133, 2135]
+          and rep["rows"][355]["knockdown_gate"] == skilldesc.GATE_HIT
+          and all(rep["rows"][s]["knockdown_gate"] == skilldesc.GATE_OTHER for s in (296, 777, 2135))
+          and rep["rows"][163]["knockdown_gate"] == skilldesc.GATE_QUALIFIED
+          and records[358]["duration0"] == 2 and records[358]["duration15"] == 4,
+          "knocks_down among the 60: 355 alone (its fall behind a bare landing on an attack -- the "
+          "positive control); 296 777 2135 keep CLAUSE_KNOCKDOWN on the SENTENCE guard (a fall behind "
+          "a predicate); 163 is a qualified fall and, with 844, a timed record; 358's 2..4 s duration "
+          "is the older timed-record rule (its conditional sentence is the length, dropped); 1133's is "
+          "the caster's own", (kd_new, ckd_new))
+    lw_force = {}
+    for sid, want in ((866, "LIMITS"), (995, "ENDS"), (778, "use requirement"), (1636, "use requirement"),
+                      (171, "non-attack")):
+        why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
+        row_f = {"fields": fields or {"scale_means": skilldesc.means_for(
+                     rep["rows"][sid]["slots"][-1]["label"], rep["rows"][sid]["slots"][-1]["detail"])
+                     or "+ Damage"},
+                 "type_code": rep["rows"][sid]["type_code"], "tier": "label",
+                 "tier_detail": det or [skilldesc.DETAIL_CONDITIONAL_DROPPED], "verified": ver}
+        lw_force[sid] = (why, skilldesc.check_label_rows({sid: row_f}, rep, hand_ids, records), want)
+    check(all(why is not None and any(want in x for x in f) for why, f, want in lw_force.values()),
+          "KNOWN-BAD ARMS: 866 (LIMITING_CLAUSE), 995 (ENDS_EARLY), 778 and 1636 (TARGET_REQUIREMENT) "
+          "and 171 (HIT_NOT_EVALUATED) are refused by the gate, and each forced in is named by the "
+          "checker for that reason", {s: (a[0], a[1]) for s, a in lw_force.items()})
+    _g = skilldesc.KD_SENTENCE_GUARD
+    try:
+        skilldesc.KD_SENTENCE_GUARD = False
+        lrows_off, _xo, _po = skilldesc.label_rows(rep, records, hand_ids)
+    finally:
+        skilldesc.KD_SENTENCE_GUARD = _g
+    kd_off = sorted(s for s in lrows_off if lrows_off[s]["fields"].get("knocks_down")
+                    and not lrows_all[s]["fields"].get("knocks_down"))
+    f_off = {s: skilldesc.check_label_rows({s: lrows_off[s]}, rep, hand_ids, records) for s in kd_off}
+    check(kd_off == [296, 777, 2135] and lrows_off[355] == lrows_all[355]
+          and all(f and any("conditional knock-down" in x for x in f) for f in f_off.values()),
+          "KNOWN-BAD ARM (KD_SENTENCE_GUARD = False): the emitter writes knocks_down on exactly 296 777 "
+          "2135 (a Signet felling any foe, an Assassin's fall regardless of allies, a fall on any foe "
+          "not only a crippled one) and the checker, guard on, names each; 355 is the same row either "
+          "way -- the positive control", (kd_off, f_off))
+    strip = {}
+    for sid, mark, want in ((391, "HIT_GATED", "HIT_GATED mark"), (402, "CONDITIONAL_DROPPED", "CONDITIONAL_DROPPED mark"),
+                            (1068, "CONDITIONAL_DROPPED", "no mark")):
+        r = dict(lrows_all[sid], tier_detail=[d for d in lrows_all[sid]["tier_detail"] if d != mark])
+        strip[sid] = (mark in lrows_all[sid]["tier_detail"],
+                      skilldesc.check_label_rows({sid: r}, rep, hand_ids, records), want)
+    check(all(had and any(want in x for x in f) for had, f, want in strip.values()),
+          "KNOWN-BAD ARMS: 391 stripped of HIT_GATED, 402 of CONDITIONAL_DROPPED, and 1068 left with no "
+          "mark at all are each named", {s: a[1] for s, a in strip.items()})
     # the generator's READING, counted over the lifted emit (DESKWORK-D6's three hand rows
     # included -- the emitted overlay is these less 167 192 197, pinned above)
     dt = collections.Counter(d for r in lrows_lift.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
@@ -1264,14 +1586,20 @@ if records is not None:
         import textrec
         p1, p2 = os.path.join(tmp, "a.toml"), os.path.join(tmp, "b.toml")
         digest = skilldesc.template_digest(texts)
-        skilldesc.emit_labels(lrows, excluded, build, exe, p1, plain, dat=textrec.DEFAULT_DAT, digest=digest)
-        skilldesc.emit_labels(lrows, excluded, build, exe, p2, plain, dat=textrec.DEFAULT_DAT, digest=digest)
+        # SKILLS-LW: the emit is the FULL set (plain + hit-gated), what --emit-labels writes
+        skilldesc.emit_labels(lrows_all, excluded_all, build, exe, p1, plain, dat=textrec.DEFAULT_DAT,
+                              digest=digest, hit_gated=hitset)
+        skilldesc.emit_labels(lrows_all, excluded_all, build, exe, p2, plain, dat=textrec.DEFAULT_DAT,
+                              digest=digest, hit_gated=hitset)
         b1, b2 = open(p1, "rb").read(), open(p2, "rb").read()
         with open(p1, "rb") as fh:
             table = tomllib.load(fh)
         se = table["skill_effect"]
-        check(b1 == b2 and len(se) == len(lrows) and set(map(int, se)) == set(lrows),
-              "the overlay is DETERMINISTIC (two emits, identical bytes) and holds exactly the set")
+        check(b1 == b2 and len(se) == len(lrows_all) and set(map(int, se)) == set(lrows_all)
+              and f"# rows: {len(lrows_all)} label-tier skill_effect rows = {len(plain)} plain SERVED".encode()
+              in b1 and f"+ {len(hitset)} hit-gated SERVED".encode() in b1,
+              "the overlay is DETERMINISTIC (two emits, identical bytes) and holds exactly the set; "
+              "its header counts the plain and the hit-gated candidates")
         check(all(r["provenance"]["source"] == "client-table"
                   and r["provenance"]["extractor"] == "toolkit/clientscan/skilldesc.py"
                   and r["provenance"]["build"] == 38797 and r["tier"] == "label"
@@ -1287,13 +1615,13 @@ if records is not None:
         w = content.load(vault_dir=tmp)
         lab = skilldesc.loaded_label_rows(w)
         hnd = skilldesc.hand_rows(w)
-        check(set(lab) == set(lrows) and set(hnd) == hand_ids
-              and all(w.rows("skill_effect")[str(s)]["tier"] == "label" for s in lrows),
+        check(set(lab) == set(lrows_all) and set(hnd) == hand_ids and not w.dropped
+              and all(w.rows("skill_effect")[str(s)]["tier"] == "label" for s in lrows_all),
               "content.load takes the overlay as the vault: the label rows load under the hand "
               "rows, and hand_rows() / loaded_label_rows() split them by tier")
         g2 = skilldesc.census(records, hnd, labels=lab)
         c2 = collections.Counter(g2.values())
-        check(c2["label-only"] == len(lrows) and c2["modelled"] == g["modelled"]
+        check(c2["label-only"] == len(lrows_all) and c2["modelled"] == g["modelled"]
               and all(g2[s] == grades[s] for s in records if s not in lab),
               "the census grades a label row 'label-only', never 'modelled', and nothing else moves",
               dict(c2))
@@ -1355,7 +1683,8 @@ if records is not None:
                         d2 = skilldesc.template_digest(t2)
                         p3 = os.path.join(tmp, "header_emit.toml")
                         skilldesc.emit_labels(rows2, excl2, skilltable.build_of(ix2.pe.data), hexe, p3,
-                                              plain2, dat=hdat, digest=d2)
+                                              plain2, dat=hdat, digest=d2,
+                                              hit_gated=skilldesc.hit_gated_served(rep2))
                         _fresh[(hexe, hdat)] = (d2, open(p3, "rb").read(), bad2)
                     finally:
                         ix2.close()
