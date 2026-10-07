@@ -2395,14 +2395,19 @@ A heal "threshold" is not identifiable there: the 313 casters fire every **11.50
 reconstructed health at the cast is the interval times the degeneration — a timer and a
 threshold predict the same 0.686. Healing Signet's intervals are bimodal (12.75 or 22.75
 s), unexplained. **Every AI heal on tape is a self-heal**: a heal on another ally is
-n = 0, and so is any condition- or hex-removal skill (P4 untestable).
+n = 0, and so is any condition- or hex-removal skill (P4 untestable). *(Superseded for
+removals by the Zaishen tapes: 117 AI removal casts, every one at a carrier — §18.5,
+CASTAI-RM1.)*
 
 ### CASTAI-C7 — four casts came before their table recharge had elapsed
 
 OBSERVED, unexamined: 38833:138 skill 1217 at −42.0 s, 38833:3489 skill 1197 at −3.0 s,
 38888:129 skill 229 at −0.50 and −1.75 s. 129 is the best hostile caster on tape. Whether
 monsters obey the player's recharge table is open, and a policy leaning on exe recharge
-for bodies should settle it first.
+for bodies should settle it first. **CLOSED 2026-10-07 (§18.5, CASTAI-RM5)**: the table
+recharge, from the completion, holds for 1,209 of 1,216 completion-measured AI re-casts;
+1197 is a measure artefact, 1217 an n = 1 body the table does not govern, and 129's two 229s
+stay UNEXPLAINED.
 
 ### CASTAI-C8 — a monster's ally-kind enchantment lands on itself
 
@@ -2497,8 +2502,9 @@ photographed.
    multi-skill hostile, which is a capture campaign.
 2. **Which tier our monsters are** (CASTAI-W2) — the Hero-vetted table is the hero tier;
    the normal-mode tiers are unpublished and only the tape can show them.
-3. **An AI heal on another ally, a removal skill** — n = 0 each on tape.
-4. **Monsters and the recharge table** (CASTAI-C7).
+3. **An AI heal on another ally, a removal skill** — n = 0 each on tape. *(Removal: 117
+   casts since, gated and shipped — §18.5.)*
+4. **Monsters and the recharge table** (CASTAI-C7). *(Closed — §18.5, CASTAI-RM5.)*
 5. **Area hexes' other wearers** (CASTAI-R3).
 
 ---
@@ -2883,6 +2889,151 @@ each have an exact per-tape witness in the test named.
 | **CASTAI-ZF35** | **c2s `0x0042 [agent]`**: sent twice, each time with a TARGET_SELECT of the Zaishen Fighter, once while the player was dead and once 21 ms after it revived. After the first, retail handed control to the Fighter (s2c `0x0022 [9, 0]`, UPSTREAM WORLD_UPDATE_CONTROLLED_AGENT, removing agents 1 and 2) and handed it back (`[7, 1]`) in the batch that revived the player. Four earlier tapes carry the same [other, 1] then [own, 1] pair. "Observe a party member while dead" is RECONSTRUCTION. **Left UNNAMED at n = 2, dropped on purpose; the name is the owner's to decide**, as 0x00A3's was. The lane's own-agent rule had to be replaced: the first-PLAYER_INFO rule names the wrong agent on 43 of 110 corpus loads. | OBSERVED (the sends, the handoff); RECONSTRUCTION (the meaning) | `test_c2striage`, `test_dispatch` |
 | **CASTAI-ZF36** | **Smaller things.** 1. 680 is Power Shot's (394) own projectile, not a new arrow. 2. A Fire Storm tick can land 68 ms late, inside D6's registered 100 ms. 3. A body's `[4]` attack start and `[50]` attack-skill announce can share one instant. 4. A buff id is reused the instant it is freed. 5. A round's end strips every effect on every body in one batch, 8 of 8 rounds. 6. Aura of Restoration is cast as the PvE row 180, which corroborates GWW's bug note. 7. The exe's 276 row has the same (energy, activation, recharge, byte) as 275, so the triple cannot tell the two apart. 8. `0x009F [159, 57, agent, 0]` arrives at ~0.5 s intervals on the monks, meaning NOT FOUND. 9. The monks swing at a median 1.709 s, and their target switches come as a group within ~2 s. | OBSERVED | the lanes' tests; `zaishenrun` |
 | **CASTAI-ZF37** | **The Zaishen Mage's `[61]` cast-time word is intermittent**: 30 words over 107 casts, only in matches 2 and 3 and starting mid-match. Matches 1, 4 and 5 run at table speed. ZF10's "the Mage casts at × 0.67 on every cast" holds on the Z1 tape only. No monk cast carries a `[61]`. The cause is UNVERIFIED. | OBSERVED | `zaishenrun` |
+
+### 18.5 CASTAI-RM — removal skills: a cure needs an afflicted target, Remove Hex works, CASTAI-C7 closed (2026-10-07)
+
+**Identifiers.** `CASTAI-RM<n>` = this section's findings and decisions on REMOVAL skills
+(conditions and hexes taken off an ally) and the recharge question C7 left — the CASTAI
+word, §17's legend. Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**Why now.** §17 closed with "a removal skill — n = 0 on tape" (CASTAI-C6, Open item 3).
+The Zaishen tapes (§18.1, §18.3) put 117 AI removal casts on the wire, and the server was
+wrong about them in BOTH directions: Mend Condition 275, Restore Condition 276 and Mend
+Ailment 277 carry `scale_means = "Healing"`, so both AI loops aimed them as heals — at the
+hurt-most ally under `HERO_HEAL_AT` (0.9) whether or not it carried a condition, where
+`resolve_heal` then removed and healed nothing, and never at an afflicted ally at 0.9 or
+above. A hostile's Remove Hex 301 (a byte-3 non-heal) went at ITSELF (CASTAI-R2's rule) and
+had no row, so it removed nothing, ever. The slice's Monk hero (bar `[281, 276, 2]`) and the
+corridor's academy monks (`[281, 252, 276]`) carry 276 by default.
+
+**Every number below was re-derived on 2026-10-07 against `642d8957`** with the repo's own
+readers — `review/castethogram.py --json --no-save` (26 s, the gapped `20260928T103123
+:65009` refused by its byte accounting, as every reader does), `review/zaishenrun.py
+--capture 20260929T100038` and `--prefix`, and a `livewire.decode_conn` scan for the wire.
+The pass-9 triage that proposed this lane was right on direction and wrong in two details,
+named where they fall.
+
+#### CASTAI-RM1 — retail's AI removals go only at a carrier, at any health
+
+OBSERVED (castethogram's rows; the status bit read strictly before the announce in stream
+order, ZF22):
+
+| Skill | AI casts | at a body with the bit | self-form | target health min / median / max | ≥ 0.9 |
+|---|---|---|---|---|---|
+| 275 Mend Condition (byte 4) | 92 (the Smiting Monks) | 92 (condition 0x02) | 0 | 0.035 / 0.563 / 1.000 | 2 |
+| 277 Mend Ailment (byte 3) | 14 (the Elementalists) | 14 (condition) | 3 | 0.068 / 0.485 / 0.857 | 0 |
+| 301 Remove Hex (byte 3) | 10 (Elementalists 7, the henchman Healer 3) | 10 (hexed 0x800) | 3 | 0.239 / 0.906 / 1.000 | 5 |
+
+**106 of 106 cures and 10 of 10 hex removals at a carrier, 0 at a clean body.** An 11th
+Remove Hex, the Healer's self-form cast on the gapped `:65009` prefix, scores the same under
+`zaishenrun --prefix` (Z1.P2: 4 of 4 hexed). 276 itself has **0** retail casts — that it
+rides the same rule is RECONSTRUCTION by class. The caster is a legal target for byte 3 (6
+self-form casts, one of them the Healer's 301 stopped by a `[59]`) and never for byte 4 (0 of
+92). **There is no health floor**: retail cured a monk at 1.000 and Remove Hexed four bodies
+at 0.906–1.000 (the henchman Healer's three at 0.997–1.000). **Triage correction:** "5
+self-form 277s" is zaishenrun Z3.P3's 5 self-form casts, which are 3 Mend Ailments and 2
+Remove Hexes; the conclusion (byte 3 admits the caster) stands. Tier: the Zaishen teams are
+CASTAI-W2's hero tier and the Healer is a henchman — the same AI class as our party bodies
+(WIKI, *Hero behavior* rev 2741080: heroes and henchmen share the AI and cleanse conditions
+and hexes on allies); for a normal-mode MONSTER this is RECONSTRUCTION, as §17 says of the
+live-effect gate.
+
+#### CASTAI-RM2 — the hex-removal wire
+
+OBSERVED, every live 301 off the gapped connection (a `livewire.decode_conn` scan): 14
+announces — the 10 AI casts above and 4 human ones on `20260817T231139` — 13 completed with
+`[58, caster, 0]` and 1 stopped by `[59]`. **11 of the 13 completion batches carry `[7, T,
+1]` `[7, T, class]` (class 9 on the Healer's two targets, 12 elsewhere) and an `0x00F1` with
+0x800 clear** — the target's last hex gone. The other 2 are the late removers at 459.68: a
+301 completed 0.75 s earlier at 458.93 had already cleaned their target, and they send their
+`[58]` and visual and nothing else — they land on nothing, as `remove_hexes` returns `[]`
+for a bare wearer. An `0x00A0`-form completion carries `[20, T, caster, 537]` (Smite Hex
+302's is 536); 537 has no `skill_visual` row and was left out (cosmetic). **A removed
+Incendiary Bonds fires nothing**: 0 payoff, 4 of 4 (studies/skills 61.1 — those are the 4
+human casts above; WIKI *Incendiary Bonds* rev 2733032). **How many per cast is not on the
+wire**: a removal that leaves another hex of the same class sends a non-observer reader
+nothing, and the client record holds no count (type 5, target byte 3, args 0 — no slot;
+`skilldesc.py --row 301` flags TARGET_ALLY only). One per cast is RECONSTRUCTION from the
+skill's singular name, UNVERIFIED; **GWW "Remove Hex" is the read owed**. Which one: the
+newest, the WIKI rule `remove_conditions` already cites (GWW *Effect* / *Cover*).
+
+#### CASTAI-RM3 — what shipped (`e0af0629`)
+
+`REMOVAL_NEEDS_AFFLICTION` (ON; `--no-removal-needs-affliction` reverts): a slot whose
+`skill_effect` row removes something (`episodemods.removal_class`: `removes_conditions`, or
+the new `removes_hexes`; 364's singular `removes_condition` is a shout's side effect and is
+not one) is aimed by `removal_target` at an ally that CARRIES it
+(`episodemods.carries_removable`), with no health floor, in both AI loops; nobody carrying
+it HOLDS the slot the heal hold's way (ready, uncharged, the cursor stepped, a same-tick
+re-pick). A target step, not a selector: `pick_skill` is untouched (its AST lock holds) and
+there is still one `live_effect_hold` call per loop — the hold order stays target →
+live-effect → reach → pay. It is **the class `PLAN.md` §7 Q19 names** ("can this body
+legally and usefully cast the slot it picked"), extended to removals, shipped under the
+derived + flagged + tested rule. Remove Hex 301 works: `skill_effect.301 removes_hexes = 1`
+(a capture row), `remove_hexes` beside `remove_conditions` (newest first; the existing
+0x0044 / aura-off / `push_status` close; no end burst), a `resolve_heal` branch riding the
+cure rule's flag. `toolkit/authsrv/test_castgate.py` §7 (bare-machine, carried rows) and §8
+(vault: the retail casts replayed through `removal_target` — 0 of 116 held, retail's own
+target named every time; a known-bad 0.9 floor refuses 2 of 92 275s and 5 of 10 301s).
+
+#### CASTAI-RM4 — the pick among several carriers is ours
+
+No tape shows an AI choosing between two afflicted allies. The lowest health fraction, then
+the lowest id, is RECONSTRUCTION, said at `removal_target`. Retail's monks also act on state
+about one AI step stale (0.19–0.54 s from a hex's rise, §18.3); the server reads the exact
+state and does not copy the lag.
+
+#### CASTAI-RM5 — CASTAI-C7 is CLOSED: the table recharge governs AI bodies
+
+C7's question was whether monsters obey the exe's recharge table, because a policy leaning
+on it for bodies "should settle it first". OBSERVED over castethogram's 1,366 AI casts with a
+measured gap: of the **1,216 measured from the previous cast's completion, 1,209 (99.4 %)
+come no sooner than 50 ms before completion + the table recharge**, and 21 sit within 50 ms
+of it — 20 of
+those with an activation of 0.5 s or more, which an announce-anchored clock would have let
+go at least half a second sooner. So the recharge runs from the completion, as ours does.
+The four casts C7 named, re-classified:
+
+- **38833:3489 skill 1197 at −3.0 s** — measured from a previous cast that never completed
+  (`superseded`): the gap the reader assumed never started. An artefact of the measure
+  (triage right).
+- **38833:138 skill 1217 at −42.0 s** — a type-16 instant re-cast 3.0 s after itself against
+  a 45 s table recharge, by a self-only Isle body: the table does not govern that body's 1217
+  at all. n = 1 pair (triage right, and the wider point is this one).
+- **38888:129 skill 229 at −0.50 and −1.75 s** — **triage wrong**: not "Isle metronome
+  bodies". 38888:129 is the engaging multi-skill Isle caster (C5's best hostile). Both re-casts
+  would be legal from the ANNOUNCE (1.50 / 0.25 s after it), but two of 129's own other
+  re-casts sit on completion + recharge. **UNEXPLAINED, n = 2, one definition.**
+
+The Zaishen tapes add four more completion-measured early casts — 38888:119's 102 at
+−6.3 s, 38888:124's Drain Enchantment 68 at −16.2 s, and the henchman 38888:25's attack
+skills 402 at −0.7 s and 404 at −0.5 s, both ending `superseded` — none a removal skill,
+none a reason to doubt the table for the bodies this server runs. (The 150 casts measured
+from an UNCOMPLETED previous cast, 1197's kind, have 8 early, on a premise — that an
+uncompleted cast recharges from its announce — that is itself UNVERIFIED.) C7
+closes: the body recharge stays the table's, from the completion; the seven
+completion-measured residuals (these four and C7's three) are named here and not chased.
+
+#### CASTAI-RM6 — what stays open, and why
+
+- **CASTAI-R3** (area hexes' other wearers) — no witness either way.
+- **Smite Hex 302 and Drain Enchantment 68** — 302's area holy damage rides property 55
+  (ZF31, unmodelled); 68 is a FOE-target enchantment removal (42 of 43 at an enchanted body)
+  whose wire is ZF24's class words. The `removes_hexes` key and the predicate are the door
+  for 302 / 303; enchantment removal has none yet.
+- **The upkeep hold for 289 / 290** (a maintained enchantment opens no episode, so the
+  Hatcher re-casts 289 every 2 s) — n = 4, one definition (an Isle body's 290, once per life),
+  and the marker belongs in the landing path other lanes own this pass. Not shipped.
+- **Selection order (C5), the tier (W2), heal thresholds** — Q19 declined them; a capture
+  campaign or the owner.
+- **The cure wire** — 275's completion batch is on tape (92 casts) and has not been joined
+  against `remove_conditions`' batch. Named, unowned.
+
+**What the owner will feel** (by code reading; the runsheet is in the PLAN-LOG entry): in a
+fight with no conditions the slice's Tahlkora never casts 276 (it used to cast it at the hurt
+player and heal nothing), so her Orison comes round faster; a Bleeding or Poisoned party
+member — the player included, at full health — draws 276 at once; the corridor's academy
+monks cure each other.
 
 ## 19. The charmable animal's turn — RANGERPRE-S12 (2026-09-30)
 
