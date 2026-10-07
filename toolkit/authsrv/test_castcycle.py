@@ -62,7 +62,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=57)   # the BARE-MACHINE number: 57 without the vault (2f's real row, 5 and 11 skip), 63 with it; 2f (the attack-target gate) +8 bare / +9 vault, 2026-09-27 -- the pre-gate press path reddens 5 of the 9; 2d (reach at the strike) +6, 2e (the approach, SLICE-C2) +12, 2026-09-12; from green runs of both
+LEDGER = checks.Ledger("cast cycle", floor=60)   # 2026-10-07 (SLICE-F52 52.8): section 3 re-aimed, 2 -> 5 checks, 57 -> 60 bare / 63 -> 66 vault, both MEASURED; before it: the BARE-MACHINE number: 57 without the vault (2f's real row, 5 and 11 skip), 63 with it; 2f (the attack-target gate) +8 bare / +9 vault, 2026-09-27 -- the pre-gate press path reddens 5 of the 9; 2d (reach at the strike) +6, 2e (the approach, SLICE-C2) +12, 2026-09-12; from green runs of both
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1035,31 +1035,85 @@ def section_skill_visual():
 def section_order_pinned_when_inverted():
     import authsrv
 
-    print("\n3. a zero-recharge skill still closes E5 -> E3 -> E6, never "
-          "E6 before E3")
+    # RE-AIMED 2026-10-07 (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5). This section
+    # used to PIN "a zero-recharge skill still closes E5 -> E3 -> E6" -- the shape
+    # this server sent for 382 / 384 / 385 and retail never does (46 of 46
+    # observer completions of a table-recharge-0 skill carry no E5 and no E6).
+    # The ORDER guard it carried (E6 never ahead of E3) is kept, on a recharge
+    # SHORTER than the aftercast, which still puts e6_at before e3_at; the old
+    # zero-recharge bytes are kept too, as the --zero-recharge-e5 arm's.
+    print("\n3. a zero-recharge skill closes with no E5 and no E6; a recharge "
+          "shorter than the aftercast still never sends E6 before E3")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
-    state = {"agents": {}}
     saved = authsrv.skill_timing
-    # recharge 0 < aftercast 0.75: e6_at lands BEFORE e3_at. The corpus never
-    # shows E6 preceding E3, so the tick must hold E6 for its E3.
-    authsrv.skill_timing = lambda sid: (0.0, 0.75, 0.0)
+    saved_flag = authsrv.ZERO_RECHARGE_SKIPS_E5
     try:
+        # (a) THE DEFAULT: recharge 0. The E5 phase still fires -- the [58]
+        # and the hold pulse ride it -- with no E5; the E3 closes the cycle
+        # and nothing follows it, on that tick or any later one.
+        authsrv.ZERO_RECHARGE_SKIPS_E5 = True
+        authsrv.skill_timing = lambda sid: (0.0, 0.75, 0.0)
+        state = {"agents": {}}
         _press(authsrv, send, state)
         sent.clear()
         _rewind(state, 0.5)   # e5 and e6 both past due; e3 not yet
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x009F, 0x009F],
-              "E6 is due but WAITS: the observed order outranks the clock",
+        check([op for op, _, _ in sent] == [0x009F, 0x009F, 0x009F]
+              and sent[0][1][0] == authsrv.agents.GV_SKILL_FINISHED,
+              "a zero-recharge skill's completion: the [58] and the hold pulse, "
+              "and NO E5 (retail: 46 of 46 observer completions of a "
+              "table-recharge-0 skill, SLICE-F52 52.8)",
               f"{[hex(op) for op, _, _ in sent]}")
+        _rewind(state, 0.5)
+        authsrv.cast_tick(send, state, 0)
+        _rewind(state, 30.0)
+        authsrv.cast_tick(send, state, 0)
+        check([op for op, _, _ in sent] == [0x009F, 0x009F, 0x009F, 0x00E3]
+              and state["pending_casts"] == [],
+              "then the E3 alone closes it -- no E6, then or later, and the "
+              "entry is gone",
+              f"{[hex(op) for op, _, _ in sent]} pending {state['pending_casts']}")
+        # (b) THE ORDER GUARD, on a real recharge: 1 s < aftercast 1.5 s puts
+        # e6_at BEFORE e3_at. The corpus never shows E6 preceding E3, so the
+        # tick must hold E6 for its E3.
+        authsrv.skill_timing = lambda sid: (0.0, 1.5, 1.0)
+        state = {"agents": {}}
+        _press(authsrv, send, state)
+        sent.clear()
+        _rewind(state, 1.2)   # e5 and e6 both past due; e3 not yet
+        authsrv.cast_tick(send, state, 0)
+        check([op for op, _, _ in sent] == [0x00E5, 0x009F, 0x009F, 0x009F]
+              and sent[0][1][3] == 1,
+              "E6 is due but WAITS: the observed order outranks the clock "
+              "(recharge 1 s, aftercast 1.5 s)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
         _rewind(state, 0.5)
         authsrv.cast_tick(send, state, 0)
         check([op for op, _, _ in sent] ==
               [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00E6],
               "then E3 and E6 land together on the next tick, in order",
               f"{[hex(op) for op, _, _ in sent]}")
+        # (c) KNOWN-BAD ARM, --zero-recharge-e5: the bytes this section pinned
+        # until 2026-10-07 -- E5 [.., 0] opens the completion, E6 waits for E3.
+        authsrv.ZERO_RECHARGE_SKIPS_E5 = False
+        authsrv.skill_timing = lambda sid: (0.0, 0.75, 0.0)
+        state = {"agents": {}}
+        _press(authsrv, send, state)
+        sent.clear()
+        _rewind(state, 0.5)
+        authsrv.cast_tick(send, state, 0)
+        _rewind(state, 0.5)
+        authsrv.cast_tick(send, state, 0)
+        check([op for op, _, _ in sent] ==
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00E6]
+              and sent[0][1][3] == 0,
+              "KNOWN-BAD ARM --zero-recharge-e5: E5 [.., 0] -> E3 -> E6, the "
+              "shape this server sent until 2026-10-07",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
     finally:
         authsrv.skill_timing = saved
+        authsrv.ZERO_RECHARGE_SKIPS_E5 = saved_flag
 
 
 def section_queue_law():

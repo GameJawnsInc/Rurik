@@ -2900,7 +2900,9 @@ def section_spell_projectiles():
               "anything under --no-spell-projectiles or --no-projectiles", str(hows))
 
         # through the real press, E5 and arrival
-        authsrv.skill_timing = lambda sid: (1.0, 0.75, 0.0)
+        # recharge 5, not 0 (SLICE-F52 52.8): a 0-recharge completion sends no E5 now,
+        # and the E5 is this batch's order anchor; the 30 s rewind keeps the E6 due either way
+        authsrv.skill_timing = lambda sid: (1.0, 0.75, 5.0)
         authsrv._is_attack_skill = lambda sid: False
         authsrv.skill_cost = lambda sid: (0, 0)
         authsrv.weapon_satisfies = lambda sid: True
@@ -3376,7 +3378,9 @@ def section_spell_areas():
               "visual -- the player takes nothing", str([(hex(op), v) for op, v in arr]))
 
         # the player's Fireball at a hostile with a second one 50 u beside it
-        authsrv.skill_timing = lambda sid: (1.5, 0.75, 0.0)
+        # recharge 5, not 0 (SLICE-F52 52.8): a 0-recharge completion sends no E5 now,
+        # and the E5 is this batch's order anchor; the 30 s rewind keeps the E6 due either way
+        authsrv.skill_timing = lambda sid: (1.5, 0.75, 5.0)
         authsrv.skill_cost = lambda sid: (0, 0)
         authsrv.weapon_satisfies = lambda sid: True
         authsrv.apply_party_character({"player_weapon": "starter_wand"})
@@ -3899,7 +3903,9 @@ def section_bursts():
         authsrv._is_attack_skill = lambda sid: False
         authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
         authsrv.skill_impact_visual = lambda sid: 304
-        authsrv.skill_timing = lambda sid: (3.0, 0.75, 0.0)
+        # recharge 5, not 0 (SLICE-F52 52.8): a 0-recharge completion sends no E5 now,
+        # and the E5 is this batch's order anchor; the 30 s rewind keeps the E6 due either way
+        authsrv.skill_timing = lambda sid: (3.0, 0.75, 5.0)
         authsrv.skill_cost = lambda sid: (0, 0)
         authsrv.weapon_satisfies = lambda sid: True
         authsrv.apply_party_character({"player_weapon": "starter_wand"})
@@ -4735,7 +4741,9 @@ def section_areas_over_time():
         authsrv._is_attack_skill = lambda sid: False
         authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
         authsrv.skill_impact_visual = lambda sid: None
-        authsrv.skill_timing = lambda sid: (2.0, 0.75, 0.0)
+        # recharge 5, not 0 (SLICE-F52 52.8): a 0-recharge completion sends no E5 now,
+        # and the E5 is this batch's order anchor; the 30 s rewind keeps the E6 due either way
+        authsrv.skill_timing = lambda sid: (2.0, 0.75, 5.0)
         # Battle Rage (317, on the default bar) keeps its 80 raw units (WIKI), so the
         # bar reads LIT and a body's tick on the player owes the 0x00CF gain -- (d), B2-4
         authsrv.skill_cost = lambda sid: (0, 80) if sid == 317 else (0, 0)
@@ -5239,7 +5247,9 @@ def section_player_spell_armour():
         authsrv._is_attack_skill = lambda sid: False
         authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
         authsrv.skill_impact_visual = lambda sid: None
-        authsrv.skill_timing = lambda sid: (2.0, 0.75, 0.0)
+        # recharge 5, not 0 (SLICE-F52 52.8): a 0-recharge completion sends no E5 now,
+        # and the E5 is this batch's order anchor; the 30 s rewind keeps the E6 due either way
+        authsrv.skill_timing = lambda sid: (2.0, 0.75, 5.0)
         authsrv.skill_cost = lambda sid: (0, 0)
         authsrv.weapon_satisfies = lambda sid: True
         authsrv.skill_projectile = lambda sid: None
@@ -6113,7 +6123,9 @@ def section_area_hexes():
             LEDGER.skip("section 37", "the vault's skills table is absent -- 1 check (the seven)")
         # (b) Deep Freeze through the real press and E5 on a cluster
         authsrv._is_attack_skill = lambda sid: False
-        authsrv.skill_timing = lambda sid: (2.0, 0.75, 0.0)
+        # recharge 5, not 0 (SLICE-F52 52.8): a 0-recharge completion sends no E5 now,
+        # and the E5 is this batch's order anchor; the 30 s rewind keeps the E6 due either way
+        authsrv.skill_timing = lambda sid: (2.0, 0.75, 5.0)
         authsrv.skill_cost = lambda sid: (0, 0)
         authsrv.weapon_satisfies = lambda sid: True
         authsrv.apply_party_character({"player_weapon": "starter_wand"})

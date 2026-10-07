@@ -16,7 +16,9 @@ RECONSTRUCTION, the shapes a morale change already has.
   2  a second press while spent: the bare release (E2), nothing begins.
   3  a corpse that already stands at the landing: the cast STOPS ([59], E2), nothing is
      spent, and a later press raises.
-  4  the KNOWN-BAD arm (--no-player-resurrection): E5 [.., 0], E6, the corpse stays down.
+  4  the KNOWN-BAD arm (--no-player-resurrection): the corpse stays down, the cast
+     closing as any 0-recharge cast (E3, no E5 / E6, SLICE-F52 52.8); with
+     --zero-recharge-e5 too, the pre-fix E5 [.., 0] and E6.
   5  the REAL kill_agent on a BOSS: the player's morale +2 (0x009C [me, 102]), the hero's
      +2, the spent signets come back (E6 [me, 2, 0], E6 [hero, 2, 0], the hero's slot
      ready), each E6 right behind an E5 [.., 0] that repaints the icon (the E6 alone left
@@ -55,7 +57,9 @@ import authsrv                                                 # noqa: E402
 # 20 -> 25 for section 8 (RESSIG-T), bare and vault alike; RESURRECT_TARGET_GATE
 # False in the source reddens 3. 25 -> 29 for section 9 (RESSIG-T2), bare and vault;
 # the gate's old target-0-only condition reddens 3.
-LEDGER = checks.Ledger("signet and boost", floor=29)
+# 29 -> 30 (2026-10-07, SLICE-F52 52.8): section 4 split -- the arm alone (no E5 / E6, a
+# 0-recharge completion) and both reverts (the pre-fix bytes); bare and vault alike, MEASURED.
+LEDGER = checks.Ledger("signet and boost", floor=30)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -186,19 +190,35 @@ def section_stop():
 
 def section_known_bad_raise():
     print("== 4. the known-bad arm: --no-player-resurrection ==")
-    saved = authsrv.PLAYER_RESURRECTION
+    # RE-AIMED 2026-10-07 (SLICE-F52 52.8): the pre-fix press's E5 [me, 2, 0, 0] and
+    # E6 were the zero-recharge completion every 0-recharge skill got, and since
+    # ZERO_RECHARGE_SKIPS_E5 a 0-recharge completion sends neither. So this arm alone
+    # now closes the cast with its E3 and no E5 / E6 -- the corpse still stays down,
+    # which is what the arm is about -- and the pre-fix BYTES need both reverts.
+    saved = (authsrv.PLAYER_RESURRECTION, authsrv.ZERO_RECHARGE_SKIPS_E5)
     authsrv.PLAYER_RESURRECTION = False
     try:
         st, w = _world(), Wire()
         _press(st, w)
         _land(st, w)
         sent = w.take()
+        check((E3, [P, RES, 0]) in sent
+              and not [1 for op, v in sent if op in (E5, E6, E7)]
+              and st["agents"][HERO]["dead"],
+              "--no-player-resurrection: the cast closes as any 0-recharge cast (E3, no E5 / "
+              "E6 / E7) and the hero stays down", f"{sent}")
+        authsrv.ZERO_RECHARGE_SKIPS_E5 = False
+        st, w = _world(), Wire()
+        _press(st, w)
+        _land(st, w)
+        sent = w.take()
         check((E5, [P, RES, 0, 0]) in sent and (E6, [P, RES, 0]) in sent
               and st["agents"][HERO]["dead"],
-              "E5 [me, 2, 0, 0] and E6, and the hero stays down -- the pre-fix press",
+              "E5 [me, 2, 0, 0] and E6, and the hero stays down -- the pre-fix press "
+              "(--no-player-resurrection with --zero-recharge-e5)",
               f"{sent}")
     finally:
-        authsrv.PLAYER_RESURRECTION = saved
+        (authsrv.PLAYER_RESURRECTION, authsrv.ZERO_RECHARGE_SKIPS_E5) = saved
 
 
 def _kill(st, aid):

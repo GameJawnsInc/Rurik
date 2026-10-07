@@ -6421,6 +6421,31 @@ INTERRUPT_SKIPS_ZERO_E5 = True
 # the [35] whatever the chain does, as every interrupt before 2026-09-28.
 INTERRUPT_CHAIN_RETAKES_HOLD = True
 
+# ZERO_RECHARGE_SKIPS_E5 (SLICE-F52 52.8, 2026-10-07; studies/slice/FINDINGS.md): A CAST
+# WHOSE RECHARGE IS 0 COMPLETES WITH NO 0x00E5 -- and the player's, with nothing to
+# recharge, with no 0x00E6 either. OBSERVED over the live corpus (128 connections):
+# every completion of a table-recharge-0 skill closes with no E5 and no E6 -- the
+# observer's 382 x23, 384 x14, 385 x7 and the hero's 382 x7, 385 x5 (skill 2's three
+# completions are E7, RESSIG's rule) -- against 291 of 291 completions with a table
+# recharge that carry one. THE KEY IS THE RECHARGE, NOT ADRENALINE: 348 is adrenal with
+# a recharge of 4 and carries E5(4) 8 of 8; on the other side ZF17's skill 2 (no
+# adrenaline) drew no E5(0) when interrupted. Read off the value the E5 would carry
+# (after a staff's 570): no table row is fractional and halved_recharge rounds .5 up,
+# so that is 0 exactly when the table says 0. WHY IT IS NOT HARMLESS: E5's worker
+# zeroes BOTH adrenaline halves (studies/skills 26.12), so an E5(0) behind a 0x00CF
+# taken after the 0x00D2 spend erased it on the client and not in our book -- and that
+# divergence is permanent (pools.py). Sites: cast_tick's completion and
+# player_resurrection_lands' (the player: no E5, no E6, the [58]/[46]/[48] and the E3
+# unchanged), hero_skill_messages (no E5; the E3 and the E4's close unchanged; no E6
+# was ever owed), and interrupt_body's hero mirror (also behind INTERRUPT_SKIPS_ZERO_E5,
+# whose mirror it is). RECONSTRUCTION: the 121 table-0 ids never cast on tape, and the
+# hero's interrupt (no hero interrupt on tape). NOT this rule, unchanged: DAGGERS-B5's
+# failed-chain second E5(0) (775 / 780 carry recharges; retail sends it) and RESSIG-B's
+# boost repaint E5(0) (the UI's repaint; the slot WAS recharging).
+# --zero-recharge-e5 reverts: E5 [.., 0] at every such completion and the player's E6,
+# as this server sent until 2026-10-07.
+ZERO_RECHARGE_SKIPS_E5 = True
+
 # NPC RECHARGE FROM COMPLETION (DESKWORK-D5 step 4, 2026-09-23; `rechargeprobe.py`).
 # Both NPC cast sites armed `skill_ready[slot] = now + recharge` at the cast's START
 # and said so: "a RECONSTRUCTION from the table's semantics ... no NPC in the corpus
@@ -24305,7 +24330,12 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
         if ready is not None and slot < len(ready):
             ready[slot] = now + total
         hero = HERO_WIRE_POOLS and hero_body_id(agent) is not None
-        if hero:
+        # SLICE-F52 52.8: no full-recharge E5(0) for a 0-recharge skill -- the player's
+        # ZF17 rule (OBSERVED n=1, interrupt_player) and the completion's
+        # (ZERO_RECHARGE_SKIPS_E5) on the mirror; either revert flag restores it.
+        # RECONSTRUCTION: no hero is interrupted on tape. Nothing recharges, so the
+        # mirror owes no E6 either (`total > 0` below already sends none).
+        if hero and (completion_sends_e5(recharge) or not INTERRUPT_SKIPS_ZERO_E5):
             send(GAME_SMSG_SKILL_RECHARGE, [agent_id, int(skill_id), 0, int(recharge)],
                  f"SKILL_RECHARGE(hero agent {agent_id}, skill {skill_id}, "
                  f"{int(recharge)}s): interrupted, the full recharge [RECONSTRUCTION]")
@@ -26939,6 +26969,17 @@ def begin_cast(send, state, cast, conn_id):
     return True
 
 
+def completion_sends_e5(recharge):
+    """SLICE-F52 52.8: does a completion whose recharge is `recharge` (the value its
+    0x00E5 would carry) send that E5? Only a real recharge does -- retail's 59 of 59
+    table-recharge-0 completions carry none, its 291 of 291 others carry one -- unless
+    --zero-recharge-e5 (ZERO_RECHARGE_SKIPS_E5 False) restores E5 [.., 0]. The one
+    predicate every completion site reads (cast_tick, player_resurrection_lands,
+    hero_skill_messages, interrupt_body's hero mirror), and the one test_zerorecharge
+    replays over the live corpus."""
+    return float(recharge) > 0.0 or not ZERO_RECHARGE_SKIPS_E5
+
+
 def cast_tick(send, state, conn_id):
     """Fire the timed three quarters of every pending cast cycle.
 
@@ -26950,7 +26991,9 @@ def cast_tick(send, state, conn_id):
 
     Phase order within a cycle is pinned to the observed one: E5, then E3,
     then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
-    waits for its E3 rather than closing the cycle early. SINCE 2026-08-22
+    waits for its E3 rather than closing the cycle early. (SINCE 2026-10-07 a
+    zero-recharge skill sends neither: the E5 phase still fires, unsent, and
+    the cycle closes at its E3 -- ZERO_RECHARGE_SKIPS_E5.) SINCE 2026-08-22
     a QUEUED cast has a fourth, earlier phase here: `begin_cast` pays and
     animates at `begin_at`, the instant the previous cast's aftercast ends
     (its E3 -- fired earlier in the same pass by the earlier entry).
@@ -27088,11 +27131,21 @@ def cast_tick(send, state, conn_id):
                     print(f"[c{conn_id}] skill {cast['skill_id']}: recharge "
                           f"{_was} -> {cast['recharge']} s, a held item's 570 "
                           f"(chance {_hch} %) [WEAPONS-W5b]", flush=True)
-            send(GAME_SMSG_SKILL_RECHARGE,
-                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
-                  cast["recharge"]],
-                 f"SKILL_RECHARGE(skill {cast['skill_id']}, "
-                 f"{cast['recharge']}s)")
+            if completion_sends_e5(cast["recharge"]):
+                send(GAME_SMSG_SKILL_RECHARGE,
+                     [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
+                      cast["recharge"]],
+                     f"SKILL_RECHARGE(skill {cast['skill_id']}, "
+                     f"{cast['recharge']}s)")
+            else:
+                # SLICE-F52 52.8 (ZERO_RECHARGE_SKIPS_E5): a 0-recharge skill
+                # completes with NO E5 and owes NO E6 -- retail's observer, 46 of
+                # 46 (382 / 384 / 385, skill 2's E7). Everything else this phase
+                # sends still rides it: `e5_sent` is the completion's book (the
+                # [58] / [46] / [48], the hit, the E3), not the wire's.
+                cast["no_e6"] = True
+                print(f"[c{conn_id}] skill {cast['skill_id']}: recharge 0 -- no "
+                      f"E5, no E6 [SLICE-F52 52.8]", flush=True)
             cast["e5_sent"] = True
             # THE FINISHED PROPERTY RIDES THE NEXT SLOT, and its position is
             # MEASURED: all five [58, agent, 0] in the live corpus are the
@@ -32583,7 +32636,12 @@ def player_resurrection_lands(send, state, conn_id, cast, now):
               f"nothing is spent [RESSIG-P]", flush=True)
         return True
     boost = RESURRECTION_SINGLE_USE and skill_recharges_on_boost(sid)
-    if not boost:
+    # SLICE-F52 52.8: a non-boost resurrection whose recharge is 0 -- today only skill 2
+    # under --no-resurrection-single-use; 1816's table recharge is 0 but it has no
+    # skill_effect row yet -- completes as any 0-recharge cast: no E5, no E6
+    # (ZERO_RECHARGE_SKIPS_E5; RECONSTRUCTION -- none on tape).
+    zero = not boost and not completion_sends_e5(cast["recharge"])
+    if not boost and not zero:
         send(GAME_SMSG_SKILL_RECHARGE, [PLAYER_AGENT_ID, sid, copy, cast["recharge"]],
              f"SKILL_RECHARGE(skill {sid}, {cast['recharge']}s)")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.GV_SKILL_FINISHED, PLAYER_AGENT_ID, 0],
@@ -32597,6 +32655,8 @@ def player_resurrection_lands(send, state, conn_id, cast, now):
          f"SKILL_ACTIVATED(skill {sid}, copy {copy})")
     cast["e3_sent"] = True
     action_hold(send, state, 0, f"skill {sid} completes")
+    if zero:
+        cast["no_e6"] = True
     if boost:
         cast["no_e6"] = True
         state.setdefault("boost_spent", {})[sid] = copy
@@ -32848,12 +32908,21 @@ def hero_skill_messages(send, state, agent_id, row, skill_id, recharge, now,
     0] (+0.56 s after the start, 35 / 48 on the tape), and 0x00E6 [hero,
     skill, 0] when it recharges (hero_recharged_tick). The hero panel draws
     its recharge from these; a henchman has no panel and gets none. `e3=False`
-    leaves the E3 to the caller (land_skill's instant batch, SKILLS-IA)."""
+    leaves the E3 to the caller (land_skill's instant batch, SKILLS-IA).
+
+    A 0-RECHARGE SKILL SENDS NO E5 (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5):
+    retail's hero closes 382 x7 and 385 x5 with the E3 alone, 12 of 12, while
+    its 35 E5s all ride a recharge (322, 346, 348). The E3 -- and with it the
+    E4's close (PENDSKILL) -- is unchanged, and no E6 was ever owed."""
     if not HERO_WIRE_POOLS or hero_body_id(row) is None or not skill_id:
         return
-    send(GAME_SMSG_SKILL_RECHARGE, [agent_id, int(skill_id), 0, int(recharge)],
-         f"SKILL_RECHARGE(hero agent {agent_id}, skill {skill_id}, "
-         f"{int(recharge)}s) [JARIN]")
+    if completion_sends_e5(recharge):
+        send(GAME_SMSG_SKILL_RECHARGE, [agent_id, int(skill_id), 0, int(recharge)],
+             f"SKILL_RECHARGE(hero agent {agent_id}, skill {skill_id}, "
+             f"{int(recharge)}s) [JARIN]")
+    else:
+        print(f"[body] hero agent {agent_id} skill {skill_id}: recharge 0 -- no E5 "
+              f"[SLICE-F52 52.8]", flush=True)
     if e3:
         hero_skill_e3(send, agent_id, row, skill_id)
     if float(recharge) > 0.0:
@@ -50155,6 +50224,14 @@ def main():
         print("INTERRUPT ZERO E5: an interrupted skill with recharge 0 still gets "
               "0x00E5 [player, skill, copy, 0] and its 0x00E6, as every interrupt before "
               "2026-09-28 (retail: none, Distracting Shot 399 on skill 2, CASTAI-ZF17).",
+              flush=True)
+
+    if a.zero_recharge_e5:
+        global ZERO_RECHARGE_SKIPS_E5
+        ZERO_RECHARGE_SKIPS_E5 = False
+        print("ZERO RECHARGE E5: a skill with recharge 0 completes with 0x00E5 [.., 0] "
+              "(the player's with its 0x00E6, a hero's, a hero's interrupt mirror), as this "
+              "server sent until 2026-10-07 (retail: none, 59 of 59; SLICE-F52 52.8).",
               flush=True)
 
     if a.no_attack_fixed_damage:

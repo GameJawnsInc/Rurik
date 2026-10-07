@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # it -- a press opens a cycle and lands nothing -- and carries 5 checks where
 # it carried 3, plus section 11's new single-caller check. Nothing here is
 # conditional, so a short run means a section stopped rather than passed.
-LEDGER = checks.Ledger("guard contract", floor=45)  # 2026-09-14: +4, DAMAGE-INT
+LEDGER = checks.Ledger("guard contract", floor=47)  # 2026-09-14: +4, DAMAGE-INT; 2026-10-07: +2, section 11's zero-recharge run (SLICE-F52 52.8), 47 MEASURED with the vault and on an empty one alike
 check = LEDGER.ok
 
 
@@ -882,13 +882,6 @@ def section_cast_timers():
     print("\n11. cast timers: N presses across threads, exactly N of each "
           "phase")
     PRESSES = 200
-    sent = []
-    sent_lock = threading.Lock()
-
-    def send(op, vals, label="", quiet=False):
-        with sent_lock:
-            sent.append((op, vals, label))
-
     # A DELIBERATELY BOTTOMLESS POOL. Skill 42 costs 10 energy and the player's
     # is 25, so under the energy gate (wired 2026-08-20) 200 presses become 2
     # casts and 198 refusals -- and this section is about the single-writer rule
@@ -896,12 +889,32 @@ def section_cast_timers():
     # is the shipped default; only the fixture's pool is made large enough that
     # every press is affordable. test_pools sections 6-6b are where the gate
     # itself is proven.
+    # TWO RUNS since 2026-10-07 (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5): a
+    # recharge-0 skill now completes with NO E5 and NO E6, so the stub that was
+    # "everything due now" (recharge 0) would count 0 of each. The E5 / E6 here
+    # are the phase-count ANCHOR, not the subject, so the first run gives the
+    # skill a 1 s recharge (E6 one second behind its E3; the ticker spins on
+    # until the list empties) and keeps the N/N/N claim; the second keeps the
+    # zero recharge and claims the new shape: N E3s, 0 E5s, 0 E6s, nothing left.
+    for recharge in (1.0, 0.0):
+        _section_cast_timers_run(authsrv, threading, PRESSES, recharge)
+
+
+def _section_cast_timers_run(authsrv, threading, PRESSES, recharge):
+    sent = []
+    sent_lock = threading.Lock()
+
+    def send(op, vals, label="", quiet=False):
+        with sent_lock:
+            sent.append((op, vals, label))
+
     state = {"agents": {}, "energy": authsrv.pools.EnergyPool(1_000_000, 3)}
     errors = []
     done_pressing = threading.Event()
 
     saved_timing = authsrv.skill_timing
-    authsrv.skill_timing = lambda sid: (0.0, 0.0, 0.0)   # everything due now
+    # everything due now -- but the E6, `recharge` behind its E3
+    authsrv.skill_timing = lambda sid: (0.0, 0.0, recharge)
     try:
         out = io.StringIO()
 
@@ -936,14 +949,19 @@ def section_cast_timers():
         for op, _, _ in sent:
             counts[op] = counts.get(op, 0) + 1
         check(errors == [] and not alive,
-              "two threads, zero exceptions, both finished",
+              f"two threads, zero exceptions, both finished (recharge {recharge:.0f} s)",
               f"errors={errors!r}, alive={alive}")
-        check(counts.get(0x00E5, 0) == PRESSES
+        # recharge > 0: one of each phase per press. recharge 0: the E3 alone
+        # (SLICE-F52 52.8) -- still exactly one close per press, none doubled.
+        cycled = PRESSES if recharge > 0 else 0
+        check(counts.get(0x00E5, 0) == cycled
               and counts.get(0x00E3, 0) == PRESSES
-              and counts.get(0x00E6, 0) == PRESSES
+              and counts.get(0x00E6, 0) == cycled
               and not state.get("pending_casts"),
-              f"exactly {PRESSES} E5s, E3s and E6s -- no phase lost, none "
-              f"doubled",
+              (f"exactly {PRESSES} E5s, E3s and E6s -- no phase lost, none doubled"
+               if recharge > 0 else
+               f"recharge 0: exactly {PRESSES} E3s and NO E5 or E6 -- every entry "
+               f"closed at its E3, none doubled, none left (SLICE-F52 52.8)"),
               f"E5={counts.get(0x00E5, 0)}, E3={counts.get(0x00E3, 0)}, "
               f"E6={counts.get(0x00E6, 0)}, pending="
               f"{len(state.get('pending_casts', ()))}")

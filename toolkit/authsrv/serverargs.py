@@ -3129,6 +3129,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-09-28. By default it gets none: OBSERVED, Distracting Shot "
                          "399 on skill 2 (recharge 0), 20260928T103123 :58544 t=621.054, "
                          "[8,0] [59] E2 [35] ... E5(20) with no first E5.")
+    ap.add_argument("--zero-recharge-e5", action="store_true",
+                    help="SLICE-F52 52.8 REVERT: a skill whose recharge is 0 completes "
+                         "with 0x00E5 [agent, skill, copy, 0] -- the player's (and its "
+                         "0x00E6), a hero's, and a hero's interrupt mirror -- as this "
+                         "server sent until 2026-10-07. Wrong two ways: retail sends no "
+                         "E5 and no E6 for one, 59 of 59 completions on the live corpus "
+                         "(382 / 384 / 385, and skill 2's E7 raises; the observer's and "
+                         "the hero's); and E5's "
+                         "worker zeroes both adrenaline halves on the client "
+                         "(studies/skills 26.12), so an E5(0) behind a gain taken after "
+                         "the spend splits the client's book from ours for good.")
     ap.add_argument("--no-attack-fixed-damage", action="store_true",
                     help="CASTAI-ZF21 REVERT: an attack skill whose scale is \"Armor-"
                          "ignoring damage\" (Distracting Shot 399) lands its WEAPON's "

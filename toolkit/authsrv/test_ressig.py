@@ -18,8 +18,9 @@ with no E5 (3 of 3). The row says so with `recharge_on = "morale_boost"`.
      STOPPED at its landing ([59], E2), raises nobody and is NOT spent -- it raises
      the next death; the PENDSKILL ledger closes every record, 0 misses.
   4  a HENCHMAN caster: single use too, and no E-family on the wire.
-  5  the KNOWN-BAD arm (--no-resurrection-single-use): E5 [hero, 2, 0, 0] + E3 ahead
-     of the [58], no E7, and the same hero raises the same corpse twice -- the loop.
+  5  the KNOWN-BAD arm (--no-resurrection-single-use): E3 ahead of the [58], no E7,
+     and the same hero raises the same corpse twice -- the loop. Since 2026-10-07 the
+     pre-fix E5 [hero, 2, 0, 0] needs --zero-recharge-e5 too (SLICE-F52 52.8).
   6  the content row and the switch's wiring; the zone and wipe paths (source).
   7  RETAIL (vault): completed raises per caster per connection never exceed one
      (>= 40 casters), every completed raise by the observer or a hero carries E7 then
@@ -45,7 +46,9 @@ import authsrv                                                 # noqa: E402
 # Floor from the BARE-MACHINE green run of 2026-09-30 (RURIK_VAULT at an empty
 # directory): 20 -- sections 1-6; section 7 (the captures) declares a skip. 22 with
 # the vault. RESURRECTION_SINGLE_USE = False in the source reddens 11.
-LEDGER = checks.Ledger("resurrection signet", floor=20)
+# 20 -> 21 bare, 22 -> 23 vault (2026-10-07, SLICE-F52 52.8): section 5 gains the pre-fix
+# bytes under both reverts, the arm alone now closing with no E5; MEASURED both ways.
+LEDGER = checks.Ledger("resurrection signet", floor=21)
 check = checks.adopt(LEDGER)
 
 E2, E3, E4, E5, E7 = 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E7
@@ -239,25 +242,41 @@ def section_henchman():
 
 def section_known_bad():
     print("== 5. the known-bad arm: --no-resurrection-single-use ==")
-    saved = authsrv.RESURRECTION_SINGLE_USE
+    # RE-AIMED 2026-10-07 (SLICE-F52 52.8): the pre-fix segment's E5 [hero, 2, 0, 0] was
+    # hero_skill_messages' zero-recharge E5, which ZERO_RECHARGE_SKIPS_E5 no longer
+    # sends -- so this arm alone closes with the E3 ahead of the [58] and no E5 / E7 (the
+    # loop below is unchanged, and the loop is what the arm is about); the pre-fix BYTES
+    # need --zero-recharge-e5 too.
+    saved = (authsrv.RESURRECTION_SINGLE_USE, authsrv.ZERO_RECHARGE_SKIPS_E5)
     authsrv.RESURRECTION_SINGLE_USE = False
     try:
         st, wire = _world((A, _caster("hero A", (0.0, 60.0), 1, 3))), Wire()
         _tick(st, wire)
         land = _land_all(st, wire)
-        i5 = _idx(land, lambda op, v: op == E5 and v[:2] == [A, RES])
+        i3 = _idx(land, lambda op, v: op == E3 and v[:2] == [A, RES])
         i58 = _idx(land, lambda op, v: op == INT and v[:2] == [agents.GV_SKILL_FINISHED, A])
-        check(i5 is not None and i58 is not None and i5 < i58
-              and not [1 for op, _v in land if op == E7],
-              "E5 [hero, 2, 0, 0] + E3 ahead of the [58], no E7 -- the pre-fix segment",
-              f"{land}")
+        check(i3 is not None and i58 is not None and i3 < i58
+              and not [1 for op, _v in land if op in (E5, E7)],
+              "--no-resurrection-single-use: the E3 ahead of the [58], no E5 (a 0-recharge "
+              "completion, SLICE-F52 52.8) and no E7", f"{land}")
         _kill(st, wire)
         _elapse(st)
         again = _tick(st, wire)
         check(_starts(again, A) == [[60, A, CORPSE, RES]],
               "and the same hero raises the same corpse again: the loop", f"{again}")
+        authsrv.ZERO_RECHARGE_SKIPS_E5 = False
+        st, wire = _world((A, _caster("hero A", (0.0, 60.0), 1, 3))), Wire()
+        _tick(st, wire)
+        land = _land_all(st, wire)
+        i5 = _idx(land, lambda op, v: op == E5 and v[:2] == [A, RES])
+        i58 = _idx(land, lambda op, v: op == INT and v[:2] == [agents.GV_SKILL_FINISHED, A])
+        check(i5 is not None and i58 is not None and i5 < i58 and land[i5][1] == [A, RES, 0, 0]
+              and not [1 for op, _v in land if op == E7],
+              "E5 [hero, 2, 0, 0] + E3 ahead of the [58], no E7 -- the pre-fix segment "
+              "(--no-resurrection-single-use with --zero-recharge-e5)",
+              f"{land}")
     finally:
-        authsrv.RESURRECTION_SINGLE_USE = saved
+        (authsrv.RESURRECTION_SINGLE_USE, authsrv.ZERO_RECHARGE_SKIPS_E5) = saved
 
 
 def section_wiring():
