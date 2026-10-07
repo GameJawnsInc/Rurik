@@ -3655,8 +3655,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   [enc_region, name, name]; the rule `region_first` holds on ours and goes red on the
   known-bad arm and on a row with no enc_region; `region_units` refuses a marker, a
   continuation word, two units, none, a bare int, a bool, a str and past a u16; load names a
-  bad row; the flag and main()'s flip. §18 (vault): the census (137, floor 137; s1 a
-  function of 8 homes; 105 rows on 146/148/160 all 0x3D64), the shipped rows' word equal to
+  bad row and the one-unit rule, on a two-unit value whose FIRST word is a valid id (review
+  RV-3: the first fixture opened with a continuation word, so the length rule could be
+  dropped with this check green; red now under that mutant); the flag and main()'s flip.
+  §18 (vault): the census (137, floor 137; s1 constant on each of 8 homes, and per quest --
+  no quest is homed on two maps; 105 rows on 146/148/160 all 0x3D64), the shipped rows' word equal to
   the corpus's for home 148, `region_units` accepting all 137 retail s1 and refusing every
   s2, 15 static sites' bytes on the pinned 38797 client and an arm-2 control. §6 and §11's
   three-slot pins re-aimed to [region, name, name]. Every new check was inverted by

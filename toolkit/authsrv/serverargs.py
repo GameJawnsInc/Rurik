@@ -1419,8 +1419,8 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0x0049 handler 0x0080F0A0 stores it at record+8, "
                          "which the heading arm 0x0057DD77 formats into string "
                          "1125), and retail's is ONE region unit on 137 of 137 "
-                         "log rows, a function of the home map (146, 148 and "
-                         "160 carry 0x3D64). A row with no enc_region sends "
+                         "log rows, constant per home map and per quest (146, "
+                         "148 and 160 carry 0x3D64). A row with no enc_region sends "
                          "the name there under either arm. KNOWN-BAD against "
                          "the tape; for an A/B.")
     ap.add_argument("--no-quest-items", action="store_true",

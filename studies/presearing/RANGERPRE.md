@@ -253,9 +253,15 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
     `0x800024EE` in NONE of the run archives (`run/slice`, `2026-09-01_44fbd68767a8`,
     `2026-09-30_8e50edfb8351`); the plain `0x24EE` binds row 8447, and a bit-31 id is a
     pending replacement the client compares exactly (`archive.py`); the shield's
-    `0x80002538` likewise (plain `0x2538` is row 23136). (2) The default character cannot
-    hold a new row without moving a test-locked value: `[party.slice] player_weapon =
-    "starter_sword"` is pinned by `toolkit/harness/test_sandbox.py:211`. (3) A hybrid --
+    `0x80002538` likewise (plain `0x2538` is row 23136). (2) NOT a reason, corrected at
+    review the same day: no test locks the default character's weapon KEY. The draft said
+    `[party.slice] player_weapon = "starter_sword"` was pinned by
+    `toolkit/harness/test_sandbox.py:211`, but that check reads `sandbox.party_row`, the
+    sandbox compiler's own Warrior default (`PLAYER_ITEMS_BY_PROFESSION`), not
+    `[party.slice]`. The one test that reads `[party.slice]`'s weapon,
+    `toolkit/authsrv/test_agentlife.py:9086-9101`, pins its VALUES -- item type 27, the 2-3
+    swing at 1.33 s, Swordsmanship rank 3 -- which a row with `starter_sword`'s type and
+    modifiers keeps. So the stop rests on (1) and (3) alone. (3) A hybrid --
     `starter_sword`'s bound file and model with item 704's name -- is a composed item with no
     retail witness, and whether a keyed name draws on our client is a client question. So
     F2's real fix is a ruling plus a run: either a player-only sword row on a bound file with
@@ -268,7 +274,8 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
     UNVERIFIED). **2026-10-07, desk -- shipped, client owed:** the field is the FIRST string
     slot (s1) of `0x0049` / `0x0050`, OBSERVED static (`0x0091DB70` -> `0x0080F0A0` ->
     record+8 -> `0x0080DB40` -> arm 3 at `0x0057DD77`, string 1125) and CORROBORATED on 137
-    of 137 retail log rows (one region unit, never s2, a function of the home map; 146 / 148 /
+    of 137 retail log rows (one region unit, never s2, constant per home map and per quest --
+    no quest is homed on two maps, so the corpus does not say which decides; 146 / 148 /
     160 carry `0x3D64`). A quest row's `enc_region` goes in s1 (`questdefs.log_strings`), both
     shipped rows carry `[0x3D64]`, `--no-quest-region` is the known-bad arm. s3 NOT FOUND.
     [studies/quests/FINDINGS.md](../quests/FINDINGS.md) §13. **Runsheet** (loopback, the

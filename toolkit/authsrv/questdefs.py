@@ -322,9 +322,11 @@ def log_flags(row):
 #
 # CORROBORATED, the live corpus (2026-10-07, 137 0x0049 / 0x0050 rows, 24
 # quests, 47 with flags 0 or 2): s1 is exactly ONE unit on 137 of 137, never
-# equal to s2, and a function of the home map -- 146, 148 and 160 carry
+# equal to s2, and constant per home map -- 146, 148 and 160 carry
 # 0x3D64 (string 15460), 212 / 238 / 242 carry 0x617D (24701), 280 0x0E63
-# (3427), 449 0x6185 (24709); textrec reads each as a region's name. Ours sent
+# (3427), 449 0x6185 (24709); textrec reads each as a region's name. It is
+# constant per quest too: no quest is homed on two maps, so the corpus does
+# not say whether the quest or its map decides the word. Ours sent
 # the quest's own name in all three slots, so a flags-0 quest was filed under
 # its own name plus the suffix (RANGERLOOP-F5, seen on our client 2026-09-30).
 #

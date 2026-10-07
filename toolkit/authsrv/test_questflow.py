@@ -2272,9 +2272,14 @@ def section_17():
            "units, none, a bare int, a bool, a str and past a u16 are REFUSED",
            f"refused {len(refused)} of {len(bad)}")
 
+    # The fixture's FIRST word is a valid one-word id (review RV-3, 2026-10-07):
+    # it was [0x8103, 0x0CC8], whose first word carries the continuation bit,
+    # so with the length rule removed the continuation test still refused it
+    # and this check stayed green. Now only the length rule can refuse it, and
+    # the message must be that rule's own.
     class _World:
         def rows(self, kind):
-            return ({"q": {"quest_id": 7, "enc_region": [0x8103, 0x0CC8]}}
+            return ({"q": {"quest_id": 7, "enc_region": [0x3D64, 0x0CC8]}}
                     if kind == "quest" else {})
     try:
         questdefs.load(_World())
@@ -2282,10 +2287,12 @@ def section_17():
     except ValueError as exc:
         load_msg = str(exc)
     led.ok("'q'" in load_msg and "enc_region" in load_msg
+           and "not ONE coded unit" in load_msg
            and all(r.get("enc_region") == [0x3D64] for r in rows.values())
            and len(rows) >= 2,
-           "questdefs.load refuses a two-unit enc_region at STARTUP, naming the "
-           "row; every shipped row carries [0x3D64]", load_msg)
+           "questdefs.load refuses a two-unit enc_region whose first word is a "
+           "valid id at STARTUP, naming the row and the one-unit rule; every "
+           "shipped row carries [0x3D64]", load_msg)
     ap = serverargs.build_parser(
         doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
         GAME_SRV_PORT=authsrv.GAME_SRV_PORT,

@@ -2115,7 +2115,8 @@ counter rise by exactly the row's gold.
 (`%str1% Quests`, one argument), and the argument is s1. Ours sent the quest's own name in
 all three slots, so a flags-0 quest was filed under its own name plus the suffix
 (RANGERLOOP-F5, seen on our client 2026-09-30, CONFIRM-2026-09-30 §10). Retail's s1 is a
-one-unit REGION id, a function of the home map.
+one-unit REGION id, constant per home map (and per quest; the corpus cannot separate the
+two).
 
 **OBSERVED, static (build 38797, `codescan.py --dis` / `--xrefs`; every site below is
 re-read as bytes by `test_questflow.py` §18 through the stdlib PE reader).** The chain
@@ -2139,10 +2140,14 @@ record+8 ← `0x0080F0A0`'s first string) is CONFIRMED and extended to `0x0050`.
 
 **CORROBORATED, the live corpus** (`livewire.decode_conn`, 127 connections, the declared gap
 set aside; `test_questflow.py` §18): 137 log rows — 30 `0x0049`, 107 `0x0050` — for 24 quests
-on 15 captures. s1 is ONE unit on 137 of 137, never equal to s2, and a function of the home
-map: 146, 148 and 160 carry `0x3D64` (string 15460); 212, 238 and 242 `0x617D` (24701); 280
+on 15 captures. s1 is ONE unit on 137 of 137, never equal to s2, and constant per home
+map — every quest homed on one map carries the same word (seven quests on 146, seven on
+148): 146, 148 and 160 carry `0x3D64` (string 15460); 212, 238 and 242 `0x617D` (24701); 280
 `0x0E63` (3427); 449 `0x6185` (24709). `textrec.py` reads each as a region's name (labels,
-not committed). 47 rows have flags 0 or 2 — 45 exactly 0, 2 with the 0x004D's bit 1 —
+not committed). No quest is homed on two maps, so s1 is equally constant per QUEST, and the
+corpus does not say whether retail takes the word from the quest's record or from its map
+(corrected at review, 2026-10-07: the draft called it "a function of the home map" and then
+contrasted that with a per-quest column, which this 1:1 data cannot do). 47 rows have flags 0 or 2 — 45 exactly 0, 2 with the 0x004D's bit 1 —
 and every one of those is filed under arm 3. s2 is one value per quest and 24 distinct for
 24 quests, so it is read as the quest's own name (CORROBORATED by that alone). **s3 is NOT
 FOUND**: 4-5 units, never equal to s2, one value per quest, shared by up to three quests
@@ -2155,9 +2160,12 @@ loader refuses the row at startup otherwise) — and `questdefs.log_strings` bui
 (region, name, name) for `accept_quest` and `_replay_quests`. Both shipped rows carry
 `[0x3D64]`, the corpus's word for their giver's map 148. A row without the column still sends
 the name in s1. `--no-quest-region` sends the name in all three, the known-bad arm. The
-column is per QUEST although retail's word is a function of the home MAP: a quest row is
-where the accept's words live, and every shipped quest is accepted on one map. s3 keeps the
-name.
+column is per QUEST, which the corpus permits rather than contradicts: s1 is constant per
+quest as well as per home map, so a per-quest column and a per-map rule agree on every
+retail row. Why it sits on the quest row is ours (RECONSTRUCTION, a design choice): a quest
+row is where the accept's words live, and every shipped quest is accepted on one map. That
+the word names a REGION rather than the quest rests on the three Pre-Searing homes sharing
+`0x3D64` across fifteen quests and on `textrec`'s reading. s3 keeps the name.
 
 **Owed: the client.** A flags-0 overlay of the errand, accepted on the client, should be
 filed under the region's heading rather than its own name, and `--no-quest-region` should

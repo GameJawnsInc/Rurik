@@ -159,9 +159,11 @@ constants read off our own captures; the words between them are ours.
 chosen: it is the first string slot of every 0x0049 / 0x0050 in the live
 corpus whose home map is 146, 148 or 160 -- 20260929T150923 alone carries
 them on all 49 of its rows -- and this quest is accepted on 148, its giver's
-map (content/world.toml errand_giver). Retail's s1 is a function of the home
-map on 137 of 137 rows (test_questflow §18); the column is per quest because
-a quest row is where the accept's words live. The heading it draws matters
+map (content/world.toml errand_giver). Retail's s1 is constant per home map
+on 137 of 137 rows (test_questflow §18), and per quest too: no quest in the
+corpus is homed on two maps, so it does not say which of the two decides,
+and a per-quest column agrees with every retail row. The column sits on the
+quest row because that is where the accept's words live. The heading it draws matters
 only under `quest_log_flags = 0`; this row's default 32 files it under the
 argument-free 'Primary Quests' heading either way.
 
