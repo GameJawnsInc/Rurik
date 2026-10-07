@@ -166,7 +166,7 @@ run (`bc8f409b`). **S19 is not built.**
 | RANGERPRE-S13 | IMMUNE-2b | condition `[6]`/`[7]` effect ids + the (agent, buff) re-key | D | **landed** `31112797`; **CONFIRMED** on the wire and the target bar ([CONFIRM](CONFIRM-2026-09-30.md) §6); the body visual is for the owner's eyes |
 | RANGERPRE-S14 | IMMUNE-1 | immunity model + #1957, with a tracked capture row for definition 1414 | D | **landed** `ce895d98`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §6) |
 | RANGERPRE-S15 | LOOT-1 | gold drop on kill, pickup, purse credit (straight walk) | L | **landed** `3e0851cf`; the drop **CONFIRMED** on the client; the pickup CONFIRMED only under `--no-model-avoid-halt`: **by default MOVECODE-1z-dj's avoid halt cancels it beside a standing NPC** (RANGERLOOP-F8, open) ([CONFIRM](CONFIRM-2026-09-30.md) §7) |
-| RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | **landed** `c26ecec5`; **CONFIRMED** on the client **on the first approach** ([CONFIRM](CONFIRM-2026-09-30.md) §8); the re-approach missed Q1's and Q6's windows, halting late and 134 u inside range once the server's mirror had diverged (RANGERLOOP-F9, open) |
+| RANGERPRE-S16 | ROUTE-A | attack-start batch after an approach | L | **landed** `c26ecec5`; **CONFIRMED** on the client **on the first approach** ([CONFIRM](CONFIRM-2026-09-30.md) §8); the re-approach missed Q1's and Q6's windows, halting late and 134 u inside range once the server's mirror had diverged (RANGERLOOP-F9: the divergence **fixed on the desk 2026-10-07**, client run owed; the late halt split out as RANGERLOOP-F11, [CONFIRM](CONFIRM-2026-09-30.md) §12) |
 | RANGERPRE-S17 | ROUTE-B | interact served ~75 u, with the stop/serve slack fixed | L | **landed** `1c1bc840`; **CONFIRMED** on the client, n = 2 ([CONFIRM](CONFIRM-2026-09-30.md) §9) |
 | RANGERPRE-S18 | QUESTFLOW-A | accept flags, marker on the objective, rewards on accept | D+L | **landed** `55f7d0fc`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §2) |
 | RANGERPRE-S19 | SECONDARY-B | a content-authored dialog button grants a secondary | L | open: **not built**, it waits on the owner's `0x00B6` ruling (§5) |
@@ -231,6 +231,15 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   - **RANGERLOOP-F9**: after S16's halt the AgTrack mirror walks the follow in (it never sees
     the `0x0028`), and a re-approach then halts late and 134 u inside range, after a 688 u
     `APPROACH RE-PIN`. The link from the one to the other is RECONSTRUCTION, n = 1.
+    **FIXED ON THE DESK 2026-10-07** ([CONFIRM](CONFIRM-2026-09-30.md) §12; `b5316ab2`,
+    `e9df994a`): two server models missed our `0x0028`, the mirror (the flights) and the
+    legacy sync model (the 688 u re-pin, replayed at 687.9 u), and both now park where they
+    stand (`--no-mirror-stop`, `--no-legacy-stop` the known-bad arms). The client run is
+    pre-registered in §12.3. The late halt was neither: it is **RANGERLOOP-F11**, the
+    2026-09-30 swing clock (last start 16.882917 + 2.475 + the 2.137 charge = the halt's
+    21.4949), gone since MOVECODE-1z-ds.11/13 for RUN-T's sequence. Its general shape -- the
+    halt rides a start the clock may hold past the arrival -- is open, retail's order
+    UNVERIFIED.
   - **RANGERLOOP-F2**: quest-granted items draw an unresolved name. `content/items.toml`
     `starter_shield`'s "name id 8582" disagrees with `codedstr`'s 8326 for unit `0x2186`.
   - **RANGERLOOP-F3**: `'anim'` draws neutral, not WIKI's green (retail's colour is
