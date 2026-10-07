@@ -341,8 +341,9 @@ class AgTrackGuard(object):
           A due WAYPOINT is different, and is parked here: consume_waypoint
         does not land the copy, it re-bakes it toward m_targetPoint, so a
         0x0028 between the waypoint's due ms and the guard's next tick (up to
-        one TICK_SECONDS, longer when combat_pass runs ahead of the tick)
-        would leave both copies walking on toward the target after our halt.
+        one TICK_SECONDS: a send from the recv thread, or from combat_pass's
+        attack_tick when combat_sleep wakes ahead of the world tick) would
+        leave both copies walking on toward the target after our halt.
         The client's halt clears +0x48 and writes m_targetPoint = +inf
         (studies/movecode/FINDINGS.md 1d.4), so its copy cannot re-bake.  It
         is parked on the waypoint, where position() puts it; the re-bake's
