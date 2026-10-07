@@ -28773,6 +28773,16 @@ def _condition_terms(skill_id, row, rank):
             continue
         try:
             seconds = skill_scale_value(skill_id, rank, slot)
+        except agents.content.ContentError:
+            # THE BARE MACHINE (2026-10-07): `skill_effect` is repo content and
+            # `skills` is vault-only, so with no overlay the row above resolves
+            # and this read raised straight out of cast_tick -- the default
+            # bar's 320, two lines after skill_timing's fallback was printed.
+            # skill_damage's narrow catch: no skills row, no condition (the
+            # inert direction, never a guessed duration), announced once per id
+            # through skill_timing; a bit-clear slot's ValueError keeps its arm.
+            skill_timing(skill_id)          # announces the missing row, once
+            continue
         except ValueError:
             # SKILLS-LV: a bit-clear slot with EQUAL endpoints is the flat
             # constant the client prints (skill_flat_constant's witnesses;
