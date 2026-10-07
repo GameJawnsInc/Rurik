@@ -61,14 +61,15 @@ import scrub_captures as sc  # noqa: E402
 # 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 6 blind-spot
 # + 1 state census stamp + 4 snapshot red-team + 11 session store + 6 state refusal
 # + 2 destination + 16 unrecognised-field report + 7 opaque-exclusion
-# + 8 search-equivalence + 8 aligned-block (14a) = 84 mandatory, plus 2 that need
-# `vault/state` to exist. MEASURED green 2026-10-07 at 86 over the whole capture tree
-# with the store present (78 before section 14a, 70 before section 14, 47 before 12).
+# + 8 search-equivalence + 13 aligned-block (14a: 8, then 5 for the walk's two edges
+# after review) = 89 mandatory, plus 2 that need `vault/state` to exist. MEASURED green
+# 2026-10-07 at 91 over the whole capture tree with the store present (86 before 14a's
+# edge checks, 78 before section 14a, 70 before section 14, 47 before 12).
 #
 # There is no bare-machine shape to floor separately: `main()` opens with
 # `vaultpath.require_dir("captures")`, so this file cannot run at all without the
 # vault. The only optional pair is the two real-store checks, which declare a skip.
-LEDGER = checks.Ledger("credential scrub", floor=84)
+LEDGER = checks.Ledger("credential scrub", floor=89)
 
 # Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
 # every record. Baked into the snapshot, so no pass can disagree about what was excluded.
@@ -233,12 +234,14 @@ def search_all(text, secrets):
 
     THE SECOND REDUCTION (2026-10-07, DESKWORK-D13 step 2), and it is the same kind:
     exact, never a sample. By then the corpus was 1.1 GB and 16,512 secrets, the
-    haystack ~164 MB, and the tail `{s for s in secrets if s in haystack}` was back to
-    being most of this file -- ~325 s per call, five calls, ~1,600 of ~1,880 s. That
-    tail is now `block_search`, which answers the identical set by a pigeonhole on
-    aligned blocks; its docstring carries the proof and section 14 the sabotages. The
-    old tail and the new one were run side by side on the FULL corpus before the old
-    one was deleted (PLAN-LOG, DESKWORK-D13).
+    haystack ~120-164 MB, and the tail `{s for s in secrets if s in haystack}` was back
+    to being most of this file: four of its five calls carried the full secret set, at
+    313-541 s each on a loaded machine (OBSERVED, the desk equivalence run; the fifth,
+    section 14's probe, searched at most 150 secrets). That tail is now
+    `block_search`, which answers the identical set by a pigeonhole on aligned blocks;
+    its docstring carries the proof and section 14a the sabotages. The old tail and the
+    new one were run side by side on the FULL corpus before the old one was deleted
+    (PLAN-LOG, DESKWORK-D13).
     """
     if not secrets:
         return set()
@@ -251,7 +254,8 @@ def search_all(text, secrets):
     return block_search(haystack, secrets)
 
 
-def block_search(haystack, secrets, block=SEARCH_BLOCK, offsets=None, long_from=None):
+def block_search(haystack, secrets, block=SEARCH_BLOCK, offsets=None, long_from=None,
+                 walk_from=0, walk_short=0):
     """Exactly `{s for s in secrets if s in haystack}`, for ANY haystack and secrets.
 
     THE PIGEONHOLE. Cut the haystack into blocks at multiples of `block` (B). Let a
@@ -259,20 +263,26 @@ def block_search(haystack, secrets, block=SEARCH_BLOCK, offsets=None, long_from=
     after p is q = p + o with 0 <= o <= B-1, and q + B <= p + (B-1) + B <= p + L. So the
     whole block haystack[q:q+B] lies inside the occurrence and equals s[o:o+B] -- and q
     is a block start the walk below visits, because q + B <= p + L <= len(haystack).
+    (That last step, and q = 0 at the other end, are the walk's two edges; section 14a
+    plants secrets flush with each end of the haystack because a middle plant never
+    reaches either.)
     Hence: index every secret's B substrings s[o:o+B], o = 0..B-1, walk the haystack's
     blocks ONCE, and for each block that matches an indexed substring, check the whole
     secret really starts at q - o. Every occurrence is caught at its first block;
     nothing is reported that `startswith` did not confirm. Secrets shorter than 2B-1
     may contain no whole block, so they keep the plain `in` -- the predicate itself.
 
-    WHY THIS SHAPE. The index is over the SECRETS (16,512 x 18 keys), never over the
-    haystack, so it costs no text-sized memory beside a test already holding ~1 GB of
-    text; the haystack is walked once at 1/B of its length in dictionary lookups. At
-    full scale (164 MB) that is ~3 s against ~325 s for the comprehension.
+    WHY THIS SHAPE. The index is over the SECRETS (16,501 long secrets x 18 keys on
+    2026-10-07; the 11 short ones are never indexed), never over the haystack, so it
+    costs no text-sized memory beside a test already holding ~1 GB of text; the
+    haystack is walked once at 1/B of its length in dictionary lookups. At full scale
+    (120-164 MB) that was 3.3-5.3 s per call against 313-541 s for the comprehension,
+    both on a loaded machine (OBSERVED, the desk equivalence run).
 
-    `offsets` and `long_from` exist ONLY so section 14 can break this the two ways a
-    plausible implementation breaks -- drop an offset, or start the block path below
-    2B-1 -- and prove the checks there go red. Callers never pass them.
+    `offsets`, `long_from`, `walk_from` and `walk_short` exist ONLY so section 14a can
+    break this the ways a plausible implementation breaks -- drop an offset, start the
+    block path below 2B-1, start the walk past the first block, or end it short of the
+    last -- and prove the checks there go red. Callers never pass them.
     """
     if long_from is None:
         long_from = 2 * block - 1
@@ -288,7 +298,7 @@ def block_search(haystack, secrets, block=SEARCH_BLOCK, offsets=None, long_from=
         for o in offsets:
             want.setdefault(s[o:o + block], []).append((s, o))
     get = want.get
-    for q in range(0, len(haystack) - block + 1, block):
+    for q in range(walk_from, len(haystack) - block + 1 - walk_short, block):
         hits = get(haystack[q:q + block])
         if hits:
             for s, o in hits:
@@ -1158,28 +1168,44 @@ def _plant(secret, residue, tag):
     return pre + secret + _hexrun(SEARCH_BLOCK, tag + ":post")
 
 
+def _plant_end(secret, residue, tag):
+    """`secret` at the same alignments as `_plant`, but ENDING the haystack -- the
+    occurrence whose first whole block may be the haystack's last one."""
+    return _hexrun(SEARCH_BLOCK + residue, tag + ":pre") + secret
+
+
+def _plant_start(secret, residue, tag):
+    """`secret` at position 0, followed by `residue` characters, so the haystack's
+    length takes every remainder mod B (and residue 0 makes the haystack the secret)."""
+    return secret + _hexrun(residue, tag + ":post")
+
+
 def check_block_search_alignments():
-    """Section 14a: `block_search` at every alignment, and the two ways to break it.
+    """Section 14a: `block_search` at every alignment, and the ways to break it.
 
     Its proof turns on one quantity: o, the distance from an occurrence's start to the
     first block boundary inside it, which takes every value 0..B-1 as the occurrence's
     position runs through its residues mod B. So a secret is planted at all B residues,
     at the boundary lengths either side of 2B-1, and the function is then broken in the
-    two places the proof leans on -- one offset left out of the index, and the block
-    path started one character too early -- and each break must lose a secret at
-    exactly the alignment the arithmetic predicts. Synthetic throughout; the real
-    corpus is section 14's next check.
+    three places the proof leans on -- one offset left out of the index, the block path
+    started one character too early, and the walk's two edges (its first block, and
+    "the walk visits q because q + B <= len(haystack)" at its last) -- and each break
+    must lose a secret at exactly the alignment the arithmetic predicts. The edges
+    need their own plants: the middle plant always leaves B characters on both sides,
+    so a walk that skipped the first block or stopped one short of the last passed it
+    (review CD-1 / EV-1, 2026-10-07). Synthetic throughout; the real corpus is
+    section 14's next check.
     """
-    print("\n14a. the aligned-block search at every alignment, and its two sabotages")
+    print("\n14a. the aligned-block search at every alignment, and its sabotages")
     B = SEARCH_BLOCK
 
-    def sweep(length, secret=None, **sabotage):
+    def sweep(length, secret=None, plant=_plant, **sabotage):
         """(residues where `secret` is missed, residues where the naive scan disagrees)."""
         target = _hexrun(length, f"secret-{length}")
         secret = secret or target
         missed, disagree = [], []
         for r in range(B):
-            hay = _plant(secret, r, f"hay-{length}-{r}")
+            hay = plant(secret, r, f"hay-{length}-{r}")
             got = block_search(hay, {target}, **sabotage)
             if target not in got:
                 missed.append(r)
@@ -1238,6 +1264,63 @@ def check_block_search_alignments():
               f"loses one at exactly the alignment with no whole block inside it",
               f"missed at residue(s) {missed}; 2B-1 is the bound, not a tuning choice")
 
+    # THE WALK'S EDGES. A secret flush with the END of the haystack (its first block
+    # may be the haystack's last), and one at position 0 (its only indexed block is
+    # the haystack's first), at every residue and every length class the block path
+    # carries.
+    lengths = (2 * B - 1, 36, 40, 128)
+    for plant, where in ((_plant_end, "ENDING the haystack"),
+                         (_plant_start, "at position 0 of the haystack")):
+        bad = {}
+        for length in lengths:
+            missed, disagree = sweep(length, plant=plant)
+            if missed or disagree:
+                bad[length] = (missed, disagree)
+        LEDGER.ok(not bad,
+                  f"a secret {where} is found at every one of the {B} alignments, "
+                  f"at lengths {', '.join(map(str, lengths))}",
+                  f"(missed, disagreeing) residues by length: {bad}" if bad else
+                  f"{B * len(lengths)}/{B * len(lengths)} found -- the walk's "
+                  f"{'last' if plant is _plant_end else 'first'} block is visited")
+
+    # SABOTAGE 3: end the walk ONE CHARACTER early, `range(0, len - B, B)`. For the
+    # end plant at residue r, o = (-r) mod B and q + B = p + o + B; the walk now
+    # misses q exactly when q + B = len, i.e. o + B = L -- only L = 2B-1 = 35 at
+    # o = B-1, residue 1. Every other length and residue keeps a visited block.
+    def ends_short(short, length_set):
+        return {length: sweep(length, plant=_plant_end, walk_short=short)[0]
+                for length in length_set}
+
+    got = ends_short(1, lengths)
+    want = {length: ([1] if length == 2 * B - 1 else []) for length in lengths}
+    LEDGER.ok(got == want,
+              "SABOTAGE: a walk that stops ONE CHARACTER short of `len - B + 1` loses "
+              f"the {2 * B - 1}-character end-planted secret at residue 1 and nothing else",
+              f"missed residues by length {got}")
+
+    # SABOTAGE 4: end the walk ONE BLOCK early. Now q must be <= len - 2B, so the
+    # occurrence is caught only when o <= L - 2B: never at 35, only at o = 0 for 36,
+    # o <= 4 for 40, always for 128.
+    got = ends_short(B, lengths)
+    want = {length: sorted(r for r in range(B) if (-r) % B > length - 2 * B)
+            for length in lengths}
+    LEDGER.ok(got == want,
+              "SABOTAGE: a walk that stops one BLOCK early loses end-planted secrets at "
+              "exactly the residues whose first whole block is the haystack's last",
+              f"missed counts by length "
+              f"{ {length: len(m) for length, m in got.items()} } (predicted "
+              f"{ {length: len(m) for length, m in want.items()} })")
+
+    # SABOTAGE 5: start the walk at B. A secret at position 0 has its first boundary
+    # at o = 0; every later block inside it sits at an offset >= B, which the index
+    # never holds -- so it is lost at every residue and every length.
+    got = {length: sweep(length, plant=_plant_start, walk_from=B)[0]
+           for length in lengths}
+    LEDGER.ok(all(m == list(range(B)) for m in got.values()),
+              "SABOTAGE: a walk that starts at the SECOND block loses a secret at "
+              "position 0 at every alignment and every length",
+              f"missed counts by length { {length: len(m) for length, m in got.items()} }")
+
 
 def check_search_all_equals_the_naive_scan():
     """`search_all` is an optimisation of a SECURITY check, so it is proved equal to it.
@@ -1250,7 +1333,9 @@ def check_search_all_equals_the_naive_scan():
     what a half-working scrubber leaves behind.
 
     Since 2026-10-07 the tail is `block_search`, so 14a (`check_block_search_alignments`)
-    plants secrets at every alignment and runs its two sabotages, and the real-corpus
+    plants secrets at every alignment and flush with both ends of the haystack, and
+    runs its five sabotages (a dropped offset, the block path from 34, the walk ending
+    a character or a block short, the walk starting at B), and the real-corpus
     probe carries both arms and near misses rather than one arm's positives.
     """
     print("\n14. the fast leak search is the slow one, exactly")

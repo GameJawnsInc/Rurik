@@ -177,15 +177,18 @@ class SourceSlicer:
     """`ast.get_source_segment(src, node)`, with the source split into lines ONCE.
 
     WHY. The stock call re-splits the whole source up to the node's last line on
-    EVERY call (`_splitlines_no_ff(source, maxlines=end_lineno+1)`), and the Walker
-    makes one call per int literal -- so a file costs O(literals x lines), quadratic
-    in its length. MEASURED 2026-10-07 (DESKWORK-D13 step 1), on a loaded machine:
-    authsrv.py at 50,878 lines took 120-128 s per `scan_file` and the whole tree
-    235-298 s, and the suite paid a whole-tree scan seven times (test_updatecheck
-    five, test_genericvalue and test_buildpins one each). The study's 2026-09 probe
-    had 54-68 s at 35k lines: the cost grew faster than the file, which is the
-    quadratic showing. This class took the same two to 8.7 s and 16.9 s, with every
-    row, problem and skip identical to the stock call's over the whole tree.
+    EVERY call (`_splitlines_no_ff(source, maxlines=end_lineno+1)`, read from
+    `inspect.getsource` on Python 3.14.4), and the Walker makes one call per int
+    literal -- so a file costs O(literals x lines), quadratic in its length. That is
+    the evidence for the quadratic: the stock source, not a timing. MEASURED
+    2026-10-07 (DESKWORK-D13 step 1): authsrv.py at 50,878 lines took 120-128 s per
+    `scan_file` and the whole tree 235-298 s (the triage's runs and this lane's, the
+    lane's on a machine sibling lanes were loading; the triage's load is UNVERIFIED),
+    and the suite paid a whole-tree scan seven times (test_updatecheck five,
+    test_genericvalue and test_buildpins one each). The study's 2026-09 probe had
+    54-68 s at 35k lines, which is consistent with that growth but cannot prove it
+    across two machines' loads. This class took the same two to 8.7 s and 16.9 s, with
+    every row, problem and skip identical to the stock call's over the whole tree.
 
     THE SAME SEMANTICS, not similar ones, because a row's `text` is what
     `is_build_coupled` classifies and what the baseline diff keys on:
@@ -197,8 +200,9 @@ class SourceSlicer:
         number below 1, an end before the start), go to the stock call itself.
     test_buildpins.py §7 compares this against `ast.get_source_segment` node for
     node on fixtures built to break each rule (CRLF, a lone CR, a form feed,
-    non-ASCII before the literal, multi-line nodes) and on two real files, and
-    shows four known-bad slicers redden it.
+    non-ASCII before the literal, multi-line nodes, non-ASCII on a multi-line
+    node's first and last lines) and on two real files, and shows six known-bad
+    slicers redden it.
     """
 
     def __init__(self, src):

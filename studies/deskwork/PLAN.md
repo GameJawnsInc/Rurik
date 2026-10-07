@@ -1140,46 +1140,64 @@ nothing exercises a no-vault machine; `authsrv.py` regrew 7,887 lines and 271 de
 in eleven days with no tripwire.
 
 **Steps 1–2 LANDED 2026-10-07** (PLAN-LOG "DESKWORK-D13 steps 1–2"). Every figure below
-is OBSERVED on a machine five parallel lanes were also loading: in the desk equivalence
-run the scrub's harvest took 39.6 s and one `scrub_tree` pass 227 s, against 18.9 s and
-99.5 s in the unloaded triage the same morning, so read the absolute seconds as about twice an idle machine's.
-Ratios and identities are the result; the seconds are context.
+is OBSERVED on a machine five parallel lanes were also loading, and how much that cost
+depends on the stage. The I/O-heavy scrub stages ran about 2x the triage's times the same
+morning (harvest 39.6 s against 18.9 s, one `scrub_tree` pass 227 s against 99.5 s); the
+CPU-bound buildpins scan ran 1.0–1.3x them (`scan_file(authsrv.py)` 128.1 s against
+119.5–123.9 s, the whole tree 298.3 s against 234.8 s). Whether the triage itself ran on a
+quiet machine is UNVERIFIED — its record does not say — so these are factors against the
+triage, not against an idle machine. Ratios and identities are the result; the seconds
+are context.
 
 - **Step 1 (buildpins).** `buildpins.SourceSlicer` splits each file once with
   `ast.get_source_segment`'s semantics exactly. HEAD's instrument against the new one over
   the whole tree: 3,749 rows, 328 live, 0 problems, 2 skipped on both, and rows, problems,
   skips and `baseline()` IDENTICAL. `scan_file(authsrv.py)` (50,878 lines) 128.1 → 8.7 s;
-  whole tree 298.3 → 16.9 s. Same check counts before and after: `test_buildpins` 258 →
-  29 s (49 → 63 checks with the new §7), `test_genericvalue` 284 → 19 s (48),
-  `test_updatecheck` 1,575 → 90 s (35). The study's probe (54–68 s at 35k lines) had
-  roughly doubled with the file, which is the quadratic it described.
+  whole tree 298.3 → 16.9 s. `test_genericvalue` 284 → 19 s and `test_updatecheck`
+  1,575 → 90 s keep their counts (48, 35); `test_buildpins` 258 → 29 s gains its new §7
+  (49 → 63 checks, and 66 after review EV-3 added a fixture with non-ASCII on a multi-line
+  node's first and last lines and the two slicers that cut one of those ends by
+  character). The quadratic is read from the stock source, not from a timing:
+  `_splitlines_no_ff(source, maxlines=end_lineno+1)` runs once per call and the Walker
+  made one call per int literal (`inspect.getsource`, Python 3.14.4). The study's probe
+  (54–68 s at 35k lines) against 120–128 s at 50,878 lines is consistent with that, not
+  proof of it — the two were measured under different and unrecorded loads.
 - **Step 2 (scrub).** `search_all`'s tail is `block_search`, the aligned-block pigeonhole
   (B = 18; the 11 secrets under 35 characters keep `in`). Before the old tail was
   deleted, both ran over the same haystack on the FULL corpus, once for each text the test
   searches, and agreed exactly: the originals 16,512 = 16,512 found; the clean
   `leaked()` blob 0 = 0; the unfiltered tree (§13) 330 = 330; the Password-dropped
-  re-scrub 4 = 4. The tail went from 260–541 s to 3.3–5.3 s per call. §13 now reuses
-  `check_corpus`'s `found`; §14a plants secrets at all 18 alignments and at 34/35, and its
-  dropped-offset and early-block-path sabotages each lose a secret at exactly the
-  predicted alignment. `test_scrub` 2,348 → 1,194 s, 78 → 86 checks (floor 76 → 84);
-  the after-run overlapped another session's `test_scrub` for 13 of its 20 minutes, so
-  1,194 s is an upper bound.
+  re-scrub 4 = 4. For the three texts the test searches with every secret the tail went
+  from 313–541 s to 3.3–5.3 s per call (the originals, 259.7 → 4.8 s, are a desk
+  calibration: the test searches them only with §14's probe). §13 now reuses
+  `check_corpus`'s `found`; §14a plants secrets at all 18 alignments, at 34/35, and —
+  after review CD-1 / EV-1 — flush with each END of the haystack, and its five sabotages
+  (one offset dropped, the block path from 34, the walk ending a character or a block
+  short, the walk starting at B) each lose a secret at exactly the predicted alignment.
+  `test_scrub` 2,348 → 1,194 s, 78 → 86 checks (floor 76 → 84), the run overlapping
+  another session's `test_scrub` for 13 of its 20 minutes, so an upper bound. With the
+  edge checks: 91 checks (floor 89) in 703 s; alongside it ran ~2.5 min of this
+  lane's own `test_buildpins` runs and no other Python process at its start or six
+  minutes in (the sibling lanes' other load is not recorded).
 - **Acceptance (a) is NOT met for `test_scrub` as written, and cannot be at this
   corpus.** Of the three numbers it implies: the replaced tail is ≤ 5.3 s per call (met);
   `search_all` end to end is 31–44 s per call (NOT the ≤ 10 s hoped for), because its
   pre-existing first half, `re.findall` over ~1 GB to build the distinct-run haystack,
   costs 26–37 s here and step 2 did not touch it; and `test_scrub` under 200 s is out of
   reach — its non-search floor (harvest, two `scrub_tree` passes, two `leaked()` blob
-  builds, the remaining `findall`s and §14's naive probe) was ~500 s unloaded in the
-  triage. `test_updatecheck` under 200 s is met at 90 s.
+  builds, the remaining `findall`s and §14's naive probe) was ~500 s in the triage,
+  whose own load is UNVERIFIED. The lane's realistic ≤ ~600 s is not demonstrated
+  either: the cleanest run today was 703 s. `test_updatecheck` under 200 s is met at
+  90 s.
 - **The "28 minutes" in this route's Value line was SERIAL seconds** (`test_scrub` 1,203 +
   `test_updatecheck` 478 in the 09-16 timings). RECONSTRUCTION, modelled with
   `run_suite.schedule()`'s order over four greedy workers on the 2026-09-29 timings file
   (252 entries, 9,934 s serial, 2,484 s modelled wall): with this landing's four measured
   times substituted (`test_scrub` scaled by the timings file's own 1,880/2,348 to
   956 s), ~47 min of serial test time and ~12 min of wall come off a four-job full
-  run (41.4 → 29.7 min); at the triage's unloaded estimate for `test_scrub` (500–600 s)
-  it is ~54 and ~14 min. So ~11–14 minutes of wall, not 28. Contention, which
+  run (41.4 → 29.7 min); at the triage's estimate for `test_scrub` (500–600 s, which
+  assumes the triage's machine was quiet — UNVERIFIED) it is ~54 and ~14 min, and at
+  the 703 s measured after review, unscaled, ~51 and ~12.7 min. So ~11–14 minutes of wall, not 28. Contention, which
   `run_suite`'s docstring measures as real at four jobs, is not in the model; step 3's
   full census is where the wall number gets OBSERVED.
 

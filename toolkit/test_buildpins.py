@@ -28,7 +28,7 @@ a real address that must SURVIVE it -- because a filter that drops everything
 produces a census of zero and a very clean-looking report.
 
 No vault, no client, no socket: a classification defect is not a property of any
-binary. Floor 63, ~30 s: one whole-tree scan, ~17 s since buildpins.SourceSlicer
+binary. Floor 66, ~30 s: one whole-tree scan, ~17 s since buildpins.SourceSlicer
 (DESKWORK-D13 step 1, 2026-10-07: 258 s -> 29 s, both measured on a loaded
 machine). This line said "Floor 40, ~2 s" long after both had stopped being true.
 Section 7 holds that slicer to `ast.get_source_segment` node for node.
@@ -49,8 +49,10 @@ import buildpins as BP                                       # noqa: E402
 import checks                                                # noqa: E402
 
 # 49 -> 63 on 2026-10-07: section 7, the cached slicer's differential and its four
-# sabotages (14 checks), measured green at 63.
-LEDGER = checks.Ledger("build-coupled census", floor=63)
+# sabotages (14 checks), measured green at 63. 63 -> 66 the same day after review
+# (EV-3): a fixture with non-ASCII on a multi-line node's first and last lines, and
+# the two slicers that cut one of those ends by character -- measured green at 66.
+LEDGER = checks.Ledger("build-coupled census", floor=66)
 check = checks.adopt(LEDGER)
 
 # One module holding the SAME address twice: once as prose, once as code. This
@@ -388,7 +390,7 @@ print("\n7. the cached slicer is ast.get_source_segment, exactly")
 # 50,878 lines cost ~120 s, the whole tree ~235 s, and the suite paid it seven
 # times. `buildpins.SourceSlicer` splits once per file. It is only allowed to be
 # FASTER than the stock call, so it is held to it node for node, here, on inputs
-# chosen to break each way a hand-rolled slicer goes wrong -- and four such wrong
+# chosen to break each way a hand-rolled slicer goes wrong -- and six such wrong
 # slicers are run and must redden, because a differential nobody has seen fail
 # could be comparing a function with itself.
 #
@@ -407,6 +409,13 @@ SLICE_FIXTURES = {
     # Nodes spanning lines: first line cut from the column, last cut to it.
     "multi-line node": ('CALL = f(0x00487BC0,\n         g("§", 1,\n'
                         '           0x00512345))\nT = """x\ny"""\n'),
+    # Non-ASCII AHEAD of a multi-line node on its FIRST line, and inside it before
+    # its end on its LAST line -- the byte rule on the two cuts a multi-line node
+    # makes. The two fixtures above put their non-ASCII text on a single-line node or
+    # in a middle line, so a slicer cutting either end of a multi-line node by
+    # character passed all of them (review EV-3, 2026-10-07).
+    "non-ASCII on a multi-line node's end lines":
+        'S = "é✓"; CALL = f(1,\n         "ß", 0x00512345)\n',
 }
 
 
@@ -565,10 +574,40 @@ class _OffByOne(BP.SourceSlicer):
         return [""] + BP.SourceSlicer.lines(self)
 
 
+class _CharEnds(BP.SourceSlicer):
+    """Bytes everywhere except ONE end of a multi-line node, which it cuts by
+    character -- `first` picks which. Single-line nodes go through the real class."""
+
+    first = True
+
+    def segment(self, node, *, padded=False):
+        if padded or node.end_lineno == node.lineno:
+            return BP.SourceSlicer.segment(self, node, padded=padded)
+        lines = self.lines()
+        a, b = node.lineno - 1, node.end_lineno - 1
+        head = (lines[a][node.col_offset:] if self.first
+                else self._cut(lines[a], node.col_offset))
+        tail = (self._cut(lines[b], None, node.end_col_offset) if self.first
+                else lines[b][:node.end_col_offset])
+        return "".join([head, *lines[a + 1:b], tail])
+
+
+class _CharFirstLine(_CharEnds):
+    """Cuts a multi-line node's FIRST line by character, every other cut in bytes."""
+
+
+class _CharLastLine(_CharEnds):
+    """Cuts a multi-line node's LAST line by character, every other cut in bytes."""
+
+    first = False
+
+
 for arm, target in ((_CharOffsets, "non-ASCII before the literal"),
                     (_SplitLines, "form feed"),
                     (_LFOnly, "lone CR"),
-                    (_OffByOne, "CRLF")):
+                    (_OffByOne, "CRLF"),
+                    (_CharFirstLine, "non-ASCII on a multi-line node's end lines"),
+                    (_CharLastLine, "non-ASCII on a multi-line node's end lines")):
     red = sorted(name for name, src in SLICE_FIXTURES.items()
                  if slice_mismatches(arm, src)[1])
     check(target in red,
