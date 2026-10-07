@@ -2055,6 +2055,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
+* **A bare server dies on 320** (found 2026-10-07, PLAN-LOG "`test_guards.py` and
+  `test_labelconsumers.py` run on a bare machine"): `_condition_terms` reads the vault-only
+  `skills` row and catches `ValueError` only, so 8 tracked hand rows raise `ContentError` —
+  the default bar's 320 out of `cast_tick`. Needs the siblings' fallback and its own test.
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
@@ -2292,7 +2296,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: serving the Reforged effect 3434; a wire-derived
-  game_mode that can contradict a manifest; S22's client look (§5).
+  game_mode that can contradict a manifest; S22's and S23 / S24's client looks (§5; S23 / S24
+  shipped 2026-10-07, PLAN-LOG).
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
 * **SLICE-F52 52.8** (no E5 / E6 at a recharge-0 completion): SHIPPED ON, UNRUN -- runsheet in studies/slice 52.10.
 * **RANGERLOOP-F9:** fixed on the desk 2026-10-07 (PLAN-LOG); owed, the RUN-T re-run

@@ -33,12 +33,25 @@ player's skill shot, 6 a body's melee attack skill and 7 a body's skill shot. 8 
 known-bad arm, --no-condition-needs-hit, at every site; 9 the flag and the four sites in the
 source.
 
+RANGERPRE-S23 and S24 (2026-10-07, the two defects S22 found in passing; the banner at
+authsrv.BLIND_MISS_SKILL_CLOSE). S23: a BODY's Blind-missed attack skill closed with the
+plain swing's [1, body, 0]; retail's close follows the ACTION -- on the witness connection
+the observer's two attack-skill misses (349.147 Jagged Strike, 443.448 the 775 dual) close
+[46] and its two plain-swing misses (433.145, 434.310) close [1] (1d re-derives it). The
+body's [46] is RECONSTRUCTION: both misses are the player's. S24: a Blinded body's attack
+skill on another BODY never rolled the miss (WIKI 'Blind' rev 2667383, 'Hit' rev 2721374).
+Section 10 is the fix at both sites and in both directions, 11 the two known-bad arms
+(--no-blind-miss-skill-close, --no-body-skill-blind) as differentials, 12 the flags, main()'s
+wiring and the two call sites in the source. Every check in 10-12 is red on the server
+before S23 / S24 (ab39c182).
+
 Section 1 needs the vault's captures (a declared skip on a machine with no captures/live; a
 vault with captures but not this one dies loudly in require_dir). Sections 2-8 need the
 vault's `skills` rows (VAULT-ONLY, skilltable.py --emit-content: without them no skill is an
 attack skill and the gate has nothing to gate) and declare a skip on a machine with no
 vault/content DIRECTORY; a content directory that does not give 382, 392 and 782 their
-attack type is a FAIL, not a skip. Section 9 runs anywhere.
+attack type is a FAIL, not a skip. Sections 10-11 need the same rows. Sections 9 and 12 run
+anywhere.
 """
 import argparse
 import ast
@@ -61,8 +74,9 @@ import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-10-07 on a machine with NO vault (RURIK_VAULT at an empty
-# directory; sections 1-8 declared skips): 4. With the vault: 28.
-LEDGER = checks.Ledger("an attack skill's condition rides the hit", floor=4)
+# directory; sections 1-8 declared skips): 4. With the vault: 28. RANGERPRE-S23 / S24, the
+# same day: bare 7 (sections 9 and 12), with the vault 38.
+LEDGER = checks.Ledger("an attack skill's condition rides the hit", floor=7)
 check = checks.adopt(LEDGER)
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -96,6 +110,12 @@ JAGGED_ON_117 = [
                ("ADD", 23), ("BLEEDBIT",), ("REGEN",), ("E3", JAGGED)]),
 ]                                       # (only the first landed word carries MAXHP-1's 42)
 BATCH_S = 0.005
+# RANGERPRE-S23: every Blind miss ([38, T, 25, 3]) by the observer on the witness connection,
+# as (t, the skills of the observer's E5s in its batch or None, the observer's closes in its
+# batch) -- the close is the ACTION's: [46] beside an attack skill, [1] beside a plain swing.
+MISS_CLOSES = [(349.147, [JAGGED], [46]), (433.145, None, [1]), (434.31, None, [1]),
+               (443.448, [775], [46])]
+ALLY = 30                               # a party body (RANGERPRE-S24's victim or caster)
 
 
 def token(op, f, attacker, target):
@@ -198,6 +218,17 @@ def section_tape():
           "bleeding bit (a Bleeding would have set it, as at 357.240), and in the second "
           "after the miss nothing puts a condition on 117", (hex(status), after))
 
+    misses = [(round(r["t"], 3),
+               [v[2] for _i, tb, op, v in seq if op == OP_E5 and v[1] == OBSERVER
+                and abs(tb - r["t"]) <= BATCH_S] or None, r["closes"])
+              for r in missjoin.fails(seq, windows, OBSERVER)
+              if r["attacker"] == OBSERVER and r["reason"] == 3]
+    check(misses == MISS_CLOSES,
+          "1d. RANGERPRE-S23's evidence: the observer's every Blind miss on this connection "
+          "rides its own close, and the close is the ACTION's -- [46] beside the two attack "
+          "skills' E5s (782 at 349.147, the 775 dual at 443.448), [1] beside the two plain "
+          "swings (433.145, 434.310) -- never the outcome's", misses)
+
 
 # ---------------------------------------------------------------------------------------
 def body(file_id=FLESHY_FILE, **kw):
@@ -236,33 +267,39 @@ def blind(st, agent_id):
 
 
 @contextlib.contextmanager
-def arm(blinded_roll=False, blocker=None, needs_hit=True):
+def arm(blinded_roll=False, blocker=None, needs_hit=True, skill_close=True,
+        body_blind=True):
     """The roll forced, the shape real: BLIND_MISS_CHANCE 1.0 (a blinded swinger misses
     every time -- the Blind itself is a real episode), a `block_chance` of 1.0 on
-    `blocker` and 0 elsewhere, and the gate's flag.
+    `blocker` and 0 elsewhere, and the gates' flags (S22's CONDITION_NEEDS_HIT, S23's
+    BLIND_MISS_SKILL_CLOSE, S24's BODY_SKILL_BLIND).
 
-    The flag is read through getattr and put back exactly as found (removed again if the
-    module had none), so this file run against a server WITHOUT the gate -- 1a678280, the
-    unfixed one -- still reaches sections 2-8 and goes red on their checks rather than dying
-    on an AttributeError at the first press; section 9 is where the missing bool and flag
-    are named."""
+    Each flag is read through getattr and put back exactly as found (removed again if the
+    module had none), so this file run against a server WITHOUT a gate -- 1a678280 for
+    S22, ab39c182 for S23 / S24 -- still reaches the server sections and goes red on their
+    checks rather than dying on an AttributeError at the first press; sections 9 and 12
+    are where a missing bool and flag are named."""
     missing = object()
     saved = (authsrv.BLIND_MISS_CHANCE, authsrv.block_chance)
-    saved_gate = getattr(authsrv, "CONDITION_NEEDS_HIT", missing)
+    gates = {"CONDITION_NEEDS_HIT": needs_hit, "BLIND_MISS_SKILL_CLOSE": skill_close,
+             "BODY_SKILL_BLIND": body_blind}
+    saved_gates = {k: getattr(authsrv, k, missing) for k in gates}
     real_bc = authsrv.block_chance
     try:
         if blinded_roll:
             authsrv.BLIND_MISS_CHANCE = 1.0
         if blocker is not None:
             authsrv.block_chance = lambda s, a: 1.0 if a == blocker else real_bc(s, a)
-        authsrv.CONDITION_NEEDS_HIT = needs_hit
+        for k, v in gates.items():
+            setattr(authsrv, k, v)
         yield
     finally:
         authsrv.BLIND_MISS_CHANCE, authsrv.block_chance = saved
-        if saved_gate is missing:
-            del authsrv.CONDITION_NEEDS_HIT
-        else:
-            authsrv.CONDITION_NEEDS_HIT = saved_gate
+        for k, v in saved_gates.items():
+            if v is missing:
+                authsrv.__dict__.pop(k, None)
+            else:
+                setattr(authsrv, k, v)
 
 
 def press(st, skill, target):
@@ -284,30 +321,64 @@ def press(st, skill, target):
     return sent
 
 
-def body_cast(st):
-    """A hostile's land_skill (its cast completing), then its arrow's arrival."""
+def body_cast(st, caster=FOE):
+    """A body's land_skill (its cast completing), then its arrow's arrival."""
     sent, send = collector()
     with contextlib.redirect_stdout(io.StringIO()):
-        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        authsrv.land_skill(send, st, caster, st["agents"][caster], 1)
         for shot in st.get("body_projectiles") or ():
             shot["arrives_at"] -= 30.0
         authsrv.projectile_tick(send, st, 1)
     return sent
 
 
+def caster_row(skill, weapon, pos, allegiance, target):
+    return {"name": "foe", "dead": False, "died_at": 0.0, "health": 600.0,
+            "max_health": 600.0, "last_hit": 0.0, "pos": pos, "plane": 0,
+            "allegiance": allegiance, "attack_speed": 1.75,
+            "effects": 0, "attacks_back": True, "skills": [[skill, 0.0, 3.0]],
+            "skill_ready": [0.0], "casting": 0, "cast_target": target,
+            "last_swing": time.time(), "weapon_item": weapon,
+            "npc": {"profession": 1, "level": 10}}
+
+
 def hostile_world(skill, weapon, pos):
-    foe = {"name": "foe", "dead": False, "died_at": 0.0, "health": 600.0,
-           "max_health": 600.0, "last_hit": 0.0, "pos": pos, "plane": 0,
-           "allegiance": agents.ALLEGIANCE_HOSTILE, "attack_speed": 1.75,
-           "effects": 0, "attacks_back": True, "skills": [[skill, 0.0, 3.0]],
-           "skill_ready": [0.0], "casting": 0, "cast_target": PLAYER,
-           "last_swing": time.time(), "weapon_item": weapon,
-           "npc": {"profession": 1, "level": 10}}
-    st = {"agents": {FOE: foe}, "pos": (0.0, 0.0), "player_health": 480.0,
-          "player_dead": False}
+    st = {"agents": {FOE: caster_row(skill, weapon, pos, agents.ALLEGIANCE_HOSTILE,
+                                     PLAYER)},
+          "pos": (0.0, 0.0), "player_health": 480.0, "player_dead": False}
     authsrv.effect_table(st)
     authsrv.player_pools(st)
     return st
+
+
+def body_world(skill, weapon, pos, party_caster=False):
+    """RANGERPRE-S24: a caster aiming `skill` at a fleshy BODY, neither of them the player
+    -- the hostile FOE at the party body ALLY, or (party_caster) ALLY at FOE. Returns
+    (state, caster, victim)."""
+    caster, victim = (ALLY, FOE) if party_caster else (FOE, ALLY)
+    side = agents.ALLEGIANCE_PLAYER if party_caster else agents.ALLEGIANCE_HOSTILE
+    other = agents.ALLEGIANCE_HOSTILE if party_caster else agents.ALLEGIANCE_PLAYER
+    st = {"agents": {caster: caster_row(skill, weapon, pos, side, victim),
+                     victim: body(pos=(0.0, 60.0), allegiance=other)},
+          "pos": (0.0, 0.0), "player_health": 480.0, "player_dead": False}
+    authsrv.effect_table(st)
+    authsrv.player_pools(st)
+    return st, caster, victim
+
+
+def plain_swing(st, attacker, target):
+    """A body's PLAIN swing landing (land_swing, skill_id None) -- the S23 control."""
+    sent, send = collector()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.land_swing(send, st, attacker, st["agents"][attacker], 1, target_id=target)
+    return sent
+
+
+def closes(sent, attacker):
+    """The attacker's own swing closes in `sent`, wire order: 1 (a plain swing's) and 46
+    (an attack skill's)."""
+    return [v[0] for op, v in sent if op == OP_INT and v[1] == attacker
+            and v[0] in (agents.GV_MELEE_ATTACK_FINISHED, agents.GV_ATTACK_SKILL_FINISHED)]
 
 
 def words(sent, attacker, target):
@@ -604,8 +675,187 @@ def section_source():
           rule)
 
 
+def blinded_cast(build):
+    """`build()` -> (state, caster, victim); the caster Blinded (a real episode, the roll
+    forced) and its cast landed. Returns (sent, state, caster, victim)."""
+    st, who, tid = build()
+    blind(st, who)
+    sent = body_cast(st, who)
+    return sent, st, who, tid
+
+
+def section_body_close():
+    print("\n10. RANGERPRE-S23 / S24: a BODY's attack skill under Blind -- the close is the "
+          "action's, and a body's skill on a body rolls the miss")
+    # 10a. S23 at the player: land_skill -> land_swing's player branch.
+    with arm(blinded_roll=True):
+        skill, st, _w, _t = blinded_cast(
+            lambda: (hostile_world(SEVER, "starter_sword", (60.0, 0.0)), FOE, PLAYER))
+        st2 = hostile_world(SEVER, "starter_sword", (60.0, 0.0))
+        blind(st2, FOE)
+        plain = plain_swing(st2, FOE, PLAYER)
+    check(tokens(skill, FOE, PLAYER) == MISS_BATCH[1:3] and closes(skill, FOE) == [46]
+          and closes(plain, FOE) == [1]
+          and fails(plain, FOE, PLAYER) == [[agents.GV_ATTACK_FAIL, PLAYER, FOE, 3]],
+          "10a. S23 at the player: the Blinded hostile's Sever Artery closes [46, 10, 0] "
+          "then [38, 1, 10, 3] -- retail's 349.147 tokens less the observer's own E5 / E3 "
+          "(1d: the close is the action's) -- and its PLAIN swing, the control, still "
+          "closes [1] then [38, 1, 10, 3] (until 2026-10-07 the skill closed [1] too)",
+          (tokens(skill, FOE, PLAYER), closes(skill, FOE), plain))
+    # 10b / 10c. S24 (and S23 at land_swing_on_body): a body's melee attack skill on a body.
+    for tag, party in (("10b", False), ("10c", True)):
+        def build(party=party):
+            return body_world(SEVER, "starter_sword", (60.0, 0.0), party_caster=party)
+        with arm(blinded_roll=True):
+            missed, st, who, tid = blinded_cast(build)
+        miss_conds = conditions_on(st, tid)
+        st, who, tid = build()
+        landed = body_cast(st, who)
+        check(tokens(missed, who, tid) == MISS_BATCH[1:3] and not words(missed, who, tid)
+              and miss_conds == [] and conditionish(tokens(missed, who, tid)) == []
+              and closes(landed, who) == [46] and len(words(landed, who, tid)) == 1
+              and conditions_on(st, tid) == [BLEED],
+              f"{tag}. S24: the Blinded {'party body' if party else 'hostile'} {who}'s Sever "
+              f"Artery at the {'hostile' if party else 'party body'} {tid} MISSES -- "
+              f"[46, {who}, 0] (S23's close) then [38, {tid}, {who}, 3], no word and no "
+              f"Bleeding -- where the unblinded control closes [46], lands its word and "
+              f"bleeds {tid} (until 2026-10-07 the Blinded strike always landed: "
+              f"land_swing_on_body rolled for a plain swing only)",
+              (tokens(missed, who, tid), miss_conds, closes(landed, who),
+               conditions_on(st, tid)))
+    # 10d. S24 on a body's SKILL SHOT at a body: the arrival rolls; no close either way.
+    with arm(blinded_roll=True):
+        missed, st, who, tid = blinded_cast(
+            lambda: body_world(PIN_DOWN, "hostile_bow", (600.0, 0.0)))
+    miss_conds = conditions_on(st, tid)
+    st, who, tid = body_world(PIN_DOWN, "hostile_bow", (600.0, 0.0))
+    landed = body_cast(st, who)
+    check(fails(missed, who, tid) == [[agents.GV_ATTACK_FAIL, tid, who, 3]]
+          and not words(missed, who, tid) and miss_conds == []
+          and [op for op, _v in missed].count(0x00A7) == 1 and closes(missed, who) == []
+          and len(words(landed, who, tid)) == 1 and conditions_on(st, tid) == [CRIPPLE]
+          and closes(landed, who) == [],
+          f"10d. S24 at the arrow: the Blinded hostile archer's Pin Down at the party body "
+          f"arrives (0x00A7) and misses -- [38, {tid}, {who}, 3], no word, no Crippled, and "
+          f"no close of either kind (a body skill shot carries none, 0 of 129) -- where the "
+          f"unblinded control's arrow lands and cripples (until 2026-10-07: always landed)",
+          (missed, miss_conds, conditions_on(st, tid)))
+
+
+def section_body_known_bad():
+    print("\n11. KNOWN-BAD ARMS: --no-blind-miss-skill-close, --no-body-skill-blind, each "
+          "against its own fix")
+    got = {}
+    for close in (True, False):
+        with arm(blinded_roll=True, skill_close=close):
+            at_player, _s, _w, _t = blinded_cast(
+                lambda: (hostile_world(SEVER, "starter_sword", (60.0, 0.0)), FOE, PLAYER))
+            at_body, _s, who, tid = blinded_cast(
+                lambda: body_world(SEVER, "starter_sword", (60.0, 0.0)))
+        got[close] = (closes(at_player, FOE), fails(at_player, FOE, PLAYER),
+                      closes(at_body, who), fails(at_body, who, tid))
+    check(got == {True: ([46], [[agents.GV_ATTACK_FAIL, PLAYER, FOE, 3]],
+                         [46], [[agents.GV_ATTACK_FAIL, ALLY, FOE, 3]]),
+                  False: ([1], [[agents.GV_ATTACK_FAIL, PLAYER, FOE, 3]],
+                          [1], [[agents.GV_ATTACK_FAIL, ALLY, FOE, 3]])},
+          "11a. --no-blind-miss-skill-close is the WHOLE difference: on, the Blinded "
+          "hostile's Sever Artery closes [46] at the player and at a body; off, [1] at both "
+          "-- the pre-2026-10-07 bytes at the player -- and the miss word is the same "
+          "[38, T, 10, 3] either way", got)
+    got = {}
+    for roll in (True, False):
+        with arm(blinded_roll=True, body_blind=roll):
+            skill, st, who, tid = blinded_cast(
+                lambda: body_world(SEVER, "starter_sword", (60.0, 0.0)))
+            skill_res = (bool(fails(skill, who, tid)), len(words(skill, who, tid)),
+                         conditions_on(st, tid))
+            st = body_world(SEVER, "starter_sword", (60.0, 0.0))[0]
+            blind(st, FOE)
+            plain = plain_swing(st, FOE, ALLY)
+            at_player, _s, _w, _t = blinded_cast(
+                lambda: (hostile_world(SEVER, "starter_sword", (60.0, 0.0)), FOE, PLAYER))
+        got[roll] = (skill_res, bool(fails(plain, FOE, ALLY)),
+                     bool(fails(at_player, FOE, PLAYER)))
+    check(got == {True: ((True, 0, []), True, True),
+                  False: ((False, 1, [BLEED]), True, True)},
+          "11b. --no-body-skill-blind reaches ONLY a body's attack skill on a body: on, "
+          "the Blinded hostile's Sever Artery at the party body misses and inflicts "
+          "nothing; off, it lands its word and bleeds the body -- the pre-2026-10-07 bytes "
+          "-- while its plain swing at the body and its skill at the player miss under "
+          "both", got)
+
+
+def section_body_source():
+    """Read through getattr / a parse that cannot raise, so the server before S23 / S24
+    (ab39c182) reports 12a-12c RED rather than dying here."""
+    print("\n12. RANGERPRE-S23 / S24: the flags, main()'s wiring and the two sites in the "
+          "source")
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    flags = {"no_blind_miss_skill_close": "BLIND_MISS_SKILL_CLOSE",
+             "no_body_skill_blind": "BODY_SKILL_BLIND"}
+    parsed = {}
+    for dest in flags:
+        opt = "--" + dest.replace("_", "-")
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                parsed[dest] = (getattr(ap.parse_args([]), dest),
+                                getattr(ap.parse_args([opt]), dest))
+        except (SystemExit, AttributeError) as exc:     # an unknown flag: argparse exits 2
+            parsed[dest] = ("refused", repr(exc))
+    bools = {b: getattr(authsrv, b, "absent") for b in flags.values()}
+    check(parsed == {d: (False, True) for d in flags}
+          and bools == {b: True for b in flags.values()},
+          "12a. --no-blind-miss-skill-close and --no-body-skill-blind parse (default off) "
+          "and both gates ship ON", (parsed, bools))
+
+    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    flipped = {}
+    missing = object()
+    for dest, name in flags.items():
+        wiring = [n for n in ast.walk(funcs["main"]) if isinstance(n, ast.If)
+                  and isinstance(n.test, ast.Attribute) and n.test.attr == dest]
+        for flag in (True, False):
+            saved = getattr(authsrv, name, missing)
+            try:
+                mod = ast.Module(body=wiring, type_ignores=[])
+                ast.fix_missing_locations(mod)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exec(compile(mod, authsrv.__file__, "exec"),            # noqa: S102
+                         authsrv.__dict__, {"a": argparse.Namespace(**{dest: flag})})
+                flipped[(dest, flag, len(wiring))] = getattr(authsrv, name, "absent")
+            finally:
+                if saved is missing:
+                    authsrv.__dict__.pop(name, None)
+                else:
+                    setattr(authsrv, name, saved)
+    check(flipped == {(d, f, 1): (not f) for d in flags for f in (True, False)},
+          "12b. main()'s `if a.no_blind_miss_skill_close:` and `if a.no_body_skill_blind:` "
+          "blocks, lifted out of the source and RUN against authsrv's own globals, each flip "
+          "their own bool -- a block without its `global` would leave it True -- and leave "
+          "it alone when the flag is off", flipped)
+
+    sites = {}
+    for name in ("land_swing", "land_swing_on_body"):
+        sites[name] = (
+            sum(1 for n in ast.walk(funcs[name]) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name) and n.func.id == "blind_miss_close"),
+            sum(1 for n in ast.walk(funcs[name]) if isinstance(n, ast.Name)
+                and n.id == "BODY_SKILL_BLIND"))
+    check(sites == {"land_swing": (1, 0), "land_swing_on_body": (1, 1)},
+          "12c. both Blind arms close through blind_miss_close exactly once, and only "
+          "land_swing_on_body's roll reads BODY_SKILL_BLIND (land_swing's player branch "
+          "always rolled; sections 10 and 11 drive both)", sites)
+
+
 def main():
-    print("test_condhit -- an attack skill's condition rides the hit (RANGERPRE-S22)")
+    print("test_condhit -- an attack skill's condition rides the hit (RANGERPRE-S22); "
+          "a body's attack skill under Blind (RANGERPRE-S23 / S24)")
     t0 = time.time()
     section_tape()
     try:
@@ -613,7 +863,7 @@ def main():
         have_rows = True
     except SystemExit as exc:
         have_rows = False
-        LEDGER.skip("2-8. the server sections", str(exc).splitlines()[0])
+        LEDGER.skip("2-8, 10-11. the server sections", str(exc).splitlines()[0])
     if have_rows:
         types = {s: authsrv._is_attack_skill(s) for s in (SEVER, PIN_DOWN, JAGGED, GASH)}
         check(all(types.values()),
@@ -633,12 +883,15 @@ def main():
             section_body_melee()
             section_body_shot()
             section_known_bad()
+            section_body_close()
+            section_body_known_bad()
         finally:
             (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.PLAYER_SWING_DAMAGE,
              authsrv.WEAPON_ATTACK_SPEED, authsrv.ATTACK_INTERVAL, authsrv.PARTY_SKILLBAR,
              agents.PLAYER_LEVEL, agents.PLAYER_HEALTH, agents.PLAYER_ATTRIBUTE_RANKS,
              agents.PLAYER_ATTRIBUTE_POINTS, authsrv.skill_cost) = saved_pc
     section_source()
+    section_body_source()
     print(f"\n({time.time() - t0:.1f} s)")
     return LEDGER.verdict()
 

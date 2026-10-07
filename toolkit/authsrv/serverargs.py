@@ -2916,6 +2916,23 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "inflicted nothing (20260917T224104 :62557 t=348.996) where the "
                          "same skill's hits on the same foe bled it 3 of 3; WIKI 'Hit': "
                          "a blocked or missed attack is no hit.")
+    ap.add_argument("--no-blind-miss-skill-close", action="store_true",
+                    help="RANGERPRE-S23 REVERT: a BODY's Blind-missed attack skill closes "
+                         "with the plain swing's [1, body, 0] ahead of its [38, T, body, "
+                         "3], this server's bytes until 2026-10-07 at the player (at a "
+                         "body, add --no-body-skill-blind: before it no body's skill on a "
+                         "body missed at all). Known-bad: retail's "
+                         "close follows the action -- both attack-skill misses on the live "
+                         "corpus close [46] (20260917T224104 :62557 349.147 and 443.448, "
+                         "the observer's), the 55 plain-swing misses [1]; the body's [46] "
+                         "is RECONSTRUCTION. A body's skill shot sends neither close.")
+    ap.add_argument("--no-body-skill-blind", action="store_true",
+                    help="RANGERPRE-S24 REVERT: a Blinded body's ATTACK SKILL on another "
+                         "body never rolls Blind's miss and always lands, condition and "
+                         "all, this server's bytes until 2026-10-07 (its plain swing, and "
+                         "its skill at the player, still roll). Known-bad by WIKI: GWW "
+                         "'Blind', a 90%% chance to miss with attacks; 'Hit', a missed "
+                         "attack is no hit. No tape shows the case.")
     ap.add_argument("--no-snare-status-bit", action="store_true",
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "

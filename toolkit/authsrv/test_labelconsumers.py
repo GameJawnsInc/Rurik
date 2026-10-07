@@ -29,7 +29,9 @@ a failed step skips a heal and an effect ON THE WIRE, and 5b reads the HAND
 rows through the same predicates (a hand row a consumer would silently
 re-route is named).
 
-NOT bare-capable in section 5b only; sections 1-5a need no vault.
+NOT bare-capable in 5a, 5b, 5c and section 8's hand-row census, whose subject is the
+vault's own table: each declares its skip (5a and 8 on an absent vault/content DIRECTORY,
+5b and 5c on an overlay with no marks); everything else needs no vault.
 """
 import contextlib
 import io
@@ -68,7 +70,14 @@ import vaultpath  # noqa: E402
 # bare-capable), a killing blow carrying no rider, and the rider's SIDE (the player's
 # 1997-shape at a FOE arms nothing); 74 + 1 skip with the vault's 57-row overlay, 77 with
 # the 60-row emit.
-LEDGER = checks.Ledger("label consumers", floor=70)
+# 2026-10-07 (the bare machine): -1 -> FLOOR 69, MEASURED with RURIK_VAULT at an empty
+# directory and at a nonexistent one (69 + 4 skips); a vault run gives 77, unchanged. The 70
+# counted section 8's hand-row census as a BARE check, and it never was one: it ran behind
+# "is any hand row's id in the skills table", which the tracked overrides' 14 rows answer
+# yes, so at 1c27ebe9 it passed bare as [] == [] and from ed781f26 (re-aimed at [167]) it
+# FAILED bare. Its subject is the vault's table, so it now skips on an absent vault/content
+# directory (`_vault_census`, with 5a beside it) and fails on a table that did not load.
+LEDGER = checks.Ledger("label consumers", floor=69)
 check = LEDGER.ok
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -182,6 +191,21 @@ def _words(batch):
 
 def _conditioned(state, aid, cond):
     return any(ep["skill"] == cond for ep in authsrv.effect_table(state).on_agent(aid))
+
+
+def _vault_census(label, why):
+    """True when vault/content is there, so a check whose SUBJECT is the vault's own table
+    runs -- and FAILS on a table that did not load. False, with the skip declared, only on
+    an absent DIRECTORY (2026-10-07). Both callers used to ask whether rows were PRESENT,
+    and a bare machine has rows: the tracked overrides carry 14 skills rows, some of them
+    hand rows' ids, so section 8 ran its census over those and reddened; and a vault whose
+    skills.toml failed to load would have skipped 5a as "a bare machine"."""
+    try:
+        vaultpath.require_dir("content", why=why)
+    except SystemExit as exc:
+        LEDGER.skip(label, str(exc).splitlines()[0])
+        return False
+    return True
 
 
 def _press_and_land(st, send, sid, target):
@@ -898,7 +922,8 @@ def main():
                 srow_ = skills_loaded.get(str(k))
                 if srow_ is not None and not int(srow_["skill_arguments"]) & bit:
                     hand_clear.append(k)
-        if any(str(k) in skills_loaded for k in hand_rows_loaded):
+        if _vault_census("8. the hand rows' condition slots (1 check)",
+                         "a census of the vault's skills table against the hand rows"):
             # 2026-09-26 (DESKWORK-D6 step 2, studies/weapons 42): Eruption 167 became a HAND
             # row -- an area over time whose Blind rides every tick -- and its `bonus_scale_means
             # = "Blind"` sits on the record's bit-clear 10 / 10 slot ON PURPOSE (the row's own
@@ -908,8 +933,6 @@ def main():
                   "the flat reader moves exactly ONE hand row -- Eruption 167, whose Blind is the "
                   "record's flat 10 s by the row's own word (2026-09-26); no other HAND row's "
                   "condition means sits on a bit-clear slot (the census of 2026-09-25)", hand_clear)
-        else:
-            LEDGER.skip("8. the hand rows' condition slots (1 check)", "no skills table (a bare machine)")
 
         # ------------------------------------------------------------------
         print("\n5. the flags parse and rebind; the loaded overlay's marks agree with the predicates")
@@ -965,13 +988,11 @@ def main():
         check(hand_gated == [],
               "no HAND row is a non-attack with combo_req -- among the effect rows the gate reaches "
               "label rows only", hand_gated)
-        if "1643" in agents.WORLD.rows("skills"):
+        if _vault_census("5a. 1643's record (1 check)", "skill 1643's row in the vault's skills table"):
             check(authsrv.skill_chain_fields(1643)[1] == 1 and not authsrv._is_attack_skill(1643)
                   and "1643" not in saved_tables["skill_effect"],
                   "1643 -- a Skill, combo_req 1, NO effect row -- is the one loaded row the gate's "
                   "RECORD read fails unchained beyond the label rows (LU-R6, stated in skills 59.7)")
-        else:
-            LEDGER.skip("5a. 1643's record (1 check)", "no skills table row 1643 (a bare machine)")
         if not any(marks.values()):
             LEDGER.skip("5b. the loaded overlay's SKILLS-LU marks (3 checks)",
                         "no AREA_CASTER / HEAL_PARTY / CHAIN_GATED row is loaded -- the vault's "
