@@ -14478,6 +14478,27 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   into it; and the overkill row's 7 is what would catch a later session sending an
   adrenaline message for the dying AGENT, which retail never does (self-scoped,
   9 of 9). Floor 40 → 41),
+  `toolkit/authsrv/test_barecondition.py` (**2026-10-07, a skill's condition on a bare
+  server: `_condition_terms` read the vault-only `skills` row through `skill_scale_value`
+  and caught `ValueError` alone, so with no vault 8 of the repo's 72 hand rows raised
+  `ContentError` out of `skill_condition` (167, 320, 337, 352, 392, 782, 799, 2059), 179
+  and 185 out of its direct callers, and the default bar's 320 pressed at a foe killed
+  `cast_tick`. Fixed with `skill_damage`'s narrow catch: no row, no condition, announced
+  once per id through `skill_timing`.** The skills table is REPLACED by `{}` for each
+  block (the tracked overrides go too, so 382 and 384 join the eight), so a vault run
+  takes the bare path. §0 the table is empty and the defect's ids are subjects; §1
+  `skill_condition` over every loaded `skill_effect` row at ranks 0, 12 and 15 raises
+  nothing and lands nothing; §2 `_condition_terms` the same, called directly; §3 the
+  missing row announced exactly once per subject and for no other id; §4 320 pressed
+  through `handle_skill_press` → `cast_tick` at a hostile agent completes, the tick's own
+  `skill_condition` call reads None (a spy, so the path cannot go round the read), and no
+  Crippled lands; §5 CONTROL, 320's own row carried (`RECORD`, skilltable.py, build
+  38974): Crippled for 3 s at rank 0 and 15 s at rank 15 with nothing announced, and the
+  same press with the starter sword held (weapon_req 0x80) lands it; §6 (vault) the
+  carried row is the vault's, column for column, skipping only on an absent vault/content
+  directory. PROVEN RED against f04cc8cc's `authsrv.py`: 5 FAIL (§1-§4) on a vault run
+  and on a nonexistent vault alike. 12 checks + 1 declared skip bare (an empty directory
+  and a nonexistent path alike), 13 vaulted; floor 12. No socket, no client. ~15 s),
   `toolkit/authsrv/test_morale.py` (**2026-09-30, REVIVE-HEAL, the player's half: §6 reads the shipped rise -- no maximum re-sent and no refill armed, the heal retail's `0x00A2 [55, me, 1.0]` (a fraction of the reduced maximum the death batch declared), and retail's seven-message ORDER in one segment: status, `[43]`, `[8, me, 0]` (the death's hold released), `[52]`, `[54]`, `[55]`, flags 5 (24 of 24 live rises); §6b the KNOWN-BAD arm `--no-player-revive-heal-gain` on its own death (refill deferred, the hold left set) and the switch's wiring. Proved red: the arm disabled in the source reddens §6's two and `test_guards.py` §6. Floor 63 -> 65, vaulted and bare.** morale and the death penalty — the
   arithmetic, the gate and the wire tick. Three things are actually at risk and
   each has its own section. **The base-versus-total scale**: morale scales a
