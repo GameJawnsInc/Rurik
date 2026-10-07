@@ -10354,7 +10354,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Why the old form could not do better is still MEASURED: the `movzx`/`jmp` shape
   occurs **596 times** in `.text`, so it identifies "a switch" and never "this
   switch" — which is why the dispatchers had to be anchored first, and now are.
-  Needs the vault throughout. Floor 39, ~20 s),
+  Needs the vault throughout. Floor 48, ~20 s -- 284 s until 2026-10-07, when §1's whole-tree `buildpins` scan stopped being quadratic (DESKWORK-D13 step 1; 19 s measured)),
   `toolkit/clientscan/test_heroes_table.py` (`s_heroClientData` as content
   rows, and the trap it exists to avoid. `s_titleClientData` sits SIX
   INSTRUCTIONS from it -- accessor `0x005A9350` (`cmp esi,0x30`, stride 12)
@@ -11756,7 +11756,7 @@ the same-tick ALIAS**: the
   is NOT unique, 56 hits, which is why the signature anchors in the body and the
   −11 delta is verified after a match rather than searched for. Both floors were
   re-measured rather than incremented: 93 with capstone, 45 stdlib-only),
-  `toolkit/test_buildpins.py` (**2026-10-01, build 38974: 301 -> 328 across 24 -> 25 files, nothing gone -- framebus.py 74 -> 97 (TABLES[38974]), one build-number row each in pinned.py, authsrv.py and skillunlock.py, and schema/codec.py's GAME_SMSG_RENUMBER key (the 25th file); the largest block is framebus.py's 97. 49 green.** **2026-09-28, the 38888 content regen: 295 → 301 across 23 → 24 files, MEASURED with `--live` against 2d9a7547's 295: nothing gone, six arrived, all in `authsrv/skillunlock.py` -- `SKILL_RECORD_COUNT_BY_BUILD`'s five build keys (38519 3,438; 38797 / 38833 / 38849 3,443; 38888 3,476 records) and the pin's row, now `SKILL_TABLE_BUILD = 38797` indexing it (`SKILL_TABLE_ROWS` carries no literal; a second one read 302 until folded). Floor 49 unchanged.** **2026-09-14 (later): 294 → 295, `CLIENT_BUILD = 38797` in authsrv.py, measured by census diff against a worktree at a8e9143a.** the build-coupled census — `studies/crossbuild/`
+  `toolkit/test_buildpins.py` (**2026-10-07, DESKWORK-D13 step 1: 258 s -> 29 s, floor 49 -> 63, green 63.** `buildpins.Walker` called `ast.get_source_segment` once per int literal, and the stock call re-splits the source up to the node every time, so a scan was quadratic in file length -- authsrv.py at 50,878 lines cost 120-128 s and the whole tree 235-298 s. `buildpins.SourceSlicer` splits once per file with the stock call's semantics exactly (its line regex, UTF-8 BYTE columns, the stock call itself for `padded`); a desk run of HEAD's buildpins against the new one over the whole tree gave 3,749 rows, 328 live, 0 problems, 2 skipped on both, rows, problems, skips and baseline() IDENTICAL, 298.3 s -> 16.9 s. **Section 7** holds the slicer to the stock call node for node on five fixtures (CRLF, lone CR, form feed, non-ASCII before the literal, multi-line nodes) and on every node of `schema/test_codec.py`, compares scan_file's rows through both on `clientscan/movehook/readhook.py`, counts the stock calls a scan makes (0; the quadratic cannot come back behind a green differential), and runs four known-bad slicers -- character offsets, `str.splitlines`, LF-only, off-by-one line -- each red on its fixture. Four monkeypatched sabotages of the REAL class (character offsets, `str.splitlines`, `padded` not delegated, the Walker back on the stock call) redden 7a+7c, 7a, 7f and 7e. **2026-10-01, build 38974: 301 -> 328 across 24 -> 25 files, nothing gone -- framebus.py 74 -> 97 (TABLES[38974]), one build-number row each in pinned.py, authsrv.py and skillunlock.py, and schema/codec.py's GAME_SMSG_RENUMBER key (the 25th file); the largest block is framebus.py's 97. 49 green.** **2026-09-28, the 38888 content regen: 295 → 301 across 23 → 24 files, MEASURED with `--live` against 2d9a7547's 295: nothing gone, six arrived, all in `authsrv/skillunlock.py` -- `SKILL_RECORD_COUNT_BY_BUILD`'s five build keys (38519 3,438; 38797 / 38833 / 38849 3,443; 38888 3,476 records) and the pin's row, now `SKILL_TABLE_BUILD = 38797` indexing it (`SKILL_TABLE_ROWS` carries no literal; a second one read 302 until folded). Floor 49 unchanged.** **2026-09-14 (later): 294 → 295, `CLIENT_BUILD = 38797` in authsrv.py, measured by census diff against a worktree at a8e9143a.** the build-coupled census — `studies/crossbuild/`
   `PLAN.md` §6, and the number that replaces `PLAN.md` §6:803's "ongoing":
   **68 live constants across 7 files**, against 360 prose citations and 133 test
   expectations. The one thing it must prove is that those three are told apart,
@@ -11819,7 +11819,7 @@ the same-tick ALIAS**: the
   and `pinned.py` 8 → 12 (`PATCHED_TEXT` gaining the key-tap's cave and jump when
   the patched-digest set was added). The docstring's changelog names each, which
   is the format that makes a moved census a result rather than a surprise. No
-  vault, no client, no socket. Floor 49, ~2 s. **294 across 23 files (2026-09-14):** +53 in
+  vault, no client, no socket. Floor 49 (63 since 2026-10-07), ~30 s since the cached slicer -- this line said ~2 s while the run took ~260 s. **294 across 23 files (2026-09-14):** +53 in
   `framebus.py` (four builds' tables, now the largest block at 74) and +5 in
   `authsrv/authsrv.py` (`MAP_ID_COUNT_BY_BUILD`'s build numbers — a build number is class (a)
   by the rule the 64 row set), the split measured per file against a worktree at 88a0fd1d and
@@ -11842,7 +11842,7 @@ the same-tick ALIAS**: the
   code, so the process was exiting 1 and "could not run" was indistinguishable
   from "something moved" to anything reading the code. Asking the exception for
   its `.code` had passed. §4 refuses the baseline into any checkout of this repo,
-  including the other one. Floor 26, ~60 s),
+  including the other one. Floor 26 (27 since 2026-09-10), ~90 s since 2026-10-07: five whole-tree `buildpins` scans, each ~17 s once DESKWORK-D13 step 1 made the scan linear -- 1,575 s that morning, 35 checks green both before and after),
   `toolkit/test_checks.py` (the check on the checker — see below. **2026-09-17, the
   PLAN-SPLIT, floor 14 → 17:** `PLAN.md` §8 is held to a BYTE CEILING (40,000) —
   until that day §8 was 226 closed entries and 1,113 KB of a 1,402 KB file, because
