@@ -19,8 +19,21 @@ strike does to a double.
 No socket, no client. Sections 3-6 read `skills` rows, which are VAULT-ONLY
 (skilltable.py --emit-content); without them the chain fields read 0 and the
 sections declare a skip rather than passing on nothing.
+
+THE BARE MACHINE (2026-10-07). With RURIK_VAULT at an empty directory this file
+ran 28 checks of its 109 floor and failed one. The skips were declared and
+honest, but nothing held a bare run to a number of its own. The FAIL was section
+3's weapon rank: `attribute_state` refuses without the vault's two attribute
+tables, so `player_weapon_rank` read None where the row makes it 3. Section 3
+now runs on the record's attribute tables (`attribute_rows`, REPLACED for the
+section, so a vault run takes the same path), and section 13 holds them to the
+vault's own. The floor is per machine (test_codescan.py's shape): the vault's
+number when vault/content EXISTS -- decided on the directory, so a vault whose
+skills.toml failed to load still owes the whole floor, and its presence-gated
+skips below take it under -- and the bare number otherwise.
 """
 
+import contextlib
 import os
 import sys
 import time
@@ -31,9 +44,17 @@ sys.path.insert(0, os.path.dirname(HERE))
 import agents  # noqa: E402
 import chain  # noqa: E402
 import checks  # noqa: E402
+import vaultpath  # noqa: E402
 
 # FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=109)   # 2026-09-29 (RANGERPRE-S2): +4 in section 4b, retail's answer to a weapon mismatch off 20260929T150923 and ours to the same press, 109 from the green run; section 4 re-pinned to #1985 always, count unchanged ;; 2026-09-23 (DESKWORK-D5 step 7): +2 in section 4, the weapon gate's reason id under --refusal-reasons and the bare release without it, from the green run
+# 2026-10-07, the bare machine: PER MACHINE. FLOOR_VAULT is the vault run's count
+# (109 + section 13's check); FLOOR_BARE is MEASURED on a green run with
+# RURIK_VAULT at an empty directory and at a nonexistent path alike (28 checks, 10
+# declared skips: sections 4, 4b, 5-9, 11, 12 and 13, each naming its count).
+HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
+FLOOR_VAULT, FLOOR_BARE = 110, 28
+LEDGER = checks.Ledger("daggers and the attack chain",
+                       floor=FLOOR_VAULT if HAVE_VAULT_CONTENT else FLOOR_BARE)  # 2026-09-29 (RANGERPRE-S2): +4 in section 4b, retail's answer to a weapon mismatch off 20260929T150923 and ours to the same press, 109 from the green run; section 4 re-pinned to #1985 always, count unchanged ;; 2026-09-23 (DESKWORK-D5 step 7): +2 in section 4, the weapon gate's reason id under --refusal-reasons and the bare release without it, from the green run
 check = LEDGER.ok
 
 PLAYER = 1
@@ -41,6 +62,41 @@ FOE = 10
 LEAD, OFF, DUAL, AFTER_DUAL = 782, 780, 775, 781
 E2, E3, E4, E5, E6 = 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E6
 COMBO = 0x005C
+
+# The attribute tables, as test_weapons.py carries them: the cost curve
+# (clientscan/attribpoints.py) and each attribute's profession and primary flag
+# (clientscan/attribtable.py), the three columns attribute_state reads. The vault
+# holds them at build 38974; section 13 checks the copy against it.
+ATTRIBUTE_BUILD = 38974
+ATTRIBUTE_COST = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 9, 9: 11, 10: 13, 11: 16, 12: 20}
+ATTRIBUTE_PROFESSION = {0: 5, 1: 5, 2: 5, 3: 5, 4: 4, 5: 4, 6: 4, 7: 4, 8: 6, 9: 6, 10: 6,
+                        11: 6, 12: 6, 13: 3, 14: 3, 15: 3, 16: 3, 17: 1, 18: 1, 19: 1,
+                        20: 1, 21: 1, 22: 2, 23: 2, 24: 2, 25: 2, 26: 11, 27: 11, 28: 11,
+                        29: 7, 30: 7, 31: 7, 32: 8, 33: 8, 34: 8, 35: 7, 36: 8, 37: 9,
+                        38: 9, 39: 9, 40: 9, 41: 10, 42: 10, 43: 10, 44: 10, 45: 11,
+                        46: 11, 47: 11, 48: 11, 49: 11, 50: 11}
+ATTRIBUTE_PRIMARY = {0, 6, 12, 16, 17, 23, 35, 36, 40, 44}
+
+
+@contextlib.contextmanager
+def attribute_rows():
+    """WORLD's two attribute tables REPLACED by the record's for the block, then
+    put back -- so a vault run reads the same rows a bare machine is given."""
+    tables = agents.WORLD.tables
+    replace = {
+        "attribute_cost": {str(k): {"points": v} for k, v in ATTRIBUTE_COST.items()},
+        "attribute": {str(k): {"profession": v, "is_primary": k in ATTRIBUTE_PRIMARY}
+                      for k, v in ATTRIBUTE_PROFESSION.items()}}
+    kept = {k: tables[k] for k in replace if k in tables}
+    tables.update(replace)
+    try:
+        yield
+    finally:
+        for k in replace:
+            if k in kept:
+                tables[k] = kept[k]
+            else:
+                del tables[k]
 
 
 def section_grammar():
@@ -1097,6 +1153,30 @@ def section_early_double(have_fields):
         authsrv.double_strike_chance = saved
 
 
+def section_attribute_rows():
+    """The carried attribute tables against the vault's own -- vault-only by
+    subject, and the skip is decided on the vault/content DIRECTORY, never on
+    what loaded: with the directory there and the tables absent it FAILS."""
+    print("\n13. the attribute tables this file carries, against the vault's own")
+    try:
+        vaultpath.require_dir("content", why="the vault's attribute tables, which "
+                                              "ATTRIBUTE_* copy")
+    except SystemExit as exc:
+        LEDGER.skip("section 13 (1 check)", str(exc).splitlines()[0])
+        return
+    cost, attrs = agents.WORLD.rows("attribute_cost"), agents.WORLD.rows("attribute")
+    got = ({int(k): int(r["points"]) for k, r in cost.items()},
+           {int(k): int(r["profession"]) for k, r in attrs.items()},
+           {int(k) for k, r in attrs.items() if r["is_primary"]})
+    check(got == (ATTRIBUTE_COST, ATTRIBUTE_PROFESSION, ATTRIBUTE_PRIMARY),
+          "the attribute tables section 3 runs on are the vault's: the cost curve, "
+          "and every attribute's profession and primary flag",
+          f"cost {got[0] == ATTRIBUTE_COST} ({len(cost)} rows), profession "
+          f"{got[1] == ATTRIBUTE_PROFESSION} ({len(attrs)} rows), primary "
+          f"{got[2] == ATTRIBUTE_PRIMARY} (copied from build {ATTRIBUTE_BUILD}; a "
+          f"regenerated table that moves a value reds this -- re-copy it)")
+
+
 def main():
     import authsrv
     section_grammar()
@@ -1104,7 +1184,8 @@ def main():
     have_fields = authsrv.skill_chain_fields(OFF) == (2, 0x02, 0x08)
     saved = _saved(authsrv)
     try:
-        section_party()
+        with attribute_rows():
+            section_party()
         section_weapon_gate(have_fields)
         section_retail_mismatch()
         section_chain(have_fields)
@@ -1117,6 +1198,7 @@ def main():
         section_early_double(have_fields)
     finally:
         _restore(authsrv, saved)
+    section_attribute_rows()
     return LEDGER.verdict()
 
 
