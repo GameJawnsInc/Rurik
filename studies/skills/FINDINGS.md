@@ -9949,3 +9949,203 @@ section records what changes HERE.
 - **The `[61]` word predicts every AI completion with no free parameter** (CASTAI-ZF10):
   485 of 486 within 0.05 s. The Zaishen Mage's casts run at × 0.67, the Degeneration
   Mesmer's at × 0.7236.
+
+## 69. SKILLS-CT — trigger-on-cast payoffs: Aura of Restoration 180 heals its bearer IMMEDIATELY ahead of every spell completion (OBSERVED, 256 of 257), Deep Wound cuts that heal, and Backfire 28 rides the same hook (RECONSTRUCTION) (2026-10-07)
+
+**Status: SHIPPED ON, behind `--no-hex-cast-triggers`; the client confirmation is OWED
+(runsheet §69.9).** DESKWORK pass 9, lane `desk-castrig`. The reader:
+`toolkit/authsrv/trigjoin.py` (over `hexjoin.census()`: 7 live captures carry a 180
+announce, 17 connections, 19 bearers, builds 38833 ×6 / 38888 ×11, 0 refused, the
+manifest-gapped `20260928T103123 :65009` set aside by name; ~20 s). The server:
+`authsrv.on_cast_triggers`, beside Empathy's `on_attack_triggers`, called IMMEDIATELY ahead
+of the [58] in `land_skill` (every body: hostiles, henchmen, heroes through
+`ally_cast_tick`) and in `cast_tick`'s E5 branch (the player). Rows: `content/world.toml`
+`skill_effect.180` (`triggers_on_cast = "Heal % of energy cost"`, source capture) and
+`skill_effect.28` (`triggers_on_cast = "Damage"`, source measured, extractor
+`skilldesc.py`). Locks: `toolkit/authsrv/test_trigcast.py` (22 bare, 29 with the vault).
+`SKILLS-CT<n>` = a finding of this section; convention:
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**Why this family.** The event-triggered effect is the largest unbuilt skill family: the
+triage's census over the client's own templates counts ~106 rows whose effect fires on an
+event (by kind, a row may sit in two: HIT / ATTACK 34, STRUCK 26, CAST-A-SPELL 19,
+USE-A-SKILL 11, DEATH 11, GAIN / LOSE A STATE 9, BLOCK 4, HEALED 3 — the triage's regex,
+±10 %, ids only; not re-derived here) and ~5 had hand rows. The CAST seam had the best
+retail evidence on disk and two call sites already in place (Panic's
+`hex_skill_use_chain`).
+
+**Predictions first, and what failed.** Registered in `trigjoin.py`'s docstring before
+its first run (2026-10-07), from the triage's lead; two FAILED AS REGISTERED and are
+printed so, with the corrected reading beside each, never rewritten:
+
+| as registered | verdict | what the tape said instead |
+|---|---|---|
+| P1 under a LIVE 180 every spell completion carries ONE `[55, b, b, +f]`, the FIRST b-word of the batch, ahead of `[58, b, 0]` | **FAILED** (246 / 257) | the "first" clause fails on 10 MIXED instants — another event naming b shares the instant ahead of the word (b's own Fire Storm tick, a foe's announce onto b, b's `[57]`). **P1c: the word is IMMEDIATELY before the 58, 256 of 257** |
+| P2 the cost-10 word is exactly twice the cost-5 word | **FAILED** (4 of 16 pairs) | every off pair is one bearer under DEEP WOUND (0x00F1 bit 0x20) — §69.4. **P2c: 12 of 12 clean pairs exact** |
+| P3 a completion under no live 180 carries no word; every live miss is explained | holds | 74 of 74 not-live completions carry none; the 1 live miss has a Drain Enchantment onto its bearer |
+| Q4 / Q5 / Q6 (questions, no prediction): the 180 re-cast, a non-spell, a stopped cast | — | 0 of 2, 0 of 5 (Resurrection Signet, a signet), 0 of 13 |
+
+Known-bad arms, each reddening the reader: a FIXED heal per spell (off on 12 of 12
+ratio pairs and fitting no bearer), the word AFTER the 58 (places 0 of 257), and
+`heal_agent`'s truncation after the Deep Wound cut (misses the four 37s).
+
+### 69.1 SKILLS-CT1 — the slot: the payoff word is the message right before the bearer's [58]
+
+OBSERVED, `trigjoin.py` P1c. A 180 episode opens at its own `[58, b, 0]` and is LIVE until
+the first of `[7, b, 13]` (the shared enchanted marker withdrawn, so no enchantment is left
+— zaishenrun's measurement), b's death bit, the round's end (0x0181), a refresh, or 60 s.
+Per capture (word immediately ahead / live spell completions): 20260817T231139 100 / 100,
+20260913T210901 10 / 10, 20260917T090355 34 / 34, 20260917T224104 26 / 26, 20260928T103123
+56 / 57, 20260929T100038 30 / 30. Every bearer is a non-observer body (`0x0020` kind 9,
+four allegiance tokens; the Zaishen Mage among them) — **no observer ever cast 180**, so
+the player-bearer slot is RECONSTRUCTION. The one miss (Z1 :58544, agent 9's Mind Burn at 592.353, age
+41.5 s) has a Drain Enchantment completing onto agent 9 at 591.54: a strip that left
+another enchantment up withdraws no marker, so the reader cannot see it end — the miss is
+printed, not dropped. The first run's 0.05 s episode tolerance called a completion at age
+60.031 live (no word); the tolerance is now 0.
+
+### 69.2 SKILLS-CT2 — the amount: paid energy × the client's scale slot as a percent
+
+OBSERVED, P2c. Every Elementalist bearer's words (cost 5 → 0.04144, cost 10 → 0.08288)
+are whole over ONE denominator only, 555, at ONE rank, 13: 23 = 5 × 460 % and 46 = 10 ×
+460 %, where 460 = interp(200, 500, 13), the record's own scale slot (bit set; 38797 /
+38833 / 38849 / 38888 / 38974 alike). Where a bearer's words reduce (25 / 480 = 5 / 96)
+the denominator and the rank trade off (192 at rank 0 … 480 at 15), and the bearer's
+DECLARED maximum — `0x009F [42, b, 480]` on :62557 — is among its fits; so is :54071
+agent 10's declared 555. Whether the percent is of the record's cost or of the cost PAID
+is UNDISCRIMINATED: every bearer on tape paid full price. The server uses what the cast
+paid (the player's glyph-discounted `cast["cost"]`; a body's record cost, which is exactly
+what both body cast sites pay).
+
+### 69.3 SKILLS-CT3 — what fires nothing
+
+OBSERVED: a completion under no live 180 (74 — stripped 59, expired 9, dead 5, round end
+1); the 180 RE-CAST under a live 180 (0 of 2: the bearer re-casting its own trigger draws
+no word); a Resurrection Signet (0 of 5: a signet is not a spell —
+`combatmath.is_spell_type`); a STOPPED cast (0 of 13 `[59]` ends). And 43 completions
+before each bearer's first 180 carry none. The server copies each: the hook gates on
+`_is_spell_skill`, skips an episode past its expiry and the bearer's own re-cast, and a
+stopped / interrupted / cancelled cast never reaches a call site. An ATTACK skill is
+RECONSTRUCTION (no 180 bearer carried one). Contrast, from CASTAI-ZF30 (monsterai §18.2,
+not re-derived here): Zealot's Fire 271 DOES fire on a Resurrection Signet (×6) — it is a
+use-a-skill trigger, a different kind.
+
+### 69.4 SKILLS-CT4 — Deep Wound cuts the 180 heal, and retail ROUNDS the cut
+
+OBSERVED, n = 6 words, one bearer (Z1's Zaishen Mage, agent 9): on :50061 its status word
+carries 0x20 (effects.STATUS_DEEP_WOUND) from 162.940 to 182.928, and its five payoffs
+inside that window are 0.08132 / 0.03956 where the clean ones on both sides are 0.08288 /
+0.04144; :58544 602.598 is a sixth. 0.08132 × 455 = 37.000 and 0.03956 × 455 = 18.000,
+where 455 = `deepwoundjoin.predicted_max(555)` (−20 %, capped at 100): **the payoff is
+HEALING, not a health gain, and Deep Wound takes 20 % of it.** So the server heals through
+`heal_agent(..., healing=True)`. **37 is round(0.8 × 46) = round(36.8), not the
+truncation**: `heal_agent`'s HEAL-INT rule ("truncated AFTER the Deep Wound cut", 2026-09-14)
+sends 36 here — **CONTESTED by this witness**; 18 = round(18.4) fits both. Whether retail
+computes round(0.8 h) or h − round(0.2 h) is UNDISCRIMINATED (both give 37 and 18). Not
+changed in this lane: `heal_agent` is every heal's door, its truncation is locked by the
+HEAL-INT tests, and the lane's hunks stay at the trigger sites — the residual is one
+point at cost 10 under Deep Wound, named here and in `PLAN.md` §8.
+
+### 69.5 SKILLS-CT5 — Backfire 28: the same hook, the other direction (RECONSTRUCTION)
+
+No live tape carries Backfire (hexjoin's census, 110 announced ids). What IS measured is
+the client's own description structure (`skilldesc.parse_row`, build 38797, template
+sha16 `7911e7c7e91b46d8`): ONE slot, a DAMAGE at str1 — the scale, 35..140, bit set,
+AGREE_PROGRESSION; flags TARGET_FOE and WHEN; and a spell being cast named as the trigger
+(a boolean over the normalised template; no text carried). Its duration is the record's
+flat 10. So the row says `triggers_on_cast = "Damage"` and the server deals the HEXER's
+scale at the hexer's rank, armour-ignoring, onto the hexed caster — Empathy's channel and
+door (`armour_ignoring_damage`), right ahead of the caster's [58] (180's OBSERVED slot).
+UNVERIFIED and owed: GWW "Backfire" (the wording, the variable's name) and GWW
+"Armor-ignoring damage" (does Backfire ignore armour — Empathy's tape says its own
+channel does); and whether a Backfire that KILLS its caster still lets the spell land.
+The server's answer is land_swing's rule for a killing trigger: the cast ends there,
+nothing of it lands (RECONSTRUCTION).
+
+### 69.6 SKILLS-CT6 — what ships, and what is decided rather than measured
+
+* `on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None)` — every live
+  episode ON the caster whose row says `triggers_on_cast` fires, ascending buff id; returns
+  the count fired. `HEX_CAST_TRIGGERS` / `--no-hex-cast-triggers` reverts to the
+  pre-SKILLS-CT bytes (test_trigcast §7 lifts main()'s block and shows it flip the bool).
+* **Bodies** (`land_skill`): right ahead of the main [58] — OBSERVED slot. A hero's E5 / E3
+  (sent at the top of `land_skill`) stay ahead of it: RECONSTRUCTION, no hero bearer on
+  tape. The dead-target, chain-gated and resurrection exits fire nothing (UNWITNESSED; the
+  quieter reading).
+* **The player** (`cast_tick`): behind the E5, right ahead of the [58] — RECONSTRUCTION
+  (the body's slot). A failed chain step fires nothing: the E5 block's `_na_fail` is
+  decided after the [58], so `player_chain_unmet` reads the same three arms ahead of it
+  (784 and 973 are SPELLS with a chain requirement; test_trigcast §5b). The player's own
+  resurrection spell completes through RESSIG-P's door ahead of this and fires none.
+* **A payoff that kills the caster** ends the completion: a body's cast slot is released
+  with no [58]; the player's batch stops, its E3 / E6 still close the cycle on their clocks.
+* **180's energy-gain half is NOT modelled.** Its bonus slot (0..1, bit clear) is
+  skilldesc's INDETERMINATE shape (two numbers, no rule for which the client prints), a
+  body's energy is never on the wire, and no observer cast 180 — nothing to fit or to
+  confirm against.
+* **Neither row names a `scale_means`.** The cast-time readers key on it: `skill_heal`
+  would heal 180's bearer 460 on its own completion. test_trigcast §1b pins the absence.
+
+### 69.7 Where the triage was right, and where it was wrong
+
+Right on direction: the order law, the amount's form, the Drain strips, the two call
+sites, the scale slot. Wrong on specifics, each re-derived here:
+* **"294 of 368"; "5 of 249"; "69 of 119"** — read per 180 ANNOUNCE over a 59 s window,
+  so a completion inside two overlapping windows counted twice (the re-run of its own
+  script: 368 rows = 315 distinct completions, 49 counted two or more times; 255 distinct
+  with a word), a completion after a strip counted as a miss, and Resurrection Signet
+  (type 7) counted as a spell (its SPELL set {4..10} — 7 is a signet). Per episode: 257
+  live completions, 256 with the word, 74 not live.
+* **"the FIRST word of the batch"** — the immediate predecessor of the 58, yes; the first
+  b-word of the instant, not on 10 mixed instants.
+* **"ratio exactly 2.000"** — not under Deep Wound; its own output held the 0.03956 /
+  0.08132 words (3 + 4 rows) without separating them.
+
+### 69.8 What stays open (OUT of this lane, with reasons)
+
+* **Zealot's Fire 271** — the order law is the same (CASTAI-ZF30, 218 rows, from the
+  triage and monsterai §18.2; not re-derived here) but the AMOUNT is several values on one
+  body whoever casts, cause UNMEASURED; `PLAN.md` §8's Zaishen residue line owns it.
+* **The ON-STRUCK riders 2136 / 113, and 926** — no tape; an on-struck seam plus a Blind
+  burst, a halving term, an area-of-allies enchantment and a Disease immunity; 926's
+  duration is INDETERMINATE (§54.3) and needs the owner's tooltip run.
+* **The cast-FAIL-and-steal hexes 127 / 46 / 51** — the cast fails at the ANNOUNCE (the
+  press path), 1 clean + 2 partial Mark of Subversion witnesses on the Zaishen tape; blind
+  replication if ever taken.
+* **The HIT-seam self-gain vocabulary** — ~12 enchantments plus 123, 2013, 1759: the next
+  lane. It reuses `hit_enemy` / `land_swing` and this section's row-field reader.
+* **HEAL-INT's truncation after the Deep Wound cut** (§69.4): one witness says round.
+
+### 69.9 The runsheet (owed; the owner's, after landing)
+
+Loopback, the owner's own client, RUNBOOK's four terminals; the flags go on the GAME server
+(the third terminal). Each run twice: arm A as written, arm B with `--no-hex-cast-triggers`
+appended.
+
+1. **A hostile bearing 180.** Aura of Restoration plus a cost-5 and a cost-10 spell on the
+   standing hostile's bar:
+
+   ```
+   python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --enemy-skills 180,185,186
+   ```
+
+   Let it cast at you for a minute. Arm A: once its 180 is up, every Mind Burn (185, 5
+   energy) and Fireball (186, 10 energy) it finishes draws a blue `+N` on the HOSTILE at
+   the instant the cast finishes, the 186 number twice the 185 one; the log prints `effect
+   180 on agent N: spell S completes -- E energy x P% = H healed, ahead of the 58
+   [SKILLS-CT]`. Arm B: no number on the hostile, no such line.
+2. **A hostile under Backfire.** Backfire on the player's bar, the hostile casting:
+
+   ```
+   python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --skills 28,0,0,0,0,0,0,0 --enemy-skills 185
+   ```
+
+   Hex the hostile with Backfire and let it cast. Arm A: a red number on the HOSTILE right
+   as each of its Mind Burns finishes, ahead of the burn on you; the log prints `hex 28 on
+   agent N: spell 185 completes -- S armour-ignoring from agent 1, ahead of the 58
+   [SKILLS-CT, RECONSTRUCTION]`; at low health it dies of it and that Mind Burn never
+   lands. Arm B: the hex is an icon, the hostile's casts cost it nothing.
+
+Score: each `[SKILLS-CT]` log line has its number on the client, on the right body, at the
+cast's finish; arm B has neither. A client assert, a number on the wrong body, or a heal
+on a bearer whose 180 has ended is a FAIL.
