@@ -3428,10 +3428,12 @@ episode change, in the batch, behind the status word.
   a bundle pick-up — and took "Charge!" to × 1.13 = 1 + 0.33 − 0.20, additive. A bundle's
   slow is not a skill snare and nothing here models one; the wiki's rule ships and the row
   is on record. UNVERIFIED which of the two a skill snare over a boost would follow.
-  **AMENDED 2026-10-07 (F48.7): for a snare PAST the −50 cap it is NEITHER.** A 75 % skill
-  snare over a boost OVERRIDES it on retail's wire (OBSERVED, speedwords P7–P10, n small:
-  75.0 where the product says 99.75 and the sum 174.0, silence where both would send a
-  word); shipped as `episodemods.SNARE_OVERRIDES_BOOST`. Under the cap the wiki's product
+  **AMENDED 2026-10-07 (F48.7): for a snare PAST the −50 cap it is NEITHER.** A × 0.25 slow
+  over a boost OVERRIDES it on retail's wire (OBSERVED, speedwords P7–P10, n small: silence
+  where both rules would send a word, on an observer under skill 493's own joined episode;
+  75.0 where the product says 99.75 and the sum 174.0, on two boosted bodies whose snare's
+  source is not on the wire — that it is a 75 % skill snare there is RECONSTRUCTION);
+  shipped as `episodemods.SNARE_OVERRIDES_BOOST`. Under the cap the wiki's product
   still ships and is still WIKI only — the bundle row stays CONTESTED against it.
 * **A shout can open an episode when its row says so.** "Charge!" is a Shout (type 15),
   outside `EFFECT_TYPES`; the corpus witnesses 47 applies of it. The content door
@@ -3562,18 +3564,43 @@ build 38797) type 5, profession 0, attribute 51, scale 75 / 75, duration 5 / 5. 
 GWW "Icy Ground" is owed, and so is what kind of effect it is (the episode below does not
 behave like a 5 s hex).
 
+**Which × 0.25 words are 493's — the wire joins 9 of 14** (P7j, added by the lane's review,
+RV-1). A word is joined when its ± 60 ms batch holds 493's `0x0042`, or an `0x0043`
+EFFECT_RENEWED (the skills study's opcode table; it re-times a buff's duration) of the buff
+that apply opened, on any agent: the observer's apply (454.171) and 8 bodies' words, each in
+the batch of a renewal `0x0043 [7, 0, 63, 5.0]` of the observer's buff 63 (456.168 × 2,
+482.170 × 2, 494.170, 496.168, 500.166, 504.168). **Five have no source on the wire at
+all**: agent 9's 75.0 at 524.186 on `20260928T103123` (0.75 s after buff 63's `0x0044`), and
+all four on `20260929T100038` :51090 (403.068, 405.071, 443.071, 444.091), a connection with
+no 493 `0x0042` and no `0x0043` of any kind. **Both of P9's witnesses are among the five.**
+So "one skill" is OBSERVED for P7a and P8 — the observer's own joined episode — and for the
+bodies' onsets and restores (P9, and P10's onset half) the ratio is OBSERVED while "it is
+493's", or a single 75 % source's, is RECONSTRUCTION. The renewal pulse itself is OBSERVED:
+33 renewals of buff 63, 456.168 → 520.171, every 2.0 s (1.983–2.015), each re-timing it to
+5.0 s — which is how a 5 s apply lives 69 s — and the `0x0044` at 523.439 comes 3.27 s after
+the last one, before that 5.0 s ran out. What re-times it (an area the party stood in?) is
+UNVERIFIED until GWW "Icy Ground" is read.
+
 | | prediction (speedwords) | result |
 |---|---|---|
-| P7 | every word in (0, 0.3) of its agent's base, and 493's own apply's, is base × 0.25 EXACTLY | **14 / 0** — 72.0 on base 288 (the observer 7, and agents 3, 5, 6 — outside the observer's party: its shouts never word them), 75.0 on base 300 (the party bodies 8, 9, 10); P7a the one joined apply **1 / 0** |
-| P8 | a "Charge!" applied to, or ending on, an observer whose last word is below × 0.5 sends NO word for it | **2 / 0**; P8b each batch words an unsnared party member **2 / 0**; P8c the same walker words a 160 / 364 apply on an unslowed observer **116 / 0** |
-| P9 | a boosted body's over-cap snare ends back on its pre-snare boosted word | **2 / 0** (399 → 75 → 399, twice) |
+| P7 | every word in the × 0.25 class (within 0.02 of it) is base × 0.25 EXACTLY | **14 / 0** — 72.0 on base 288 (the observer 7, and agents 3, 5, 6 — outside the observer's party: its shouts never word them), 75.0 on base 300 (the party bodies 8, 9, 10); P7a 493's own apply on an agent with no slow open **1 / 0**; other words under × 0.3, an unscored census, **0** |
+| P7j | (a census) the × 0.25 words batch-joined to 493's apply or its buff's renewals | **9 joined / 5 with no source on the wire** |
+| P8 | a "Charge!" applied to, or ending on, an observer whose last word is below × 0.5 sends NO word for it | **2 / 0**; P8b each batch MOVES another agent's word with the boost (up at the apply, down at the end, at or above × 0.5 both sides) **2 / 0**; P8c the same walker words a 160 / 364 apply on an unslowed observer **116 / 0** |
+| P9 | a boosted body's over-cap snare ends back on its pre-snare boosted word | **2 / 0** (399 → 75 → 399, twice; neither onset joined to 493) |
 | P10 | OVERRIDE vs. MULTIPLICATIVE (`b × s`) vs. ADDITIVE (`b − (1 − s)`) over the same 4 exposed rows (2 boosted onsets + 2 boost events under a snare) | **4 / 0** vs. **0 / 4** vs. **0 / 4** |
+
+*(P7's window was "every word in (0, 0.3)" until the review: a deeper slow that is not 75 % —
+Crippled over a 66 override, 0.17; a 90 snare, 0.10 — would have counted a miss and turned
+the suite red on good news (RV-3). P8b counted ANY other agent's word, a snared foe's onset
+included (RV-6); on the corpus both of its hits are agent 9's boost moves, so the result
+stood.)*
 
 **The witness, verbatim** (`20260928T103123` :50295, the observer is agent 7, base 288;
 `0x0042 [agent, skill, rank, buff, duration]`):
 
 * 454.171 `0x0042 [7, 493, 0, 63, 5.0]`, `0x0027 [7, 72.0]` — no `0x00F1` for it.
-* 456.168 `0x0027 [10, 75.0]`, `[8, 75.0]` — two party bodies snared, again no `0x00F1`.
+* 456.168 `0x0043 [7, 0, 63, 5.0]` (buff 63's first renewal), `0x0027 [10, 75.0]`,
+  `[8, 75.0]` — two party bodies snared, again no `0x00F1`.
 * 468.208 `0x0042 [7, 364, 1, 56, 6.0]` — the observer's own "Charge!" — and ONE word,
   `0x0027 [9, 399.0]` (agent 9, unsnared, 300 → 399). **Nothing for 7**, where the product
   says 95.76 and the sum 167.04. (Nothing for 8 or 10 either, but their earshot membership
@@ -3586,17 +3613,22 @@ behave like a 5 s hex).
   (UNVERIFIED what it is — an area the party stood in, or a strip).
 * 524.186 `0x0027 [9, 75.0]`; 531.168 `0x0027 [9, 399.0]` — P9's first witness: 9 was
   boosted (399.0 since 474.211), the onset is 300 × 0.25 (the product: 99.75), and the end
-  restores 399.0.
+  restores 399.0. No `0x0042` or `0x0043` in the onset's batch, 0.75 s after buff 63
+  closed: the source is not on the wire.
 * The second tape (`20260929T100038` :51090): agent 10 399.0 (409.540) → **75.0** (443.071) →
   399.0 (454.369) → 402.0 (462.503, a "Charge!" over the boost that had lived through the
-  snare).
+  snare). This connection carries no 493 and no `0x0043` at all.
 
 **Where the triage was wrong.** (1) Agent 9 is not "399.0 in both batches" as a held value:
 it went 300 → 399 at 468.208 and 402 → 399 at 474.211 (a second boost between). Each batch
 still words it, so the control stands. (2) "Ours reads x0.34 (97.92) where this tape reads"
 the same — no tape holds a 66 % snare over a boost; 97.92 for Windborne + Deep Freeze is the
-shipped CONSEQUENCE of the rule (RECONSTRUCTION for 66), not a tape number. (3) Nothing else
-in its account of these two tapes moved.
+shipped CONSEQUENCE of the rule (RECONSTRUCTION for 66), not a tape number. (3) It said the
+14 words "come from skill 493" — "the observer's apply 1 time, bodies' words 13". The wire
+joins 9 of them (P7j above); the other 5, both P9 witnesses among them, have no source on it.
+*(This item read "Nothing else in its account of these two tapes moved" until the lane's
+review, RV-1, found the 13; the lane's own notes had recorded "only ONE joined to a 0x0042"
+and the labels had not carried it.)*
 
 **The rule shipped** (`episodemods.move_speed_factor`, flag `SNARE_OVERRIDES_BOOST`, revert
 `--snare-multiplies-boost`): when the largest single snare exceeds `MOVE_SPEED_CAP_DOWN`
@@ -3606,8 +3638,11 @@ send-on-change then gives retail's silence for free: a boost opening or closing 
 snare leaves the number where it was and sends nothing (test_mechanics §8c, measured).
 Windborne + Deep Freeze: **97.92** (was 130.23, × 0.4522). Labels:
 
-* the 75 % override, the silence and the restore — **OBSERVED** (n small: one observer
-  episode, two boost events, two bodies; one skill; two build-38888 tapes);
+* the silence (P8) under 493's own joined episode — **OBSERVED** (n small: one observer
+  episode, two boost events, one skill, one build-38888 tape);
+* the bodies' × 0.25 onset over a boost and its restore (P9, P10's onset half) — the ratio
+  **OBSERVED** (two bodies, two build-38888 tapes); that the slow is 493's, or one 75 %
+  source's, **RECONSTRUCTION** — neither onset is batch-joined to anything (P7j);
 * the same regime for the 66s (Deep Freeze, Ice Spikes, Teinai's Prison) and the client
   table's 90s — **RECONSTRUCTION** (none ever seen under a boost);
 * a SINGLE source decides (two 33s sum to the capped 50 and keep the product) — **WIKI**
@@ -3631,7 +3666,8 @@ number written into the template, so they carry `COLD_DAMAGE` (+ `DURATION`) onl
 the server through their hand rows alone; the flat-66 slots of 129 and 210 (`DURATION` only)
 and 212 and 213 (`COLD_DAMAGE` + `DURATION`) are invisible to it the same way, each owed a
 wiki read before it is called a snare (939's 66 / 90 are labelled `REDUCTION`); (iv) GWW
-"Icy Ground" (what 493 is, and the 69 s episode).
+"Icy Ground" (what 493 is, what re-times buff 63 every 2 s for 69 s, and whether the five
+unjoined × 0.25 words can be its).
 
 #### 48.7.1 Runsheets — REGISTERED 2026-10-07, before any launch; neither has run
 

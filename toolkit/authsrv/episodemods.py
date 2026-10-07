@@ -288,10 +288,12 @@ def swing_preparation_bonus(state, weapon_row, agent_id, SCALE_MEANS_DAMAGE):
 #            a single skill that causes more than -50% ... can override the -50%
 #            cap" (WIKI, GWW "Snare (tactic)", rev. 2026-04-24). OBSERVED: six
 #            x0.34 rows (Teinai's Prison, -66%) on 20260913T210901, and 14 x0.25
-#            rows (skill 493, -75%) on the Zaishen tapes. The rows that declare
-#            one today: Deep Freeze 234 and Ice Spikes 211 (the flat 66 in the
-#            bonus slot, DESKWORK-D6), and on a vault machine the label tier's
-#            1044, 1404 (Flail's 33) and 1652.
+#            rows (-75%) on the Zaishen tapes -- 9 batch-joined to skill 493's
+#            apply or its buff's 0x0043 renewals, 5 with no source on the wire
+#            (speedwords P7j). The rows that declare one today: Deep Freeze 234
+#            and Ice Spikes 211 (the flat 66 in the bonus slot, DESKWORK-D6),
+#            and on a vault machine the label tier's 1044, 1404 (Flail's 33)
+#            and 1652.
 #   Crippled MULTIPLIES the result by 0.5 -- "you move 50% slower" (WIKI, GWW
 #            "Crippled", rev. 2020-10-23). OBSERVED, and this is the arithmetic
 #            the corpus settles: Crippled over a 33% boost reads x0.665 =
@@ -311,13 +313,15 @@ def swing_preparation_bonus(state, weapon_row, agent_id, SCALE_MEANS_DAMAGE):
 #            skill and nothing here models one; CONTESTED, on record).
 #   OVER the cap (a single snare above 50): the snare OVERRIDES the boosts --
 #            the factor is 1 - snare/100 whatever boosts are open, and they
-#            come back when it ends. OBSERVED on retail's wire for a 75% snare
-#            (speedwords P7-P10, n small): a boosted body's onset reads 75.0 =
-#            300 x 0.25 (2 of 2, never the multiplicative 99.75 or the additive
-#            174.0); a "Charge!" applied to and ending on an observer at x0.25
-#            sends NO word (2 of 2, an unsnared ally worded in both batches);
-#            the snare's end restores the boosted 399.0 (2 of 2). RECONSTRUCTION
-#            for every other over-cap snare -- the 66s (Deep Freeze, Ice Spikes,
+#            come back when it ends. OBSERVED on retail's wire at x0.25
+#            (speedwords P7-P10, n small): a "Charge!" applied to and ending on
+#            an observer under 493 sends NO word (2 of 2, an unsnared ally's
+#            word moved with the boost in both batches); a boosted body's onset
+#            reads 75.0 = 300 x 0.25 (2 of 2, never the multiplicative 99.75 or
+#            the additive 174.0) and the snare's end restores the boosted 399.0
+#            (2 of 2) -- but those onsets' source is NOT on the wire (P7j), so
+#            that they are 493's, or one 75% snare's, is RECONSTRUCTION. So is
+#            every other over-cap snare -- the 66s (Deep Freeze, Ice Spikes,
 #            Teinai's Prison) and the client table's 90s: same regime, never seen
 #            under a boost. SNARE_OVERRIDES_BOOST; the revert
 #            --snare-multiplies-boost restores the multiplicative product above

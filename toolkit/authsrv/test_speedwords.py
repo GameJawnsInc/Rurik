@@ -13,8 +13,14 @@ Section 4 runs on EVERY machine: the scorer itself on three synthetic tapes buil
 through the real `speed_rows` / `boost_events` -- retail's override shape, and the
 multiplicative and additive worlds the corpus refutes -- so the P8 / P10 arms are
 shown to go red on the wire a wrong rule would have produced, not only green on the
-one retail did.
+one retail did. Its `review()` half (2026-10-07) pins what the lane's review found:
+P7 scoped to the x0.25 class (a x0.17 / x0.10 word is not a miss), P8b's control a
+word that moves WITH the boost (a foe's onset is not one), P7j's join to 493, and
+`--json` writing the JSON alone to stdout.
 """
+import contextlib
+import io
+import json
 import os
 import sys
 
@@ -29,8 +35,8 @@ import vaultpath        # noqa: E402
 
 # Per machine, decided on the live-captures DIRECTORY, never on what loaded.
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
-FLOOR_BARE = 5     # 2026-10-07 (SLICE-F48b): MEASURED -- section 4 alone (the synthetic tapes), RURIK_VAULT at a nonexistent path; sections 1-3 one declared skip
-FLOOR_VAULT = 27   # 2026-10-07 (SLICE-F48b): MEASURED -- 12 (2026-09-16, P1-P6 and the controls) + the gapped connection's audit + P7, P7a, P8, P8b, P8c, P9, P10, P10m, P10a + section 4's 5
+FLOOR_BARE = 9     # 2026-10-07 (SLICE-F48b review): MEASURED -- section 4 alone (the synthetic tapes: 5 + the review's 4), RURIK_VAULT at a nonexistent path; sections 1-3 one declared skip
+FLOOR_VAULT = 32   # 2026-10-07 (SLICE-F48b review): MEASURED -- 12 (2026-09-16, P1-P6 and the controls) + the gapped connection's audit + P7, P7a, P7j, P8, P8b, P8c, P9, P10, P10m, P10a + section 4's 9
 LEDGER = checks.Ledger("speed words on retail's wire",
                        floor=FLOOR_VAULT if HAVE_LIVE else FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -78,20 +84,29 @@ def corpus():
     # SLICE-F48b (2026-10-07): the over-cap snare over a boost.
     hit, miss, _ = s["P7 75% snare = x0.25 exactly"]
     check(hit >= 14 and miss == 0,
-          f"P7: every word in (0, 0.3) of its base, and 493's own apply's, is base x 0.25 "
-          f"exactly -- 72.0 on 288, 75.0 on 300 ({hit} / {miss}, floor 14 / 0)")
+          f"P7: every word in the x0.25 class (within 0.02 of it) is base x 0.25 exactly -- "
+          f"72.0 on 288, 75.0 on 300 ({hit} / {miss}, floor 14 / 0)")
     hit, miss, _ = s["P7a 493's own apply joined at x0.25"]
     check(hit >= 1 and miss == 0,
-          f"P7a: skill 493's 0x0042 is joined in its batch by a 0x0027 at x0.25 "
-          f"({hit} / {miss}, floor 1 / 0)")
+          f"P7a: skill 493's 0x0042 on an agent with no slow open is joined in its batch by "
+          f"a 0x0027 at x0.25 ({hit} / {miss}, floor 1 / 0)")
+    # 2026-10-07 review (RV-1): an exposure floor on the ATTRIBUTION, not a prediction --
+    # 9 of the 14 ride 493's apply or its buff's 0x0043 renewals; the other 5 (both P9
+    # witnesses) have no source on the wire, which is why the study labels "it is 493's"
+    # for them RECONSTRUCTION. Printed, never pinned: a capture that joins more is news.
+    joined, unjoined, _ = s["P7j x0.25 words batch-joined to 493 (a census)"]
+    check(joined >= 9,
+          f"P7j: {joined} x0.25 words are batch-joined to 493 (its 0x0042, or an 0x0043 "
+          f"renewal of the buff it opened; floor 9) and {unjoined} have no source on the wire")
     hit, miss, _ = s["P8 boost under an over-cap snare is silent"]
     check(hit >= 2 and miss == 0,
           f"P8: a Charge! applied to, and ending on, an observer whose last word is x0.25 "
           f"sends NO 0x0027 for it ({hit} silent / {miss} worded, floor 2 / 0)")
     hit, miss, _ = s["P8b control: the same batch words another agent"]
     check(hit >= 2 and miss == 0,
-          f"P8b: and each of those batches words an UNSNARED party member -- the boost "
-          f"reached the wire ({hit} / {miss}, floor 2 / 0)")
+          f"P8b: and each of those batches MOVES another agent's word with the boost (up at "
+          f"its apply, down at its end, at or above x0.5 both sides) -- the boost reached "
+          f"the wire ({hit} / {miss}, floor 2 / 0)")
     hit, miss, _ = s["P8c control: a boost on an unslowed agent is worded"]
     check(hit >= 100 and miss == 0,
           f"P8c: the same walker sees the word when there is one -- a 160/364 apply on an "
@@ -201,6 +216,93 @@ def scorer():
     rows = speedwords.with_bases(speedwords.speed_rows(msgs))
     check(speedwords.score(rows)["P7 75% snare = x0.25 exactly"][:2] == (0, 1),
           "KNOWN-BAD: a 493 apply joined by 72.5 (not 288 x 0.25) is a P7 miss")
+    review()
+
+
+def _score(msgs):
+    rows = speedwords.with_bases(speedwords.speed_rows(msgs))
+    for r in rows:
+        r.update(capture="synthetic", connection="review")
+    return speedwords.score(rows, speedwords.boost_events(msgs, rows))
+
+
+def review():
+    """2026-10-07 review (RV-2, RV-3, RV-6, RV-1): four ways the reader overstated or broke,
+    each pinned on a synthetic tape so the old shape goes red."""
+    f, a, rm = speedwords.OP_SPEED, speedwords.OP_APPLY, speedwords.OP_REMOVE
+    rn = speedwords.OP_RENEW
+
+    def w(t, agent, val):
+        return (t, f, [39, agent, float(val)])
+    # RV-3: P7 is the x0.25 class. A deeper slow that is not 75% -- Crippled over a 66
+    # override (0.17, the factor this lane ships UNVERIFIED) or a 90 snare (0.10) --
+    # is listed, unscored; under the old (0, 0.3) window both were P7 MISSES, and a
+    # vault that gained such a tape would have turned the suite red on good news.
+    s = _score([w(1.0, 7, 288.0), w(10.0, 7, 48.96), w(20.0, 7, 288.0),
+                w(30.0, 7, 28.8), w(40.0, 7, 288.0)])
+    check(s["P7 75% snare = x0.25 exactly"][:2] == (0, 0)
+          and s["P7 census: other words under x0.3 (unscored)"][:2] == (2, 0),
+          "a x0.17 and a x0.10 word are OUTSIDE P7's x0.25 class: listed in its census, "
+          "not counted misses", str({k: v for k, v in s.items() if k.startswith("P7")}))
+    # RV-6: P8b's control is a word that MOVES WITH THE BOOST. The observer (72.0 under
+    # 493) takes a Charge! whose only companion word is a foe's own 72.0 onset -- a word,
+    # not the boost's: a miss. The shout's end words agent 9 399 -> 300: a hit. A second
+    # Charge! whose only companion is that foe's RESTORE (72 -> 288: up, but from under
+    # x0.5 -- a snare ending, not this boost): a miss; its end, with no word at all: a
+    # miss. The old predicate (any other agent's word) scored this tape (3, 1); one that
+    # checked only the direction, without the x0.5 floor, (2, 2).
+    s = _score([w(1.0, 7, 288.0), w(1.0, 3, 288.0), w(1.0, 9, 300.0),
+                (5.0, a, [66, 7, 493, 0, 63, 5.0]), w(5.0, 7, 72.0),
+                (10.0, a, [66, 7, 364, 1, 56, 6.0]), w(10.0, 3, 72.0),
+                w(12.0, 9, 399.0),
+                (16.0, rm, [68, 7, 56]), w(16.0, 9, 300.0),
+                (18.0, a, [66, 7, 364, 1, 57, 6.0]), w(18.0, 3, 288.0),
+                (24.0, rm, [68, 7, 57]),
+                (30.0, rm, [68, 7, 63]), w(30.0, 7, 288.0)])
+    check(s["P8 boost under an over-cap snare is silent"][:2] == (4, 0)
+          and s["P8b control: the same batch words another agent"][:2] == (1, 3),
+          "P8b: a snared foe's onset or restore in the boost's batch is NOT the control "
+          "(1 / 3: the end's 399 -> 300 counts; the 288 -> 72 onset, the 72 -> 288 restore "
+          "and a wordless end do not)",
+          str(s["P8b control: the same batch words another agent"][:2]))
+    # RV-1: P7j joins a x0.25 word to 493 through its apply or a 0x0043 renewal of the
+    # buff THAT apply opened -- not another skill's buff, not after the buff's 0x0044.
+    s = _score([w(1.0, 7, 288.0), w(1.0, 8, 300.0), w(1.0, 9, 300.0), w(1.0, 10, 300.0),
+                (10.0, a, [66, 7, 493, 0, 63, 5.0]), w(10.0, 7, 72.0),
+                (12.0, rn, [67, 7, 0, 63, 5.0]), w(12.0, 8, 75.0),
+                (13.0, a, [66, 7, 288, 13, 51, 15.0]),
+                (14.0, rn, [67, 7, 0, 51, 15.0]), w(14.0, 9, 75.0),
+                (20.0, rm, [68, 7, 63]), w(20.0, 7, 288.0), w(20.0, 8, 300.0),
+                w(21.0, 9, 300.0), (22.0, rn, [67, 7, 0, 63, 5.0]), w(22.0, 10, 75.0),
+                w(30.0, 10, 300.0)])
+    check(s["P7j x0.25 words batch-joined to 493 (a census)"][:2] == (2, 2),
+          "P7j: 493's apply and its OWN buff's renewal join (2); another buff's renewal and "
+          "a renewal after the 0x0044 do not (2)",
+          str(s["P7j x0.25 words batch-joined to 493 (a census)"][:2]))
+    # RV-2: `--json` writes the JSON alone to stdout. The census prints capgaps' SET ASIDE
+    # line (here through the real capgaps.set_aside); until the review it landed ahead of
+    # the '[' and json.loads refused the stream.
+    real = speedwords.census
+
+    def fake(codec=None, events=None, set_aside=None):
+        name = "10.0.0.1:1->10.0.0.2:80"
+        capgaps.set_aside(os.path.join("synthetic", "20260928T103123"), name,
+                          {name: {"s2c": [(38045, 38)]}}, set_aside)
+        return [{"t": 1.0, "agent": 7, "val": 288.0}]
+    out, err = io.StringIO(), io.StringIO()
+    speedwords.census = fake
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            speedwords.main(["--json"])
+    finally:
+        speedwords.census = real
+    try:
+        parsed = json.loads(out.getvalue())
+    except ValueError as e:
+        parsed = f"not JSON: {e}"
+    check(parsed == [{"t": 1.0, "agent": 7, "val": 288.0}] and "SET ASIDE" in err.getvalue(),
+          "--json: stdout parses as the rows alone, and the census's SET ASIDE line is said "
+          "on stderr", f"stdout {out.getvalue()[:80]!r}; parsed {parsed!r}")
 
 
 def main():
