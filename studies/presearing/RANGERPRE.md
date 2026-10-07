@@ -172,6 +172,7 @@ run (`bc8f409b`). **S19 is not built.**
 | RANGERPRE-S19 | SECONDARY-B | a content-authored dialog button grants a secondary | L | open: **not built**, it waits on the owner's `0x00B6` ruling (§5) |
 | RANGERPRE-S20 | QUESTFLOW-H4 | reward item + quest-item removal via one shared grant helper | L | **landed** `1c512339`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §3) |
 | RANGERPRE-S21 | WEAPONREFUSE-B | persist hand changes across loads (default ON since the run) | L | **landed** `3ab6b017`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §1); the default flipped ON in `bc8f409b` |
+| RANGERPRE-S22 | CONDHIT | an attack skill's condition needs a landed strike (§5, found by S14's reviewer) | D | **landed** `4cd9172e` (2026-10-07, lane `desk-condhit`; §5); the client look is owed (a runsheet, not a run) |
 
 **Deferred, with reasons** (critic's DEFER list): ROUTE-C corner-leg routing (contests
 MOVECODE-1z-dn.5's "no route" closure, conflicts with LOOT's pickup walk, and our A* picks a
@@ -189,11 +190,75 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
 - Retail's kill frame carries the quest-objective lines (`0x0054`, `0x0051`) before the death flags;
   ours after (n = 1, found in passing by the critic).
 - R4c-2a's "independent connections" needs a ruling (§1).
-- **Found by S14's reviewer, pre-existing:** `cast_tick` applies an attack skill's inflicted
+- ~~**Found by S14's reviewer, pre-existing:** `cast_tick` applies an attack skill's inflicted
   condition without checking the hit's result, so a missed or blocked Sever Artery still bleeds
   a fleshy foe (and, since S14, draws #1957 on a non-fleshy one). WIKI: the condition rides a
-  hit only. Its own item; the repro is in the S14 review. Also open: IMMUNE-3, the #1957
-  sentence on the ranged, area and burst sites (they refuse the condition silently).
+  hit only. Its own item; the repro is in the S14 review.~~ **CLOSED 2026-10-07 as RANGERPRE-S22, `4cd9172e`
+  (lane `desk-condhit`; `test_condhit.py`, `--no-condition-needs-hit` the known-bad arm).**
+  It was four sites, not one: the player's melee strike in `cast_tick`, `land_player_skill_shot`,
+  `land_body_skill_shot` and `land_skill`'s attack arm each gated the knock-down and the random
+  condition on `res == "landed"` and the skill's own condition on nothing. Re-derived at
+  `1a678280` before the change: a landed Sever Artery (382) on a fleshy body leaves Bleeding;
+  a Blind-missed one (`[38, 22, 1, 3]`, no word) and a blocked one (`[38, 22, 1, 0]`) left it
+  too. Now `attack_condition_lands` gates all four.
+  **The rule is OBSERVED, which the triage said it could not be** (it read the two Blind misses
+  in the corpus as "none with a condition"; one of them is Jagged Strike 782, which inflicts
+  Bleeding). Over the live corpus (127 decodable game connections, 20260928T103123 :65009 set
+  aside as declared gapped), 569 attack-skill activations `[50, A, T, S]` resolve as 510 landed,
+  19 failed (17 reason 2, the chain; 2 reason 3, Blind), 27 stopped, 9 superseded and 4 with no
+  resolution in 6 s. Exactly one FAILED activation is of a conditioned skill:
+  **20260917T224104 :62557, t=348.996** — the observer (25), under a live Blind (347.485-356.488),
+  presses Jagged Strike at agent 117, whose status word carries no bleeding bit. The completion
+  batch at 349.147 is E5, `[46, 25, 0]`, `[38, 117, 25, 3]`, E3, and nothing in the following
+  second puts a condition on 117 (no `[6, 117, 23]`, no `0x00F1` bleeding bit, no `[44]`). The
+  same skill on the same foe at 357.240, 395.754 and 442.328, the Blind gone, lands the word with
+  `[6, 117, 23]`, `0x00F1 [117, 0x83]` and `[44]`, 3 of 3. OBSERVED, n = 1 miss against its
+  same-tape control. Corpus-wide, 116 landed activations of conditioned skills (320, 382, 384,
+  392, 782 by our rows) show the condition 100 times; the 16 without it are 7 Jagged Strikes on
+  a foe already bleeding (status `0x3`), 3 Gashes on a foe not bleeding (its own gate), 1 Sever
+  Artery on the non-fleshy 22 (#1957), and 5 Jagged Strikes by agent 30 on 20260819T132414
+  onto definition 3113 bodies that never carry a condition bit on that tape (consistent with
+  non-fleshy; UNVERIFIED). No attack skill is blocked or dodged on any tape, so **the block half
+  is WIKI**: GWW "Hit" (rev 2721374) — "Any time an attack is blocked or misses, there is no
+  hit" — and each conditioned skill's own sentence ("If this attack hits", "Sever Artery" rev
+  2738479; "If Jagged Strike hits", rev 2731014). The repo already had the dodge (a dodged shot
+  sends the word and nothing else, retail 7 of 7).
+  **What it does not touch:** spells and non-attacks (Blind and a block reach attacks only;
+  GWW "Block" rev 2740767), Irresistible Blow's block punishment (the content's only
+  `knocks_down_if_blocked` row), the hit-or-miss clauses (Desperation Blow's self knock-down,
+  Final Thrust's wipe). No other rider had the ungated shape: in the loaded content no attack
+  skill opens an episode through `apply_effect` (33 attack skills with rows), and the
+  knock-down, random condition, adjacent damage and chain step were already landed-gated.
+  **Found in passing, NOT fixed (not this item):** (i) `land_swing`'s Blind arm closes a BODY's
+  attack skill with `[1, body, 0]` where its block arm sends `[46, body, 0]` — retail's one
+  attack-skill miss (above) carries `[46]`; (ii) `land_swing_on_body` never rolls Blind for an
+  attack skill (`skill_id is None and blind_miss(...)`), so a Blinded body's attack skill on
+  another body always lands; (iii) retail's 357.240 hit carries `[42, 117, 480]`, which ours
+  does not send for 782 (the tape's other two hits do not either); (iv) a side witness for
+  `studies/daggers`: the Blind-missed LEAD sent no `0x005C`, and the Fox Fangs pressed 0.54 s
+  later failed with reason 2 — a missed lead advances no chain (OBSERVED, n = 1; the repo's
+  "a blocked lead advancing nothing" was RECONSTRUCTION).
+  Also open, and NOT bundled: IMMUNE-3, the #1957 sentence on the ranged, area and burst sites
+  (they refuse the condition silently).
+- **RANGERPRE-S22's client look — a RUNSHEET, owed, the owner's; not run.** Loopback, ours-DH,
+  caged; the owner drives; `--no-energy` only so Sever Artery (adrenal, 0 s recharge) can be
+  pressed at will. Four launches, each `python toolkit/harness/session.py --keep-open --hold 240
+  --enemy --game-args "--party slice --enemy-health 2000 --no-energy <ARM>"`, with `<ARM>`:
+  (A) `--enemy-skills 220` (the hostile's Blind on the player, 7 s every 8 s; offline, its
+  `land_skill` puts 479 on the player); (B) A plus `--no-condition-needs-hit`; (C)
+  `--enemy-skills 380` (the hostile's Bonetti's Defense on itself, a 75 % block; offline,
+  `block_chance` 0.75); (D) C plus `--no-condition-needs-hit`. In each, target the hostile and
+  press Sever Artery (slot 1) about ten times. PREDICTED in A, on each press made while the
+  Blind icon is up (about 9 in 10): the swing, a yellow "miss" over the hostile, no damage
+  number, and NO Bleeding on it — no bleeding body visual, no degeneration arrows on its health
+  bar; the gamesrv log prints `[RANGERPRE-S22] ... the strike missed -- no condition` for each.
+  Presses with no Blind up are the control: a number and the Bleeding. In C, a yellow "block"
+  and no Bleeding on about 3 presses in 4. In B and D the same miss or block words draw AND the
+  hostile bleeds — the pre-fix look, which retail's 349.147 refutes. Floor: 5 gated presses per
+  arm and 2 landed controls, counted off the tape as `[38, T, 1, 3]` (or 0) with no
+  `[6, T, 23]` in its batch. What would refute the fix: a bleed drawn on a miss or block in A
+  or C, or an assert. UNKNOWN going in: whether the hostile's AI casts 380 on itself at all; if
+  C shows no "block" in 60 s, record C as unexposed. Not a test of anything retail-side.
 - ~~The five test reds this capture caused (test_wearmap, test_adrenwire, test_movesync,
   test_routerbench, test_weaponcensus; test_npcdefs §8 would add two) are all confirming evidence
   breaking exact pins; the owner chose server diffs first, and they stay open.~~

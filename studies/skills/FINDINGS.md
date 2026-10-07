@@ -7480,6 +7480,18 @@ the arithmetic half is OBSERVED on one skill and carried to the others by the wi
   the rank it reads at each site, which for the player is the content rank. Unwitnessed.
 - **Heroes and other bodies** get the arithmetic and no wire; retail's word for them is
   unread (other agents' conditions never ride `0x0042` either — F46.8).
+  **What the corpus holds for it, re-read 2026-10-07 (lane `desk-condhit`; OBSERVED, the
+  repo's own decoders over 127 decodable game connections, 20260928T103123 :65009 set aside as
+  declared gapped):** every `0x003B` in the corpus names the observer — 138 of 138, none any
+  other agent; the 9 Weakness (486) applies on `0x0042` are all on the observer, on three
+  captures (20260821T152147 ×1, 20260917T090355 ×2, 20260917T124314 ×6). **One correction to the
+  sentence above:** a HERO's effects do ride `0x0042` — the JARIN tape (20260914T005758 :56011,
+  observer 29) carries 24 applies on its hero, agent 30 (17 × Frenzy 346, a stance; 7 ×
+  "Watch Yourself!" 348, a shout), the
+  only `0x0042` on a non-observer anywhere; F46.8's rule holds for foes. No hero or other body is
+  weakened on any tape, so what retail sends for one is NOT FOUND, and it is not a desk read:
+  the witness wanted is one live run with a hero beside a Weakness inflicter, watching for a
+  `0x003B` (or anything) naming the hero at the apply.
 
 ---
 
