@@ -71,7 +71,10 @@ def sequence(capture_dir, connection, codec):
     """[(index, t, opcode, values)] for one connection, framed whole."""
     info, events = tape.load_tape(capture_dir, connection)
     t_base = info.get("t0") or 0.0
-    events = [(round(t + t_base, 6), p) for t, p in events]
+    # Events.of, never a bare list: the rebase must keep the tape's BUILD, or decode_all
+    # reads a 38974 tape in the caller's numbering (tape.Events; studies/tape/
+    # WIREORDER.md, WIREORDER-B1).
+    events = tape.Events.of([(round(t + t_base, 6), p) for t, p in events], events)
     msgs, (consumed, total, err) = tape.decode_all(events, codec, "GAME_SMSG", 0)
     if err is not None or consumed != total:
         raise bufflog.BuffLogError(

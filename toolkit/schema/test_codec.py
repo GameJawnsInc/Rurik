@@ -359,8 +359,11 @@ def main():
             d = os.path.join("captures", "live", cap)
             for row in tape.whole_channels(d, set_aside):
                 _info, events = tape.load_tape(d, row["connection"])
+                # The tape's OWN build's numbering, both ways: a joined blob carries no
+                # build, so a bare `c` would read a 38974 tape as the pin (WIREORDER-B1).
+                cb = tape.codec_for(events, c)
                 blob = b"".join(b for _t, b in events)
-                msgs, consumed, err = c.decode_stream_at("GAME_SMSG", blob, 0)
+                msgs, consumed, err = cb.decode_stream_at("GAME_SMSG", blob, 0)
                 conns += 1
                 for i, (off, op, vals) in enumerate(msgs):
                     end = msgs[i + 1][0] if i + 1 < len(msgs) else consumed
@@ -369,8 +372,8 @@ def main():
                     if any(isinstance(x, str) and "�" in x for x in vals):
                         replaced[op] += 1
                     try:
-                        enc = c.encode("GAME_SMSG", op, list(vals)[1:],
-                                       header_value=vals[0])
+                        enc = cb.encode("GAME_SMSG", op, list(vals)[1:],
+                                        header_value=vals[0])
                     except Exception:
                         fails[op] += 1
                         continue

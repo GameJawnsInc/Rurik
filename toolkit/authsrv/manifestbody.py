@@ -422,13 +422,16 @@ def chain_streams(stamps, set_aside, root=None, codec=None):
     Connections are put in capture-clock order by their earliest message.
 
     NOT `livewire.decode_conn`'s merged stream, and this is why (review RV-2,
-    2026-10-07): that one is SORTED BY SEGMENT TIME, and a capture's segment clock runs
+    2026-10-07): that one WAS SORTED BY SEGMENT TIME, and a capture's segment clock runs
     backwards in places (on 41 of 127 live game connections' s2c, measured 2026-10-07), so
-    the merge is not wire order.
+    the merge was not wire order.
     On two connections of this chain it moved the manifest family itself -- a `0x0196`
     ahead of its `0x0198`, a kind-0 DONE ahead of the kind-2 bracket -- which `rebuild`
-    refuses (MsCliMan:457). `replay` needs the s2c order of DONE against `0x019F` and
-    nothing of the c2s/s2c interleaving, so the two directions are kept apart.
+    refuses (MsCliMan:457). decode_conn keeps each direction in wire order since
+    WIREORDER-A1 (studies/tape/WIREORDER.md, the same day), and `test_livewire.py` section
+    6 holds both connections to it; this reader still keeps the two directions apart,
+    because `replay` needs the s2c order of DONE against `0x019F` and nothing of the
+    c2s/s2c interleaving.
 
     A connection that will not decode in BOTH directions to the last byte RAISES unless
     its capture's manifest declares it gapped -- then it is set aside by name into

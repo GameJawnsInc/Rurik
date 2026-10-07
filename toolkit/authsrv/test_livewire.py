@@ -37,8 +37,11 @@ import tape        # noqa: E402
 # section 1 only, 4 checks, below this floor as it always has been.)
 # 2026-09-28 (CASTAI-Z1, the gap lane): 18 -- capgaps' set_aside/audit door in
 # section 1 (bare, so a bare run is 5) and the whole-corpus set-aside audit in 5.
+# 2026-10-07 (WIREORDER-A1): 23 -- 1b's synthetic reordered capture and its known-bad
+# arm (bare, so a bare run is 7), and section 6's corpus-wide wire-order check plus the
+# two D13.4 manifest connections. Red 4 of the 5 against the pre-fix decode_conn.
 LEDGER = checks.Ledger("livewire: the committed retail-decode recipe",
-                       floor=18)
+                       floor=23)
 check = checks.adopt(LEDGER)
 
 
@@ -90,6 +93,7 @@ def main():
           and livewire.conn_name("auth-1.2.3.4_5-to-6.7.8.9_80.jsonl") is None,
           "conn_name spells a game file's connection the way the manifest does, and "
           "refuses a name of another shape")
+    section_wire_order_synthetic()
 
     print("\n2. the live corpus (skips loudly without the vault)")
     root = livewire.captures_root()
@@ -156,9 +160,11 @@ def main():
               "of messages moves it")
         ts = [r[0] for r in merged]
         check(all(a <= b for a, b in zip(ts, ts[1:])),
-              "the merged stream is time-ordered",
-              "consumers window over time; an unsorted merge makes every "
-              "silence census wrong quietly")
+              "the merged stream is time-ordered on this connection, whose clock "
+              "never steps back -- wire order and time order agree here",
+              "consumers window over time. Since WIREORDER-A1 the merge keeps each "
+              "direction in WIRE order and t may dip where segments reached the "
+              "capture out of order (41 live connections, section 6); this one has none")
 
     print("\n4. the rung-7 capture: whole-capture closure")
     capdir = os.path.join(root, "20260818T132739")
@@ -214,7 +220,137 @@ def main():
               "KNOWN-BAD: an audit told it decodes goes red",
               f"{n_yield} yielded; {a_why}")
 
+    section_wire_order_corpus(root)
     return LEDGER.verdict()
+
+
+def _write_reordered_capture(td):
+    """A capture whose s2c clock steps BACK: segment 2 (body B) was captured 10 ms
+    before segment 1 (body A) though it follows it in TCP sequence -- they reached the
+    capture out of order, the shape 41 live connections carry. One c2s message
+    at a time between. Returns (game file, A, B, C) with A/B/C the decoded value lists."""
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+    import codec as codecmod                                  # noqa: PLC0415
+    cod = codecmod.Codec()
+    a = cod.encode("GAME_SMSG", 0x01C4, [0x0A0A])
+    b = cod.encode("GAME_SMSG", 0x01C5, [0x0B0B])
+    c = cod.encode("GAME_CMSG", 0x0011, [0x0C0C], header_value=0x8011)
+    client, server = ("10.9.9.9", 5000), ("3.3.3.3", 80)
+    conn = f"{client[0]}:{client[1]}->{server[0]}:{server[1]}"
+    rows = []
+
+    def seg(way, seq, t, payload):
+        src, dst = (client, server) if way == "c2s" else (server, client)
+        rows.append({"kind": "wire", "dir": way, "seq": seq, "t": t,
+                     "payload": payload.hex(), "src": src[0], "sport": src[1],
+                     "dst": dst[0], "dport": dst[1]})
+
+    hs_s, hs_c = b"S" * livewire.HANDSHAKE_S2C, b"C" * livewire.HANDSHAKE_C2S_GAME
+    seg("s2c", 1000, 9.0, hs_s)
+    seg("s2c", 1000 + len(hs_s), 10.000, a)                   # first in sequence
+    seg("s2c", 1000 + len(hs_s) + len(a), 9.990, b)           # ...captured EARLIER
+    seg("c2s", 5000, 9.0, hs_c)
+    seg("c2s", 5000 + len(hs_c), 9.995, c)
+    with open(os.path.join(td, "wire.jsonl"), "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r) + "\n")
+    gf = f"game-{client[0]}_{client[1]}-to-{server[0]}_{server[1]}.jsonl"
+    with open(os.path.join(td, gf), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"kind": "version", "channel": "game", "connection": conn}) + "\n")
+        fh.write(json.dumps({"kind": "frame", "direction": "s2c",
+                             "plain": (a + b).hex()}) + "\n")
+        fh.write(json.dumps({"kind": "frame", "direction": "c2s", "plain": c.hex()}) + "\n")
+    return gf
+
+
+def section_wire_order_synthetic():
+    """1b. WIREORDER-A1 (2026-10-07), on a capture built here, so a bare machine runs it.
+
+    decode_conn used to SORT its merge by segment time, and a capture's segment clock
+    runs backwards wherever two segments reached the capture out of order -- so a later message
+    could come out ahead of an earlier one in its OWN direction. The contract now: each
+    direction in wire order, `t` verbatim, the two interleaved head by head. KNOWN-BAD:
+    the old sort, applied to the same rows, puts B ahead of A."""
+    with tempfile.TemporaryDirectory() as td:
+        gf = _write_reordered_capture(td)
+        _conn, merged, ok = livewire.decode_conn(td, gf)
+    got = [(d, op, round(t, 3)) for t, d, op, _v in merged]
+    check(ok and got == [("c2s", 0x0011, 9.995), ("s2c", 0x01C4, 10.0), ("s2c", 0x01C5, 9.99)],
+          "1b. a segment captured EARLIER than the one before it in sequence stays BEHIND "
+          "it: each direction in wire order, t verbatim (it may step back), the c2s "
+          "interleaved head by head (WIREORDER-A1)", f"ok={ok} {got}")
+    resorted = sorted(merged, key=lambda r: (r[0], 0 if r[1] == "c2s" else 1))
+    check([r[2] for r in resorted if r[1] == "s2c"] == [0x01C5, 0x01C4],
+          "KNOWN-BAD: the time sort decode_conn used before WIREORDER-A1 puts B ahead "
+          "of A on the same rows -- so the check above can tell the two apart",
+          f"{[(r[1], hex(r[2])) for r in resorted]}")
+
+
+def section_wire_order_corpus(root):
+    """6. WIREORDER-A1 on the live corpus: wire order inside each direction, everywhere.
+
+    The two connections DIVERGENCE-D13.4's review caught (RV-2) carry a 0x0196 manifest
+    body that the time sort put AHEAD of its 0x0198 phase -- which the client's own
+    handler refuses (MsCliMan:457, studies/divergence/FINDINGS.md D13.4). In wire order
+    each body follows a phase."""
+    print("\n6. wire order inside each direction, over the corpus (WIREORDER-A1)")
+    n = wire_ok = differs = 0
+    for capdir, gf in livewire.live_connections(set_aside=[]):
+        _conn, merged, ok = livewire.decode_conn(capdir, gf)
+        if not ok:
+            continue
+        cod = livewire._get_codec(livewire.conn_build(capdir, gf))
+        same = True
+        for way, chan, mask in (("c2s", "GAME_CMSG", livewire.CMSG_MASK),
+                                ("s2c", "GAME_SMSG", 0)):
+            _c, events, _err = livewire.build_events(capdir, gf, way)
+            wire, _r = tape.decode_all(events, cod, chan, mask, strict=False)
+            same &= [(t, op, v) for t, d, op, v in merged if d == way] == wire
+        n += 1
+        wire_ok += same
+        ts = sorted(merged, key=lambda r: (r[0], 0 if r[1] == "c2s" else 1))
+        differs += ts != merged
+    # A FLOOR on `differs`, never an equality: the corpus grows, and a new reordered
+    # connection is good news that must not redden this (41 of 127 on 2026-10-07).
+    check(n > 0 and wire_ok == n and differs >= 41,
+          "every closing live connection's merge holds EACH direction in wire order "
+          "(TCP sequence, build_events + decode_all), and the corpus still carries the "
+          "reordering that makes this a check -- the time sort differs on >= 41",
+          f"{wire_ok}/{n} in wire order; time sort differs on {differs}")
+    # The oracle is manifestbody.rebuild: the client's own phase/body/done bookkeeping,
+    # which REFUSES a body with no open phase (MsCliMan:457) as the client asserts on it.
+    import manifestbody                                        # noqa: PLC0415
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+    import codec as codecmod                                   # noqa: PLC0415
+    ops = manifestbody.opcodes(codecmod.Codec())
+
+    def closes(rows):
+        """'refused: ...', or (body bytes closed by a DONE, body bytes sent)."""
+        sent = sum(len(v[1]) for _t, _d, op, v in rows if op == ops["body"])
+        try:
+            done = manifestbody.rebuild([(t, op, v) for t, _d, op, v in rows], ops)
+        except manifestbody.ManifestError as exc:
+            return "refused: " + str(exc)[:70]
+        return (sum(len(d.p0) + len(d.p1) for d in done), sent)
+
+    # :51534 -- the time sort puts a body where no phase is open (rebuild refuses);
+    # :55934 -- it puts a kind-0 DONE ahead of the kind-2 bracket, so that DONE closes
+    # two EMPTY buffers and the 17 + 504 body bytes after it are never closed at all.
+    for stamp, port in (("20260916T213125", "51534"), ("20260929T150923", "55934")):
+        capdir = os.path.join(root, stamp)
+        gfs = [g for g in livewire.connections(capdir) if f"_{port}-to-" in g]
+        if len(gfs) != 1:
+            LEDGER.skip(f"6. {stamp} :{port}", "connection missing")
+            continue
+        _conn, merged, _ok = livewire.decode_conn(capdir, gfs[0])
+        s2c = [r for r in merged if r[1] == "s2c"]
+        wire, resorted = closes(s2c), closes(sorted(s2c, key=lambda r: r[0]))
+        check(isinstance(wire, tuple) and wire[1] > 0 and wire[0] == wire[1]
+              and resorted != wire,
+              f"{stamp} :{port}: in decode_conn's order every 0x0196 body byte is closed "
+              f"by a DONE, the client's own bookkeeping (manifestbody.rebuild); KNOWN-BAD, "
+              f"the time sort refuses or strands body bytes (D13.4 RV-2)",
+              f"wire (closed, sent) {wire}; time-sorted {resorted}")
 
 
 # `sys.exit(main())`, not a bare `main()`, and `main` RETURNS the verdict:

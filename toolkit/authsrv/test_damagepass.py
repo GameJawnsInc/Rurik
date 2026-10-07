@@ -357,7 +357,8 @@ per_conn = {}
 for row in damagepass.tape.channel_files(rung7):
     info, events = damagepass.tape.load_tape(rung7, row["connection"])
     t0 = info.get("t0") or 0.0
-    events = [(round(t + t0, 6), p) for t, p in events]
+    events = damagepass.tape.Events.of([(round(t + t0, 6), p) for t, p in events],
+                                       events)       # keeps the build (WIREORDER-B1)
     msgs, _ = damagepass.tape.decode_all(events, damagepass.Codec(),
                                          "GAME_SMSG", 0)
     for t, op, v in msgs:

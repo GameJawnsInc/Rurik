@@ -340,7 +340,8 @@ def section_join():
     # bracket on the chain must close the way the client's bookkeeping closes it. Review
     # RV-2: chain_streams once handed over livewire.decode_conn's merge, sorted by SEGMENT
     # TIME, and the segment clock runs backwards in places -- the KNOWN-BAD arm below is
-    # that order, and on this chain it puts a 0x0196 ahead of its 0x0198.
+    # that order, and on this chain it puts a 0x0196 ahead of its 0x0198. (decode_conn
+    # itself keeps wire order since WIREORDER-A1, 2026-10-07; the arm re-sorts by itself.)
     refused = []
     for st in streams:
         try:
@@ -357,7 +358,7 @@ def section_join():
         except mb.ManifestError:
             clock.append((st.capture, st.connection))
     check(len(clock) >= 1,
-          f"KNOWN-BAD: the same s2c re-sorted by segment clock (decode_conn's merge) breaks a "
+          f"KNOWN-BAD: the same s2c re-sorted by segment clock (decode_conn's old merge) breaks a "
           f"bracket on {len(clock)} connection(s) -- the order is not decoration", f"{clock[:2]}")
     first = [st for st in streams if st.capture == mb.CHAIN_FIRST_CAPTURE]
     head = mb.replay(list(rec.table), first, ops)
