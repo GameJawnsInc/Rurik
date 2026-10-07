@@ -6403,7 +6403,11 @@ INTERRUPTS = True
 # recharge is 0 (OBSERVED n=1). With nothing recharging at all -- 0 and no disable --
 # no E6 is owed either, since no E5 opened one: RECONSTRUCTION, DAGGERS-B5's `no_e6`
 # ("a failed chain step never began a recharge"); no tape shows that case.
-# --interrupt-zero-e5 reverts: E5(0) first, as every interrupt before 2026-09-28.
+# --interrupt-zero-e5 reverts: E5(0) first, as every interrupt before 2026-09-28. Since
+# 2026-10-07 (SLICE-F52 52.8) it also restores a HERO's interrupt-mirror E5 [hero, skill,
+# 0, 0] (interrupt_body), with no E6 -- the mirror sent it on every hero interrupt until
+# that day, so the flag puts back the E5(0) for both casters; --zero-recharge-e5 restores
+# the mirror's E5(0) as well (either revert does).
 INTERRUPT_SKIPS_ZERO_E5 = True
 # INTERRUPT_CHAIN_RETAKES_HOLD: a cast interrupted under a chain that RESUMES -- a live
 # target in reach, no follow leg, nothing else short of its E3 (_player_chain_running
@@ -6424,12 +6428,15 @@ INTERRUPT_CHAIN_RETAKES_HOLD = True
 # ZERO_RECHARGE_SKIPS_E5 (SLICE-F52 52.8, 2026-10-07; studies/slice/FINDINGS.md): A CAST
 # WHOSE RECHARGE IS 0 COMPLETES WITH NO 0x00E5 -- and the player's, with nothing to
 # recharge, with no 0x00E6 either. OBSERVED over the live corpus (128 connections):
-# every completion of a table-recharge-0 skill closes with no E5 and no E6 -- the
+# 56 of 56 completions of a table-recharge-0 skill close with no E5 and no E6 -- the
 # observer's 382 x23, 384 x14, 385 x7 and the hero's 382 x7, 385 x5 (skill 2's three
-# completions are E7, RESSIG's rule) -- against 291 of 291 completions with a table
-# recharge that carry one. THE KEY IS THE RECHARGE, NOT ADRENALINE: 348 is adrenal with
-# a recharge of 4 and carries E5(4) 8 of 8; on the other side ZF17's skill 2 (no
-# adrenaline) drew no E5(0) when interrupted. Read off the value the E5 would carry
+# completions are E7, RESSIG's rule, and not this rule's evidence) -- against 291 of 291
+# completions with a table recharge that carry one. ADRENALINE DOES NOT SUPPRESS THE E5:
+# 348 is adrenal with a recharge of 4 and carries E5(4) 8 of 8. What the tape does NOT
+# separate is "recharge 0" from "recharge 0 and adrenal" -- all 56 are adrenal; the one
+# non-adrenal witness is ZF17's skill 2, which drew no E5(0) when interrupted (n=1, an
+# interrupt) -- so the 40 non-adrenal recharge-0 rows are RECONSTRUCTION (studies/slice
+# 52.9). Read off the value the E5 would carry
 # (after a staff's 570): no table row is fractional and halved_recharge rounds .5 up,
 # so that is 0 exactly when the table says 0. WHY IT IS NOT HARMLESS: E5's worker
 # zeroes BOTH adrenaline halves (studies/skills 26.12), so an E5(0) behind a 0x00CF
@@ -6438,8 +6445,9 @@ INTERRUPT_CHAIN_RETAKES_HOLD = True
 # player_resurrection_lands' (the player: no E5, no E6, the [58]/[46]/[48] and the E3
 # unchanged), hero_skill_messages (no E5; the E3 and the E4's close unchanged; no E6
 # was ever owed), and interrupt_body's hero mirror (also behind INTERRUPT_SKIPS_ZERO_E5,
-# whose mirror it is). RECONSTRUCTION: the 121 table-0 ids never cast on tape, and the
-# hero's interrupt (no hero interrupt on tape). NOT this rule, unchanged: DAGGERS-B5's
+# whose mirror it is). RECONSTRUCTION: the 82 adrenal table-0 ids never cast on tape, the
+# 40 non-adrenal ones (above), and the hero's interrupt (no hero interrupt on tape). NOT
+# this rule, unchanged: DAGGERS-B5's
 # failed-chain second E5(0) (775 / 780 carry recharges; retail sends it) and RESSIG-B's
 # boost repaint E5(0) (the UI's repaint; the slot WAS recharging).
 # --zero-recharge-e5 reverts: E5 [.., 0] at every such completion and the player's E6,
@@ -6700,7 +6708,9 @@ HERO_CAST_OPENS_E4 = True      # False (--no-hero-cast-e4): no E4, every hero E3
 # morale boost that refreshes it is RESSIG-B below (a boss's death, WIKI; its wire
 # RECONSTRUCTION -- no boss dies on any tape, 0 of 5 glowing agents on 128
 # connections), and the player's own signet is RESSIG-P.
-# --no-resurrection-single-use is the pre-fix arm.
+# --no-resurrection-single-use is the pre-fix arm -- for the pre-2026-10-07 BYTES add
+# --zero-recharge-e5: since SLICE-F52 52.8 a recharge-0 raise outside the boost path
+# completes with E3 and no E5 [.., 0] (and the player's with no E6).
 RESURRECTION_SINGLE_USE = True  # False (--no-resurrection-single-use): ready every fight.
 # RESSIG-P (2026-10-01): THE PLAYER'S OWN SIGNET RAISES. A press of skill 2 at a party
 # corpse was accepted, ran its 3 s, sent E5 [.., 0] and E6, and raised nobody --
@@ -6714,7 +6724,9 @@ RESURRECTION_SINGLE_USE = True  # False (--no-resurrection-single-use): ready ev
 # +inf and should never send one), and a corpse that already stands STOPS the cast
 # through the cancel burst ([8 -> 0], [59], E2), nothing spent -- RECONSTRUCTION for
 # the observer (the bodies' stops are OBSERVED, 42 on tape; the observer's one stop was
-# an interrupt). --no-player-resurrection is the pre-fix arm.
+# an interrupt). --no-player-resurrection is the pre-fix arm -- for the pre-2026-10-07
+# BYTES add --zero-recharge-e5: alone it now closes the cast as any recharge-0 cast (E3,
+# no E5 [.., 0], no E6; SLICE-F52 52.8).
 PLAYER_RESURRECTION = True      # False (--no-player-resurrection): the press raises nobody.
 # RESSIG-B (2026-10-01): A BOSS'S DEATH IS A MORALE BOOST. WIKI (GWW "Morale Boost", rev
 # 2730137): "2%, whenever any boss dies", to all party members, and it RECHARGES
@@ -26971,8 +26983,9 @@ def begin_cast(send, state, cast, conn_id):
 
 def completion_sends_e5(recharge):
     """SLICE-F52 52.8: does a completion whose recharge is `recharge` (the value its
-    0x00E5 would carry) send that E5? Only a real recharge does -- retail's 59 of 59
-    table-recharge-0 completions carry none, its 291 of 291 others carry one -- unless
+    0x00E5 would carry) send that E5? Only a real recharge does -- retail's 56 of 56
+    table-recharge-0 completions carry none (skill 2's 3 raises, E7, set aside), its 291
+    of 291 others carry one -- unless
     --zero-recharge-e5 (ZERO_RECHARGE_SKIPS_E5 False) restores E5 [.., 0]. The one
     predicate every completion site reads (cast_tick, player_resurrection_lands,
     hero_skill_messages, interrupt_body's hero mirror), and the one test_zerorecharge
@@ -32637,8 +32650,9 @@ def player_resurrection_lands(send, state, conn_id, cast, now):
         return True
     boost = RESURRECTION_SINGLE_USE and skill_recharges_on_boost(sid)
     # SLICE-F52 52.8: a non-boost resurrection whose recharge is 0 -- today only skill 2
-    # under --no-resurrection-single-use; 1816's table recharge is 0 but it has no
-    # skill_effect row yet -- completes as any 0-recharge cast: no E5, no E6
+    # under --no-resurrection-single-use; 306, 791 and 1816 (the other recharge-0 rows of
+    # the target-byte-6 family) read 0 but have no skill_effect row yet -- completes as
+    # any 0-recharge cast: no E5, no E6
     # (ZERO_RECHARGE_SKIPS_E5; RECONSTRUCTION -- none on tape).
     zero = not boost and not completion_sends_e5(cast["recharge"])
     if not boost and not zero:
@@ -50223,7 +50237,9 @@ def main():
         INTERRUPT_SKIPS_ZERO_E5 = False
         print("INTERRUPT ZERO E5: an interrupted skill with recharge 0 still gets "
               "0x00E5 [player, skill, copy, 0] and its 0x00E6, as every interrupt before "
-              "2026-09-28 (retail: none, Distracting Shot 399 on skill 2, CASTAI-ZF17).",
+              "2026-09-28 (retail: none, Distracting Shot 399 on skill 2, CASTAI-ZF17); "
+              "and a hero's interrupt mirror its E5 [hero, skill, 0, 0], with no E6, as "
+              "until 2026-10-07 (SLICE-F52 52.8).",
               flush=True)
 
     if a.zero_recharge_e5:
@@ -50231,7 +50247,7 @@ def main():
         ZERO_RECHARGE_SKIPS_E5 = False
         print("ZERO RECHARGE E5: a skill with recharge 0 completes with 0x00E5 [.., 0] "
               "(the player's with its 0x00E6, a hero's, a hero's interrupt mirror), as this "
-              "server sent until 2026-10-07 (retail: none, 59 of 59; SLICE-F52 52.8).",
+              "server sent until 2026-10-07 (retail: none, 56 of 56; SLICE-F52 52.8).",
               flush=True)
 
     if a.no_attack_fixed_damage:

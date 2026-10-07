@@ -1037,8 +1037,9 @@ def section_order_pinned_when_inverted():
 
     # RE-AIMED 2026-10-07 (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5). This section
     # used to PIN "a zero-recharge skill still closes E5 -> E3 -> E6" -- the shape
-    # this server sent for 382 / 384 / 385 and retail never does (46 of 46
-    # observer completions of a table-recharge-0 skill carry no E5 and no E6).
+    # this server sent for 382 / 384 / 385 and retail never does (44 of 44
+    # observer completions of 382 / 384 / 385 carry no E5 and no E6; skill 2's
+    # raises, E7, are RESSIG's rule).
     # The ORDER guard it carried (E6 never ahead of E3) is kept, on a recharge
     # SHORTER than the aftercast, which still puts e6_at before e3_at; the old
     # zero-recharge bytes are kept too, as the --zero-recharge-e5 arm's.
@@ -1062,8 +1063,8 @@ def section_order_pinned_when_inverted():
         check([op for op, _, _ in sent] == [0x009F, 0x009F, 0x009F]
               and sent[0][1][0] == authsrv.agents.GV_SKILL_FINISHED,
               "a zero-recharge skill's completion: the [58] and the hold pulse, "
-              "and NO E5 (retail: 46 of 46 observer completions of a "
-              "table-recharge-0 skill, SLICE-F52 52.8)",
+              "and NO E5 (retail: 44 of 44 observer completions of "
+              "382 / 384 / 385, SLICE-F52 52.8)",
               f"{[hex(op) for op, _, _ in sent]}")
         _rewind(state, 0.5)
         authsrv.cast_tick(send, state, 0)

@@ -3546,11 +3546,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   bare green run (the vault adds 2: 22). No socket, no client),
   `toolkit/authsrv/test_zerorecharge.py` (**2026-10-07, SLICE-F52 52.8: a skill whose
   recharge is 0 completes with NO `0x00E5`, and the player's with no `0x00E6` either
-  (`ZERO_RECHARGE_SKIPS_E5`, `--zero-recharge-e5` reverts).** Retail splits its completions on
-  the table recharge alone: 59 of 59 recharge-0 completions carry no E5 (the observer's 382 /
-  384 / 385, the hero's 382 / 385, skill 2's raises which are E7), 291 of 291 others carry one
-  -- 348, ADRENAL with a 4 s recharge, among them, which is what says the key is the recharge
-  and not adrenaline. `authsrv.completion_sends_e5` is the one predicate the four sites read.
+  (`ZERO_RECHARGE_SKIPS_E5`, `--zero-recharge-e5` reverts).** Retail: 56 of 56 recharge-0
+  completions through the E5 path carry no E5 (the observer's 382 / 384 / 385 x44, the hero's
+  382 / 385 x12; skill 2's 3 raises are E7, RESSIG's rule, set aside), 291 of 291 others carry
+  one -- 348, ADRENAL with a 4 s recharge, among them, so adrenaline does not suppress the E5.
+  The tape does NOT separate "recharge 0" from "recharge 0 and adrenal" (all 56 are adrenal;
+  the one non-adrenal witness is ZF17's interrupt, n=1), so the 40 non-adrenal recharge-0 rows
+  are RECONSTRUCTION. `authsrv.completion_sends_e5` is the one predicate the four sites read.
   §1 the PLAYER through the real press and `cast_tick` (seeded, every content read stubbed):
   382 and 385 complete `[46]` .. E3 with no E5 / E6 and the entry gone; the KNOWN-BAD arm is
   EXACTLY E5 [me, skill, 0, 0] + the same batch + E6, the press identical; a recharge-4 attack
@@ -3566,19 +3568,29 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   behind a real first E5 are still sent; the one table-0 chain row's corner (976's shape) sends
   no first E5 and still sends the failed step's E5(0) -- unchanged, unwitnessed, said so. §5
   the flag ships ON and is registered; `main()`'s own `if a.zero_recharge_e5:` block, lifted
-  from the source and RUN, leaves it on without the flag and turns it off with it; the four
-  sites read the predicate. §6 (vault) RETAIL: over 128 connections the predicate agrees with
-  the wire on every completion of a skill the table knows (observer 256 + 46, hero 35 + 13,
-  the observer anchored by `henchjoin.whose_agent`); the same predicate under the revert is
-  wrong on all 59 recharge-0 completions and nothing else; 348 carries its E5 8 of 8; no E6
-  names 382 / 384 / 385. Proved red, each in a scratch copy: the flag False in the source
+  from the source and RUN, leaves it on without the flag and turns it off with it, and the
+  block is a DIRECT statement of `main()` ahead of `srv.listen` (so `main()` reaches it before
+  the first connection); the four sites read the predicate. §6 (vault) RETAIL: over 128
+  connections the predicate agrees with the wire on every completion of a skill the table
+  knows (observer 256 + 44, hero 35 + 12, the observer anchored by `henchjoin.whose_agent`);
+  the completions set aside for their E7 are skill 2's raises and no other skill's (3); the
+  same predicate under the revert is wrong on all 56 recharge-0 completions and nothing
+  else; 348 carries its E5 8 of 8; no E6 names 382 / 384 / 385. §6 SKIPS ONLY on an absent
+  vault directory (the live captures, or the vault's content): `livewire` / `henchjoin` are
+  imported at the top, so a decoder that will not load is a traceback, and a content
+  directory without 382's row is a FAIL (the fix pass of 2026-10-07: §6 used to turn ANY
+  exception into a declared skip). Proved red, each in a scratch copy: the flag False in the source
   reddens 1 here (+1 each in guards, signetboost, ressig -- the sections here set the flag
   per arm); the predicate planted `>= 0` reddens 15 here and 2 in castcycle; the `global`
   dropped from main()'s block reddens the flip; the player's `no_e6` dropped reddens 4 (+1
   castcycle, +1 guards); each site made unconditional reddens its section; the revert made
   inert reddens 8 (+1 each in castcycle, signetboost, ressig); the rule extended to the boost
-  repaint or the failed chain reddens §4. Floor 23 from the bare green run (the vault adds 6:
-  29). No socket, no client. ~20 s vaulted),
+  repaint or the failed chain reddens §4; the fix pass's: main()'s block nested under a dead
+  `if`, or moved after `srv.listen`, reddens the reach check (1 each); a planted load failure
+  in `henchjoin`, or `livewire` poisoned in `sys.modules`, is a traceback (rc 1) with the vault
+  present; a content directory without 382's row reddens 1; an E7 read on every completion
+  reddens 4, the set-aside check among them. Floor 24 from the bare green run (the vault adds
+  7: 31). No socket, no client. ~30-60 s vaulted),
   `toolkit/authsrv/test_damagelatch.py` (**2026-09-30, ANIMREF-RE 43: the player's hit sends
   `[1]` BEFORE its damage word, so the client draws the number on the player's own swing.**
   The client latches the agent of the last `0x009F [1|46|49]` (`0x007F6BC0`), clears it on
@@ -13176,7 +13188,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
   replay continued the other's condition) -- both reddened unrun by that arc.
-  `toolkit/authsrv/test_castcycle.py` (**2026-10-07, SLICE-F52 52.8 (ZERO_RECHARGE_SKIPS_E5): §3 RE-AIMED -- it PINNED "a zero-recharge skill still closes E5 -> E3 -> E6", the shape retail never sends (46 of 46 observer completions of a table-recharge-0 skill carry no E5 and no E6). Now (a) recharge 0: the [58] and the hold pulse with no E5, then the E3 alone and the entry gone, no E6 then or later; (b) the ORDER guard kept on a real recharge shorter than the aftercast (1 s vs 1.5 s): E6 due but waiting, then E3 and E6 together; (c) the KNOWN-BAD arm `--zero-recharge-e5`: the old E5 [.., 0] -> E3 -> E6 bytes. 2 -> 5 checks; 60 bare, 66 vaulted, both MEASURED; floor 57 -> 60.** **2026-09-29, RANGERPRE-S2 (WEAPONREFUSE-A): §2f's AHEAD-OF-THE-WEAPON-GATE check re-pinned — the named press with the wrong weapon now draws `#1985`, `[1, 7]`, `0x00E2` (retail's OBSERVED weapon-mismatch answer), not the bare release; count unchanged (63 with the vault, floor 57).** **2026-09-27, the attack-target gate: §2f, an attack
+  `toolkit/authsrv/test_castcycle.py` (**2026-10-07, SLICE-F52 52.8 (ZERO_RECHARGE_SKIPS_E5): §3 RE-AIMED -- it PINNED "a zero-recharge skill still closes E5 -> E3 -> E6", the shape retail never sends (44 of 44 observer completions of 382 / 384 / 385 carry no E5 and no E6; skill 2's raises, E7, are RESSIG's rule). Now (a) recharge 0: the [58] and the hold pulse with no E5, then the E3 alone and the entry gone, no E6 then or later; (b) the ORDER guard kept on a real recharge shorter than the aftercast (1 s vs 1.5 s): E6 due but waiting, then E3 and E6 together; (c) the KNOWN-BAD arm `--zero-recharge-e5`: the old E5 [.., 0] -> E3 -> E6 bytes. 2 -> 5 checks; 60 bare, 66 vaulted, both MEASURED; floor 57 -> 60.** **2026-09-29, RANGERPRE-S2 (WEAPONREFUSE-A): §2f's AHEAD-OF-THE-WEAPON-GATE check re-pinned — the named press with the wrong weapon now draws `#1985`, `[1, 7]`, `0x00E2` (retail's OBSERVED weapon-mismatch answer), not the bare release; count unchanged (63 with the vault, floor 57).** **2026-09-27, the attack-target gate: §2f, an attack
   skill pressed with TARGET 0 is refused with retail's #1934 before the first send. The
   referent is one press whose n was re-counted that day (159 live attack-skill presses, all on
   0x0027; 1 at target 0 — 20260819T132414 t=238.496 — answered #1934, [1, 7], 0x00E2, no E4;

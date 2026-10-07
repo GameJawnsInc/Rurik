@@ -2,15 +2,18 @@ r"""test_zerorecharge -- a skill whose recharge is 0 completes with NO 0x00E5, a
 player's with no 0x00E6 either (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5, 2026-10-07;
 studies/slice/FINDINGS.md 52.8).
 
-WHAT IT IS REALLY CHECKING. Retail's completions split on the skill's table recharge and
-on nothing else: over every live connection, 59 of 59 completions of a recharge-0 skill
-carry no E5 (the observer's 382 / 384 / 385, the hero's 382 / 385, and skill 2's raises,
-which are E7) and 291 of 291 completions with a recharge carry one -- 348, an ADRENAL
-skill with a recharge of 4, among them, which is what says the key is the recharge and
-not adrenaline. This server sent E5 [.., 0] at every such completion (and the player's
-E6 behind it), and E5's worker zeroes both adrenaline halves on the client
-(studies/skills 26.12). `authsrv.completion_sends_e5` is the one predicate the four
-completion sites read; this file drives each site and replays the predicate over retail.
+WHAT IT IS REALLY CHECKING. Over every live connection, 56 of 56 completions of a
+recharge-0 skill through the E5 path carry no E5 (the observer's 382 / 384 / 385 x44, the
+hero's 382 / 385 x12; skill 2's three raises are E7, RESSIG's rule, and are set aside) and
+291 of 291 completions with a recharge carry one. 348, ADRENAL with a recharge of 4, is
+among the 291: adrenaline does not suppress the E5. What the tape does NOT separate is
+"recharge 0" from "recharge 0 AND adrenal" -- every one of the 56 is adrenal, and the only
+non-adrenal recharge-0 evidence is CASTAI-ZF17's single interrupt -- so the 40
+non-adrenal recharge-0 rows are RECONSTRUCTION (studies/slice 52.9). This server sent
+E5 [.., 0] at every such completion (and the player's E6 behind it), and E5's worker
+zeroes both adrenaline halves on the client (studies/skills 26.12).
+`authsrv.completion_sends_e5` is the one predicate the four completion sites read; this
+file drives each site and replays the predicate over retail.
 
   1  THE PLAYER, through the real press and cast_tick: Sever Artery 382 and Final Thrust
      385 complete [46] .. E3 with no E5 and no E6, the entry gone; --zero-recharge-e5
@@ -29,11 +32,15 @@ completion sites read; this file drives each site and replays the predicate over
      table-0 chain row's corner (976's shape): no first E5, the failed step's E5(0) still
      sent -- unchanged by this rule, said so.
   5  THE FLAG: ships ON, --zero-recharge-e5 parses, and main()'s own block (lifted out
-     of the source and run) turns it off -- and leaves it on without the flag.
+     of the source and run) turns it off -- and leaves it on without the flag; the block
+     is a direct statement of main(), ahead of srv.listen, so main() really reaches it.
   6  RETAIL (vault): `completion_sends_e5` over every observer and hero completion of a
      skill the world table knows agrees with the wire 100 %; the REVERT arm of the same
-     predicate disagrees on every recharge-0 completion; 348 separates recharge from
-     adrenaline; no E6 ever names 382 / 384 / 385. Skipped without the captures.
+     predicate disagrees on every recharge-0 completion; the completions set aside for
+     their E7 are skill 2's alone; 348 says adrenaline does not suppress the E5; no E6
+     ever names 382 / 384 / 385. Skipped ONLY on an absent vault directory (the live
+     captures, or the vault's content); a decoder that will not import is a traceback and
+     a content directory without 382's row is a FAIL.
 
 Sections 1-5 need no vault: every timing, cost and attack-ness they lean on is stubbed.
 """
@@ -58,12 +65,21 @@ if SCHEMA not in sys.path:
     sys.path.insert(0, SCHEMA)
 
 import checks                                                  # noqa: E402
+import content                                                 # noqa: E402
+import vaultpath                                               # noqa: E402
 import agents                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
+# section 6's decoders, imported HERE and not inside a try: both are in-repo and stdlib,
+# so a bare machine imports them, and a load failure must be a traceback, never a skip
+# (the fix pass of 2026-10-07, EV-1 / CD-1)
+import livewire                                                # noqa: E402
+import henchjoin                                               # noqa: E402
 
 # Floor from the BARE-MACHINE green run of 2026-10-07 (RURIK_VAULT at an empty
 # directory): 23 -- sections 1-5; section 6 declares a skip. 29 with the vault.
-LEDGER = checks.Ledger("zero-recharge completions", floor=23)
+# The fix pass (same day) adds CD-2's main()-reaches-the-block check to section 5 and
+# EV-3's raises set-aside check to section 6: 24 bare, 31 with the vault.
+LEDGER = checks.Ledger("zero-recharge completions", floor=24)
 check = checks.adopt(LEDGER)
 
 E2, E3, E4, E5, E6, E7 = 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E6, 0x00E7
@@ -166,7 +182,7 @@ def section_player():
                   and done[0] == (INT, [agents.GV_ATTACK_SKILL_FINISHED, P, 0])
                   and done[-1] == (E3, [P, sid, 0]) and not st.get("pending_casts"),
                   f"skill {sid}'s completion: [46] .. E3 and NO E5 / E6, the entry gone -- "
-                  f"retail's observer, 46 of 46 recharge-0 completions",
+                  f"retail's observer, 44 of 44 (382 x23, 384 x14, 385 x7)",
                   f"{[(hex(op), v) for op, v in done]}")
             press_r, old, st_r = _player_cast(sid, False)
             check(press_r == press and old[:1] == [(E5, [P, sid, 0, 0])]
@@ -387,6 +403,18 @@ def section_flag():
     if block is None:
         check(False, "main() carries an `if a.zero_recharge_e5:` block")
         return
+    # ...and main() REACHES it before the first connection: a block nested under another
+    # test, or one placed after the listener, would still flip below and change nothing a
+    # client sees (the fix pass of 2026-10-07, CD-2; test_labelconsumers §5's
+    # `i_main < bind < i_listen`, as an AST walk)
+    listen = next((n for n in ast.walk(main) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Attribute) and n.func.attr == "listen"
+                   and isinstance(n.func.value, ast.Name) and n.func.value.id == "srv"), None)
+    check(block in main.body and listen is not None and block.lineno < listen.lineno,
+          "main() reaches the block: a DIRECT statement of main() (nested under nothing), "
+          "ahead of srv.listen -- the flag is set before the first connection",
+          f"direct={block in main.body}, block line {block.lineno}, "
+          f"srv.listen line {getattr(listen, 'lineno', None)}")
     fn = ast.Module(body=[ast.FunctionDef(
         name="_flip", args=ast.arguments(posonlyargs=[], args=[ast.arg("a")], vararg=None,
                                          kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
@@ -417,9 +445,9 @@ def section_flag():
 
 
 def _completions(merged):
-    """(agent, skill, e5 recharge or None, e6 seen, e7 seen) per 0x00E3 completion: the E5
-    is the same agent's and skill's, back to the cast's own E4 (<= 8 s) or 0.3 s ahead;
-    the E6 within the table recharge + 2.5 s; the E7 in the E3's stamp."""
+    """(t, agent, skill, e5 recharge or None, e7 seen) per 0x00E3 completion: the E5 is the
+    same agent's and skill's, back to the cast's own E4 (<= 8 s) or 0.3 s ahead; the E7 the
+    same agent's and skill's within 0.3 s of the E3 (a raise's E7 shares its stamp)."""
     s2c = [(t, op, v) for t, d, op, v in merged if d == "s2c"]
     out = []
     for i, (t, op, v) in enumerate(s2c):
@@ -441,39 +469,48 @@ def _completions(merged):
                 if oj == E5 and len(vj) > 4 and int(vj[1]) == ag and int(vj[2]) == sk:
                     e5 = int(vj[4])
                     break
-        out.append((t, ag, sk, e5, s2c, i))
+        e7 = any(oj == E7 and abs(tj - t) <= 0.3 and len(vj) > 2 and int(vj[1]) == ag
+                 and int(vj[2]) == sk for tj, oj, vj in s2c[max(0, i - 40):i + 40])
+        out.append((t, ag, sk, e5, e7))
     return out
 
 
 def section_retail():
     print("== 6. retail: the predicate against every completion on the live corpus ==")
-    try:
-        import livewire
-        import henchjoin
-        root = livewire.captures_root()
-    except Exception as exc:                                    # pragma: no cover
-        LEDGER.skip("section 6 (retail)", f"livewire unavailable: {exc}")
+    # Skips on an absent vault DIRECTORY and on nothing else (the fix pass of 2026-10-07,
+    # EV-1 / CD-1: this section used to turn ANY exception -- a decoder that would not
+    # import, a table that would not load -- into a declared skip, and floor 23 could not
+    # notice six checks vanishing). The decoders are imported at the top; a content
+    # directory that is THERE but lacks 382's row is a FAIL, not a skip.
+    root = livewire.captures_root()
+    if not os.path.isdir(root):
+        LEDGER.skip("section 6 (retail)", f"no live captures on this machine ({root}) -- 7 checks")
         return
-    if not root or not os.path.isdir(root):
-        LEDGER.skip("section 6 (retail)", "no live captures on this machine -- 6 checks")
+    cdir = vaultpath.vault_path("content")
+    if not os.path.isdir(cdir):
+        LEDGER.skip("section 6 (retail)", f"the vault's content directory is absent ({cdir}): "
+                    "the table recharge is the key -- 7 checks")
         return
     try:
         agents.WORLD.get("skills", str(SEVER))
-    except Exception:                                           # noqa: BLE001
-        LEDGER.skip("section 6 (retail)", "the world's skills table (vault/content) is absent "
-                    "-- the table recharge is the key -- 6 checks")
+    except content.ContentError as exc:
+        check(False, "the vault's content directory is present, so the world's skills table "
+              "carries 382's row", f"{exc}"[:200])
         return
 
     def table(sid):
+        # a skill the table does not know is not classed (and is counted, below); only the
+        # table's own "no such row" is caught
         try:
             row = agents.WORLD.get("skills", str(sid))
-        except Exception:                                       # noqa: BLE001
+        except content.ContentError:
             return None, None
         return float(row["recharge"]), int(row.get("adrenaline_units") or 0) > 0
 
     saved = authsrv.ZERO_RECHARGE_SKIPS_E5
     agree = collections.Counter()
     wrong_new, wrong_old, sep, e6_zero, conns = [], [], collections.Counter(), [], 0
+    raised, unknown, nonadren_zero = collections.Counter(), collections.Counter(), []
     try:
         for capdir, gf in livewire.live_connections():
             _c, merged, _ok = livewire.decode_conn(capdir, gf)
@@ -483,12 +520,22 @@ def section_retail():
             me = henchjoin.whose_agent(merged)
             heroes = {int(v[3]) for _t, d, op, v in merged
                       if d == "s2c" and op == 0x01C2 and len(v) > 3}
-            for t, ag, sk, e5, s2c, i in _completions(merged):
+            for t, ag, sk, e5, e7 in _completions(merged):
                 who = "observer" if ag == me else ("hero" if ag in heroes else "other")
                 tr, adren = table(sk)
                 if tr is None:
+                    unknown[sk] += 1
+                    continue
+                if e7:
+                    # a raise: E7 (indefinite) and E3, RESSIG's boost path -- the server
+                    # never consults completion_sends_e5 for it under the defaults, so it is
+                    # not this rule's evidence either way (EV-3); which skills these are is
+                    # checked below, so the set-aside cannot swallow a witness unseen
+                    raised[sk] += 1
                     continue
                 sent = e5 is not None
+                if tr == 0 and not adren:
+                    nonadren_zero.append((os.path.basename(capdir), round(t, 3), ag, sk, e5))
                 authsrv.ZERO_RECHARGE_SKIPS_E5 = True
                 ours = authsrv.completion_sends_e5(tr)
                 authsrv.ZERO_RECHARGE_SKIPS_E5 = False
@@ -509,23 +556,36 @@ def section_retail():
     zero = sum(n for (w, z, s), n in agree.items() if z == "zero")
     rech = sum(n for (w, z, s), n in agree.items() if z == "recharge")
     print(f"  census: {conns} connections; {dict(sorted(agree.items()))}")
-    check(conns >= 120 and zero >= 59 and rech >= 291,
-          "the corpus is the one the lane measured (>= 120 connections, >= 59 recharge-0 and "
-          ">= 291 recharge completions; floors, not equalities)",
+    print(f"  set aside: raises (E7) {dict(raised)}; skills the table does not know "
+          f"{sum(unknown.values())} completions {dict(unknown)}")
+    # informational, NOT a check (a count that reddens on good news is not one): a
+    # non-adrenal recharge-0 completion through the E5 path is the witness the tape lacks
+    # -- 0 on 2026-10-07, which is why those 40 table rows are RECONSTRUCTION (52.9)
+    print(f"  non-adrenal recharge-0 completions outside the raises: {len(nonadren_zero)} "
+          f"{nonadren_zero[:4]}")
+    check(conns >= 120 and zero >= 56 and rech >= 291,
+          "the corpus is the one the lane measured (>= 120 connections, >= 56 recharge-0 and "
+          ">= 291 recharge completions outside the raises; floors, not equalities)",
           f"{conns} connections, {zero} recharge-0, {rech} with a recharge")
+    check(set(raised) == {RES} and raised[RES] >= 3,
+          "the completions set aside for their E7 are skill 2's raises and no other skill's "
+          "(>= 3): RESSIG's boost path, not this rule's evidence -- so the set-aside cannot "
+          "swallow a witness unseen", f"{dict(raised)}")
     check(not wrong_new,
           "completion_sends_e5 (the shipped arm) agrees with the wire on EVERY completion: an "
           "E5 exactly when the table recharge is > 0", f"{wrong_new[:6]}")
     check(len(wrong_old) == zero and all(w[4] is None for w in wrong_old),
           "KNOWN-BAD ARM: the same predicate with --zero-recharge-e5 is wrong on EVERY "
           "recharge-0 completion and on nothing else", f"{len(wrong_old)} of {zero}")
-    check(sum(n for (w, z, s), n in agree.items() if z == "zero" and w == "observer") >= 46
-          and sum(n for (w, z, s), n in agree.items() if z == "zero" and w == "hero") >= 13,
-          "both caster kinds witness it: the observer's recharge-0 completions (>= 46) and the "
-          "hero's (>= 13)", f"{dict(agree)}")
+    check(sum(n for (w, z, s), n in agree.items() if z == "zero" and w == "observer") >= 44
+          and sum(n for (w, z, s), n in agree.items() if z == "zero" and w == "hero") >= 12,
+          "both caster kinds witness it: the observer's recharge-0 completions (>= 44) and the "
+          "hero's (>= 12)", f"{dict(agree)}")
     check(sep.get(True, 0) >= 8 and not sep.get(False, 0),
-          "THE SEPARATOR: an ADRENAL skill with a table recharge (348's 4 s) carries its E5 "
-          "every time -- so the key is the recharge, not adrenaline", f"{dict(sep)}")
+          "an ADRENAL skill with a table recharge (348's 4 s) carries its E5 every time: "
+          "adrenaline does not suppress the E5. (It does not separate 'recharge 0' from "
+          "'recharge 0 and adrenal': every recharge-0 witness is adrenal -- 52.9)",
+          f"{dict(sep)}")
     check(not e6_zero,
           "no 0x00E6 names 382 / 384 / 385 anywhere on the corpus", f"{e6_zero[:5]}")
 

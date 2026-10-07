@@ -3809,12 +3809,21 @@ observer is `henchjoin.whose_agent`.
 
 - **No E6 names 382, 384 or 385** anywhere on the corpus.
 - **Skill 2's three completions are E7** (RESSIG's rule, 53.2), so they are not evidence
-  for this rule either way.
-- **The separator is 348**, adrenal (80 units) with a table recharge of 4. Its completions
-  carry `E5(4)` 8 of 8 (the observer 1, the hero 7). So "adrenal" does not suppress the E5;
-  a recharge of 0 does. On the non-adrenal side the one witness is CASTAI-ZF17's interrupted
-  skill 2 (`20260928T103123 :58544` 621.054): no first E5(0), only the +20 disable. That is
-  n = 1, and an interrupt, not a completion.
+  for this rule either way. **The rule's own witnesses are 56 of 56** (the observer's 44, the
+  hero's 12), not the 59 of the table above, and that is the number the code and the tests
+  cite (corrected in the fix pass, same day).
+- **348 says adrenaline does not suppress the E5.** It is adrenal (80 units) with a table
+  recharge of 4, and its completions carry `E5(4)` 8 of 8 (the observer 1, the hero 7).
+- **What the tape does NOT separate** is "recharge 0" from "recharge 0 AND adrenal". All 56
+  witnesses are adrenal (382 / 384 / 385: 75 / 125 / 200 units). No non-adrenal recharge-0
+  skill completes through the E5 path anywhere on tape: the only non-adrenal recharge-0
+  completions are skill 2's three raises, and those are E7. The one non-adrenal witness is
+  CASTAI-ZF17's interrupted skill 2 (`20260928T103123 :58544` 621.054): no first E5(0), only
+  the +20 disable. That is n = 1, and an interrupt, not a completion. The two readings give
+  different bytes on exactly the 40 non-adrenal recharge-0 rows (among them 2 under the
+  reverts, 306, 791, 976 and 1816), so the shipped rule is RECONSTRUCTION there (52.9).
+  `test_zerorecharge.py` §6 prints how many such completions a run finds (0 today) rather
+  than checking it, so a new witness does not redden the suite.
 - **The key is the recharge the E5 would carry.** No table row of 1,334 is fractional, and
   `halved_recharge` rounds .5 up, so a positive recharge never halves to 0. "After the
   staff's 570" and "the table says 0" are the same set on every real row. The value is read,
@@ -3834,9 +3843,12 @@ permanent. Whether one ever landed in that window on our server is UNVERIFIED. O
 - **`cast_tick`'s completion (the player):** no E5, and `no_e6` so no E6. The phase still
   fires. The `[58]` / `[46]` / `[48]`, the visual, the hit and the E3 ride it unchanged
   (`e5_sent` is the completion's book, not the wire's). Sever Artery's batch now opens with
-  `[46]` and closes with E3 with no E5 between, as retail's 382 batch at 624.615 does.
+  `[46]` and closes with E3 with no E5 between, as retail's 382 batch at
+  `20260817T231139 :54071` 624.615 does.
 - **`player_resurrection_lands`' non-boost arm:** the same rule. Today only skill 2 under
-  `--no-resurrection-single-use` reaches it; 1816 reads 0 but has no `skill_effect` row.
+  `--no-resurrection-single-use` reaches it. The client's target byte 6 marks 11 skills, all
+  resurrections, and four of them read recharge 0: 2, 306, 791 and 1816. Only skill 2 has a
+  `skill_effect` row, so the other three never reach this arm yet.
 - **`hero_skill_messages`:** no E5. The E3, and with it the E4's close, is unchanged, and no
   E6 was ever owed.
 - **`interrupt_body`'s hero mirror:** no full-recharge E5(0), also behind
@@ -3854,23 +3866,41 @@ sends B5's E5(0). It is unwitnessed. The E5(0) zeroes a slot that holds no adren
 
 **Also seen, not this lane.** The only two E6s on a table-0 skill are skill 2's on
 `20260817T231139 :54071` (627.854, 656.799). Each closes an `E5 [11, 2, 0, 3]`, a 3 s
-recharge on the observer's uncast and unspent signet. That E5 lands in the stamp where
-another party member's raise of agent 12 lands (`[58, 13|14, 0]`, `[20, 12, 13|14, 152]`).
-There is no `0x009C` near either, so it is not a morale boost (the triage read it as one).
-OBSERVED n = 2, cause NOT FOUND. It is an E5 with a positive recharge, so retail never sends
-E5(0) on skill 2 either.
+recharge on the observer's uncast and unspent signet. There is no `0x009C` near either, so
+it is not a morale boost (the triage read it as one). It is an E5 with a positive recharge,
+so retail never sends E5(0) on skill 2 either.
+
+Those two are part of a wider pattern on the same capture (found by the fix pass's review,
+re-derived by the fixer with `livewire`). **11 observer E5s carry 3 where the table says
+otherwise**, all on `20260817T231139`:
+- 364 ×7 (table 20), on `:50286`, `:50513`, `:50527` and `:54071`. Each lands in the stamp
+  where a team-mate uses the same skill, `[48, ally, 364]`.
+- skill 2 ×2 (table 0), the two above. Each lands with a team-mate's completed raise: its
+  `[58, ally, 0]` and the `[20, 12, ally, 152]` visual.
+- skill 1 ×2 (table 4). Each lands with a team-mate's `[58, ally, 0]`, at 764.488 with its
+  self-heal `[55, ally, ally]` as well.
+
+Every one of the 11 stamps also carries `[21, me, 11]`, an effect on the observer. The wire
+names the team-mate's skill only for 364; for skills 2 and 1 the `[58]` does not say which
+skill completed, and the raise visual and the self-heal fit the same skill without proving
+it. So the salient context is a team-mate's use of (very likely) the same skill, of which
+the raise is one case, not the raise itself. OBSERVED, n = 11. The cause is NOT FOUND, and it
+does not touch this rule: all 11 carry a positive recharge.
 
 **Two corrections to the 2026-10-07 triage.**
-- **"Skill 2 is the separating witness."** It is not, for completions: E7 explains them. The
-  separator is 348.
+- **"Skill 2 is the separating witness."** It is not, for completions: E7 explains them.
+  348 refutes "adrenal means no E5", but nothing on tape separates "recharge 0" from
+  "recharge 0 and adrenal" (above).
 - **"observer 250 / others 41."** That split anchored the observer on a single property-41
   agent, which fails on the hero tape (the hero carries 41 too). There the observer's own 6
   completions were counted as "other". With `whose_agent` it is 256 / 35. The totals, 291
   and 59, are unchanged.
 
 **Tests.**
-- **`test_zerorecharge.py` is new:** 23 checks bare, 29 with the vault (TESTS.md). Every
-  guard was reddened in a scratch copy.
+- **`test_zerorecharge.py` is new:** 24 checks bare, 31 with the vault (TESTS.md; 23 / 29
+  before the fix pass, which added a check that `main()` reaches the flag's block before
+  `srv.listen` and one that the E7 set-aside holds skill 2 alone, and made §6 skip only on an
+  absent vault directory). Every guard was reddened in a scratch copy.
 - **Stubs and pins re-aimed, not weakened:**
   - `test_castcycle` §3, which PINNED the old zero-recharge shape. It now carries the old
     bytes as the revert arm's, with the E6-after-E3 order guard on a 1 s recharge.
@@ -3881,11 +3911,17 @@ E5(0) on skill 2 either.
 
 ### 52.9 Labels for 52.8
 
-- OBSERVED: the census table, 348's 8 of 8, the zero E6s, ZF17's skill-2 interrupt (n = 1),
-  and skill 2's two E5(3)s (n = 2).
+- OBSERVED: the census table (the rule's 56 of 56), 348's 8 of 8, the zero E6s, ZF17's
+  skill-2 interrupt (n = 1), and the 11 off-table observer E5(3)s, skill 2's two among them.
 - MEASURED (studies/skills 26.12): E5 zeroes both adrenaline halves.
 - RECONSTRUCTION:
-  - the 121 table-0 ids never completed on tape;
+  - the 82 adrenal table-0 ids never completed on tape, generalised from 382 / 384 / 385;
+  - **the 40 non-adrenal table-0 rows** (2 under the reverts, 306, 791, 976, 1816 and 35
+    others). This is the weaker generalisation: no completion of one goes through the E5
+    path on tape, and ZF17's interrupt (n = 1) is the only non-adrenal evidence. It is where
+    "recharge 0" and "recharge 0 and adrenal" give different bytes. Under either reading
+    the adrenaline argument does not apply to these rows, since an E5(0) on them zeroes a
+    slot that holds no adrenaline;
   - the hero's interrupt mirror (no hero is interrupted on tape);
   - the non-boost resurrection arm;
   - 976's corner.

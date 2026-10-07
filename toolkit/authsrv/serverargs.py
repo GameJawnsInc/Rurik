@@ -756,8 +756,9 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "7 / 48 / 35 rows); a henchman's never.")
     ap.add_argument("--no-player-resurrection", action="store_true",
                     help="THE REVERT ARM for RESSIG-P: the player's own Resurrection "
-                         "Signet runs its 3 s and raises nobody (E5 [.., 0], E6), every run "
-                         "before 2026-10-01. By default it raises the corpse in retail's "
+                         "Signet runs its 3 s and raises nobody (E3; the E5 [.., 0] and E6 "
+                         "of every run before 2026-10-01 also need --zero-recharge-e5, "
+                         "SLICE-F52 52.8). By default it raises the corpse in retail's "
                          "order ([58], E7, E3, [8 -> 0], the rise), is spent until a morale "
                          "boost, and stops ([59]) on a corpse already standing.")
     ap.add_argument("--no-kbd-body-estimate", action="store_true",
@@ -3128,15 +3129,18 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "ahead of the stop, and its 0x00E6 -- every interrupt before "
                          "2026-09-28. By default it gets none: OBSERVED, Distracting Shot "
                          "399 on skill 2 (recharge 0), 20260928T103123 :58544 t=621.054, "
-                         "[8,0] [59] E2 [35] ... E5(20) with no first E5.")
+                         "[8,0] [59] E2 [35] ... E5(20) with no first E5. Since 2026-10-07 "
+                         "(SLICE-F52 52.8) it also restores a hero's interrupt-mirror "
+                         "E5 [hero, skill, 0, 0], with no E6, as every hero interrupt "
+                         "until that day (--zero-recharge-e5 restores that one too).")
     ap.add_argument("--zero-recharge-e5", action="store_true",
                     help="SLICE-F52 52.8 REVERT: a skill whose recharge is 0 completes "
                          "with 0x00E5 [agent, skill, copy, 0] -- the player's (and its "
                          "0x00E6), a hero's, and a hero's interrupt mirror -- as this "
                          "server sent until 2026-10-07. Wrong two ways: retail sends no "
-                         "E5 and no E6 for one, 59 of 59 completions on the live corpus "
-                         "(382 / 384 / 385, and skill 2's E7 raises; the observer's and "
-                         "the hero's); and E5's "
+                         "E5 and no E6 for one, 56 of 56 completions on the live corpus "
+                         "(382 / 384 / 385, the observer's and the hero's; skill 2's three "
+                         "raises are E7, RESSIG's rule); and E5's "
                          "worker zeroes both adrenaline halves on the client "
                          "(studies/skills 26.12), so an E5(0) behind a gain taken after "
                          "the spend splits the client's book from ours for good.")
