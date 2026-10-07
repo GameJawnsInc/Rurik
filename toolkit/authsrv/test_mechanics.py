@@ -39,8 +39,8 @@ import vaultpath    # noqa: E402
 # 2026-10-07 (the bare machine): TWO floors, decided on the vault's content DIRECTORY --
 # test_codescan's FLOOR_WITH_CAPSTONE / FLOOR_STDLIB_ONLY pattern -- and never on what
 # loaded, so a vault whose skills.toml did not load still demands FLOOR_VAULT and goes red.
-FLOOR_BARE = 343   # 2026-10-07 (the bare machine): MEASURED 343 checks, 0 failed, 6 declared skips (42 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path -- sections 19 (13), 20 (17), 23 (6) and 32 (4), the live corpus; section 37's record against its build's client row (1), the pristine image; section 42 (1), the vault's table. Every other section runs on the carried rows (RECORD, the attribute tables). Before this the bare run died at section 1's module level (ContentError: no skills row '346') and reached no verdict
-FLOOR_VAULT = 385  # 2026-10-07 (the bare machine): +1 -- sec.42 the 41 carried skills rows and the two attribute tables against the vault's own, column for column (vault-only); measured 385 with the vault; before that 2026-09-30 (RANGERPRE-S10, MAXHP-1): +1 -- sec.29(b) the foe's SECOND punished swing carries no 42 (the first still declares, its tracker marked stale as create_agent_world marks it); measured 384; before that 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+FLOOR_BARE = 356   # 2026-10-07 (SLICE-F48b): +13 -- sec.8c the over-cap snare overrides the boosts (the player's script, a body, the tape's 399 -> 75 -> 399, the known-bad arm, the cap boundary, the single source, under-cap unchanged, Crippled on top, the flag run off main(), the source), all bare; MEASURED 356 with RURIK_VAULT at a nonexistent path; before that 343: 2026-10-07 (the bare machine): MEASURED 343 checks, 0 failed, 6 declared skips (42 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path -- sections 19 (13), 20 (17), 23 (6) and 32 (4), the live corpus; section 37's record against its build's client row (1), the pristine image; section 42 (1), the vault's table. Every other section runs on the carried rows (RECORD, the attribute tables). Before this the bare run died at section 1's module level (ContentError: no skills row '346') and reached no verdict
+FLOOR_VAULT = 398  # 2026-10-07 (SLICE-F48b): +13 -- sec.8c, the same thirteen as the bare floor's; measured 398 with the vault; before that 385: 2026-10-07 (the bare machine): +1 -- sec.42 the 41 carried skills rows and the two attribute tables against the vault's own, column for column (vault-only); measured 385 with the vault; before that 2026-09-30 (RANGERPRE-S10, MAXHP-1): +1 -- sec.29(b) the foe's SECOND punished swing carries no 42 (the first still declares, its tracker marked stale as create_agent_world marks it); measured 384; before that 2026-09-29 (RANGERPRE-S3): +4 -- sec.16c a rate back at zero is +0.0 (a foe's and the player's Bleeding expiry, the --regen-zero-signed known-bad arm, the source); measured 383; before that 2026-09-29 (RANGERPRE-S1): +10 -- sec.16b the floored Deep Wound on retail's two edges (64 -> 52 and its [44] / next-hit 42 / word, 483 -> 387, the round() and --no-deep-wound known-bad arms, the close's re-division) and sec.18's 64, 483, the 1..2000 sweep and predicted_max against the server; measured 379; before that 2026-09-28 (CASTAI-Z1 round 3): +1 -- sec.20 healjoin P2's annotation test with BOTH conjuncts (never-beside-damage exact per tape, no candidate over the corpus); measured 369; before that 2026-09-28 (CASTAI-Z1, the Zaishen capture): +10 -- sec.19 the Deep Wound stacking signature and its witness (P1 / P3 pin-scoped); sec.20 P1 / P2 recorded FAILED as written, the allegiance-token signature, the healjoin-P2 annotation signature, the token pass's gapped set-aside and its reader cross-check, P1c / P2c on the capture; measured 368; before that 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 HAVE_VAULT = os.path.isdir(vaultpath.vault_path("content"))
 LEDGER = checks.Ledger("effect mechanics", floor=FLOOR_VAULT if HAVE_VAULT else FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -530,6 +530,267 @@ try:
           "--no-move-speed-effects: the condition opens, the status word goes, no 0x0027")
 finally:
     authsrv.MOVE_SPEED_EFFECTS = saved
+
+# ---------------------------------------------------------------------------
+# 8c: SLICE-F48b (2026-10-07, studies/slice/FINDINGS.md F48.7). A snare past the -50 cap
+# OVERRIDES the boosts on retail's wire (speedwords P7-P10: a boosted body's onset 75.0 =
+# 300 x 0.25, 2 of 2; a "Charge!" applied to and ending on an observer at x0.25 sends no
+# word, 2 of 2; the snare's end restores 399.0, 2 of 2). Through the real sender and the
+# real per-wearer path; Deep Freeze 234, Windborne 160 and "Charge!" 364 are carried rows.
+print("== 8c. SLICE-F48b: an over-cap snare drops the boosts -- 97.92 under Windborne, "
+      "silence for a boost under it, the boost back at its end ==")
+DEEP_FREEZE = 234
+SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE
+SYN = {}                       # synthetic snare rows by percent, removed in the finally
+
+
+def speed_words(sent, agent):
+    return [round(v[1], 4) for op, v, _l in sent if op == SPEED_OP and v[0] == agent]
+
+
+def wear(send, st, sid, rank, wearer, caster=None):
+    """One episode through _apply_effect_on, the real per-wearer path (0x0042 / [6]s /
+    status / speed), at the row's own duration."""
+    row = agents.WORLD.get("skills", str(sid))
+    try:
+        erow = agents.WORLD.get("skill_effect", str(sid))
+    except Exception:                                          # noqa: BLE001
+        erow = {}
+    family = effects.applies_effect(row) or erow.get("opens_episode") or "hex"
+    return authsrv._apply_effect_on(send, st, wearer if caster is None else caster, sid,
+                                    rank, wearer, 0, row, erow, family,
+                                    effects.resolve_duration(row, rank) or 10.0)
+
+
+def expire(send, st, ep):
+    ep["expires_at"] = 0.0
+    authsrv.effect_tick(send, st, 0)
+
+
+def syn_snare(pct, n=0):
+    """A rowed snare of `pct` in the bonus slot, Deep Freeze's shape (flat, bit clear) --
+    a TEST FIXTURE for the boundary, never content. Ids 99000 + 100 n + pct, so two
+    snares of one percent are two SKILLS (strongest_per_skill counts one skill once);
+    99999 stays rowless."""
+    sid = 99000 + 100 * int(n) + int(pct)
+    if sid not in SYN:
+        cols = dict(zip(SKILL_COLUMNS, RECORD[str(DEEP_FREEZE)]))
+        cols.update(bonus_scale0=int(pct), bonus_scale15=int(pct), skill_arguments=0)
+        agents.WORLD.tables["skills"][str(sid)] = agents.content.Row(
+            cols, "skills", str(sid), dict(RECORD_PROVENANCE))
+        agents.WORLD.tables["skill_effect"][str(sid)] = agents.content.Row(
+            {"bonus_scale_means": "Movement speed decrease"}, "skill_effect", str(sid),
+            {"source": "test fixture (test_mechanics 8c)"})
+        SYN[sid] = pct
+    return sid
+
+
+def player_script():
+    """Windborne, Deep Freeze over it, "Charge!" opening and closing under the snare, the
+    snare's end, Windborne's end: the player's 0x0027 words per step."""
+    st = fresh_state()
+    steps = {}
+    sent, send = collector()
+    wb = authsrv.apply_effect(send, st, PLAYER, WINDBORNE, 15, PLAYER, 0)
+    steps["windborne"] = speed_words(sent, PLAYER)
+    sent, send = collector()
+    df = wear(send, st, DEEP_FREEZE, 0, PLAYER, caster=10)
+    steps["deep freeze"] = speed_words(sent, PLAYER)
+    sent, send = collector()
+    ch = authsrv.apply_effect(send, st, PLAYER, CHARGE, 10, PLAYER, 0)
+    steps["charge on"] = speed_words(sent, PLAYER)
+    steps["charge applied"] = ch is not None and any(
+        e["skill"] == CHARGE for e in st["effects"].on_agent(PLAYER))
+    sent, send = collector()
+    expire(send, st, ch)
+    steps["charge off"] = speed_words(sent, PLAYER)
+    sent, send = collector()
+    expire(send, st, df)
+    steps["snare off"] = speed_words(sent, PLAYER)
+    sent, send = collector()
+    expire(send, st, wb)
+    steps["windborne off"] = speed_words(sent, PLAYER)
+    return steps
+
+
+def retail_shape(steps, base=288.0, snare=0.34, boost=1.33):
+    """P7-P10's shape: the onset at base x snare whatever is boosting, NO word while a boost
+    opens or closes under it, the boosted word back at the snare's end."""
+    return (steps["deep freeze"] == [round(base * snare, 4)]
+            and steps["charge on"] == [] and steps["charge off"] == []
+            and steps["snare off"] == [round(base * boost, 4)])
+
+
+_s8c = (authsrv.MOVE_SPEED_EFFECTS, authsrv.episodemods.SNARE_OVERRIDES_BOOST)
+try:
+    authsrv.MOVE_SPEED_EFFECTS = True
+    authsrv.episodemods.SNARE_OVERRIDES_BOOST = True
+    steps = player_script()
+    check(steps["windborne"] == [383.04] and steps["deep freeze"] == [97.92],
+          "the player: Windborne declares 383.04, then Deep Freeze over it declares 97.92 = "
+          "288 x 0.34 -- the snare's number alone, NOT 288 x 1.33 x 0.34 = 130.23",
+          str(steps))
+    check(steps["charge applied"] and steps["charge on"] == [] and steps["charge off"] == [],
+          "\"Charge!\" opening AND closing under the snare sends no 0x0027 -- retail's "
+          "silence (speedwords P8, 2 of 2), from push_speed's send-on-change alone",
+          str(steps))
+    check(steps["snare off"] == [383.04] and steps["windborne off"] == [288.0],
+          "the snare's end restores 383.04 (Windborne still open: suppressed, not "
+          "cancelled -- P9's 399 -> 75 -> 399), and Windborne's end 288.0", str(steps))
+    check(retail_shape(steps),
+          "the whole script has retail's P7-P10 shape (the predicate the known-bad arm "
+          "below must fail)")
+
+    # A BODY, base 288: the same rule through its own word.
+    st = fresh_state()
+    st["agents"][10] = {"name": "hatcher", "pos": (300.0, 0.0), "plane": 0,
+                        "max_health": 100.0, "health": 100.0}
+    sent, send = collector()
+    wear(send, st, WINDBORNE, 15, 10)
+    df = wear(send, st, DEEP_FREEZE, 0, 10, caster=PLAYER)
+    on = len(sent)
+    ch = wear(send, st, CHARGE, 10, 10)
+    silent = ch is not None and speed_words(sent[on:], 10) == []
+    expire(send, st, df)
+    check(speed_words(sent, 10) == [383.04, 97.92, 385.92] and silent
+          and abs(authsrv.npc_declared_speed(st, 10) - 385.92) < 1e-9
+          and abs(authsrv.move_speed_factor(st, 10) - 1.34) < 1e-9,
+          "a body: Windborne 383.04, Deep Freeze over it 97.92, \"Charge!\" opening under "
+          "the snare silent, and the snare's end declares BOTH boosts at their cap, 385.92 -- "
+          "the silent shout counts once the snare is gone (RECONSTRUCTION: it follows from "
+          "a suppressed, not cancelled, boost; P9's restore is the witness for that), and "
+          "the chase reads the declared 385.92", str(speed_words(sent, 10)))
+
+    # The tape's own bytes: a base-300 body boosted to 399.0 under a 75% snare reads 75.0
+    # and comes back to 399.0 (20260928T103123 agent 9, 20260929T100038 agent 10).
+    st = fresh_state()
+    st["agents"][9] = {"name": "zaishen", "pos": (300.0, 0.0), "plane": 0,
+                       "max_health": 100.0, "health": 100.0, "speed_base": 300.0}
+    sent, send = collector()
+    wear(send, st, WINDBORNE, 15, 9)
+    snare = wear(send, st, syn_snare(75), 0, 9, caster=PLAYER)
+    expire(send, st, snare)
+    check(speed_words(sent, 9) == [399.0, 75.0, 399.0],
+          "a base-300 body under a boost and a 75% snare sends retail's own three words, "
+          "399.0 -> 75.0 -> 399.0 (P9 on both Zaishen tapes; never the product's 99.75)",
+          str(speed_words(sent, 9)))
+
+    # THE KNOWN-BAD ARM: the multiplicative rule past the cap, this server until 2026-10-07.
+    authsrv.episodemods.SNARE_OVERRIDES_BOOST = False
+    bad = player_script()
+    authsrv.episodemods.SNARE_OVERRIDES_BOOST = True
+    check(bad["deep freeze"] == [130.2336] and bad["charge on"] == [131.2128]
+          and bad["charge off"] == [130.2336] and not retail_shape(bad),
+          "KNOWN-BAD (--snare-multiplies-boost): the same script reads 130.23 (x0.4522), "
+          "words 131.21 at the shout under the snare (x1.34 x 0.34) and 130.23 at its end -- "
+          "and FAILS retail's shape, where the override passes it", str(bad))
+
+    # THE BOUNDARY: past 50, a SINGLE source. Windborne open on the player throughout.
+    def factor_with(*pcts, override=True):
+        authsrv.episodemods.SNARE_OVERRIDES_BOOST = override
+        try:
+            st = fresh_state()
+            open_ep(st, WINDBORNE, rank=15, duration=13.0)
+            for n, p in enumerate(pcts):
+                open_ep(st, syn_snare(p, n), duration=10.0, type_code=4)
+            return round(authsrv.move_speed_factor(st, PLAYER), 4)
+        finally:
+            authsrv.episodemods.SNARE_OVERRIDES_BOOST = True
+    sweep = {p: factor_with(p) for p in (33, 50, 51, 66, 75)}
+    check(sweep == {33: 0.8911, 50: 0.665, 51: 0.49, 66: 0.34, 75: 0.25},
+          "the cap is the boundary: a 33 and a 50 keep the product (1.33 x 0.67, 1.33 x 0.5), "
+          "a 51, a 66 and a 75 are the snare alone (0.49, 0.34, 0.25)", str(sweep))
+    check(factor_with(33, 33) == 0.665 and factor_with(66, 33) == 0.34
+          and factor_with(50, 50) == 0.665,
+          "it is a SINGLE source past the cap that overrides (WIKI 'Snare (tactic)': 'a "
+          "single skill that causes more than -50%'): two 33s sum to the capped 50 and keep "
+          "the product (0.665), as do two 50s; a 66 beside a 33 overrides (0.34)",
+          str((factor_with(33, 33), factor_with(66, 33), factor_with(50, 50))))
+    check(factor_with(33, override=False) == 0.8911
+          and factor_with(50, override=False) == 0.665
+          and factor_with(66, override=False) == 0.4522,
+          "under the cap the flag changes nothing -- a 33 under Windborne stays the 89.1 % "
+          "of GWW 'Effect stacking' (Flail's example, WIKI) either way; past it the revert "
+          "multiplies (0.4522)")
+
+    # Crippled on top of an overriding snare: x0.5 still multiplies (UNVERIFIED).
+    st = fresh_state()
+    open_ep(st, WINDBORNE, rank=15, duration=13.0)
+    open_ep(st, DEEP_FREEZE, duration=10.0, type_code=4)
+    open_ep(st, CRIPPLED_ID, duration=10.0, type_code=8)
+    check(abs(authsrv.move_speed_factor(st, PLAYER) - 0.17) < 1e-9,
+          "Crippled over Windborne + Deep Freeze: 0.34 x 0.5 = 0.17 -- Crippled keeps its own "
+          "multiplying rule over an override (UNVERIFIED: no tape holds both)",
+          f"{authsrv.move_speed_factor(st, PLAYER)}")
+
+    # THE FLAG: parsed, and main()'s block -- lifted off the syntax tree and RUN -- flips it.
+    import ast
+    import argparse
+    import contextlib
+    import io
+    import serverargs
+    ap = serverargs.build_parser(
+        doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+        VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            parsed = (ap.parse_args([]).snare_multiplies_boost,
+                      ap.parse_args(["--snare-multiplies-boost"]).snare_multiplies_boost)
+    except (SystemExit, AttributeError) as exc:
+        parsed = ("refused", repr(exc))
+    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    main_fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    block = [n for n in ast.walk(main_fn) if isinstance(n, ast.If)
+             and isinstance(n.test, ast.Attribute) and n.test.attr == "snare_multiplies_boost"]
+    flipped = {}
+    for flag in (True, False):
+        try:
+            mod = ast.Module(body=block, type_ignores=[])
+            ast.fix_missing_locations(mod)
+            with contextlib.redirect_stdout(io.StringIO()):
+                exec(compile(mod, authsrv.__file__, "exec"),            # noqa: S102
+                     authsrv.__dict__, {"a": argparse.Namespace(snare_multiplies_boost=flag)})
+            flipped[flag] = authsrv.episodemods.SNARE_OVERRIDES_BOOST
+        finally:
+            authsrv.episodemods.SNARE_OVERRIDES_BOOST = True
+    check(parsed == (False, True) and len(block) == 1
+          and flipped == {True: False, False: True},
+          "--snare-multiplies-boost parses (default off), and main()'s `if "
+          "a.snare_multiplies_boost:` block, run against authsrv's own globals, clears "
+          "episodemods.SNARE_OVERRIDES_BOOST -- and leaves it True when the flag is off",
+          str((parsed, len(block), flipped)))
+
+    # THE SOURCE: the leaf owns the bool (column 0, default True) and the rule reads it;
+    # push_speed still goes through move_speed_factor, the one place the rule lives.
+    # (str.find, not _idx/_lock: those are defined further down the file, for 35+.)
+    leaf = open(os.path.join(HERE, "episodemods.py"), encoding="utf-8").read()
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    i_main = src.find("\ndef main():")
+    i_flip = src.find("    if a.snare_multiplies_boost:", i_main)
+    i_mf = leaf.find("def move_speed_factor(")
+    i_ps = src.find("def push_speed(")
+    i_pf = src.find("    factor = move_speed_factor(state, agent_id)")
+    check(min(i_main, i_flip, i_mf, i_ps, i_pf) >= 0
+          and "\nSNARE_OVERRIDES_BOOST = True\n" in leaf.replace("\r\n", "\n")
+          and "SNARE_OVERRIDES_BOOST and bool(snares)" in leaf[i_mf:i_mf + 1200]
+          and "max(snares) > MOVE_SPEED_CAP_DOWN" in leaf[i_mf:i_mf + 1200]
+          and "episodemods.SNARE_OVERRIDES_BOOST = False" in src[i_flip:i_flip + 120]
+          and src.count("    factor = move_speed_factor(state, agent_id)") == 1
+          and i_ps < i_pf < src.find("\ndef ", i_ps + 1)
+          and "\nSNARE_OVERRIDES_BOOST" not in src and "global SNARE_OVERRIDES_BOOST" not in src,
+          "the source: episodemods holds SNARE_OVERRIDES_BOOST = True at column 0 and "
+          "move_speed_factor reads it beside the cap; main() clears it under "
+          "--snare-multiplies-boost; push_speed's factor is move_speed_factor's; authsrv "
+          "keeps no column-0 copy and no `global` of it (a copy is what main() would flip "
+          "while the rule read the leaf's)",
+          str((i_main, i_flip, i_mf, i_ps, i_pf)))
+finally:
+    authsrv.MOVE_SPEED_EFFECTS, authsrv.episodemods.SNARE_OVERRIDES_BOOST = _s8c
+    for _sid in SYN:
+        agents.WORLD.tables["skills"].pop(str(_sid), None)
+        agents.WORLD.tables["skill_effect"].pop(str(_sid), None)
 
 print("== 9. land_swing end to end: the pipeline in the measured batch ==")
 saved_armour = authsrv.ARMOUR_TERM

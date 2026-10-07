@@ -4750,6 +4750,24 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   arm opens the condition and sends no 0x0027. `test_effects.py` §4d and §5 (three checks) now
   expect the 0x0027 that Rush's apply and expiry carry, in retail's position behind the
   apply/remove.
+  **SLICE-F48b (2026-10-07, floors 343 -> 356 bare / 385 -> 398 vault, all thirteen bare).**
+  `test_mechanics.py` §8c: a snare past the -50 cap OVERRIDES the boosts
+  (`episodemods.SNARE_OVERRIDES_BOOST`, speedwords P7-P10). Through the real sender and
+  `_apply_effect_on`: the player's Windborne 383.04, then Deep Freeze over it 97.92 (not the
+  product's 130.23); "Charge!" opening and closing under the snare sends NO 0x0027 (retail's
+  silence, from `push_speed`'s send-on-change); the snare's end restores 383.04 and
+  Windborne's 288.0; a body the same, its snare's end declaring both boosts' cap 385.92; a
+  base-300 body under a synthetic 75 % snare row (a test fixture, ids 99000 + 100 n + pct,
+  removed in the finally) sends the Zaishen tapes' own 399.0 -> 75.0 -> 399.0. The known-bad
+  arm (flag off) reads 130.23 / 131.21 / 130.23 and fails the same `retail_shape` predicate
+  the override passes. The boundary: 33 and 50 keep the product (0.8911, 0.665), 51 / 66 /
+  75 are the snare alone; two 33s or two 50s keep it (a SINGLE source overrides), 66 beside
+  33 overrides; under the cap the flag changes nothing. Crippled still multiplies on top
+  (0.17, UNVERIFIED). The flag parses through `serverargs.build_parser` and main()'s block,
+  lifted off the syntax tree and run against authsrv's globals, clears the leaf's bool; the
+  source lock holds the bool to the leaf (no authsrv copy, no `global`). Seven mutation arms
+  in a scratch copy (rule removed, Crippled skipped, bare-name flip, misspelt flag, `>=`,
+  sum-not-single, an authsrv copy) each reddened 8c.
 
 - `toolkit/authsrv/test_speedwords.py` -- **SLICE-F48 (2026-09-16, floor 12).** The reader's
   predictions over the live corpus, stated before the scan in `speedwords.py`'s docstring:

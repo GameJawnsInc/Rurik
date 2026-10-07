@@ -17325,7 +17325,9 @@ def area_tick_period(skill_id):
 #     not either).
 #   * a SNARE HEX (bonus_scale_means = "Movement speed decrease", the flat 66)
 #     rides episodemods.move_speed_terms with no code of its own: 0x0027
-#     [foe, base x 0.34] at the apply and the base back at the end -- Teinai's
+#     [foe, base x 0.34] at the apply -- over ANY open boost too, since a
+#     snare past the -50 cap drops the boosts (SLICE-F48b, episodemods'
+#     SNARE_OVERRIDES_BOOST) -- and the base back at the end -- Teinai's
 #     Prison 1097 OBSERVED 6/6 (288 x 0.34 = 97.92), Deep Freeze's exact
 #     arithmetic. And 0x00F1 bit 0x400 while it is live (SNARE_STATUS_BIT).
 #   * a target DEAD at the completion lands NOTHING -- no episode on a corpse
@@ -17396,6 +17398,9 @@ CONDITION_EFFECT_WORDS = True
 # at its end while another hex kept 0x800 up (651.779: 0xC00 -> 0x803), 6/6;
 # effects.py's census knew the bit only from the Isle's 999 and left it
 # unmapped. Crippled (0x0A, 2/2) is not a snare here, as in move_speed_terms.
+# NOT every snare's, it seems: skill 493 (a type-5 75% snare, SLICE-F48b) sent
+# NO 0x00F1 at its apply on the observer or on two bodies (20260928T103123
+# :50295, 454.171 / 456.168) -- whether 0x400 is the hex's alone is UNVERIFIED.
 # --no-snare-status-bit reverts.
 SNARE_STATUS_BIT = True
 # THE FOUR HEXES THAT NEED A MECHANISM (B2, 2026-09-27) -- Suffering 108,
@@ -30327,7 +30332,9 @@ def push_speed(send, state, agent_id, conn_id):
     144.0] and Windborne's is [0x0042 160, ..., 0x00F1 0x80, 0x0027 383.04].
     One message per CHANGE, never a stream (speedwords: 501 words, every one
     a change). The factor is `move_speed_factor` (episodemods: boosts summed
-    and capped at +34, snares at -50, Crippled x 0.5 on the result).
+    and capped at +34, snares at -50, Crippled x 0.5 on the result; a single
+    snare past the cap drops the boosts, SLICE-F48b -- so a boost opening
+    or closing under it changes nothing and sends nothing, retail's silence).
 
     The player's word also lands in `state["declared_speed_base"]`, which the
     click leg, the approach, the router's chain ETA, the arrival carry, the
@@ -50317,6 +50324,12 @@ def main():
         SNARE_STATUS_BIT = False
         print("HEXES: --no-snare-status-bit -- 0x00F1 bit 0x400 is never set for a "
               "movement-speed-decrease episode [studies/weapons 43 revert]", flush=True)
+    if a.snare_multiplies_boost:
+        episodemods.SNARE_OVERRIDES_BOOST = False
+        print("SPEED: --snare-multiplies-boost -- a snare past the -50% cap multiplies "
+              "the open boosts (Windborne + Deep Freeze = 130.23 u/s, a word at every "
+              "boost change under it), this server's bytes until 2026-10-07 [SLICE-F48b "
+              "revert]", flush=True)
     if a.no_hex_degeneration:
         global HEX_DEGENERATION
         HEX_DEGENERATION = False

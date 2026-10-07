@@ -3416,7 +3416,8 @@ episode change, in the batch, behind the status word.
   8 second-boost rows. A single source may exceed it (× 1.5 rows).
 * **Snares sum and cap at −50, a single source may exceed.** WIKI (GWW "Snare (tactic)",
   rev. 2026-04-24); OBSERVED × 0.34 (n = 6). No content row declares a decrease yet, so the
-  arm runs on nothing today.
+  arm runs on nothing today. *(Stale since 2026-09-27: DESKWORK-D6 shipped Deep Freeze 234
+  and Ice Spikes 211, studies/weapons 43; and × 0.25 is OBSERVED too, 14 words — F48.7.)*
 * **Crippled × 0.5, multiplying the result.** WIKI (GWW "Crippled", rev. 2020-10-23: "you
   move 50% slower"); OBSERVED, and this is the arithmetic the wire settles — × 0.665 on 21 of
   21, × 0.83 on none.
@@ -3427,6 +3428,11 @@ episode change, in the batch, behind the status word.
   a bundle pick-up — and took "Charge!" to × 1.13 = 1 + 0.33 − 0.20, additive. A bundle's
   slow is not a skill snare and nothing here models one; the wiki's rule ships and the row
   is on record. UNVERIFIED which of the two a skill snare over a boost would follow.
+  **AMENDED 2026-10-07 (F48.7): for a snare PAST the −50 cap it is NEITHER.** A 75 % skill
+  snare over a boost OVERRIDES it on retail's wire (OBSERVED, speedwords P7–P10, n small:
+  75.0 where the product says 99.75 and the sum 174.0, silence where both would send a
+  word); shipped as `episodemods.SNARE_OVERRIDES_BOOST`. Under the cap the wiki's product
+  still ships and is still WIKI only — the bundle row stays CONTESTED against it.
 * **A shout can open an episode when its row says so.** "Charge!" is a Shout (type 15),
   outside `EFFECT_TYPES`; the corpus witnesses 47 applies of it. The content door
   `effects.py`'s docstring reserved — `opens_episode = "shout"` on the `skill_effect` row —
@@ -3536,6 +3542,142 @@ death-strip restore OBSERVED (4 of 4).
 **Open, for the next arc:** a skill SNARE row (a Water hex, a self-snare stance) to exercise
 the `Movement speed decrease` arm and settle 48.3's contested boost × snare rule on our own
 client — Deep Freeze's −66 % single-source excess would answer both.
+*(Superseded 2026-10-07, F48.7: the rows shipped with DESKWORK-D6 (234, 211; weapons 43), and
+"settle … on our own client" was a category error — our client walks at whatever we declare,
+so it can confirm that it honours a number and never which number retail's rule produces. The
+rule was settled, for the over-cap case, on retail's own tapes.)*
+
+### 48.7 SLICE-F48b — an over-cap snare OVERRIDES the boosts on retail's wire (2026-10-07)
+
+**Found by** a read-only triage of the corpus as it stands (831 speed words over 26
+captures; 48.2 read 501 over 17): **14 words at exactly × 0.25** on the two Zaishen tapes
+(`20260928T103123`, `20260929T100038`, build 38888) that no study had read. Every number
+below is re-derived by `speedwords.py`'s own run, with P7–P9 written into the session's notes
+BEFORE that run — but the triage had already seen the words, so they are predictions of the
+reader, not blind ones. (These are speedwords' P7–P10, not 48.6's run predictions P6–P8.)
+
+**The skill.** 493, the only snare whose own `0x0042` is on tape: client table (the pin,
+build 38797) type 5, profession 0, attribute 51, scale 75 / 75, duration 5 / 5. OBSERVED
+(table). The brief's name for it, *Icy Ground*, is UNVERIFIED — no wiki page was read here;
+GWW "Icy Ground" is owed, and so is what kind of effect it is (the episode below does not
+behave like a 5 s hex).
+
+| | prediction (speedwords) | result |
+|---|---|---|
+| P7 | every word in (0, 0.3) of its agent's base, and 493's own apply's, is base × 0.25 EXACTLY | **14 / 0** — 72.0 on base 288 (the observer and foes 3, 5, 6), 75.0 on base 300 (party bodies 8, 9, 10); P7a the one joined apply **1 / 0** |
+| P8 | a "Charge!" applied to, or ending on, an observer whose last word is below × 0.5 sends NO word for it | **2 / 0**; P8b each batch words an unsnared party member **2 / 0**; P8c the same walker words a 160 / 364 apply on an unslowed observer **116 / 0** |
+| P9 | a boosted body's over-cap snare ends back on its pre-snare boosted word | **2 / 0** (399 → 75 → 399, twice) |
+| P10 | OVERRIDE vs. MULTIPLICATIVE (`b × s`) vs. ADDITIVE (`b − (1 − s)`) over the same 4 exposed rows (2 boosted onsets + 2 boost events under a snare) | **4 / 0** vs. **0 / 4** vs. **0 / 4** |
+
+**The witness, verbatim** (`20260928T103123` :50295, the observer is agent 7, base 288;
+`0x0042 [agent, skill, rank, buff, duration]`):
+
+* 454.171 `0x0042 [7, 493, 0, 63, 5.0]`, `0x0027 [7, 72.0]` — no `0x00F1` for it.
+* 456.168 `0x0027 [10, 75.0]`, `[8, 75.0]` — two party bodies snared, again no `0x00F1`.
+* 468.208 `0x0042 [7, 364, 1, 56, 6.0]` — the observer's own "Charge!" — and ONE word,
+  `0x0027 [9, 399.0]` (agent 9, unsnared, 300 → 399). **Nothing for 7**, where the product
+  says 95.76 and the sum 167.04. (Nothing for 8 or 10 either, but their earshot membership
+  cannot be proved — last positions 14 s stale — so only the observer is scored.)
+* 471.277 `0x0027 [9, 402.0]` — a second boost on 9 (× 1.34, the cap).
+* 474.211 `0x0044 [7, 56]`, `0x0027 [9, 399.0]` — the shout ends; 9 is worded, **7 is not**.
+* 523.439 `0x0044 [7, 63]`, `[7, 51]`, `[7, 52]`, `0x00F1 [9, 0]`, `0x0027` 7 → 288.0,
+  8 → 300.0, 10 → 300.0 — buff 63 closed **69.27 s** after a 5.0 s apply, beside two other
+  buffs and with all three snared party members restored at once: not a timed hex's expiry
+  (UNVERIFIED what it is — an area the party stood in, or a strip).
+* 524.186 `0x0027 [9, 75.0]`; 531.168 `0x0027 [9, 399.0]` — P9's first witness: 9 was
+  boosted (399.0 since 474.211), the onset is 300 × 0.25 (the product: 99.75), and the end
+  restores 399.0.
+* The second tape (`20260929T100038` :51090): agent 10 399.0 (409.540) → **75.0** (443.071) →
+  399.0 (454.369) → 402.0 (462.503, a "Charge!" over the boost that had lived through the
+  snare).
+
+**Where the triage was wrong.** (1) Agent 9 is not "399.0 in both batches" as a held value:
+it went 300 → 399 at 468.208 and 402 → 399 at 474.211 (a second boost between). Each batch
+still words it, so the control stands. (2) "Ours reads x0.34 (97.92) where this tape reads"
+the same — no tape holds a 66 % snare over a boost; 97.92 for Windborne + Deep Freeze is the
+shipped CONSEQUENCE of the rule (RECONSTRUCTION for 66), not a tape number. (3) Nothing else
+in its account of these two tapes moved.
+
+**The rule shipped** (`episodemods.move_speed_factor`, flag `SNARE_OVERRIDES_BOOST`, revert
+`--snare-multiplies-boost`): when the largest single snare exceeds `MOVE_SPEED_CAP_DOWN`
+(50), the boosts are dropped — factor = 1 − snare / 100 — and they come back when it closes,
+because the factor is recomputed from the open episodes at every change. `push_speed`'s
+send-on-change then gives retail's silence for free: a boost opening or closing under the
+snare leaves the number where it was and sends nothing (test_mechanics §8c, measured).
+Windborne + Deep Freeze: **97.92** (was 130.23, × 0.4522). Labels:
+
+* the 75 % override, the silence and the restore — **OBSERVED** (n small: one observer
+  episode, two boost events, two bodies; one skill; two build-38888 tapes);
+* the same regime for the 66s (Deep Freeze, Ice Spikes, Teinai's Prison) and the client
+  table's 90s — **RECONSTRUCTION** (none ever seen under a boost);
+* a SINGLE source decides (two 33s sum to the capped 50 and keep the product) — **WIKI**
+  ("a single skill that causes more than −50 % … can override the −50 % cap") carried over
+  to the boosts' side: RECONSTRUCTION;
+* under the cap the product stands — **WIKI** only (GWW "Effect stacking", Flail with
+  "Fall Back!" = 89.1 %), still CONTESTED by the bundle row (48.3);
+* Crippled's × 0.5 still multiplies on top of an override (0.17) — **UNVERIFIED**, no tape
+  holds both; chosen because it leaves Crippled's own rule (21 of 21) untouched;
+* 493's apply carries no `0x00F1` on three agents — **OBSERVED**; so the 0x400 "snared" bit
+  (`SNARE_STATUS_BIT`, Teinai's 0xC00) is not every snare's — whether it is the hex's alone
+  is **UNVERIFIED**, and nothing was changed for it.
+
+**Open, one line each in `PLAN.md` §8:** (i) under-cap snare × boost has no tape — a live R0b
+run (the lane's runsheet: Windborne Speed 160 + Armor of Earth 165, whose own snare is 50 → 14
+by Earth Magic rank, in both orders) settles it with one observer; (ii) Crippled over an
+override; (iii) **the label census misses literal-number snares** — re-derived with
+`skilldesc.analyse` (labels only): its `MOVE_SPEED_DOWN` census is 14 rows (10 RECOGNISED, 4
+SERVED), and 234 and 211 are not among them — their flat 66 sits in the bonus slot with the
+number written into the template, so they carry `COLD_DAMAGE` (+ `DURATION`) only and reach
+the server through their hand rows alone; the flat-66 slots of 129 and 210 (`DURATION` only)
+and 212 and 213 (`COLD_DAMAGE` + `DURATION`) are invisible to it the same way, each owed a
+wiki read before it is called a snare (939's 66 / 90 are labelled `REDUCTION`); (iv) GWW
+"Icy Ground" (what 493 is, and the 69 s episode).
+
+#### 48.7.1 Runsheets — REGISTERED 2026-10-07, before any launch; neither has run
+
+**LOOPBACK (confirms our client honours the override; it cannot settle retail's rule).**
+PowerShell, from the merged tree:
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 90 --walk "skill:160 W:2 wait:8 skill:364 W:2 wait:8 skill:160 W:2 wait:14 W:3" --game-args "--map 146 --explorable --skills 160,364,0,0 --enemy-skills 234 --enemy-hit 0.02"
+```
+
+Deep Freeze (234, a flat 10 s) rather than Ice Spikes (211, 2–6 s by rank) so a boost can open
+and close inside one snare; 211 is the fallback with the same predictions. Lakeside (146)
+because casting is refused in a town (studies/animref RUN-R5.md); `--enemy-hit 0.02` so the
+level-1 character survives the bout. Score off the gamesrv tape's decoded `0x0027` and
+`0x003D` (a leg's speed = distance / dt between consecutive reports, 48.5's instrument):
+**L1** every `0x0027` to the player while a 234 episode is live reads **97.92**, boosted or
+not — 130.23 / 131.21 appear nowhere; **L2** a Windborne / "Charge!" apply or expiry inside the
+snare sends NO `0x0027`; **L3** the snare's end declares 383.04 (one boost open), 385.92 (two)
+or 288.0 (none); **L4** a W leg wholly inside the snare reads 97.9 ± 1 u/s on its leg-ending
+interval. Floor: ≥ 1 snare episode overlapping a boost; under it the run is a null, not a
+pass. Known-bad arm (same command, `--snare-multiplies-boost` appended to `--game-args`):
+130.23 under the snare and a word at each boost change.
+
+**LIVE R0b (the owner's; settles the UNDER-cap case with one observer).** Human-driven, the
+secondary account, `RUNBOOK.md` §"Capturing a live session" (dry-run green; `dhbuild.py`
+says `stock` + `key_tapped`; plan sealed with `--plan`; human cadence, one client, never
+competitive; never `--host`). **Not an outpost** — the brief said one, but Guild Wars refuses
+casting in a town (RUN-R5.md); stand just inside an explorable area with no foe in range. An
+Elementalist bar with **Windborne Speed 160** (33 %, 5–13 s by Air Magic) and **Armor of Earth
+165** (an enchantment whose own snare is 50 → 14 by Earth Magic, client table bonus slot,
+30 s). Note the Earth Magic rank (the `0x0042` field 3 says it too): the snare is
+s = round(50 − 36·r/15). Plan lines, each done twice: *Order A* — Windborne, then Armor of
+Earth inside it, then let both run out; *Order B* — Armor of Earth, then Windborne inside it.
+The decisive word is the second skill's (base 288):
+
+| Earth Magic r | s | product (WIKI, shipped) | additive | override |
+|---|---|---|---|---|
+| 0 | 50 (the cap itself) | 191.52 | 239.04 | 144.00 |
+| 5 | 38 | 237.48 | 273.60 | 178.56 |
+| 8 | 31 | 264.30 | 293.76 | 198.72 |
+| 12 | 21 | 302.60 | 322.56 | 227.52 |
+
+and Windborne's END under the armour reads 288 × (1 − s/100) under product and sum alike
+(the end does not discriminate; Order B's apply and Order A's apply do). Floor: 2 decisive
+words per order. Score with `speedwords.py --rows` once the capture lands (a P11 for the
+under-cap join is owed to the reader then, not before).
 
 ## SLICE-F49 — **the swing clock carries its remainder: every attacker on this server was 2–3 % slow, because a start-to-start clock stamped with the tick that opened the swing rounds each interval UP to the 51 ms grid — fixed for the player, enemies and allies, measured on the client (2026-09-18)**
 
