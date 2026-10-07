@@ -5243,23 +5243,32 @@ def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
 # Blind-missed or blocked Sever Artery still bled the foe (studies/presearing/RANGERPRE.md
 # section 5, found by S14's reviewer).
 #
-# OBSERVED, one miss and its control (test_condhit section 1): 20260917T224104 :62557,
-# the observer (25) under a live Blind presses Jagged Strike (782) at agent 117 at
-# t=348.996 -- [38, 117, 25, 3] and nothing naming 117 with a condition (no [6, 117, 23],
-# no 0x00F1 bleeding bit, no [44]) on a 117 that was not bleeding; the same skill on
-# the same foe once the Blind is gone draws [6, 117, 23], 0x00F1 [117, 0x83] and [44],
-# 3 of 3 on that tape. THE BLOCK has no retail witness (no attack skill is blocked on any
-# tape) and rests on WIKI: GWW "Hit" rev 2721374, "Any time an attack is blocked or
-# misses, there is no hit", and each row's own sentence, "If this attack hits" (GWW
-# "Sever Artery" rev 2738479, "Jagged Strike" rev 2731014). A DODGED shot already
-# inflicted nothing (projectile_tick: retail 7 of 7). UNTOUCHED: a spell's and a
-# non-attack's condition (neither rolls Blind or a block -- WIKI "Block": no effect
-# against spells), the knock-down and random condition (landed-gated already), Irresistible
-# Blow's block punishment (hit_enemy's block arm), and the hit-or-miss clauses (Desperation
-# Blow's self knock-down, Final Thrust's wipe). The rule is `res == "landed"`, so a None
-# (a dead target, or --legacy-attack-finish's interval-gated strike, which dealt nothing)
-# inflicts nothing either. --no-condition-needs-hit is the known-bad arm: the condition
-# lands whatever the strike did, this server's bytes until 2026-10-07.
+# OBSERVED for the PLAYER'S MELEE attack skill under Blind, n = 1 with a 3-of-3 same-tape
+# control (test_condhit section 1): 20260917T224104 :62557, the observer (25) under a live
+# Blind presses Jagged Strike (782) at agent 117 at t=348.996 -- [38, 117, 25, 3] and
+# nothing naming 117 with a condition (no [6, 117, 23], no 0x00F1 bleeding bit, no [44])
+# on a 117 that was not bleeding; the same skill on the same foe once the Blind is gone
+# draws [6, 117, 23], 0x00F1 [117, 0x83] and [44], 3 of 3. The event is DAGGERS-F16's
+# (studies/daggers/FINDINGS.md section 8, read 2026-09-17 for the chain: a missed lead sets
+# nothing); S22 reads its other half, the Bleeding that did not follow. Every other case
+# rests on WIKI, with no retail witness -- no tape shows an attack skill blocked, a skill
+# shot missed or a body's attack skill missed: GWW "Hit" rev 2721374, "Any time an attack
+# is blocked or misses, there is no hit", and each row's own sentence, "If this attack
+# hits" (GWW "Sever Artery" rev 2738479, "Jagged Strike" rev 2731014). That carries the
+# block at every site, and the miss at the arrow's arrival and the two body sites. A
+# DODGED shot already inflicted nothing (projectile_tick: retail 7 of 7). UNTOUCHED: a
+# spell's and a non-attack's condition (neither rolls Blind's 90% miss or a block -- WIKI
+# "Blind" rev 2667383: a projectile spell may stray instead, unmodelled; "Block" rev
+# 2740767: no effect against spells), the knock-down and random condition (landed-gated
+# already), Irresistible Blow's block punishment (hit_enemy's block arm), and the
+# hit-or-miss clauses (Desperation Blow's self knock-down, Final Thrust's wipe). The rule
+# is `res == "landed"`, so a None -- a dead target (the shared apply refused a corpse
+# already, so the wire is unchanged), or --legacy-attack-finish's interval-gated strike,
+# which never happened -- inflicts nothing either: RECONSTRUCTION, no strike read as no
+# hit (the evidence covers a miss and a block). That one changes the legacy arm's bytes,
+# which until 2026-10-07 still put the condition on the foe; --legacy-attack-finish
+# with --no-condition-needs-hit restores them. --no-condition-needs-hit is the known-bad
+# arm: the condition lands whatever the strike did, this server's bytes until 2026-10-07.
 CONDITION_NEEDS_HIT = True    # False (--no-condition-needs-hit): a miss or block still inflicts
 
 

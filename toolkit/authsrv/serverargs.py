@@ -632,7 +632,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "client's attack-skill action never closes, and a "
                          "held movement key after a press moves 0.0 u where "
                          "retail moves within ~0.25 s of E3 (FINDINGS 11b, "
-                         "13).")
+                         "13). Since 2026-10-07 (RANGERPRE-S22) the swallowed "
+                         "strike also inflicts NO condition; add "
+                         "--no-condition-needs-hit to restore this arm's "
+                         "pre-2026-10-07 bytes, where the skill's condition "
+                         "still landed on the foe it never struck.")
     ap.add_argument("--no-skill-visuals", action="store_true",
                     help="Stop sending the on-body effect visual (properties "
                          "20/21) at a cast's landing. ON by default since "

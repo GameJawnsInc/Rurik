@@ -201,43 +201,62 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   `1a678280` before the change: a landed Sever Artery (382) on a fleshy body leaves Bleeding;
   a Blind-missed one (`[38, 22, 1, 3]`, no word) and a blocked one (`[38, 22, 1, 0]`) left it
   too. Now `attack_condition_lands` gates all four.
-  **The rule is OBSERVED, which the triage said it could not be** (it read the two Blind misses
-  in the corpus as "none with a condition"; one of them is Jagged Strike 782, which inflicts
-  Bleeding). Over the live corpus (127 decodable game connections, 20260928T103123 :65009 set
-  aside as declared gapped), 569 attack-skill activations `[50, A, T, S]` resolve as 510 landed,
-  19 failed (17 reason 2, the chain; 2 reason 3, Blind), 27 stopped, 9 superseded and 4 with no
-  resolution in 6 s. Exactly one FAILED activation is of a conditioned skill:
+  **The rule is OBSERVED for the player's melee attack skill under Blind** (n = 1 against a
+  3-of-3 same-tape control) **and WIKI everywhere else.** The witness is an event the repo
+  already held: **DAGGERS-F16** (`studies/daggers/FINDINGS.md` §8, RUN-DAGGERS-2, 2026-09-17)
+  read this batch and its three controls for the chain — a lead that does not land sets
+  nothing, no `0x005C`, and the Fox Fangs behind it fails with reason 2 — and moved that label
+  to OBSERVED. Its Bleeding half went unread, and the triage, reading the corpus's two Blind
+  misses as "none with a condition", missed that Jagged Strike 782 inflicts Bleeding. Over the
+  live corpus (127 decodable game connections, 20260928T103123 :65009 set aside as declared
+  gapped), 569 attack-skill activations `[50, A, T, S]` resolve as 510 landed, 19 failed (17
+  reason 2, the chain; 2 reason 3, Blind), 27 stopped, 9 superseded and 4 with no resolution in
+  6 s. Exactly one FAILED activation is of a conditioned skill:
   **20260917T224104 :62557, t=348.996** — the observer (25), under a live Blind (347.485-356.488),
   presses Jagged Strike at agent 117, whose status word carries no bleeding bit. The completion
   batch at 349.147 is E5, `[46, 25, 0]`, `[38, 117, 25, 3]`, E3, and nothing in the following
   second puts a condition on 117 (no `[6, 117, 23]`, no `0x00F1` bleeding bit, no `[44]`). The
   same skill on the same foe at 357.240, 395.754 and 442.328, the Blind gone, lands the word with
-  `[6, 117, 23]`, `0x00F1 [117, 0x83]` and `[44]`, 3 of 3. OBSERVED, n = 1 miss against its
-  same-tape control. Corpus-wide, 116 landed activations of conditioned skills (320, 382, 384,
-  392, 782 by our rows) show the condition 100 times; the 16 without it are 7 Jagged Strikes on
-  a foe already bleeding (status `0x3`), 3 Gashes on a foe not bleeding (its own gate), 1 Sever
-  Artery on the non-fleshy 22 (#1957), and 5 Jagged Strikes by agent 30 on 20260819T132414
-  onto definition 3113 bodies that never carry a condition bit on that tape (consistent with
-  non-fleshy; UNVERIFIED). No attack skill is blocked or dodged on any tape, so **the block half
-  is WIKI**: GWW "Hit" (rev 2721374) — "Any time an attack is blocked or misses, there is no
-  hit" — and each conditioned skill's own sentence ("If this attack hits", "Sever Artery" rev
-  2738479; "If Jagged Strike hits", rev 2731014). The repo already had the dodge (a dodged shot
-  sends the word and nothing else, retail 7 of 7).
-  **What it does not touch:** spells and non-attacks (Blind and a block reach attacks only;
-  GWW "Block" rev 2740767), Irresistible Blow's block punishment (the content's only
-  `knocks_down_if_blocked` row), the hit-or-miss clauses (Desperation Blow's self knock-down,
-  Final Thrust's wipe). No other rider had the ungated shape: in the loaded content no attack
-  skill opens an episode through `apply_effect` (33 attack skills with rows), and the
-  knock-down, random condition, adjacent damage and chain step were already landed-gated.
+  `[6, 117, 23]`, `0x00F1 [117, 0x83]` and `[44]`, 3 of 3. Corpus-wide, 116 landed activations
+  of conditioned skills (320, 382, 384, 392, 782 by our rows) show **their own** condition (its
+  `0x0042`, its `[6, T, id]`, or its own status bit newly set, within 0.5 s) 99 times; the 17
+  without it are 7 Jagged Strikes on a foe already bleeding (status `0x3`), 3 Gashes on a foe
+  not bleeding (its own gate), 1 Sever Artery on the non-fleshy 22 (#1957), and 6 Jagged
+  Strikes by agent 30 on 20260819T132414 (235.143-261.798) onto definition 3113 bodies that
+  never carry a condition bit on that tape (consistent with non-fleshy; UNVERIFIED). (The first
+  count, 100 and 16, took ANY newly set status bit for evidence and so read 254.648's target
+  dying — `0x00F1 [137, 0x10]` at 255.607 — as a Bleeding; corrected by the review.) **What the
+  witness does NOT cover:** every attack-fail word in the corpus that joins to an attack-skill
+  activation (24: 22 reason 2, 2 reason 3) is a melee dagger skill (775 / 780 / 782) pressed
+  by the observer (25 on the two 20260917 tapes, 27 on 20260819T132414); no tape shows an attack skill blocked or dodged, a skill SHOT
+  missed, or a body's attack skill missed. So **the block at every site, and the miss at the
+  arrow's arrival and at both body sites, are WIKI**: GWW "Hit" (rev 2721374) — "Any time an
+  attack is blocked or misses, there is no hit" — and each conditioned skill's own sentence
+  ("If this attack hits", "Sever Artery" rev 2738479; "If Jagged Strike hits", rev 2731014).
+  The repo already had the dodge (a dodged shot sends the word and nothing else, retail 7 of 7).
+  A None result — a dead target, or `--legacy-attack-finish`'s interval-gated strike that never
+  happened — inflicts nothing too: RECONSTRUCTION (no strike read as no hit). For the dead
+  target the wire is unchanged (the apply refused a corpse already); the legacy arm's bytes do
+  move, and `--legacy-attack-finish --no-condition-needs-hit` restores them (the review's
+  29-scenario differential, re-run by the fixer: byte-identical to `1a678280`).
+  **What it does not touch:** spells and non-attacks (Blind's 90 % miss and a block reach
+  attacks only — WIKI "Blind" rev 2667383: a projectile spell may stray instead, which we do
+  not model; "Block" rev 2740767: no effect against spells), Irresistible Blow's block
+  punishment (the content's only `knocks_down_if_blocked` row), the hit-or-miss clauses
+  (Desperation Blow's self knock-down, Final Thrust's wipe). No other rider had the ungated
+  shape: in the loaded content no attack skill opens an episode through `apply_effect` (33
+  attack skills with rows), and the knock-down, random condition, adjacent damage and chain
+  step were already landed-gated. Our Blinded player's Jagged Strike now completes with
+  retail's 349.147 tokens exactly, and unblinded on a body whose maximum is undeclared with
+  retail's 357.240 tokens exactly — MAXHP-1's `[42, 117, 480]` included (`test_condhit` 2a, 2b).
   **Found in passing, NOT fixed (not this item):** (i) `land_swing`'s Blind arm closes a BODY's
   attack skill with `[1, body, 0]` where its block arm sends `[46, body, 0]` — retail's one
   attack-skill miss (above) carries `[46]`; (ii) `land_swing_on_body` never rolls Blind for an
   attack skill (`skill_id is None and blind_miss(...)`), so a Blinded body's attack skill on
-  another body always lands; (iii) retail's 357.240 hit carries `[42, 117, 480]`, which ours
-  does not send for 782 (the tape's other two hits do not either); (iv) a side witness for
-  `studies/daggers`: the Blind-missed LEAD sent no `0x005C`, and the Fox Fangs pressed 0.54 s
-  later failed with reason 2 — a missed lead advances no chain (OBSERVED, n = 1; the repo's
-  "a blocked lead advancing nothing" was RECONSTRUCTION).
+  another body always lands. (The 357.240 `[42, 117, 480]` first listed here as a third is
+  not a divergence: it is MAXHP-1 / RANGERPRE-S10, the maximum declared before the observer's
+  first landed word on 117, which ours sends too. The chain half, listed as a fourth, is
+  DAGGERS-F16's, above.)
   Also open, and NOT bundled: IMMUNE-3, the #1957 sentence on the ranged, area and burst sites
   (they refuse the condition silently).
 - **RANGERPRE-S22's client look — a RUNSHEET, owed, the owner's; not run.** Loopback, ours-DH,

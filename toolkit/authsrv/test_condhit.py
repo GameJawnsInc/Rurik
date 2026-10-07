@@ -13,8 +13,15 @@ carries no bleeding bit. The completion batch at 349.147 is exactly E5, [46, 25,
 no [6, 117, 23], no 0x00F1, no [44]. The same skill on the same foe once the Blind is gone
 (357.240, 395.754, 442.328) lands its word with [6, 117, 23], 0x00F1 [117, 0x83] (the bleeding
 bit newly set) and [44, 117, ..], 3 of 3. Section 1 re-derives every literal from the bytes.
-THE BLOCK has no retail witness (no attack skill is blocked on any live tape) and rests on
-WIKI: GWW "Hit" rev 2721374, "Any time an attack is blocked or misses, there is no hit".
+The event is not new to the repo: studies/daggers/FINDINGS.md DAGGERS-F16 (RUN-DAGGERS-2,
+2026-09-17) read the same batch and its three controls for the CHAIN (a missed lead sets
+nothing); what S22 reads in it is the other half, that no Bleeding followed.
+WHAT THAT WITNESS COVERS: the player's MELEE attack skill under Blind, n = 1. No live tape
+shows an attack skill blocked, a skill SHOT missed, or a body's attack skill missed (every
+attack-fail word joined to an attack-skill activation, 24, is the observer's own melee dagger
+skill), so THE BLOCK at every site and the miss at the arrow's arrival and the
+two body sites rest on WIKI: GWW "Hit" rev 2721374, "Any time an attack is blocked or misses,
+there is no hit".
 
 Ours, until 2026-10-07, applied the skill's condition at all four attack-skill sites whatever
 the strike did -- the knock-down and the random condition were landed-gated, the condition
@@ -75,15 +82,19 @@ MISS_AT = 349.147                       # the E5 batch of the Blind-missed Jagge
 MISS_BATCH = [("E5", JAGGED), ("CLOSE46",), ("FAIL", 3), ("E3", JAGGED)]
 COND_TOKENS = [("ADD", 23), ("BLEEDBIT",), ("REGEN",)]          # what a landed one adds
 # Every Jagged Strike E5 batch on 117: (t, tokens). The three after the miss land and bleed.
+# 357.240's ("MAXHP",) is 0x009F [42, 117, 480], MAXHP-1 / RANGERPRE-S10: the body's maximum
+# declared immediately before the observer's FIRST landed word on it (117 was created at
+# 332.484 and the 349.147 strike missed); it is the only property 42 on 117 on the tape.
+HIT_357 = [("E5", JAGGED), ("CLOSE46",), ("CHAIN",), ("MAXHP",), ("WORD",),
+           ("ADD", 23), ("BLEEDBIT",), ("REGEN",), ("E3", JAGGED)]
 JAGGED_ON_117 = [
     (349.147, MISS_BATCH),
-    (357.240, [("E5", JAGGED), ("CLOSE46",), ("CHAIN",), ("VISUAL",), ("WORD",),
-               ("ADD", 23), ("BLEEDBIT",), ("REGEN",), ("E3", JAGGED)]),
+    (357.240, HIT_357),
     (395.754, [("E5", JAGGED), ("CLOSE46",), ("CHAIN",), ("WORD",),
                ("ADD", 23), ("BLEEDBIT",), ("REGEN",), ("E3", JAGGED)]),
     (442.328, [("E5", JAGGED), ("CLOSE46",), ("CHAIN",), ("WORD",),
                ("ADD", 23), ("BLEEDBIT",), ("REGEN",), ("E3", JAGGED)]),
-]                                       # (only 357.240 carries a [42, 117, 480] visual)
+]                                       # (only the first landed word carries MAXHP-1's 42)
 BATCH_S = 0.005
 
 
@@ -105,8 +116,8 @@ def token(op, f, attacker, target):
         return ("WORD",)
     if op == OP_CHAIN and f[0] == attacker and f[1] == target:
         return ("CHAIN",)
-    if op == OP_INT and f[0] == 42 and f[1] == target:
-        return ("VISUAL",)
+    if op == OP_INT and f[0] == agents.PROP_HEALTH_MAX and f[1] == target:
+        return ("MAXHP",)                     # MAXHP-1: the maximum, before a first word
     if op == OP_INT and f[0] == agents.PROP_AURA_ON and f[1] == target:
         return ("ADD", f[2])
     if op == OP_STATUS and f[0] == target:
@@ -228,8 +239,16 @@ def blind(st, agent_id):
 def arm(blinded_roll=False, blocker=None, needs_hit=True):
     """The roll forced, the shape real: BLIND_MISS_CHANCE 1.0 (a blinded swinger misses
     every time -- the Blind itself is a real episode), a `block_chance` of 1.0 on
-    `blocker` and 0 elsewhere, and the gate's flag."""
-    saved = (authsrv.BLIND_MISS_CHANCE, authsrv.block_chance, authsrv.CONDITION_NEEDS_HIT)
+    `blocker` and 0 elsewhere, and the gate's flag.
+
+    The flag is read through getattr and put back exactly as found (removed again if the
+    module had none), so this file run against a server WITHOUT the gate -- 1a678280, the
+    unfixed one -- still reaches sections 2-8 and goes red on their checks rather than dying
+    on an AttributeError at the first press; section 9 is where the missing bool and flag
+    are named."""
+    missing = object()
+    saved = (authsrv.BLIND_MISS_CHANCE, authsrv.block_chance)
+    saved_gate = getattr(authsrv, "CONDITION_NEEDS_HIT", missing)
     real_bc = authsrv.block_chance
     try:
         if blinded_roll:
@@ -239,7 +258,11 @@ def arm(blinded_roll=False, blocker=None, needs_hit=True):
         authsrv.CONDITION_NEEDS_HIT = needs_hit
         yield
     finally:
-        authsrv.BLIND_MISS_CHANCE, authsrv.block_chance, authsrv.CONDITION_NEEDS_HIT = saved
+        authsrv.BLIND_MISS_CHANCE, authsrv.block_chance = saved
+        if saved_gate is missing:
+            del authsrv.CONDITION_NEEDS_HIT
+        else:
+            authsrv.CONDITION_NEEDS_HIT = saved_gate
 
 
 def press(st, skill, target):
@@ -315,12 +338,15 @@ def section_player_witness():
           "2a. VERBATIM: our Blinded player's Jagged Strike completes E5, [46], "
           "[38, 117, 1, 3], E3 and nothing else naming 117 -- retail's 349.147 batch token "
           "for token -- and 117 carries no condition", (missed, conditions_on(st, 117)))
-    st = world(a117=body())
+    # The body's maximum not yet declared to the client (MAXHP-1's tracker stale, as
+    # retail's 117 was before the observer's first landed word on it).
+    st = world(a117=body(max_declared_on_hit=None))
     hit = tokens(press(st, JAGGED, 117), PLAYER, 117)
-    check(conditionish(hit) == COND_TOKENS and ("WORD",) in hit
-          and conditions_on(st, 117) == [BLEED],
-          "2b. CONTROL, the same press unblinded: the word, then [6, 117, 23], the bleeding "
-          "bit and [44] -- retail's 357.240 condition tokens -- and Bleeding on 117",
+    check(hit == HIT_357 and conditions_on(st, 117) == [BLEED],
+          "2b. CONTROL, VERBATIM too: the same press unblinded, on a body whose maximum the "
+          "client has not been told, completes with retail's 357.240 batch token for token "
+          "-- E5, [46], the chain step, MAXHP-1's [42], the word, then [6, 117, 23], the "
+          "bleeding bit and [44], E3 -- and Bleeding on 117",
           (hit, conditions_on(st, 117)))
 
 
@@ -382,7 +408,9 @@ def section_unmoved():
               and (sid != SPELL or len(words(sent, PLAYER, 22)) == 1),
               f"4. {what}, cast by a BLINDED player at a foe that blocks every attack: no "
               f"fail word{', its word lands' if sid == SPELL else ''} and the condition "
-              f"lands -- Blind and a block reach attacks, not spells (WIKI 'Block')",
+              f"lands -- Blind's 90% miss and a block reach attacks only (WIKI 'Blind' rev "
+              f"2667383: a projectile spell may stray, unmodelled; 'Block' rev 2740767: no "
+              f"effect against spells)",
               (conditions_on(st, 22), sent))
 
 
@@ -508,6 +536,8 @@ def section_known_bad():
 
 
 def section_source():
+    """Every name the gate adds is read through getattr / a parse that cannot raise, so a
+    server without the gate (1a678280) reports 9a-9d RED rather than dying here."""
     print("\n9. the flag, main()'s wiring and the four sites in the source")
     import serverargs
     ap = serverargs.build_parser(
@@ -515,27 +545,37 @@ def section_source():
         HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
         GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
         VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
-    check(ap.parse_args([]).no_condition_needs_hit is False
-          and ap.parse_args(["--no-condition-needs-hit"]).no_condition_needs_hit is True
-          and authsrv.CONDITION_NEEDS_HIT is True,
-          "9a. --no-condition-needs-hit parses (default off) and the gate ships ON")
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            parsed = (ap.parse_args([]).no_condition_needs_hit,
+                      ap.parse_args(["--no-condition-needs-hit"]).no_condition_needs_hit)
+    except (SystemExit, AttributeError) as exc:     # an unknown flag: argparse exits 2
+        parsed = ("refused", repr(exc))
+    gate = getattr(authsrv, "CONDITION_NEEDS_HIT", "absent")
+    check(parsed == (False, True) and gate is True,
+          "9a. --no-condition-needs-hit parses (default off) and the gate ships ON",
+          (parsed, gate))
 
     tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
     funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     wiring = [n for n in ast.walk(funcs["main"]) if isinstance(n, ast.If)
               and isinstance(n.test, ast.Attribute) and n.test.attr == "no_condition_needs_hit"]
     flipped = {}
+    missing = object()
     for flag in (True, False):
-        saved = authsrv.CONDITION_NEEDS_HIT
+        saved = getattr(authsrv, "CONDITION_NEEDS_HIT", missing)
         try:
             mod = ast.Module(body=wiring, type_ignores=[])
             ast.fix_missing_locations(mod)
             with contextlib.redirect_stdout(io.StringIO()):
                 exec(compile(mod, authsrv.__file__, "exec"),            # noqa: S102
                      authsrv.__dict__, {"a": argparse.Namespace(no_condition_needs_hit=flag)})
-            flipped[flag] = authsrv.CONDITION_NEEDS_HIT
+            flipped[flag] = getattr(authsrv, "CONDITION_NEEDS_HIT", "absent")
         finally:
-            authsrv.CONDITION_NEEDS_HIT = saved
+            if saved is missing:
+                authsrv.__dict__.pop("CONDITION_NEEDS_HIT", None)
+            else:
+                authsrv.CONDITION_NEEDS_HIT = saved
     check(len(wiring) == 1 and flipped == {True: False, False: True},
           "9b. main()'s `if a.no_condition_needs_hit:` block, lifted out of the source and "
           "RUN against authsrv's own globals, flips the module bool -- a block without its "
@@ -551,13 +591,16 @@ def section_source():
                     "land_body_skill_shot": 1, "land_skill": 1},
           "9c. each of the four attack-skill condition sites asks attack_condition_lands "
           "exactly once (sections 3, 5, 6 and 7 drive each of them)", sites)
+    rule_fn = getattr(authsrv, "attack_condition_lands", None)
     with contextlib.redirect_stdout(io.StringIO()):
-        rule = {r: authsrv.attack_condition_lands(r, 1, 2, 0, "t")
-                for r in ("landed", "missed", "blocked", None, "failed")}
+        rule = {r: rule_fn(r, 1, 2, 0, "t")
+                for r in ("landed", "missed", "blocked", None, "failed")} if rule_fn else None
     check(rule == {"landed": True, "missed": False, "blocked": False, None: False,
                    "failed": False},
-          "9d. the rule: only 'landed' lets the condition follow; 'missed', 'blocked', a "
-          "None (a dead target, the legacy interval-gated strike) and 'failed' do not",
+          "9d. the rule: only 'landed' lets the condition follow; 'missed' and 'blocked' do "
+          "not (the evidence), and neither do a None -- a dead target, or "
+          "--legacy-attack-finish's interval-gated strike that never happened -- and "
+          "'failed' (RECONSTRUCTION: no strike read as no hit)",
           rule)
 
 
