@@ -3196,6 +3196,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "recharge runs from the cast end; with this flag a hostile "
                          "casts ~20 %% too fast for a 1 s / 5 s spell. Attack skills "
                          "are unaffected either way (their table activation is 0).")
+    ap.add_argument("--no-npc-aftercast", action="store_true",
+                    help="a body's (hostile, hero, henchman) next cast or swing may "
+                         "start on the tick after its spell lands -- the server as it "
+                         "was until 2026-10-07 (642d8957). The known-bad arm of "
+                         "DESKWORK-D5's NPC aftercast: retail's other agents never "
+                         "start anything sooner than 0.704 s after the [58] of a "
+                         "table-aftercast-0.75 spell (1,477 of 1,477, "
+                         "npcaftercast.py), and this arm chains two ready spells "
+                         "~0.03 s apart (our own capture "
+                         "authsrv-20260928T002701-c1, min 0.025 s).")
     ap.add_argument("--no-interrupts", action="store_true",
                     help="no skill interrupts anything -- the server as it was "
                          "until 2026-09-23 (castmech P1 / animref D5: 'no "

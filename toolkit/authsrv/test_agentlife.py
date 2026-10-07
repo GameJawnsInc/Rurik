@@ -5229,11 +5229,19 @@ def section_caster_held_slot():
 
     def land(st):
         """The cast in flight lands -- its window over, one more tick, through
-        land_skill as a run's would -- so the next tick is a fresh pick."""
+        land_skill as a run's would -- so the next tick is a fresh pick.
+
+        RE-AIMED 2026-10-07 (NPC_AFTERCAST, studies/skills 65): a completed cast
+        now holds the body's next action for its table aftercast (0.75 s for 253),
+        so "a fresh pick" also needs that window over -- expired by hand here the
+        way the activation window is above. This section is about the reach
+        hold's cursor; the cadence is test_npcaftercast's."""
         ag = st["agents"][10]
         if ag.get("cast_lands_at") is not None:
             ag["cast_lands_at"] = time.time() - 0.001
             tick(st)
+            if ag.get("aftercast_until") is not None:
+                ag["aftercast_until"] = time.time() - 0.001
 
     def quiet(st, n=1):
         """`tick` with stdout captured: (sent, the log)."""
@@ -5996,6 +6004,12 @@ def section_enemy_skill():
     #    swinging here, and the two checks that used to sit in this spot asserted
     #    exactly that. They were correct for a single skill and wrong for a bar.
     state["agents"][10]["last_swing"] = time.time() - 100.0
+    # RE-AIMED 2026-10-07 (NPC_AFTERCAST, studies/skills 65): the landing above now
+    # holds the body's next action for 276's table aftercast (0.75 s), so the window
+    # is expired by hand as the swing clock is on the line above -- this check is
+    # about WHICH slot comes next; the cadence is test_npcaftercast's.
+    if state["agents"][10].get("aftercast_until") is not None:
+        state["agents"][10]["aftercast_until"] = time.time() - 0.001
     after = _swings(state, n=1)
     second = cast_msgs(after)
     LEDGER.ok(len(second) == 1

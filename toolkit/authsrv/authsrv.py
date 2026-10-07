@@ -6555,6 +6555,53 @@ def npc_recharge_anchor(activation):
     (start + recharge). One place so the two cast sites cannot drift."""
     return float(activation) if NPC_RECHARGE_FROM_COMPLETION else 0.0
 
+# NPC AFTERCAST (DESKWORK-D5 "NPC aftercast proper", 2026-10-07; studies/skills 65,
+# SKILLS-AC1..AC7; toolkit/authsrv/npcaftercast.py). A body's completed cast held
+# nothing: `casting` cleared at the landing and the next tick could cast or swing --
+# the fixture Hatcher re-cast 0.025 s after its [58] (our own recorder capture
+# authsrv-20260928T002701-c1, n = 13, min 0.025). OBSERVED, retail: after a [58] of a
+# table-aftercast-0.75 spell, no other agent starts anything sooner than 0.704 s --
+# 1,477 of 1,477 over 127 connections on six builds (median 1.135; 35.7 % within
+# [0.70, 0.80)), a cast 1,108, a swing 352 and an attack skill 17 alike -- while the
+# table-aftercast-0 control (2, the preparations 432 / 433 / 435, 769) re-starts under
+# 0.70 s 49 of 95 times, down to 0.000: the floor is the table's +0x40, not a general
+# pause (CORROBORATED: the observer's own E5 -> E3 is the same column, castmech 9).
+# So land_skill stamps `aftercast_until` (the landing + the aftercast) and the three
+# body ticks hold the next cast or swing until it passes. OBSERVED the other way, n = 3:
+# an INSTANT skill is not held -- a stance's [48] fell inside the window 3 of 7 times
+# (0.000 / 0.499 / 0.501), against the wiki's "cannot ... activate other skills" -- so
+# the hold is a CLOCK gate on the PICKED slot (npc_aftercast_holds), never a stop ahead
+# of pick_skill. RECONSTRUCTION, each said at its site: a party body takes the
+# hostile's rule (no hero completes an aftercast > 0 skill on tape); an interrupt, a
+# cancel, a scatter cancel and a RESSIG stop are not completions and stamp nothing; an
+# attack skill and an instant stamp nothing (the wiki's two classes; the 17 ranged
+# attack rows at 0.6-1.5 are CONTESTED, castmech 9). The hero's E3 does NOT move
+# (hero_skill_messages, untouched). --no-npc-aftercast is 642d8957's arm: the next
+# action on the very next tick.
+NPC_AFTERCAST = True
+
+
+def npc_aftercast(skill_id):
+    """Seconds a body's COMPLETED cast of `skill_id` holds its next action: the
+    table's aftercast (skill_timing's middle value) -- 0 for an attack skill, an
+    instant skill, a rowless id (the bare machine's zeros) and under
+    --no-npc-aftercast. One place, beside the recharge anchor, so the stamp and
+    the three holds cannot drift."""
+    if not NPC_AFTERCAST or not skill_id:
+        return 0.0
+    if _is_attack_skill(skill_id) or _is_instant_skill(skill_id):
+        return 0.0
+    return float(skill_timing(skill_id)[1])
+
+
+def npc_aftercast_holds(agent, skill_id, now):
+    """True while `agent` is inside its last completed cast's aftercast and the
+    action it would take is not an instant skill (`skill_id` None: a plain
+    swing). A CLOCK hold -- the caller keeps the round-robin cursor where it is."""
+    if not NPC_AFTERCAST or now >= agent.get("aftercast_until", 0.0):
+        return False
+    return not (skill_id and _is_instant_skill(skill_id))
+
 # THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
 # never puts the OBSERVER's property 42 immediately ahead of a damage word at
 # the observer: 0 of 401 16/17 words and 0 of 3 armour-ignoring 55 words. The
@@ -20162,9 +20209,10 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 # observable: the 8 s skill fires once and the 2 s ones cycle.
 #
 # WHAT IS MODELLED AND WHAT IS NOT. The table also gives each of these four an
-# AFTERCAST of 0.75 s and an energy cost (5, 5, 5, 10). Neither is modelled --
-# aftercast is wirable from the same read and is not wired; energy is a pool the
-# client never sees (PLAN.md 1.7). studies/monsterai/FINDINGS.md 8.2.
+# AFTERCAST of 0.75 s and an energy cost (5, 5, 5, 10). Neither was modelled when
+# this was written -- energy is a pool the client never sees (PLAN.md 1.7),
+# studies/monsterai/FINDINGS.md 8.2. (2026-10-07: the aftercast is wired, read
+# through skill_timing -- NPC_AFTERCAST, studies/skills 65.)
 #
 #                  id  activation  recharge   type_code
 ENEMY_SKILL_BAR = ((276, 0.75, 2.0),   # 5
@@ -31665,6 +31713,15 @@ def enemy_attack_tick(send, state, conn_id):
                     _next = pick_skill(agent, now)
                     slot = None if (_next is None or _next in _held) else _next
                     continue
+            # NPC_AFTERCAST (a CLOCK gate, SKILLS-AC): the body's last completed cast
+            # still holds it -- the cursor stays and the slot is retried next tick,
+            # the pay gate's shape. AFTER the world gates (RV-1: a slot that cannot
+            # be cast from here is never waited on) and BEFORE the pay gate, because
+            # the aftercast is the BODY's clock, not the slot's price. An instant
+            # skill passes it (retail: 3 of 7 inside the window).
+            if npc_aftercast_holds(agent, _sid, now):
+                slot = None
+                break
             # ---- THE RESOURCE GATE (a CLOCK gate), which is NOT an AI rule --
             #
             # `pick_skill` is declared in its own docstring to be a testing
@@ -31811,6 +31868,8 @@ def enemy_attack_tick(send, state, conn_id):
             # swing from the halt at range expires unspent). RECONSTRUCTION
             # for the wait between casts; 4440 "holds its ground" (12.8).
             continue
+        if npc_aftercast_holds(agent, None, now):
+            continue                # NPC_AFTERCAST: a swing waits it out too (retail 352)
         if now - agent.get("last_swing", 0.0) < interval:
             continue
         agent["last_swing"] = swing_clock_stamp(
@@ -32047,6 +32106,8 @@ def ally_cast_tick(send, state, conn_id):
             if slot is None:
                 continue
         skill_id, activation, recharge = skills[slot]
+        if npc_aftercast_holds(agent, skill_id, now):
+            continue            # NPC_AFTERCAST: a CLOCK hold, the hostile's gate (RECONSTRUCTION)
         # B2: a signet under Rust (x2); the recharge anchor takes it too.
         activation = signet_activation(state, agent_id, skill_id, activation)
         activation = dazed_activation(state, agent_id, skill_id, activation)   # B4: a spell x2
@@ -35883,6 +35944,8 @@ def ally_attack_tick(send, state, conn_id):
             continue
         if agent.get("cast_lands_at") is not None:
             continue                          # a cast in flight beats it
+        if npc_aftercast_holds(agent, None, now):
+            continue                          # NPC_AFTERCAST: and so does its aftercast
         tx, ty = target_pos(state, tid)
         ax, ay = agent["pos"]
         dist = math.hypot(tx - ax, ty - ay)
@@ -38952,6 +39015,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # behind the [58] on a raise, the stop's E2 on a standing target -- and no E5.
     _boost = (RESURRECTION_SINGLE_USE and bool(skill_id)
               and skill_resurrects(skill_id) and skill_recharges_on_boost(skill_id))
+    # NPC_AFTERCAST (SKILLS-AC): this landing IS the completion (every caller fires it
+    # when cast_lands_at falls due), so the body's NEXT action waits the table's
+    # aftercast from here. npc_aftercast gives 0 for an attack or instant skill; a
+    # RESSIG stop below takes the stamp back.
+    _aftercast = npc_aftercast(skill_id)
+    if _aftercast > 0.0:
+        agent["aftercast_until"] = time.time() + _aftercast
     if slot is not None and slot < len(skills) and _boost:
         agent.pop("cast_recharge", None)
     elif slot is not None and slot < len(skills):
@@ -38976,6 +39046,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
                  f"skill_stopped: agent {agent_id}'s skill {skill_id} -- its target "
                  f"already stands [RESSIG]")
             hero_cast_drop(send, agent_id, agent, skill_id, "its target already stands")
+            agent.pop("aftercast_until", None)   # NPC_AFTERCAST: a [59] stop, no completion
             if _ready is not None and slot is not None and slot < len(_ready):
                 _ready[slot] = time.time()
             print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} is STOPPED: its "
@@ -50632,6 +50703,14 @@ def main():
               "block go out with the release (today: the party-target gate's "
               "#1986 on a foe spell). The OBSERVED 1934/1960/1961/1985 are "
               "sent either way.", flush=True)
+
+    if a.no_npc_aftercast:
+        global NPC_AFTERCAST
+        NPC_AFTERCAST = False
+        print("NO NPC AFTERCAST: a body's next cast or swing may start on the tick after "
+              "its spell lands, as this server did until 2026-10-07 (retail: never sooner "
+              "than 0.704 s after the [58] of a 0.75-aftercast spell, 1,477 of 1,477 -- "
+              "npcaftercast.py; this arm chains them ~0.03 s apart).", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION

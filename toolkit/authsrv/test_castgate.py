@@ -83,7 +83,8 @@ import vaultpath                                               # noqa: E402
 # Floor from the BARE-MACHINE green run (RURIK_VAULT=C:/nonexistent-vault), 2026-09-28,
 # re-measured after CASTAI-R2: 36 -- section 1's predicate (20), section 5's rowless form
 # (5, the legacy property-61 check added) and section 6's source checks (11: the re-arm's
-# default and flag, and CASTAI-R2's flag). 81 with the vault. A driven section skips ONLY
+# default and flag, and CASTAI-R2's flag). 81 with the vault; 82 since 2026-10-07 (section
+# 2's after-close check runs on both NPC_AFTERCAST arms). A driven section skips ONLY
 # when the vault is absent; a present vault missing a row is a FAIL (vault_skills /
 # rows_problem).
 LEDGER = checks.Ledger("cast gate (CASTAI)", floor=36)
@@ -106,7 +107,7 @@ TICK = 0.05
 T0 = 1_000_000.0
 FLAGS = ("SKIP_LIVE_EFFECT", "SELF_CAST_FORM", "CAST_FORM", "ENERGY", "NPC_FOLLOW",
          "CASTER_OPENING", "CONDITION_HEAL_RULE", "EFFECTS", "INSTANT_ANNOUNCE",
-         "LIVE_EFFECT_REARM", "HOSTILE_ALLY_SKILL_SELF")
+         "LIVE_EFFECT_REARM", "HOSTILE_ALLY_SKILL_SELF", "NPC_AFTERCAST")
 BEAT = 0.25                          # authsrv.LIVE_EFFECT_REARM's default, as a LITERAL
 
 # THE KNOWN-BAD ARM'S LITERAL: the first 24 (tick index, skill) casts of fight(bar=the
@@ -143,7 +144,8 @@ def arm(A=authsrv, clock=None, **flags):
     base = {"SKIP_LIVE_EFFECT": True, "SELF_CAST_FORM": True, "CAST_FORM": "follows-target",
             "ENERGY": False, "NPC_FOLLOW": False, "CASTER_OPENING": True,
             "CONDITION_HEAL_RULE": True, "EFFECTS": True, "INSTANT_ANNOUNCE": True,
-            "LIVE_EFFECT_REARM": BEAT, "HOSTILE_ALLY_SKILL_SELF": True}
+            "LIVE_EFFECT_REARM": BEAT, "HOSTILE_ALLY_SKILL_SELF": True,
+            "NPC_AFTERCAST": True}
     base.update(flags)
     for k, v in base.items():
         setattr(A, k, v)
@@ -338,13 +340,42 @@ def section_predicate():
 
 
 # ---------------------------------------------------------------------------------
-def _hatcher_fight(skip, secs=120.0):
-    with arm(clock=Clock(T0), SKIP_LIVE_EFFECT=skip):
+def _hatcher_fight(skip, secs=120.0, aftercast=True):
+    with arm(clock=Clock(T0), SKIP_LIVE_EFFECT=skip, NPC_AFTERCAST=aftercast):
         st = hatcher_world(authsrv)
         with recording_consults() as seen:
             rec = fight(authsrv, st, secs)
     rec["consults"] = seen
     return rec
+
+
+def _after_close(rec, n253, closes, looks, aftercast_aware):
+    """(good, detail) for section 2's after-close check over one fight. With
+    `aftercast_aware`, a go tick inside the hostile's aftercast -- a [58] of its within
+    the 0.75 s before (NPC_AFTERCAST) -- owes no cast THAT tick; the gate's own facts
+    are owed on every close either way."""
+    f58 = [i for i, op, v in rec["sends"] if op == INT and v[:2] == [58, HOSTILE]]
+    win = int(round(0.75 / TICK))
+    good, detail = True, []
+    for c in closes:
+        tc = T0 + c * TICK - 1e-9
+        after = [(t, held) for t, held in looks if t >= tc]
+        if not after:
+            continue
+        t_first, held_first = after[0]
+        inside = [held for t, held in after if t < t_first + BEAT - 1e-6]
+        past = [(t, held) for t, held in after if t >= t_first + BEAT - 1e-6]
+        if not past:
+            continue
+        t_go, held_go = past[0]
+        k_go = int(round((t_go - T0) / TICK))
+        cast_inside = [i for i in n253 if c <= i < k_go]
+        cover = ([x for x in f58 if x <= k_go < x + win] if aftercast_aware else [])
+        detail.append((c, int(round((t_first - T0) / TICK)), k_go, held_first,
+                       all(inside), held_go, k_go in n253, cover[:1]))
+        good = (good and held_first and all(inside) and not held_go
+                and (k_go in n253 or bool(cover)) and not cast_inside)
+    return good, detail
 
 
 def section_hatcher():
@@ -382,31 +413,33 @@ def section_hatcher():
           "than stalling the bar (DESKWORK-D8 step 4's lesson)",
           f"{sorted(fired)} counts {[sum(1 for _i, s in hat if s == k) for k in (RESTORE, SCOURGE, HOLY, VITAL)]}")
     # AFTER A CLOSE: THE FIRST LOOK HOLDS FOR ONE BEAT, THE FIRST LOOK PAST IT CASTS.
+    # RE-AIMED 2026-10-07 (NPC_AFTERCAST, studies/skills 65): "cast on that very tick"
+    # now also needs the body OUT of its aftercast -- a CLOCK gate after this WORLD gate
+    # -- and on the default arm every go tick falls inside one (the Hatcher's 30-tick
+    # cycle, 0.75 s cast + 0.75 s aftercast, puts a [58] on each close's tick). So the
+    # check is run twice: on the default arm, the gate's own four facts on every close
+    # AND the cast on the go tick wherever no aftercast covers it, the cover itself
+    # named per close; and VERBATIM on --no-npc-aftercast, where all five go ticks cast.
     looks = [(t, held) for t, a, s, held in rec["consults"] if a == HOSTILE and s == SCOURGE]
-    good, detail = True, []
-    for c in closes:
-        tc = T0 + c * TICK - 1e-9
-        after = [(t, held) for t, held in looks if t >= tc]
-        if not after:
-            continue
-        t_first, held_first = after[0]
-        inside = [held for t, held in after if t < t_first + BEAT - 1e-6]
-        past = [(t, held) for t, held in after if t >= t_first + BEAT - 1e-6]
-        if not past:
-            continue
-        t_go, held_go = past[0]
-        k_go = int(round((t_go - T0) / TICK))
-        cast_inside = [i for i in n253 if c <= i < k_go]
-        detail.append((c, int(round((t_first - T0) / TICK)), k_go, held_first,
-                       all(inside), held_go, k_go in n253))
-        good = (good and held_first and all(inside) and not held_go and k_go in n253
-                and not cast_inside)
+    good, detail = _after_close(rec, n253, closes, looks, aftercast_aware=True)
     check(good and detail,
           "after each close the gate's FIRST look at 253 HOLDS it (the re-arm), every look "
           "inside the next 0.25 s holds, and the first look past the beat lets it through "
-          "and 253 is cast on that very tick -- no 253 inside the beat",
-          f"(close, first look, go tick, held first?, held inside?, held at go?, cast?) "
-          f"{detail}")
+          "-- no 253 inside the beat -- and 253 is cast on that very tick unless the "
+          "body's aftercast covers it (NPC_AFTERCAST's clock gate; named per close)",
+          f"(close, first look, go tick, held first?, held inside?, held at go?, cast?, "
+          f"covered by the [58] at tick) {detail}")
+    rec_pre = _hatcher_fight(True, aftercast=False)
+    n253_pre = [i for i, a, s in rec_pre["casts"] if a == HOSTILE and s == SCOURGE]
+    closes_pre = rec_pre["closes"].get((P, SCOURGE), [])
+    looks_pre = [(t, held) for t, a, s, held in rec_pre["consults"]
+                 if a == HOSTILE and s == SCOURGE]
+    good_pre, detail_pre = _after_close(rec_pre, n253_pre, closes_pre, looks_pre,
+                                        aftercast_aware=False)
+    check(good_pre and detail_pre,
+          "  and under --no-npc-aftercast, verbatim: the first look past the beat lets it "
+          "through and 253 is cast on that very tick, every close",
+          f"{detail_pre}")
     held_while_live = sum(1 for _t, held in looks if held)
     check(held_while_live >= len(closes),
           "and the gate DID hold 253 while it was live (the arm is live, not vacuous)",
@@ -458,7 +491,11 @@ def section_hatcher():
 # ---------------------------------------------------------------------------------
 def section_known_bad():
     print("== 3. (b) the KNOWN-BAD arm: --no-skip-live-effect is the pre-CASTAI server ==")
-    rec = _hatcher_fight(False)
+    # HEAD_SEQUENCE was recorded on 19213513, which predates NPC_AFTERCAST (2026-10-07)
+    # as well as CASTAI: the pre-CASTAI server is BOTH reverts, so this arm sets both
+    # (re-aimed 2026-10-07; with the aftercast on, every cast after the first waits
+    # 0.75 s past the previous [58] and the literal moves by exactly that).
+    rec = _hatcher_fight(False, aftercast=False)
     hat = [(i, s) for i, a, s in rec["casts"] if a == HOSTILE]
     check(hat[:len(HEAD_SEQUENCE)] == HEAD_SEQUENCE,
           "the first 24 casts (tick, skill) equal 19213513's own -- round robin's sequence "
