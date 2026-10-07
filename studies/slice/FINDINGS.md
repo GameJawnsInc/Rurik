@@ -3564,7 +3564,7 @@ behave like a 5 s hex).
 
 | | prediction (speedwords) | result |
 |---|---|---|
-| P7 | every word in (0, 0.3) of its agent's base, and 493's own apply's, is base × 0.25 EXACTLY | **14 / 0** — 72.0 on base 288 (the observer and foes 3, 5, 6), 75.0 on base 300 (party bodies 8, 9, 10); P7a the one joined apply **1 / 0** |
+| P7 | every word in (0, 0.3) of its agent's base, and 493's own apply's, is base × 0.25 EXACTLY | **14 / 0** — 72.0 on base 288 (the observer 7, and agents 3, 5, 6 — outside the observer's party: its shouts never word them), 75.0 on base 300 (the party bodies 8, 9, 10); P7a the one joined apply **1 / 0** |
 | P8 | a "Charge!" applied to, or ending on, an observer whose last word is below × 0.5 sends NO word for it | **2 / 0**; P8b each batch words an unsnared party member **2 / 0**; P8c the same walker words a 160 / 364 apply on an unslowed observer **116 / 0** |
 | P9 | a boosted body's over-cap snare ends back on its pre-snare boosted word | **2 / 0** (399 → 75 → 399, twice) |
 | P10 | OVERRIDE vs. MULTIPLICATIVE (`b × s`) vs. ADDITIVE (`b − (1 − s)`) over the same 4 exposed rows (2 boosted onsets + 2 boost events under a snare) | **4 / 0** vs. **0 / 4** vs. **0 / 4** |
