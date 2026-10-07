@@ -2868,6 +2868,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "swing gate swallowed it. The revert restores the single word, "
                          "not the interval swallow. --no-spell-areas reverts it too (the "
                          "older flag wins).")
+    ap.add_argument("--no-area-tick-ramp", action="store_true",
+                    help="studies/weapons 45 REVERT: a skill_effect row's `tick_ramp` is "
+                         "ignored, so every tick of an area over time deals the row's flat "
+                         "amount. Savannah Heat (1380) then deals 17 a tick at rank 12 -- 85 "
+                         "over its five seconds where the ramp deals k x 17, 255 -- the "
+                         "known-bad reading: the client's own description puts its damage "
+                         "on each second the spell has been in effect, so a flat tick is "
+                         "wrong for it (RECONSTRUCTION either way: no tape holds a cast).")
     ap.add_argument("--no-cast-time-word", action="store_true",
                     help="Send no property 61 GV_CASTTIME ahead of a cast whose time differs "
                          "from the record's (a Dazed spell, a Rusted signet): the client draws "

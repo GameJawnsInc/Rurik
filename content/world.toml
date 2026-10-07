@@ -2877,10 +2877,13 @@ word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said her
 # effect `area_visual` is drawn at the completion and re-drawn at +3 / +6 (the
 # 350, OBSERVED 51 of 51). A row here REPLACES the label row the vault carries
 # for the same id (content.py's tier rule), so it names everything the label
-# named. The other eleven areas over time carry NO skill_effect row of any tier
-# (checked 2026-09-26 in content/ and vault/content) and are INERT, as every run
-# before today; a row that names one -- label or hand -- with a damage OPENS AN
-# AREA (area_over_time reads the record, not the tier). Named in authsrv's banner.
+# named. The other eleven areas over time carried NO skill_effect row of any tier
+# (checked 2026-09-26 in content/ and vault/content) and were INERT; a row that
+# names one -- label or hand -- with a damage OPENS AN AREA (area_over_time reads
+# the record, not the tier). Named in authsrv's banner. 2026-10-07 (weapons 45):
+# five of them gain CLIENT-TABLE rows after 167's below -- 1094, 2222, 830, 910
+# and 1380 -- and six stay inert (77, 196, 215, 844, 1083, 1372: each needs a
+# mechanism of its own, weapons 45).
 [skill_effect.197]
 scale_means = "Fire damage"
 damage_type = 5                # fire ([damage_type.table]): the page's own word; the wire carries no kind for a tick
@@ -2903,8 +2906,10 @@ while the caster walks. Client (38797): type_code 5, TARGET BYTE 16, aoe_range 1
 (GWW "Fire Storm", rev. 2695857, read 2026-09-26): var1 `Fire damage` 5->35, "Create a Fire Storm at target \
 foe's location. For 10 seconds, foes adjacent to that location are struck for 5...35 fire damage \
 each second". NOT modelled, said here: who stands inside 156 u at \
-each tick on the tape (every non-observer position is a lead); whether the caster's death ends the \
-area (INCONCLUSIVE, 2 casts -- the server keeps it, RECONSTRUCTION)."""
+each tick on the tape (every non-observer position is a lead). Whether the caster's death ends the \
+area was INCONCLUSIVE here (2 casts, both areas empty); 2026-10-07 (weapons 45) it is OBSERVED n = 1 \
+on 20260929T100038 :51199 -- a clean tick at completion + 9.989, 1.5 s after the caster's death -- \
+and the server keeps the area, as it did."""
 
 [skill_effect.192]
 scale_means = "Fire damage"
@@ -2950,6 +2955,118 @@ the page's "each second ... are struck ... and are Blinded" puts both on every s
 re-applied Blind is the longer-stands rule apply_condition already keeps (WIKI "Condition"). \
 NO ground effect (no visual id is known). The label row this replaces carried the same two \
 labels; what it lacked was the area and the seconds."""
+
+# FIVE MORE AREAS OVER TIME -- 2026-10-07 (studies/weapons/PLAN.md 45). CLIENT-TABLE
+# rows: the record's numbers (skilltable.py) and the client's own description-template
+# LABELS and flags (skilldesc.py --row, the pinned 38797 client, read as a tool -- ids,
+# slots, labels and numbers only, never the text). The five records are IDENTICAL on
+# builds 38797, 38888 and 38974 (vault/research content-38797-2026-09-28 and
+# content-38888-2026-10-01 against the 38974 overlay, compared 2026-10-07). NONE was
+# ever cast on a live tape (aotjoin P8, NOT FOUND over the corpus), so the WIRE is Fire
+# Storm's OBSERVED shape reused (RECONSTRUCTION): the completion opens the area at the
+# target's position with no word, then a tick per foe inside the record's aoe_range;
+# no ground effect (no `area_visual`: no id is known for any of the five). The wiki
+# pages are OWED -- UNVERIFIED until read (GWW "Breath of Fire", "Snow Storm", "Ray of
+# Judgment", "Spirit Rift", "Savannah Heat"); no repo document cites them yet.
+[skill_effect.1094]
+scale_means = "Fire damage"    # the template's FIRE_DAMAGE on the scale slot (str1), 10..40: 34 at rank 12
+damage_type = 5                # fire ([damage_type.table]), the template's own label
+[skill_effect.1094.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """studies/weapons/PLAN.md 45. Client (38797; identical on 38888 and 38974): id 1094, \
+type_code 5, attribute 10 (Fire Magic), TARGET BYTE 16, aoe_range 156 (the client's own \
+adjacent), projectile 2077 (none), impact_visual 2077 (none), duration 5 / 5, scale 10 -> 40, \
+bonus 0 / 0, skill_arguments 3 (duration + scale), activation 2.0, recharge 10, energy 5. \
+skilldesc --row 1094: str3 DURATION AGREE_FLAT 5/5, str1 FIRE_DAMAGE AGREE_PROGRESSION 10/40, \
+flags AREA_ADJACENT, TARGET_FOE; the sentence strikes the foes at the location each second for \
+the duration (paraphrase). So: ticks at +1 .. +5, per foe inside 156 u of the target's position \
+at the completion, the word at the rank's amount. NEVER cast on any live tape (aotjoin P8) -- \
+the wire is Fire Storm's shape, RECONSTRUCTION. WIKI owed (GWW "Breath of Fire")."""
+
+[skill_effect.2222]
+scale_means = "Cold damage"    # the template's COLD_DAMAGE on the scale slot (str1), 30..40: 38 at rank 12
+damage_type = 3                # cold ([damage_type.table]), the template's own label
+[skill_effect.2222.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """studies/weapons/PLAN.md 45. Client (38797; identical on 38888 and 38974): id 2222, \
+type_code 5, attribute 51 (none -- the rank a hostile casts it at is ENEMY_SKILL_RANK or its \
+row's own), profession 0, TARGET BYTE 16, aoe_range 156, projectile 2077 (none), impact_visual \
+2077 (none), duration 5 / 5, scale 30 -> 40, bonus 0 / 0, skill_arguments 3, activation 1.0, \
+recharge 10, energy 10. skilldesc --row 2222: str3 DURATION 5/5, str1 COLD_DAMAGE \
+AGREE_PROGRESSION 30/40, flags AREA_ADJACENT, TARGET_FOE; each second for the duration \
+(paraphrase). Ticks at +1 .. +5 per foe inside 156 u. NEVER cast on any live tape (aotjoin P8) \
+-- Fire Storm's shape, RECONSTRUCTION. WIKI owed (GWW "Snow Storm")."""
+
+[skill_effect.830]
+scale_means = "Holy damage"    # the template's HOLY_DAMAGE on the scale slot (str1), 10..50: 42 at rank 12
+bonus_scale_means = "Burning"  # str2 CONDITION_DURATION:Burning on the bonus slot, 1..3: 3 s at rank 12 -- on each struck foe EVERY tick
+damage_type = 8                # holy ([damage_type.table]), the template's own label
+[skill_effect.830.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """studies/weapons/PLAN.md 45. Client (38797; identical on 38888 and 38974): id 830, \
+type_code 5, attribute 14 (Smiting Prayers), profession 3, TARGET BYTE 16, aoe_range 156, \
+projectile 2077 (none), impact_visual 1019 (not read for an area -- the server draws an area's \
+ground only from `area_visual`), duration 5 / 5, scale 10 -> 50, bonus 1 -> 3, \
+skill_arguments 7 (duration + scale + bonus), activation 1.0, recharge 15, energy 10. \
+skilldesc --row 830: str3 DURATION 5/5, str1 HOLY_DAMAGE AGREE_PROGRESSION 10/50, str2 \
+CONDITION_DURATION:Burning AGREE_PROGRESSION 1/3 (governed, no rider), flags AREA_ADJACENT, \
+TARGET_FOE; the struck foes begin Burning for the bonus's seconds EVERY second (paraphrase) -- \
+Eruption 167's shape, the condition on each struck foe at every tick, a re-applied Burning \
+under apply_condition's longer-stands rule. Holy damage is not armour-respecting \
+(ARMOUR_RESPECTING_MEANS) and its wire channel is CASTAI-ZF31's open question (retail's holy \
+rides property 55): this row takes whatever channel the server gives a standalone holy word. \
+NEVER cast on any live tape (aotjoin P8) -- Fire Storm's shape, RECONSTRUCTION. A condition \
+on a FOE sends no [6] id (the known gap, PLAN.md 8.1). WIKI owed (GWW "Ray of Judgment")."""
+
+[skill_effect.910]
+scale_means = "Lightning damage"      # the template's LIGHTNING_DAMAGE on the scale slot (str1), 25..125: 105 at rank 12
+bonus_scale_means = "Cracked Armor"   # str2 CONDITION_DURATION:Cracked Armor on the bonus slot, 1..20: 16 s at rank 12
+damage_type = 4                       # lightning ([damage_type.table]), the template's own label
+tick_period = 3.0                     # ONE strike, AFTER the record's 3 s: tick_instants(t0, 3, 3) = [+3.0]
+[skill_effect.910.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """studies/weapons/PLAN.md 45. Client (38797; identical on 38888 and 38974): id 910, \
+type_code 5, attribute 34 (Channeling Magic), profession 8, TARGET BYTE 16, aoe_range 156, \
+projectile 2077 (none), impact_visual 2077 (none), duration 3 / 3, scale 25 -> 125, bonus 1 -> \
+20, skill_arguments 7, activation 2.0, recharge 5, energy 10. skilldesc --row 910: str3 \
+DURATION AGREE_FLAT 3/3, str1 LIGHTNING_DAMAGE AGREE_PROGRESSION 25/125, str2 \
+CONDITION_DURATION:Cracked Armor AGREE_PROGRESSION 1/20 (governed, no rider), flags ALL_FOES, \
+AREA_ADJACENT, TARGET_FOE; the duration slot is a DELAY -- the adjacent foes are struck once, \
+AFTER that many seconds, and suffer Cracked Armor (paraphrase). So `tick_period` = the \
+duration: one tick at +3.0, the word then Cracked Armor (2077) on each struck foe. Without the \
+period the schedule would be Fire Storm's 1 s -- three strikes at +1 / +2 / +3, the known-bad \
+arm test_aotrows drives red. NEVER cast on any live tape (aotjoin P8) -- RECONSTRUCTION. A \
+condition on a FOE sends no [6] id (the known gap). WIKI owed (GWW "Spirit Rift")."""
+
+[skill_effect.1380]
+scale_means = "Fire damage"    # the template's FIRE_DAMAGE on the scale slot (str1) with FOR_EACH, 5..20: 17 at rank 12
+damage_type = 5                # fire ([damage_type.table]), the template's own label
+tick_ramp = "elapsed"          # tick k deals k x the scale (areatime.tick_amount): 17, 34, 51, 68, 85 at rank 12
+[skill_effect.1380.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """studies/weapons/PLAN.md 45. Client (38797; identical on 38888 and 38974): id 1380, \
+type_code 5, attribute 10 (Fire Magic), profession 6, TARGET BYTE 16, aoe_range 240 (the \
+client's own nearby), projectile 2077 (none), impact_visual 2077 (none), duration 5 / 5, scale \
+5 -> 20, bonus 5 -> 20, skill_arguments 7, activation 2.0, recharge 25, energy 5. skilldesc \
+--row 1380: str3 DURATION 5/5, str1 FIRE_DAMAGE AGREE_PROGRESSION 5/20 with FOR_EACH, flags \
+ALL_FOES, AREA_NEARBY, TARGET_FOE -- the nearby foes take the scale for each second the spell \
+has been in effect (paraphrase), so tick k at +k s deals k x the scale (`tick_ramp`, \
+authsrv.area_tick_ramp; --no-area-tick-ramp reverts to a flat tick). The ENABLED bonus slot \
+(5 -> 20) is in NO template slot and is not read; it equals the scale at every rank, so \
+"k x scale" and "scale + (k - 1) x bonus" are the same numbers on this record and nothing here \
+can tell them apart. NEVER cast on any live tape (aotjoin P8) -- Fire Storm's shape, \
+RECONSTRUCTION. WIKI owed (GWW "Savannah Heat"); the monster-AI page the repo holds names it \
+as an area that scatters (vault/research/castai-2026-09-27/wiki-ai-pages.json)."""
 
 # THE AREA HEXES -- DESKWORK-D6 step 4 (2026-09-27, studies/weapons/PLAN.md 43). The
 # record's type 4 with target byte 16 (`areatime.area_hex_row`, seven rows). A row here

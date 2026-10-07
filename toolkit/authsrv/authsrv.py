@@ -17189,10 +17189,13 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # spell word to the player already has (body_spell_word); the dead never
 # struck, a revived foe struck again, a foe that walks in late struck; the
 # area STAYS at P while the caster walks (7 casts). Caster death:
-# INCONCLUSIVE on the tape (2 casts, both areas empty; the 350 was re-sent
-# after the caster died, n = 1) -- the server KEEPS the area, a dead body
-# caster's ticks resolving from its strike level snapshotted at the
-# completion (RECONSTRUCTION, said at open_area).
+# INCONCLUSIVE on the first tape (2 casts, both areas empty; the 350 was
+# re-sent after the caster died, n = 1) -- the server KEEPS the area, a dead
+# body caster's ticks resolving from its strike level snapshotted at the
+# completion. 2026-10-07 (weapons 45): OBSERVED n = 1 on the second Zaishen
+# tape -- a clean tick 1.5 s after the caster's death (1 positive, 3
+# inconclusive of 4 deaths); the strike level of a dead caster stays
+# RECONSTRUCTION (said at open_area).
 #
 # The SHAPE is Fire Storm's; the other two rows content carries are WIKI +
 # RECONSTRUCTION (NOT FOUND on any tape, aotjoin P8): Meteor Shower 192
@@ -17201,11 +17204,21 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # condition rides EVERY tick, the page's "each second ... are struck ... and
 # are Blinded"). No ground visual id is known for either: none is sent, said
 # in the log. THE OTHER ELEVEN areas over time (77, 196, 215, 830, 844, 910,
-# 1083, 1094, 1372, 1380, 2222) carry no skill_effect row of any tier (checked
-# 2026-09-26 in content/ and vault/content): no damage resolves for them and
-# they are INERT, as before today. The day a row -- label or hand -- names one
-# with a damage, it OPENS AN AREA (area_over_time reads the record, not the
-# tier), not one target.
+# 1083, 1094, 1372, 1380, 2222) carried no skill_effect row of any tier (checked
+# 2026-09-26 in content/ and vault/content): no damage resolved for them and
+# they were INERT. A row -- label or hand -- that names one with a damage OPENS
+# AN AREA (area_over_time reads the record, not the tier), not one target.
+# 2026-10-07 (studies/weapons 45): five gain client-table rows -- Breath of
+# Fire 1094 and Snow Storm 2222 (rows only), Ray of Judgment 830 (Burning on
+# each struck foe every tick, Eruption's shape), Spirit Rift 910 (`tick_period`
+# = its 3 s: ONE strike at +3, then Cracked Armor) and Savannah Heat 1380 (a
+# `tick_ramp`: tick k deals k x its scale, area_tick_ramp below) -- all never
+# cast on a tape, so Fire Storm's shape is RECONSTRUCTION for them. Six stay
+# inert (77, 196, 215, 844, 1083, 1372): each needs a clause of its own.
+# THE CASTER'S DEATH (weapons 45): the area OUTLIVES it -- OBSERVED n = 1
+# (20260929T100038 :51199, Fire Storm cast at 562.188: the Zaishen Mage dead at
+# completion + 8.487, a clean tick at + 9.989 on two foes), the reading the
+# server already made.
 #
 # Where it runs: the completion opens the area (open_area at the player's E5
 # and at a body's 58) and lands NOTHING on the target -- today's single word
@@ -17285,6 +17298,47 @@ def area_tick_period(skill_id):
     Shower's 3.0, WIKI) else AREA_TICK_PERIOD (Fire Storm's 1.0, OBSERVED)."""
     v = skill_effect_row(skill_id).get("tick_period")
     return float(v) if v else float(AREA_TICK_PERIOD)
+
+
+# ---- AN AREA WHOSE TICK GROWS WITH ITS AGE (2026-10-07, studies/weapons 45)
+#
+# A row's `tick_ramp = "elapsed"` makes tick k deal k x the row's amount
+# (areatime.tick_amount). Savannah Heat 1380 is the one row that carries it:
+# its record has ONE damage slot in its template (scale 5..20, FIRE_DAMAGE,
+# rank 12 -> 17), and the client's own description puts the FOR_EACH flag on
+# it -- the damage is per second the spell has been in effect (skilldesc.py
+# over the pinned 38797 client, read as a tool; the text is not committed).
+# So at rank 12 its five ticks are 17, 34, 51, 68, 85. RECONSTRUCTION: no
+# tape holds a cast of 1380 (aotjoin P8, NOT FOUND over the live corpus) and
+# the wiki page (GWW "Savannah Heat") is owed -- UNVERIFIED. The record's
+# ENABLED bonus slot (5..20, equal to the scale at every rank) sits in no
+# template slot and is not read: "k x scale" and "scale + (k - 1) x bonus"
+# give the same numbers at every rank of this record, so nothing here can
+# tell them apart, and the template names the one slot.
+# --no-area-tick-ramp reverts: every tick deals the flat amount -- the
+# reading every row without the field gives (17 a tick, 85 over the area
+# where the ramp deals 255), known wrong for 1380 because the client says its
+# damage grows with the area's age.
+AREA_TICK_RAMP = True
+
+from areatime import tick_amount, TICK_RAMPS  # noqa: E402,F401  -- read by test_aotrows as authsrv.*
+
+
+def area_tick_ramp(skill_id):
+    """The row's `tick_ramp` when it is one areatime models ("elapsed") and
+    --no-area-tick-ramp is off, else None. A value areatime does not know is
+    printed and read as None -- the flat amount every row without the field
+    gets -- never a guessed ramp."""
+    if not AREA_TICK_RAMP:
+        return None
+    v = skill_effect_row(skill_id).get("tick_ramp")
+    if v is None:
+        return None
+    if v not in TICK_RAMPS:
+        print(f"skill {skill_id}'s tick_ramp {v!r} is not one of {TICK_RAMPS} -- its area "
+              f"ticks the flat amount [studies/weapons 45]", flush=True)
+        return None
+    return v
 
 
 # ---- AN AREA HEX: one hex per foe around the target (2026-09-27, studies/weapons
@@ -18086,7 +18140,8 @@ def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, ao
     on state["areas"] that area_tick serves. A BODY caster's row is
     snapshotted (`caster_row`) so a caster killed or despawned mid-area still
     resolves its ticks at the strike level it had -- the area OUTLIVES its
-    caster (RECONSTRUCTION; the tape is inconclusive, weapons 41). Returns the
+    caster (OBSERVED n = 1, weapons 45: a clean tick 1.5 s after the Zaishen
+    Mage's death; the snapshotted strike level is RECONSTRUCTION). Returns the
     area."""
     radius, duration = aot
     now = time.time()
@@ -18112,6 +18167,7 @@ def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, ao
             "ticks": ticks, "visuals": visuals, "visual": visual,
             "knocks_down": skill_knocks_down(skill_id),
             "condition": skill_condition(skill_id, rank),
+            "ramp": area_tick_ramp(skill_id),                 # studies/weapons 45
             "caster_row": dict(agent if agent is not None else (row or {}))}
     state["area_seq"] = area["id"]
     state.setdefault("areas", []).append(area)
@@ -18125,6 +18181,8 @@ def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, ao
           + (", knocks down" if area["knocks_down"] else "")
           + (f", condition {area['condition'][0]} for {area['condition'][1]:g} s a tick"
              if area["condition"] else "")
+          + (f", tick k deals k x {amount:.0f} (tick_ramp {area['ramp']})"
+             if area["ramp"] else "")
           + " [studies/weapons 42]", flush=True)
     return area
 
@@ -18143,13 +18201,18 @@ def _area_strike(send, state, conn_id, area, now):
     by the caster's own path -- no 58, no [20], no 0x00A7 (OBSERVED 0/74) --
     then the row's knock-down and condition on each struck living foe."""
     sid, caster, k, n = area["skill_id"], area["caster"], area["k"], area["n"]
+    # studies/weapons 45: the tick's amount -- the row's, or k x it under a
+    # `tick_ramp` (Savannah Heat); .get because a hand-made area (test_agentlife's
+    # scatter records) predates the field and is flat
+    amount = tick_amount(area["amount"], k, area.get("ramp"),
+                         area.get("period", AREA_TICK_PERIOD))
     foes = foes_within(state, caster, area["point"], area["radius"],
                        hostile=area["hostile"])
     struck = []
     if area["caster_kind"] == "player":
         for foe in foes:
             res = hit_enemy(send, state, foe, conn_id,
-                            exact=player_spell_amount(state, sid, foe, area["amount"]), swing=False,
+                            exact=player_spell_amount(state, sid, foe, amount), swing=False,
                             armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}")
             if res == "landed":
                 struck.append(foe)
@@ -18160,7 +18223,7 @@ def _area_strike(send, state, conn_id, area, now):
             tbody = foe != PLAYER_AGENT_ID and foe in table
             try:
                 terms.append((foe, tbody, body_spell_terms(
-                    state, area["caster_row"], sid, area["amount"], foe, tbody)))
+                    state, area["caster_row"], sid, amount, foe, tbody)))
             except ValueError as exc:
                 # the refusal contract, per tick: THIS foe, THIS tick, nothing sent
                 print(f"[c{conn_id}] [DESKWORK-D6] area #{area['id']} tick {k}/{n}: the "
@@ -18172,7 +18235,7 @@ def _area_strike(send, state, conn_id, area, now):
             if frac is None:
                 continue
             body_spell_word(send, state, caster, sid, foe, tbody, dealt, frac, spell_ar,
-                            area["amount"], conn_id)
+                            amount, conn_id)
             struck.append(foe)
     for foe in struck:
         if target_dead(state, foe):
@@ -50261,6 +50324,12 @@ def main():
               "made -- except that the word lands on a foe hit inside the last "
               "ATTACK_INTERVAL too (the single word is restored, not the swing gate's "
               "swallow of a spell) [studies/weapons 42 revert]", flush=True)
+    if a.no_area_tick_ramp:
+        global AREA_TICK_RAMP
+        AREA_TICK_RAMP = False
+        print("SPELLS: --no-area-tick-ramp -- a row's tick_ramp is ignored: every tick of "
+              "an area over time deals the row's flat amount (Savannah Heat 17 a tick at "
+              "rank 12, where the ramp deals k x 17) [studies/weapons 45 revert]", flush=True)
     if a.no_cast_time_word:
         global CAST_TIME_WORD
         CAST_TIME_WORD = False
