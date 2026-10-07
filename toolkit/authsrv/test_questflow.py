@@ -107,9 +107,46 @@ WHAT THIS CHECKS:
          OURS vs TAPE; sabotaged tapes red; q440; the corpus's every
          item-bearing hand-in.
 
-§5, §8, §10 and §14 share ONE decode of the corpus (corpus()); §7 and on share
-one of 20260929T150923 (tape_s18()). Nothing binds a port, launches a client,
-or touches vault/state.
+  * RANGERLOOP-F6, THE ACCOUNT'S UNLOCK GATE. A granted skill's 0x001C rides
+    its 0x00DC only when the skill is outside the ACCOUNT's library -- the
+    load's 0x001D, plus every 0x001C since. OBSERVED on 19 of 19 retail
+    grants (7 captures). Ours tested the per-connection skills_known, empty
+    at every connect, so every first grant toasted, a held skill included;
+    --no-account-unlock-gate is that, kept as the KNOWN-BAD arm. Every
+    fixture here that grants a skill now names the account it models
+    (`held`, laid into authsrv.UNLOCKED -- the --unlocks bitmap, every
+    skill by default), and the fakes of skills_known are gone.
+      §15 (bare): 0x001C iff outside the bitmap, both arms exercised;
+         skills_known joins it; a stored list wins over the flag and an
+         absent one falls back to it; the served table bounds it; the
+         known-bad arm sends the old toast and the rule goes red; the flag
+         and main()'s flip.
+      §16 (vault-gated, the live corpus): every retail 0x00DC joined to the
+         library in force on its capture's clock -- 19 of 19 agree (floor
+         19), 7 outside, 12 inside, one of them (384 at :53756 1191.028)
+         by :56064's 0x001C at 921.161; the 0x001D only grows and holds
+         every skill a 0x001C unlocked before it; the known-bad rule
+         disagrees on 12 and a sabotaged tape is red. §10 now runs q75 on
+         the tape's own 38-skill library.
+  * RANGERLOOP-F5, THE LOG HEADING'S REGION. 0x0049 / 0x0050's FIRST
+    string slot is the heading's argument (static: 0x0091DB70 -> 0x0080F0A0
+    -> record+8 -> 0x0080DB40 -> arm 3 at 0x0057DD77, string 1125), and
+    retail's is ONE region unit on 137 of 137 log rows, never equal to the
+    second, a function of the home map. Ours sent the name in all three;
+    --no-quest-region is that, kept as the KNOWN-BAD arm.
+      §17 (bare): log_strings and both send sites (accept_quest,
+         _replay_quests) put the row's enc_region in s1 and the name in s2
+         and s3; the rule (region_first) holds on ours and goes red on the
+         known-bad arm and on a row with no enc_region; region_units'
+         refusals and load's; the shipped rows; the flag and main()'s flip.
+      §18 (vault-gated): the corpus census (floor 137), the shipped rows'
+         word equal to the corpus's for their home (148), the loader's rule
+         accepting every retail s1 and refusing every retail s2; the static
+         read's bytes on the pinned 38797 client, and a swapped-arm control.
+
+§5, §8, §10, §14, §16 and §18 share ONE decode of the corpus (corpus()); §7
+and on share one of 20260929T150923 (tape_s18()). Nothing binds a port,
+launches a client, or touches vault/state.
 """
 
 import os
@@ -124,12 +161,13 @@ import authsrv      # noqa: E402
 import serverargs   # noqa: E402
 import vaultpath    # noqa: E402
 
-# Floor 61 from the bare-machine green run (RURIK_VAULT at an empty dir): §1's
-# nine checks, §3's six, §6's eleven, §9's twelve, §11's ten and §13's
-# thirteen. §2 adds 15 with the four captures present, §4 7, §5 3, §7 7, §8 3,
-# §10 7, §12 4 and §14 8 (115 in all), each declaring a LEDGER.skip for what
-# is absent. Set from the run, never above it.
-led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=61)
+# Floor 77 from the bare-machine green run (RURIK_VAULT at an empty dir,
+# 2026-10-07): §1's nine checks, §3's six, §6's eleven, §9's twelve, §11's
+# ten, §13's thirteen, §15's seven and §17's nine. §2 adds 15 with the four
+# captures present, §4 7, §5 3, §7 7, §8 3, §10 9, §12 4, §14 8, §16 4 and
+# §18 6 (143 in all), each declaring a LEDGER.skip for what is absent. Set
+# from the run, never above it. (61 and 115 until RANGERLOOP-F5 / F6.)
+led = checks.Ledger("quest accept and hand-in shapes (QUESTFLOW)", floor=77)
 
 REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE                # 0x0052
 UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST     # 0x004A
@@ -221,13 +259,24 @@ def fresh_state(**kw):
     return st
 
 
-def ours(row, after_gold=True, turn_in=False, known=()):
-    """OUR batch for `row` on an empty bar, reduced; flags restored."""
+def account_words(held):
+    """The --unlocks bitmap for an account holding exactly `held` -- what a
+    fixture lays into authsrv.UNLOCKED, whose default (every skill) would
+    make every grant a held one once RANGERLOOP-F6 gates the 0x001C on it."""
+    return authsrv.skillunlock.words_from_ids(sorted(int(s) for s in held),
+                                              "test_questflow account")
+
+
+def ours(row, after_gold=True, turn_in=False, known=(), held=()):
+    """OUR batch for `row` on an empty bar, reduced; flags restored. `held`
+    is the ACCOUNT's library (authsrv.UNLOCKED; empty unless named), `known`
+    this connection's skills_known."""
     saved = (authsrv.QUEST_SKILLS_AFTER_GOLD, authsrv.REWARD_IN_FRAME,
-             list(authsrv.SKILLBAR))
+             list(authsrv.SKILLBAR), authsrv.UNLOCKED)
     authsrv.QUEST_SKILLS_AFTER_GOLD = after_gold
     authsrv.REWARD_IN_FRAME = True
     authsrv.SKILLBAR[:] = [0] * authsrv.SKILLBAR_SLOTS
+    authsrv.UNLOCKED = account_words(held)
     sent, send = collect()
     st = fresh_state(quests={1463}, skills_known=set(known))
     try:
@@ -239,6 +288,7 @@ def ours(row, after_gold=True, turn_in=False, known=()):
     finally:
         (authsrv.QUEST_SKILLS_AFTER_GOLD, authsrv.REWARD_IN_FRAME) = saved[:2]
         authsrv.SKILLBAR[:] = saved[2]
+        authsrv.UNLOCKED = saved[3]
     return reduce_batch(sent), paid
 
 
@@ -259,8 +309,10 @@ def section_1():
                        "UNL"] and skills_after_reward(red_tin),
            "turn_in_quest: 0x0052, xp, gold, skills, 0x004A -- the skills "
            "inside the frame, before the closing 0x004A", f"{red_tin}")
+    # RE-AIMED for RANGERLOOP-F6: "the account knows" is the account's
+    # library (held), not a faked skills_known -- the gate reads the former.
     red_xp, _ = ours({"reward_experience": 2000, "reward_skills": [2]},
-                     known=(2,))
+                     held=(2,))
     led.ok(red_xp == ["EE0", "SKC:2", "SKB:0:2"] and skills_after_reward(red_xp),
            "no gold: the skills follow the xp (MANTID q347's shape), and a "
            "skill the account knows sends no 0x001C", f"{red_xp}")
@@ -334,17 +386,19 @@ def section_2():
         if port != "55934":
             continue
         # OURS for that batch's own row, the account already holding both
-        # skills (the tape carries no 0x001C).
+        # skills (the tape carries no 0x001C). RE-AIMED for RANGERLOOP-F6:
+        # held, the account's library -- the tape's own 0x001D (:59969
+        # 157.127) holds both, §16 -- not a faked skills_known.
         row = {"reward_experience": 500, "reward_gold": 25,
                "reward_skills": [394, 446]}
-        red_ours, _ = ours(row, turn_in=True, known=(394, 446))
+        red_ours, _ = ours(row, turn_in=True, held=(394, 446))
         led.ok(red_ours == collapse_remove(red),
                "OURS vs TAPE :55934: turn_in_quest for {500 xp, 25 gold, "
                "skills 394, 446} equals the retail batch on every reduced kind, "
                "skill id and bar slot (the tape's doubled 0x0052 collapsed)",
                f"ours {red_ours} tape {red}")
         red_bad, _ = ours(row, after_gold=False, turn_in=True,
-                          known=(394, 446))
+                          held=(394, 446))
         led.ok(red_bad != collapse_remove(red),
                "KNOWN-BAD: --quest-skills-first does NOT equal the tape",
                f"{red_bad}")
@@ -578,7 +632,12 @@ def corpus():
     'handins' [(capture, file, t, qid, own, batch)], 'accepts' [(capture,
     port, t, values, conn map, batch)] and 'replays' [(capture, port, t,
     values, conn map)] -- values as decoded, header field in front; the conn
-    map is read only on a connection holding an accept (None elsewhere)."""
+    map is read only on a connection holding an accept (None elsewhere).
+    RANGERLOOP-F6's join adds 'libs' [(capture, port, t, ids)] -- every
+    0x001D, the account library -- 'learns' [(capture, port, t, skill)] --
+    every 0x00DC -- and 'unlocks' [(capture, port, t, skill)] -- every
+    0x001C; t is the capture's own clock (wire.jsonl), shared by its
+    connections."""
     global _CORPUS
     if _CORPUS is not None:
         return _CORPUS or None
@@ -592,7 +651,8 @@ def corpus():
         _CORPUS = {}
         return None
     out = {"root": root, "conns": conns, "aside": aside, "decoded": 0,
-           "handins": [], "accepts": [], "replays": []}
+           "handins": [], "accepts": [], "replays": [],
+           "libs": [], "learns": [], "unlocks": []}
     for capdir, gf in conns:
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         out["decoded"] += 1 if ok else 0
@@ -619,8 +679,38 @@ def corpus():
                                        by_t[t]))
             elif d == "s2c" and op == REPLAY:
                 out["replays"].append((cap, port, round(t, 4), v, cmap))
+            elif d == "s2c" and op == ACCT_LIB:
+                out["libs"].append((cap, port, round(t, 4),
+                                    frozenset(lib_ids(v[-1]))))
+            elif d == "s2c" and op == SKC:
+                out["learns"].append((cap, port, round(t, 4), v[-2]))
+            elif d == "s2c" and op == SKU:
+                out["unlocks"].append((cap, port, round(t, 4), v[-2]))
     _CORPUS = out
     return out
+
+
+ACCT_LIB = authsrv.GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS  # 0x001D
+
+
+def lib_ids(words):
+    """A decoded 0x001D bitmap (its word list) -> the skill ids it sets."""
+    return authsrv.skillunlock.ids_from_words(list(words))
+
+
+def tape_library(conns, before):
+    """(ids, 'port t') of the LAST s2c 0x001D strictly before `before` on
+    any of one capture's connections (tape_s18's), on the capture's own
+    clock -- the account library the client held then -- or (None, None)."""
+    best = None
+    for port, _cmap, merged, _ok in conns:
+        for t, d, op, v in merged:
+            if d == "s2c" and op == ACCT_LIB and t < before \
+                    and (best is None or t > best[0]):
+                best = (t, port, frozenset(lib_ids(v[-1])))
+    if best is None:
+        return None, None
+    return best[2], f":{best[1]} {best[0]:.3f}"
 
 
 def section_5():
@@ -722,19 +812,23 @@ def rows_with(overrides):
     return rows
 
 
-def drive(rows, steps, retail=True, bar=None, **flags):
+def drive(rows, steps, retail=True, bar=None, held=(), **flags):
     """Run accept_quest / _replay_quests against `rows` (patched in as the
     server's quest table) with QUEST_LOG_RETAIL = `retail`, the skill bar
-    `bar` (an empty bar when None) and any other authsrv flag in `flags`;
-    restores all of it. `steps` is [(kind, qid or held, map_id, state
-    overrides)]; one progress carrier is shared across the steps, as
-    bind_progress shares it across connections. Returns [[(op, values)] per
-    step]; the last step's state is left in drive.state."""
+    `bar` (an empty bar when None), the ACCOUNT's library `held` (laid into
+    authsrv.UNLOCKED; empty unless named -- RANGERLOOP-F6) and any other
+    authsrv flag in `flags`; restores all of it. `steps` is [(kind, qid or
+    held, map_id, state overrides)]; one progress carrier is shared across
+    the steps, as bind_progress shares it across connections. Returns
+    [[(op, values)] per step]; the last step's state is left in
+    drive.state."""
     saved_rows = authsrv._QUEST_ROWS
-    saved_flags = {k: getattr(authsrv, k) for k in ["QUEST_LOG_RETAIL"] + list(flags)}
+    saved_flags = {k: getattr(authsrv, k)
+                   for k in ["QUEST_LOG_RETAIL", "UNLOCKED"] + list(flags)}
     saved_bar = list(authsrv.SKILLBAR)
     authsrv._QUEST_ROWS = rows
     authsrv.QUEST_LOG_RETAIL = retail
+    authsrv.UNLOCKED = account_words(held)
     authsrv.SKILLBAR[:] = list(bar) if bar is not None else [0] * authsrv.SKILLBAR_SLOTS
     for k, v in flags.items():
         setattr(authsrv, k, v)
@@ -777,10 +871,13 @@ def section_6():
     import questdefs
     rows = questdefs.load()
     nm = questdefs.enc_string(rows[ERRAND]["enc_name"])
+    # RE-AIMED for RANGERLOOP-F5: s1 is the row's region now, not the name
+    # (§17 holds the slots themselves); this section is about flags and home.
+    reg = questdefs.enc_string(rows[ERRAND]["enc_region"])
     acc, = drive(rows, [("accept", ERRAND, 148, {})])
     add = first(acc, ACCEPT)
     led.ok(add is not None and add[4] == 32 and add[8] == 148
-           and add[5:8] == [nm, nm, nm],
+           and add[5:8] == [reg, nm, nm],
            "the errand's 0x0049 carries log flags 32 (a row that says nothing: "
            "QUEST_LOG_FLAGS_DEFAULT, what ours always sent) and home 148, the "
            "accepting map", f"{add}")
@@ -791,14 +888,14 @@ def section_6():
     led.ok(add0 is not None and add0[4] == 0 and add0[8] == 148,
            "a row with quest_log_flags = 0 accepts with flags 0 (retail's value "
            "on 5 of the tape's 12 accepts)", f"{add0}")
-    led.ok(re0 == [ERRAND, 0, nm, nm, nm, 148],
+    led.ok(re0 == [ERRAND, 0, reg, nm, nm, 148],
            "and its 0x0050 on the NEXT map (168) carries flags 0 and home 148 "
            "-- the accepting map, not the one being loaded", f"{re0}")
     led.ok(log_words_hold(add0, 148, [re0]),
            "and the tape's rule (log_words_hold) holds on ours", f"{add0} {re0}")
     # A quest held with no recorded home: the loaded map, as before S18.
     rep_nohome, = drive(rows0, [("replay", [ERRAND], 168, {})])
-    led.ok(first(rep_nohome, REPLAY) == [ERRAND, 0, nm, nm, nm, 168],
+    led.ok(first(rep_nohome, REPLAY) == [ERRAND, 0, reg, nm, nm, 168],
            "a held quest with NO recorded home replays the loaded map (the "
            "pre-S18 value) with the row's flags", f"{first(rep_nohome, REPLAY)}")
     # KNOWN-BAD: --no-retail-quest-log.
@@ -1087,7 +1184,9 @@ def section_9():
                     "SKU:384", "ADD", "SHOW"],
            f"a FULL backpack ({size} slots): no 0x0161 / 0x013E, the skills "
            "and the accept still go", f"{red3}")
-    acc4, = drive(rows, [("accept", ERRAND, 148, {"skills_known": {382}})])
+    # RE-AIMED for RANGERLOOP-F6: the account's library (held), not a faked
+    # skills_known; §15 covers the connection's own earlier grant.
+    acc4, = drive(rows, [("accept", ERRAND, 148, {})], held={382})
     led.ok(reduce_accept(acc4)[2:5] == ["SKC:382", "SKB:0:382", "SKC:384"],
            "a skill the account already holds sends no 0x001C",
            f"{reduce_accept(acc4)}")
@@ -1223,23 +1322,42 @@ def section_10():
                and it[3] == 27,
                "TAPE: the 0x013E places the item the 0x0161 declared (id "
                f"{it[1] if it else None}, type 27 -- a sword)", f"{it} {ia}")
-        # OURS vs TAPE: q75's own grants, the bar holding two skills and the
-        # account already holding 382 and 1 (the tape's lone 0x001C is 384's).
+        # OURS vs TAPE: q75's own grants, the bar holding two skills, and the
+        # ACCOUNT the tape's own -- RE-AIMED for RANGERLOOP-F6. This used to
+        # fake skills_known = {382, 1} to reproduce the lone 0x001C (384's),
+        # because ours gated the toast on that per-connection set; the gate
+        # now reads the account's library, so the fixture hands it the
+        # library this account's client was holding: the tape's last 0x001D
+        # before the accept (tape_library).
+        lib, lib_at = tape_library(conns, 921.1613)
+        led.ok(lib is not None and len(lib) == 38 and {382, 1} <= lib
+               and 384 not in lib,
+               "TAPE: the account library in force at q75's accept is the "
+               f"0x001D at {lib_at} -- 38 skills, 382 and 1 among them, 384 "
+               "not", f"{None if lib is None else len(lib)} {lib_at}")
         rows = rows_with({ERRAND: {"accept_items": ["starter_sword"],
                                    "accept_skills": [382, 384, 1]}})
         bar = [331, 332] + [0] * (authsrv.SKILLBAR_SLOTS - 2)
-        ours_b, = drive(rows, [("accept", ERRAND, 160,
-                                {"skills_known": {382, 1}})], bar=bar)
-        bad_b, = drive(rows, [("accept", ERRAND, 160,
-                               {"skills_known": {382, 1}})], bar=bar,
-                       ACCEPT_REWARDS=False)
+        held = lib or ()
+        ours_b, = drive(rows, [("accept", ERRAND, 160, {})], bar=bar,
+                        held=held)
+        bad_b, = drive(rows, [("accept", ERRAND, 160, {})], bar=bar,
+                       held=held, ACCEPT_REWARDS=False)
         led.ok(reduce_accept(ours_b) == red,
-               "OURS vs TAPE: accept_quest for q75's grants equals the tape on "
-               "every reduced kind, skill id and bar slot",
+               "OURS vs TAPE: accept_quest for q75's grants, on the tape's own "
+               "account library and NO skills_known, equals the tape on every "
+               "reduced kind, skill id and bar slot -- the lone 0x001C 384's",
                f"ours {reduce_accept(ours_b)} tape {red}")
         led.ok(reduce_accept(bad_b) != red,
                "KNOWN-BAD: --no-accept-rewards does NOT equal the tape",
                f"{reduce_accept(bad_b)}")
+        gate_b, = drive(rows, [("accept", ERRAND, 160, {})], bar=bar,
+                        held=held, ACCOUNT_UNLOCK_GATE=False)
+        led.ok([k for k in reduce_accept(gate_b) if k.startswith("SKU")]
+               == ["SKU:382", "SKU:384", "SKU:1"],
+               "KNOWN-BAD: --no-account-unlock-gate on the same library sends "
+               "0x001C for 382 and 1 too -- the toast RANGERLOOP-F6 saw -- and "
+               "does NOT equal the tape", f"{reduce_accept(gate_b)}")
         sab = list(batch)
         ai = next(i for i, (op, _v) in enumerate(sab) if op == ACCEPT)
         si = next(i for i, (op, _v) in enumerate(sab) if op == SKC)
@@ -1295,15 +1413,18 @@ def section_11():
     rows = questdefs.load()
     nm_e = questdefs.enc_string(rows[ERRAND]["enc_name"])
     nm_b = questdefs.enc_string(rows[BANDITS]["enc_name"])
+    # RE-AIMED for RANGERLOOP-F5: s1 is the row's region (0x3D64) now, not
+    # the name; this section is about the marker (§17 holds the slots).
+    reg = questdefs.enc_string(rows[ERRAND]["enc_region"])
     scout = {"pos": (8933.0, 7752.0), "plane": 0}
     live = {"agents": {98: dict(scout)}}
     e, b = drive(rows, [("accept", ERRAND, 148, live),
                         ("accept", BANDITS, 148, live)])
     add_e, add_b = first(e, ACCEPT), first(b, ACCEPT)
-    led.ok(add_e == [ERRAND, (8933.0, 7752.0), 0, 148, 32, nm_e, nm_e, nm_e, 148],
+    led.ok(add_e == [ERRAND, (8933.0, 7752.0), 0, 148, 32, reg, nm_e, nm_e, 148],
            "the errand's 0x0049 marks the scout (errand_scout, 8933, 7752) with "
            "its live plane on this map", f"{add_e}")
-    led.ok(add_b == [BANDITS, (9326.0, 8077.0), 0, 168, 32, nm_b, nm_b, nm_b, 148],
+    led.ok(add_b == [BANDITS, (9326.0, 8077.0), 0, 168, 32, reg, nm_b, nm_b, 148],
            "the bandits' 0x0049 marks the exit ascalon_to_corridor (9326, 8077) "
            "on 148, plane 0, labelled 168 -- the kill target's map", f"{add_b}")
     spots = {(8933.0, 7752.0, 0)}
@@ -1849,6 +1970,447 @@ def section_14():
            f"{[(cc, t, q, r) for cc, _g, t, q, r in bearing if not items_before_remove(r)]}")
 
 
+# ---------------------------------------------------------------- RANGERLOOP-F6
+def grant_kinds(sid, held=(), known=(), store=None, gate=True):
+    """grant_skill(sid) on an empty bar, the account holding `held` (laid
+    into authsrv.UNLOCKED), this connection `known`, an optional store, the
+    gate flag `gate`; -> (reduced kinds, state). Everything restored."""
+    import contextlib
+    import io
+    saved = (authsrv.UNLOCKED, authsrv.ACCOUNT_UNLOCK_GATE,
+             list(authsrv.SKILLBAR))
+    authsrv.UNLOCKED = account_words(held)
+    authsrv.ACCOUNT_UNLOCK_GATE = gate
+    authsrv.SKILLBAR[:] = [0] * authsrv.SKILLBAR_SLOTS
+    sent, send = collect()
+    st = fresh_state(skills_known=set(known))
+    if store is not None:
+        st["charstore_game"] = store
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.grant_skill(send, st, sid, 0)
+    finally:
+        authsrv.UNLOCKED, authsrv.ACCOUNT_UNLOCK_GATE = saved[:2]
+        authsrv.SKILLBAR[:] = saved[2]
+    return reduce_batch(sent), st
+
+
+def toast_iff_outside(results, held):
+    """The tape's rule, 19 of 19: every grant carries its 0x00DC, and a
+    0x001C exactly when the skill is outside the account's library. Vacuous
+    unless both sides are exercised: False."""
+    ins = [s for s in results if s in held]
+    outs = [s for s in results if s not in held]
+    if not ins or not outs:
+        return False
+    return all(f"SKC:{s}" in k and (f"SKU:{s}" in k) == (s not in held)
+               for s, k in results.items())
+
+
+class _AcctStore:
+    """A charstore stand-in for grant_skill: an account list (None = never
+    authored, the --unlocks flag answers) and no-op mutators."""
+
+    def __init__(self, acct):
+        self.acct = acct
+
+    def account_unlocked_skills(self):
+        return None if self.acct is None else list(self.acct)
+
+    def learn_character_skill(self, uuid_hex, skill_id, seed=None):
+        return True
+
+    def unlock_account_skill(self, skill_id, seed=None):
+        return False
+
+
+def section_15():
+    print("\n15. RANGERLOOP-F6: OURS -- a granted skill's 0x001C iff it is "
+          "outside the ACCOUNT's library")
+    held = {2, 382}
+    sweep = (1, 2, 382, 384, 394)
+    res = {s: grant_kinds(s, held=held)[0] for s in sweep}
+    led.ok(toast_iff_outside(res, held)
+           and res[2] == ["SKC:2", "SKB:0:2"]
+           and res[384] == ["SKC:384", "SKB:0:384", "SKU:384"],
+           "grant_skill with the account holding {2, 382} (authsrv.UNLOCKED, "
+           "the --unlocks bitmap the load's 0x001D sends): 2 and 382 send "
+           "0x00DC + 0x00D9 and NO 0x001C; 1, 384 and 394 add the 0x001C",
+           f"{res}")
+    k_known, _ = grant_kinds(384, held=(), known={384})
+    k_new, st_new = grant_kinds(394, held=(), known={384})
+    led.ok(k_known == ["SKC:384", "SKB:0:384"]
+           and k_new == ["SKC:394", "SKB:0:394", "SKU:394"]
+           and st_new["skills_known"] == {384, 394},
+           "a skill this connection granted earlier (skills_known) is held: "
+           "no second 0x001C; one new to both still toasts, and joins "
+           "skills_known", f"{k_known} {k_new}")
+    s_hold, _ = grant_kinds(384, held={2}, store=_AcctStore([384]))
+    s_flag, _ = grant_kinds(2, held={2}, store=_AcctStore([384]))
+    s_none, _ = grant_kinds(2, held={2}, store=_AcctStore(None))
+    led.ok(s_hold == ["SKC:384", "SKB:0:384"]
+           and s_flag == ["SKC:2", "SKB:0:2", "SKU:2"]
+           and s_none == ["SKC:2", "SKB:0:2"],
+           "under --persist a STORED account list is the library (384 held, "
+           "2 -- set only in the flag's bitmap -- new), and a store with NO "
+           "list falls back to the flag's bitmap (2 held), as the load's "
+           "0x001D does (resolve_library)", f"{s_hold} {s_flag} {s_none}")
+    words = [0] * len(authsrv.UNLOCKED)
+    past = authsrv.SKILL_TABLE_ROWS
+    for s in (382, past):
+        words[s // 32] |= 1 << (s % 32)
+    saved = authsrv.UNLOCKED
+    authsrv.UNLOCKED = words
+    try:
+        got = authsrv.account_skills_held(fresh_state(skills_known={7}))
+    finally:
+        authsrv.UNLOCKED = saved
+    led.ok(got == {382, 7},
+           f"account_skills_held: the flag's bitmap bounded by the served "
+           f"table (a bit at {past} dropped, as the seed is) plus "
+           f"skills_known", f"{sorted(got)}")
+    # KNOWN-BAD: the pre-F6 gate -- the empty per-connection set.
+    bad = {s: grant_kinds(s, held=held, gate=False)[0] for s in sweep}
+    led.ok(all(f"SKU:{s}" in k for s, k in bad.items())
+           and not toast_iff_outside(bad, held),
+           "KNOWN-BAD arm (--no-account-unlock-gate): every first grant "
+           "toasts, 2 and 382 included -- RANGERLOOP-F6's toast -- and the "
+           "rule goes RED", f"{bad}")
+    led.ok(not toast_iff_outside({2: ["SKC:2", "SKB:0:2"]}, held)
+           and not toast_iff_outside({2: ["SKC:2", "SKB:0:2", "SKU:2"],
+                                      384: ["SKC:384", "SKB:0:384", "SKU:384"]},
+                                     held)
+           and not toast_iff_outside({2: ["SKB:0:2"],
+                                      384: ["SKC:384", "SKU:384"]}, held),
+           "VACUITY: the rule refuses one side unexercised, a held skill's "
+           "toast, and a grant without its 0x00DC")
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.no_account_unlock_gate:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--no-account-unlock-gate"]).no_account_unlock_gate
+           and not ap.parse_args([]).no_account_unlock_gate
+           and authsrv.ACCOUNT_UNLOCK_GATE is True
+           and "global ACCOUNT_UNLOCK_GATE\n" in window
+           and "ACCOUNT_UNLOCK_GATE = False\n" in window,
+           "--no-account-unlock-gate parses, the default gates on the account, "
+           "and main() sets ACCOUNT_UNLOCK_GATE = False under it",
+           f"window found={at >= 0}")
+
+
+def library_join(libs, learns, unlocks):
+    """Every 0x00DC joined to the account library IN FORCE at it: the last
+    0x001D before it on the corpus's clock (capture, then t), plus every
+    0x001C after that load and before this batch. -> [(capture, port, t,
+    skill, toasted, by_load, by_unlock, lib_at)] -- toasted = a 0x001C for
+    the skill in the same batch; lib_at None when no 0x001D precedes it."""
+    ev = ([(c, t, 0, "LIB", ids, p) for c, p, t, ids in libs]
+          + [(c, t, 1, "LEARN", s, p) for c, p, t, s in learns]
+          + [(c, t, 2, "UNL", s, p) for c, p, t, s in unlocks])
+    ev.sort(key=lambda e: (e[0], e[1], e[2]))
+    toasts = {(c, p, t, s) for c, p, t, s in unlocks}
+    lib, since, at, out = None, set(), None, []
+    for cap, t, _o, kind, x, port in ev:
+        if kind == "LIB":
+            lib, since, at = set(x), set(), (cap, port, t)
+        elif kind == "UNL":
+            since.add(x)
+        else:
+            out.append((cap, port, t, x, (cap, port, t, x) in toasts,
+                        lib is not None and x in lib,
+                        x in since and not (lib is not None and x in lib), at))
+    return out
+
+
+def library_growth(libs, unlocks):
+    """(drops, carried): every 0x001D against the previous one plus the
+    0x001C since -- `drops` the loads that lost an id; `carried` [(skill,
+    in the next load?)] for each 0x001C that a later load follows."""
+    ev = sorted([(c, t, 0, ids) for c, _p, t, ids in libs]
+                + [(c, t, 1, s) for c, _p, t, s in unlocks],
+                key=lambda e: (e[0], e[1], e[2]))
+    prev, since, drops, carried, pending = None, set(), [], [], []
+    for cap, t, kind, x in ev:
+        if kind == 1:
+            since.add(x)
+            pending.append(x)
+            continue
+        if prev is not None and not (prev - since) <= x:
+            drops.append((cap, t, sorted(prev - x)))
+        carried += [(s, s in x) for s in pending]
+        prev, since, pending = set(x), set(), []
+    return drops, carried
+
+
+def section_16():
+    print("\n16. RANGERLOOP-F6: the live CORPUS -- every retail 0x00DC against "
+          "the account library in force")
+    c = corpus()
+    if c is None:
+        led.skip("section 16, the live corpus", "no live captures")
+        return
+    joined = library_join(c["libs"], c["learns"], c["unlocks"])
+    unjoined = [j[:4] for j in joined if j[7] is None]
+    wrong = [j[:7] for j in joined
+             if j[4] == (j[5] or j[6])]          # toasted a held one, or not a new one
+    outside = [j for j in joined if not (j[5] or j[6])]
+    by_load = [j for j in joined if j[5]]
+    by_unl = [j[:4] for j in joined if j[6]]
+    led.ok(len(joined) >= 19 and not unjoined and not wrong
+           and len(outside) >= 7 and len(by_load) >= 11
+           and ("20260929T150923", "53756", 1191.0277, 384) in by_unl,
+           f"CORPUS: {len(joined)} retail 0x00DC (floor 19), each joined to the "
+           f"library in force -- 0x001C on {len(outside)} outside it (floor 7) "
+           f"and on none of {len(by_load) + len(by_unl)} inside it ({len(by_load)} "
+           f"in the load's 0x001D, floor 11; {by_unl} by an earlier 0x001C on the "
+           f"same clock)", f"unjoined {unjoined} wrong {wrong}")
+    drops, carried = library_growth(c["libs"], c["unlocks"])
+    led.ok(len(c["libs"]) >= 38 and not drops and len(carried) >= 6
+           and all(ok for _s, ok in carried),
+           f"CORPUS: the account library only grows -- {len(c['libs'])} 0x001D "
+           f"(floor 38), none drops an id -- and every skill a 0x001C unlocked "
+           f"is in the next load ({len(carried)} of {len(carried)}, floor 6): "
+           f"0x001C is the ACCOUNT's unlock", f"drops {drops} {carried}")
+    # KNOWN-BAD: the pre-F6 rule on the same events -- a toast for any skill
+    # not granted earlier on the same CONNECTION.
+    seen, agree = {}, 0
+    for cap, port, t, s, toasted, _bl, _bu, _at in sorted(joined, key=lambda j: (j[0], j[2])):
+        mine = seen.setdefault((cap, port), set())
+        agree += toasted == (s not in mine)
+        mine.add(s)
+    led.ok(len(joined) - agree >= 12,
+           f"KNOWN-BAD: the per-connection rule (--no-account-unlock-gate) "
+           f"predicts a toast on every first grant and MISSES "
+           f"{len(joined) - agree} of {len(joined)} (floor 12)", f"agree {agree}")
+    sab = [u for u in c["unlocks"]
+           if (u[0], u[1], u[2], u[3]) != ("20260929T150923", "56064", 921.1613, 384)]
+    sjoin = library_join(c["libs"], c["learns"], sab)
+    sbad = [j[:5] for j in sjoin if j[4] == (j[5] or j[6])]
+    led.ok(len(sab) == len(c["unlocks"]) - 1 and sbad,
+           "KNOWN-BAD: a sabotaged tape (q75's 0x001C for 384 dropped) FAILS "
+           "the join", f"{sbad}")
+
+
+# ---------------------------------------------------------------- RANGERLOOP-F5
+def region_first(v):
+    """The tape's rule for one 0x0049 / 0x0050, 137 of 137: s1 is ONE code
+    unit and differs from s2. Read from the END ([.., s1, s2, s3, home]),
+    so the tape's header field and our bare list both fit."""
+    s1, s2 = v[-4], v[-3]
+    return len(s1) == 1 and s1 != s2
+
+
+def section_17():
+    print("\n17. RANGERLOOP-F5: OURS -- the region in 0x0049 / 0x0050's first "
+          "string slot, the name in the other two")
+    import questdefs
+    rows = questdefs.load()
+    row = rows[ERRAND]
+    nm = questdefs.enc_string(row["enc_name"])
+    reg = questdefs.enc_string(row["enc_region"])
+    led.ok(questdefs.log_strings(row) == (reg, nm, nm) == (chr(0x3D64), nm, nm)
+           and questdefs.log_strings(row, region=False) == (nm, nm, nm),
+           "questdefs.log_strings: (enc_region, name, name) -- s1 0x3D64 -- and "
+           "(name, name, name) with region=False", f"{questdefs.log_strings(row)}")
+    rows0 = rows_with({ERRAND: {"quest_log_flags": 0}})
+    acc, rep = drive(rows0, [("accept", ERRAND, 148, {}),
+                             ("replay", [ERRAND], 168, {})])
+    add, re_ = first(acc, ACCEPT), first(rep, REPLAY)
+    led.ok(add is not None and add[5:8] == [reg, nm, nm] and add[4] == 0
+           and re_ == [ERRAND, 0, reg, nm, nm, 148],
+           "BOTH send sites: accept_quest's 0x0049 and _replay_quests' 0x0050 "
+           "for a flags-0 errand carry [region, name, name]", f"{add} {re_}")
+    led.ok(region_first(add) and region_first(re_),
+           "and the tape's rule (region_first) holds on both", f"{add[5:8]}")
+    b_acc, b_rep = drive(rows0, [("accept", ERRAND, 148, {}),
+                                 ("replay", [ERRAND], 168, {})],
+                         QUEST_REGION_SLOT=False)
+    b_add, b_re = first(b_acc, ACCEPT), first(b_rep, REPLAY)
+    led.ok(b_add[5:8] == [nm, nm, nm] and b_re == [ERRAND, 0, nm, nm, nm, 148]
+           and not region_first(b_add) and not region_first(b_re),
+           "KNOWN-BAD arm (--no-quest-region): the name in all three slots at "
+           "both sites -- every run before F5 -- and the rule goes RED",
+           f"{b_add[5:8]} {b_re}")
+    bare = dict(row)
+    bare.pop("enc_region")
+    rows_n = dict(rows0)
+    rows_n[ERRAND] = dict(bare, quest_log_flags=0)
+    n_acc, = drive(rows_n, [("accept", ERRAND, 148, {})])
+    n_add = first(n_acc, ACCEPT)
+    led.ok(questdefs.log_strings(bare) == (nm, nm, nm)
+           and n_add[5:8] == [nm, nm, nm] and not region_first(n_add),
+           "a row with NO enc_region sends the name in s1 under either arm "
+           "(the pre-F5 shape, and red under the rule) -- the column is what "
+           "carries the fix", f"{n_add[5:8]}")
+    led.ok(region_first([1, 0, "㵤", "ab", "ab", 148])
+           and not region_first([1, 0, "ab", "ab", "ab", 148])
+           and not region_first([1, 0, "㵤ā", "ab", "ab", 148])
+           and not region_first([1, 0, "ab", "ab", "cd", 148]),
+           "VACUITY: the rule refuses s1 == s2, a two-unit s1, and the name "
+           "in s1 with only s3 differing")
+    bad = [[0x41], [0x8103], [0x3D64, 0x0CC8], [], 0x3D64, [True], ["x"],
+           [0x10000], [0x00FF], (0x3D64, 1)]
+    refused = []
+    for v in bad:
+        try:
+            questdefs.region_units({"enc_region": v})
+        except ValueError:
+            refused.append(v)
+    led.ok(refused == bad and questdefs.region_units({}) is None
+           and questdefs.region_units({"enc_region": [0x3D64]}) == [0x3D64]
+           and questdefs.region_units({"enc_region": (0x0100,)}) == [0x0100]
+           and questdefs.region_units({"enc_region": [0x7FFF]}) == [0x7FFF],
+           "questdefs.region_units: absent is None; one unit 0x0100..0x7FFF "
+           "passes; a marker (0x41, 0xFF), a continuation word (0x8103), two "
+           "units, none, a bare int, a bool, a str and past a u16 are REFUSED",
+           f"refused {len(refused)} of {len(bad)}")
+
+    class _World:
+        def rows(self, kind):
+            return ({"q": {"quest_id": 7, "enc_region": [0x8103, 0x0CC8]}}
+                    if kind == "quest" else {})
+    try:
+        questdefs.load(_World())
+        load_msg = ""
+    except ValueError as exc:
+        load_msg = str(exc)
+    led.ok("'q'" in load_msg and "enc_region" in load_msg
+           and all(r.get("enc_region") == [0x3D64] for r in rows.values())
+           and len(rows) >= 2,
+           "questdefs.load refuses a two-unit enc_region at STARTUP, naming the "
+           "row; every shipped row carries [0x3D64]", load_msg)
+    ap = serverargs.build_parser(
+        doc="", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+        GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+        HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+        TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+        GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+        PROF_WARRIOR=authsrv.PROF_WARRIOR, VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+    with open(authsrv.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    at = src.find("    if a.no_quest_region:\n")
+    window = src[at:at + 200] if at >= 0 else ""
+    led.ok(ap.parse_args(["--no-quest-region"]).no_quest_region
+           and not ap.parse_args([]).no_quest_region
+           and authsrv.QUEST_REGION_SLOT is True
+           and "global QUEST_REGION_SLOT\n" in window
+           and "QUEST_REGION_SLOT = False\n" in window,
+           "--no-quest-region parses, the default sends the region, and main() "
+           "sets QUEST_REGION_SLOT = False under it", f"window found={at >= 0}")
+
+
+# The static read (build 38797, the pinned client), re-read as bytes by the
+# stdlib PE reader: (VA, bytes, what the instruction is). OBSERVED with
+# codescan --dis / --xrefs; studies/quests/FINDINGS.md §2.5 has the chain.
+F5_SITES = [
+    (0x0091DB9D, "8d421c50", "0x0049 dispatcher: lea eax, [edx+0x1c]; push eax -- s1 as the handler's [ebp+0x18]"),
+    (0x0080F0E2, "ff7518", "0x0049 handler 0x0080F0A0: push [ebp+0x18] (s1)"),
+    (0x0080F10E, "894608", "...mov [esi+8], eax -- s1 into record+0x08"),
+    (0x0080F135, "ff751c", "...push [ebp+0x1c] (s2)"),
+    (0x0080F161, "89460c", "...mov [esi+0xc], eax -- s2 into record+0x0C"),
+    (0x0091DC81, "8d410c50", "0x0050 dispatcher: lea eax, [ecx+0xc]; push eax -- s1 as [ebp+0x10]"),
+    (0x0080F4CB, "ff7510", "0x0050 handler 0x0080F470: push [ebp+0x10] (s1)"),
+    (0x0080F4FA, "894608", "...mov [esi+8], eax -- s1 into record+0x08"),
+    (0x0080DB8B, "8b4608", "0x0080DB40: mov eax, [esi+8] -- out[0] = record+0x08"),
+    (0x0080DBB1, "8b4604894708", "...mov eax, [esi+4]; mov [edi+8], eax -- out[2] = the flags"),
+    (0x0057DC70, "8d45f450ff7604e8", "heading 0x0057DC60: lea eax, [ebp-0xc]; push eax; push [esi+4]; call 0x0080DB40"),
+    (0x0057DCD2, "be02000000a8407505be03000000", "...sort code 2 if flags & 0x40, else 3"),
+    (0x0057DDA8, "13dd570046dd57005bdd570077dd5700", "...jump table: arms 0x57DD13, 0x57DD46, 0x57DD5B, 0x57DD77"),
+    (0x0057DD46, "6864040000e8", "arm 1: push 0x464 (1124), no argument"),
+    (0x0057DD77, "6a00ff75f46a0a6865040000e8", "arm 3: push 0; push [ebp-0xc]; push 0xa; push 0x465 (1125); call"),
+]
+
+
+def section_18():
+    print("\n18. RANGERLOOP-F5: the live CORPUS -- every retail 0x0049 / 0x0050's "
+          "first slot -- and the static read's bytes")
+    import questdefs
+    c = corpus()
+    if c is None:
+        led.skip("section 18's corpus half", "no live captures")
+    else:
+        rows = ([(cc, p, t, v) for cc, p, t, v, _m, _b in c["accepts"]]
+                + [(cc, p, t, v) for cc, p, t, v, _m in c["replays"]])
+        units = [(cc, p, t, v[1], v[-1], [[ord(ch) for ch in s] for s in v[-4:-1]])
+                 for cc, p, t, v in rows]
+        bad = [(cc, p, t, q) for cc, p, t, v in rows
+               for q in [v[1]] if not region_first(v)]
+        by_home = {}
+        for *_x, home, s in units:
+            by_home.setdefault(home, set()).add(tuple(s[0]))
+        many = {h: sorted(v) for h, v in by_home.items() if len(v) > 1}
+        pre = [s for *_x, home, s in units if home in (146, 148, 160)]
+        led.ok(len(rows) >= 137 and not bad and not many
+               and len(pre) >= 105 and all(s[0] == [0x3D64] for s in pre),
+               f"CORPUS: {len(rows)} quest-log rows (floor 137): s1 is ONE unit "
+               f"and differs from s2 on every one, and a function of the home "
+               f"map ({len(by_home)} homes, one word each); the {len(pre)} rows "
+               f"homed on 146 / 148 / 160 (floor 105) all carry 0x3D64",
+               f"bad {bad[:5]} many {many}")
+        shipped = questdefs.load()
+        word148 = by_home.get(148)
+        led.ok(word148 is not None and len(word148) == 1
+               and all([tuple(r["enc_region"])] == sorted(word148)
+                       for r in shipped.values()),
+               "the shipped rows' enc_region EQUALS the corpus's s1 for home 148 "
+               "-- their giver's map (content/world.toml errand_giver)",
+               f"{word148}")
+        ok_s1, ok_s2 = 0, 0
+        for *_x, s in units:
+            try:
+                questdefs.region_units({"enc_region": s[0]})
+                ok_s1 += 1
+            except ValueError:
+                pass
+            try:
+                questdefs.region_units({"enc_region": s[1]})
+                ok_s2 += 1
+            except ValueError:
+                pass
+        led.ok(ok_s1 == len(units) and ok_s2 == 0,
+               f"the loader's rule is the tape's: region_units accepts all "
+               f"{len(units)} retail s1 and refuses every retail s2 (4-5 units)",
+               f"s1 accepted {ok_s1}, s2 accepted {ok_s2}")
+        sab = [list(v[:-4]) + [v[-3]] + list(v[-3:])
+               for _cc, _p, _t, v in rows[:5]]
+        led.ok(sab and not any(region_first(v) for v in sab),
+               "KNOWN-BAD: retail rows sabotaged to carry the name in s1 FAIL "
+               "the rule", f"{len(sab)}")
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "clientscan"))
+    import framebus
+    exe = vaultpath.vault_path("client", "2026-07-29_221c13772c7a", "Gw.exe")
+    if not os.path.isdir(os.path.dirname(exe)):
+        led.skip("section 18's static half", f"no pinned client at {exe}")
+        return
+    im = framebus.Image(exe)
+
+    def at(va, n):
+        o = im.offset(va)
+        return im.blob[o:o + n].hex()
+    miss = [(hex(va), at(va, len(b) // 2), b) for va, b, _w in F5_SITES
+            if at(va, len(b) // 2) != b]
+    led.ok(im.identity[0] == 38797 and not miss,
+           f"STATIC, build 38797: all {len(F5_SITES)} sites of the chain read "
+           "as recorded -- the 0x0049 / 0x0050 dispatchers hand s1 to the "
+           "handlers, which store it at record+0x08; 0x0080DB40 returns it and "
+           "the flags; the heading's arm 3 (flags with none of 0x10 / 0x20 / "
+           "0x40) formats string 1125 with it", f"{im.identity} {miss}")
+    arm2 = at(0x0057DD5B, 13)
+    led.ok(arm2 != dict((va, b) for va, b, _w in F5_SITES)[0x0057DD77]
+           and arm2.startswith("6a00ff75f46a0a68") and arm2[16:24] == "78160100",
+           "CONTROL: arm 2 (0x0057DD5B, flags & 0x40) is the same shape with "
+           "id 0x11678, NOT 1125 -- the arm is what names the heading string",
+           arm2)
+
+
 def main():
     section_1()
     section_2()
@@ -1864,6 +2426,10 @@ def main():
     section_12()
     section_13()
     section_14()
+    section_15()
+    section_16()
+    section_17()
+    section_18()
     return led.verdict()
 
 

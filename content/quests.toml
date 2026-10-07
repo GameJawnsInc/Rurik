@@ -32,6 +32,12 @@
 [quest.rurik_first_errand]
 quest_id     = 1463
 enc_name     = [0x8103, 0x0CC8]
+# THE REGION (RANGERLOOP-F5): 0x0049 / 0x0050's FIRST string slot, which the
+# client's quest log formats into the heading of a quest with log flags 0
+# (string 1125, one argument) -- not the name, which rides the other two.
+# ArenaNet's word, an id and not text: OBSERVED as s1 on every retail log row
+# whose home is 146, 148 or 160 (questdefs.log_strings; the provenance note).
+enc_region   = [0x3D64]
 description  = "Follow the green arrow to my companion, then return to me."
 objectives   = "Speak with the scout, then return."
 wire_framing = "template"
@@ -148,6 +154,17 @@ none of that -- they are literals, and the 0x004C field holds 128 code units.
 literal run in the corpus) then the UTF-16, then 0x0001. The three are MEASURED
 constants read off our own captures; the words between them are ours.
 
+`enc_region = [0x3D64]` is ArenaNet's one-word id for string 15460 (word -
+0x100), the region the client files a flags-0 quest under. OBSERVED, not
+chosen: it is the first string slot of every 0x0049 / 0x0050 in the live
+corpus whose home map is 146, 148 or 160 -- 20260929T150923 alone carries
+them on all 49 of its rows -- and this quest is accepted on 148, its giver's
+map (content/world.toml errand_giver). Retail's s1 is a function of the home
+map on 137 of 137 rows (test_questflow §18); the column is per quest because
+a quest row is where the accept's words live. The heading it draws matters
+only under `quest_log_flags = 0`; this row's default 32 files it under the
+argument-free 'Primary Quests' heading either way.
+
 quest_id 1463 sits under the client's own bound -- UiCtlWebLink.cpp:576 asserts
 `challengeId < CHALLENGES`, and CHALLENGES is 1465 on build 38797. There is no
 high band to author into: the corpus maximum is 1462, so 1463 and 1464 are the
@@ -164,6 +181,7 @@ only free ids beneath the bound.
 [quest.rurik_bandits]
 quest_id     = 1464
 enc_name     = [0x8103, 0x0CC9]
+enc_region   = [0x3D64]         # RANGERLOOP-F5: the errand's region, its home 148
 description  = "Bandits hold the road north. Their leader wears a glow. End him and come back."
 objectives   = "Kill the bandit leader, then return."
 wire_framing = "template"
@@ -184,5 +202,8 @@ spawn key to the corridor's boss row, so `kill_completes_objective` fires
 when THAT body dies and never for another. There is no objective NPC, so
 no marker moves off the giver while it is held; the giver's arrow comes
 back once the boss is dead. The reward is paid as the errand's is.
+`enc_region = [0x3D64]` is the errand's, for the errand's reason: the same
+giver on map 148, whose retail log rows all carry that s1 (the errand's
+provenance note has the census).
 """
 

@@ -305,6 +305,72 @@ def log_flags(row):
     return v
 
 
+# THE QUEST-LOG STRING SLOTS -- 0x0049's s1, s2, s3 and 0x0050's, RANGERLOOP-F5.
+# s1 IS THE HEADING'S ARGUMENT, and it is a REGION, not the quest's name.
+#
+# OBSERVED, static (build 38797, codescan): the 0x0049 dispatcher (0x0091DB70)
+# hands the handler 0x0080F0A0 the message's first string slot as [ebp+0x18],
+# and the handler copies it into the log record's +0x08 (0x0080F0E2..F130; s2
+# -> +0x0C, s3 -> +0x10). 0x0050's pair (0x0091DC70 -> 0x0080F470) does the
+# same with its first slot (0x0080F4FA). The log's heading formatter (0x0057DC60)
+# reads the record through 0x0080DB40 -- out[0] = +0x08, out[2] = the flags
+# word at +0x04 -- and picks its sort code off the flags: 0x10 -> 0, 0x20 -> 1
+# (id 1124, no argument -- "Primary Quests", what a flags-32 row has always
+# drawn), 0x40 -> 2 (id 71800), none -> 3 (jump table 0x0057DDA8). Arm 3
+# (0x0057DD77) formats id 1125 with +0x08 as its one argument (marker 0x0A) --
+# so a flags-0 quest is filed under "<s1> Quests".
+#
+# CORROBORATED, the live corpus (2026-10-07, 137 0x0049 / 0x0050 rows, 24
+# quests, 47 with flags 0 or 2): s1 is exactly ONE unit on 137 of 137, never
+# equal to s2, and a function of the home map -- 146, 148 and 160 carry
+# 0x3D64 (string 15460), 212 / 238 / 242 carry 0x617D (24701), 280 0x0E63
+# (3427), 449 0x6185 (24709); textrec reads each as a region's name. Ours sent
+# the quest's own name in all three slots, so a flags-0 quest was filed under
+# its own name plus the suffix (RANGERLOOP-F5, seen on our client 2026-09-30).
+#
+# s2 IS READ AS THE NAME: one value per quest and 24 distinct values for the
+# corpus's 24 quests (CORROBORATED by that alone). Which slot the tracker and
+# the 'Quest Added' toast draw is UNVERIFIED -- every run of ours sent the
+# name in all three. s3's meaning is NOT FOUND: retail's is 4-5 units, never
+# equal to s2, one value per quest and shared by up to 3 quests (15 values
+# for 24). Ours keeps the name in s2 and s3, as before.
+def region_units(row):
+    """The row's `enc_region` as [unit], validated, or None when absent.
+
+    ONE coded unit, because s1 is one unit on 137 of 137 retail rows: a list
+    holding a single int in 0x0100..0xFFFF with the continuation bit
+    (codedstr.CONT) clear -- a complete one-word string id, never a marker
+    (< 0x100, the TextApi.cpp:585 assert coded_literal's note is about), never
+    the first word of a longer id. Raises ValueError otherwise."""
+    v = row.get("enc_region")
+    if v is None:
+        return None
+    if not isinstance(v, (list, tuple)) or len(v) != 1:
+        raise ValueError(
+            f"enc_region = {v!r} is not ONE coded unit -- retail's s1 is a "
+            f"single unit on 137 of 137 quest-log rows")
+    u = v[0]
+    if isinstance(u, bool) or not isinstance(u, int):
+        raise ValueError(f"enc_region holds {u!r}, not a code unit")
+    if not codedstr.BIAS <= u <= 0xFFFF or u & codedstr.CONT:
+        raise ValueError(
+            f"enc_region = [0x{u:X}] is not a one-word string id: a unit "
+            f"below 0x100 is a MARKER and the continuation bit 0x8000 opens a "
+            f"multi-unit id")
+    return [u]
+
+
+def log_strings(row, region=True):
+    """(s1, s2, s3) for 0x0049 / 0x0050, as codec-ready strs.
+
+    s1 is the row's enc_region when it has one and `region` is set; else the
+    name, which is what every slot carried before RANGERLOOP-F5 (and what
+    --no-quest-region sends). s2 and s3 are the name."""
+    nm = enc_string(row.get("enc_name") or [])
+    reg = region_units(row) if region else None
+    return (enc_string(reg) if reg is not None else nm), nm, nm
+
+
 def check_accept_grants(row, item_rows):
     """Refuse a row's accept-time grants unless each resolves (RANGERPRE-S18,
     QUESTFLOW-A3): `accept_items` a list of content/items.toml keys present
@@ -355,9 +421,10 @@ def load(world=None):
     Keyed by the u32 the WIRE uses, not by the TOML section name, because that
     is what arrives in GAME_CMSG 0x0012 and what the server has to look up.
 
-    A row's `quest_log_flags`, its accept-time grants and (RANGERPRE-S20) its
-    hand-in items are validated HERE (RANGERPRE-S18), so a bad one stops the
-    server at startup rather than at the first accept or hand-in.
+    A row's `quest_log_flags`, its `enc_region` (RANGERLOOP-F5), its
+    accept-time grants and (RANGERPRE-S20) its hand-in items are validated
+    HERE (RANGERPRE-S18), so a bad one stops the server at startup rather
+    than at the first accept or hand-in.
     """
     world = world or content.load()
     out = {}
@@ -373,6 +440,7 @@ def load(world=None):
                 f"never be addressed.")
         try:
             log_flags(row)
+            region_units(row)
             if row.get("accept_items") is not None \
                     or row.get("accept_skills") is not None:
                 check_accept_grants(row, world.rows("item"))

@@ -2084,7 +2084,8 @@ print("== 29. MANTID: the effect list is the player's own; a hex's auras; a hex 
       "that punishes attacks; Ether Feast; a skill granted mid-map ==")
 EMPATHY, ETHER_FEAST = 26, 40
 _m29 = (authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS, authsrv.ENERGY,
-        authsrv.STATUS_WORD, authsrv.ARMOUR_TERM, list(authsrv.SKILLBAR))
+        authsrv.STATUS_WORD, authsrv.ARMOUR_TERM, list(authsrv.SKILLBAR),
+        authsrv.UNLOCKED)
 try:
     authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS = True, True
     authsrv.ENERGY, authsrv.STATUS_WORD, authsrv.ARMOUR_TERM = False, True, False
@@ -2202,6 +2203,11 @@ try:
           "(the tape's 0.68 x 88 = 60), 50 landing on 50/100",
           f"out={out} heals={heals(sent)}")
     # (d) a skill granted mid-map
+    # RE-AIMED for RANGERLOOP-F6: the 0x001C is gated on the ACCOUNT's
+    # library (authsrv.UNLOCKED, the --unlocks bitmap -- every skill by
+    # default, which would make each grant below a held one), so the
+    # fixture names the account it models: one holding the bar's 1 and 2.
+    authsrv.UNLOCKED = authsrv.skillunlock.words_from_ids([1, 2], "test")
     authsrv.SKILLBAR[:] = [1, 2, 0, 0, 0, 0, 0, 0]
     state = fresh_state()
     sent, send = collector()
@@ -2248,6 +2254,7 @@ finally:
     (authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS, authsrv.ENERGY,
      authsrv.STATUS_WORD, authsrv.ARMOUR_TERM) = _m29[:5]
     authsrv.SKILLBAR[:] = _m29[5]
+    authsrv.UNLOCKED = _m29[6]
 
 print("\n== 30. SLICE-H14: Healing Signet costs its caster 40 armour WHILE it is "
       "used -- a hostile swing landing inside the activation deals exactly "

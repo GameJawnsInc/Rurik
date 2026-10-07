@@ -819,7 +819,10 @@ def accept_quest(send, state, qid, row, conn_id):
         print(f"[c{conn_id}] quest {qid} accept grants, BEFORE the 0x0049: "
               f"{', '.join(granted)} (RANGERPRE-S18, QUESTFLOW-A3)", flush=True)
     mid = state["map_id"]
-    nm = questdefs.enc_string(row.get("enc_name") or [])
+    # RANGERLOOP-F5: s1 is the heading's argument -- the row's REGION, s2 and
+    # s3 its name (questdefs.log_strings has the static read and the census);
+    # --no-quest-region sends the name in all three, as before F5.
+    s1, s2, s3 = questdefs.log_strings(row, region=QUEST_REGION_SLOT)
     flags = questdefs.log_flags(row) if QUEST_LOG_RETAIL else 32
     if QUEST_MARKER_AT_OBJECTIVE:
         mpos, mplane, mmap, why = quest_accept_marker(state, row)
@@ -831,7 +834,7 @@ def accept_quest(send, state, qid, row, conn_id):
           f"{mpos[1]:.0f}) plane {mplane} map {mmap} -- {why} "
           f"(RANGERPRE-S18, QUESTFLOW-A2)", flush=True)
     send(GAME_SMSG_QUEST_ADD,
-         [qid, tuple(mpos), mplane, mmap, flags, nm, nm, nm, mid],
+         [qid, tuple(mpos), mplane, mmap, flags, s1, s2, s3, mid],
          f"QUEST_ADD[{qid}] (accepted; marker map {mmap}, log flags {flags}, "
          f"home {mid})")
     state.setdefault("quests", set()).add(qid)
@@ -1617,12 +1620,13 @@ def _replay_quests(send, state):
     homes = state.get("quest_home") or {}
     for qid in held:
         row = quest_rows()[qid]
-        nm = questdefs.enc_string(row.get("enc_name") or [])
+        # RANGERLOOP-F5: the accept's three slots (questdefs.log_strings).
+        s1, s2, s3 = questdefs.log_strings(row, region=QUEST_REGION_SLOT)
         if QUEST_LOG_RETAIL:
             flags, home = questdefs.log_flags(row), int(homes.get(qid, mid))
         else:
             flags, home = 32, mid
-        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, flags, nm, nm, nm, home],
+        send(GAME_SMSG_QUEST_ADD_NO_MARKER, [qid, flags, s1, s2, s3, home],
              f"QUEST_ADD_NO_MARKER[{qid}] (instance load; log flags {flags}, "
              f"home {home})")
     for qid in held:
@@ -14319,6 +14323,27 @@ ACCEPT_REWARDS = True          # False (--no-accept-rewards): a quest row's
                                # them BEFORE the 0x0049 -- retail's order on 2
                                # of 2 grant-carrying accepts (OBSERVED;
                                # 20260929T150923 :56064 921.161, q75).
+ACCOUNT_UNLOCK_GATE = True     # False (--no-account-unlock-gate): grant_skill
+                               # decides "new to the account" (its 0x001C)
+                               # against this connection's skills_known alone
+                               # without a stored library -- empty at every
+                               # connect, so every first grant toasts, the
+                               # skill already held included (RANGERLOOP-F6,
+                               # seen on our client 2026-09-30). Default ON:
+                               # against account_skills_held -- the stored
+                               # list, else the --unlocks bitmap the load's
+                               # 0x001D carried, plus skills_known. OBSERVED
+                               # 19 of 19 retail 0x00DC: 0x001C iff outside.
+QUEST_REGION_SLOT = True       # False (--no-quest-region): 0x0049 / 0x0050
+                               # carry the quest's name in all three string
+                               # slots, as every run before RANGERLOOP-F5 --
+                               # a flags-0 quest is then filed under its OWN
+                               # name plus the 'Quests' suffix (seen on our
+                               # client 2026-09-30). Default ON: s1 is the
+                               # row's enc_region (questdefs.log_strings) --
+                               # the heading's argument (static, 0x0057DD77
+                               # <- record+8 <- 0x0080F0A0's first string)
+                               # and one region unit on 137 of 137 retail rows.
 QUEST_ITEMS_ENABLED = True     # False (--no-quest-items): a hand-in takes no
                                # handin_items back and grants no reward_items,
                                # and the screens draw no item line, as every
@@ -28038,6 +28063,33 @@ def on_attack_triggers(send, state, attacker_id, conn_id):
     return total
 
 
+def account_skills_held(state):
+    """The skills this ACCOUNT holds right now -- what grant_skill's 0x001C
+    is gated on (RANGERLOOP-F6).
+
+    The load's 0x001D is the account's library, so this is that set, read
+    the way the load reads it (skillunlock.resolve_library) and the way
+    player_usable_library / hero_usable_library fall back: the stored list
+    under --persist, else the --unlocks bitmap, bounded by the served skill
+    table as the seed in grant_skill is -- PLUS skills_known, what this
+    connection has granted since, because a grant's 0x001C has unlocked it
+    whether or not anything persisted.
+
+    OBSERVED, the live corpus (19 retail 0x00DC, 7 captures; the library
+    in force at each = the latest 0x001D before it on the capture's own
+    clock, plus every 0x001C sent since): the 0x001C rides the 0x00DC on 7
+    of 7 skills outside that set and on 0 of 12 inside it -- 11 in the
+    load's 0x001D, and skill 384 at 20260929T150923 :53756 1191.028, which
+    :56064's 0x001C had unlocked at 921.161 on the same clock.
+    test_questflow §15-§16 pin it."""
+    store = state.get("charstore_game")
+    acct = None if store is None else store.account_unlocked_skills()
+    if acct is None:
+        acct = [s for s in ids_from_words(UNLOCKED) if s < SKILL_TABLE_ROWS]
+    return (set(int(s) for s in acct)
+            | set(int(s) for s in state.get("skills_known", ())))
+
+
 def grant_skill(send, state, skill_id, conn_id, slot=None, unlocked=False):
     """MANTID: put a skill in the player's hands the way the tutorial did --
     SKILL_SET_COPIES, the per-slot bar write, and SKILL_UNLOCKED unless the
@@ -28092,8 +28144,17 @@ def grant_skill(send, state, skill_id, conn_id, slot=None, unlocked=False):
     known = state.setdefault("skills_known", set())
     acct_ids = None if store is None else store.account_unlocked_skills()
     # Read the account BEFORE the mutators below touch it.
-    new_to_account = (skill_id not in acct_ids if acct_ids is not None
-                      else skill_id not in known)
+    # RANGERLOOP-F6: WITHOUT A STORED LIST the account is the --unlocks
+    # bitmap the load's 0x001D sent, not the per-connection skills_known --
+    # which is empty at every connect, so the old test toasted every first
+    # grant, the skill already held included (skill 2 on our client,
+    # 2026-09-30; retail granted it with no 0x001C, MANTID :60877 736.185).
+    # account_skills_held has the rule and the corpus (19 of 19).
+    if ACCOUNT_UNLOCK_GATE:
+        new_to_account = skill_id not in account_skills_held(state)
+    else:       # --no-account-unlock-gate: the pre-F6 test, KNOWN-BAD
+        new_to_account = (skill_id not in acct_ids if acct_ids is not None
+                          else skill_id not in known)
     if store is not None:
         learned = store.learn_character_skill(uuid_hex, skill_id, seed=seed)
         if learned is None:
@@ -48597,6 +48658,25 @@ def main():
               "before RANGERPRE-S18. KNOWN-BAD against the tape: retail grants "
               "them before the 0x0049 on 2 of 2 grant-carrying accepts "
               "(accept_quest).", flush=True)
+    if a.no_account_unlock_gate:
+        global ACCOUNT_UNLOCK_GATE
+        ACCOUNT_UNLOCK_GATE = False
+        print("[skills] --no-account-unlock-gate: a granted skill's 0x001C is "
+              "gated on this connection's skills_known alone (no stored "
+              "library), so every first grant toasts, a skill the account "
+              "holds included, as every run before RANGERLOOP-F6. KNOWN-BAD "
+              "against the tape: retail sends 0x001C only for a skill outside "
+              "the account's library, 19 of 19 (account_skills_held).",
+              flush=True)
+    if a.no_quest_region:
+        global QUEST_REGION_SLOT
+        QUEST_REGION_SLOT = False
+        print("[quests] --no-quest-region: 0x0049 / 0x0050 carry the quest's "
+              "name in all three string slots, as every run before "
+              "RANGERLOOP-F5 -- a flags-0 quest is filed under its own name. "
+              "KNOWN-BAD against the tape: retail's first slot is one region "
+              "unit on 137 of 137 log rows (questdefs.log_strings).",
+              flush=True)
     if a.no_quest_items:
         global QUEST_ITEMS_ENABLED
         QUEST_ITEMS_ENABLED = False
