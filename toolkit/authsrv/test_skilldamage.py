@@ -27,6 +27,7 @@ server resolves lands on a .5 at any rank 0..15.
 """
 
 import collections
+import contextlib
 import math
 import os
 import struct
@@ -49,7 +50,29 @@ import vaultpath  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=97)  # 2026-09-29 CASTAI-Z2 (the z2-sdmg lane) +16, all vault-only (sec.12: the pin exact under the payoff / converted classes with P3's swing pairs, the second Zaishen tape's census exact with the 16 unbacked rows, the Zealot's Fire finding, the classify=False arm, the wire's [10]-naming census; the round-2 review's four: the announce-order arm, the arbitrary-value injection arm, the converted and payoff signatures on synthetic batches through events(); the round-3 review's four: the sibling class pinned with its twelve value singletons, the Fighter's census with its whole-point reading, the sibling-bound arm (ARM 4), the wire-order read's re-keyed rows at the pin; the round-4 review's one: the flagged sibling counted at P2's floor, ARM 4 (iv); sec.12c: G4 exact on the tape with G4r and the whole-corpus signature, the removal-by-time arm): MEASURED, a vault run gives 135 (was 119, 6 red; 126 after round 1; 130 after round 2; 134 after round 3); floor unchanged -- a bare run still dies at section 1; 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+# THE BARE MACHINE (2026-10-07): the floor is decided on DIRECTORIES -- vault/content
+# and vault/captures/live -- never on what loaded, so a vault whose skills.toml did not
+# load still owes the full count and goes red. Each number is a green run's banner,
+# MEASURED 2026-10-07 in the zealous-cannon tree, never computed:
+#   FLOOR_VAULT 136 on the owner's vault, no skips = 2026-09-29's 135 + section 15 (the
+#     carried rows against the vault's). The single floor it replaces, 97, was a stale
+#     core: everything past it was vault-only and nothing said which.
+#   FLOOR_VAULT_NO_CORPUS 94 on a scratch vault holding a copy of the owner's
+#     vault/content and no captures/live: 136 less sections 12-13's 42, one declared skip.
+#     The corpus is all or nothing on its DIRECTORY -- a missing tape FAILS by name, it
+#     never skips -- so its count cannot drift with which tapes exist.
+#   FLOOR_BARE 76 with RURIK_VAULT at an empty directory and at a nonexistent path
+#     alike: sections 2-4 and 6-11d on the carried rows, five declared skips (1: 4
+#     checks, 5: 1, 12-13: 42, 14: 12, 15: 1).
+FLOOR_VAULT = 136
+FLOOR_VAULT_NO_CORPUS = 94
+FLOOR_BARE = 76
+HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
+HAVE_LIVE_CORPUS = os.path.isdir(vaultpath.vault_path("captures", "live"))
+LEDGER = checks.Ledger("skill damage", floor=(
+    FLOOR_BARE if not HAVE_VAULT_CONTENT
+    else FLOOR_VAULT if HAVE_LIVE_CORPUS else FLOOR_VAULT_NO_CORPUS))
+# The floor's history before 2026-10-07, when it was one number, 97: 2026-09-29 CASTAI-Z2 (the z2-sdmg lane) +16, all vault-only (sec.12: the pin exact under the payoff / converted classes with P3's swing pairs, the second Zaishen tape's census exact with the 16 unbacked rows, the Zealot's Fire finding, the classify=False arm, the wire's [10]-naming census; the round-2 review's four: the announce-order arm, the arbitrary-value injection arm, the converted and payoff signatures on synthetic batches through events(); the round-3 review's four: the sibling class pinned with its twelve value singletons, the Fighter's census with its whole-point reading, the sibling-bound arm (ARM 4), the wire-order read's re-keyed rows at the pin; the round-4 review's one: the flagged sibling counted at P2's floor, ARM 4 (iv); sec.12c: G4 exact on the tape with G4r and the whole-corpus signature, the removal-by-time arm): MEASURED, a vault run gives 135 (was 119, 6 red; 126 after round 1; 130 after round 2; 134 after round 3); floor unchanged -- a bare run still dies at section 1; 2026-09-28 the regenerate-from-38888 arc (c38-tab) +2, both vault-only (sec.12c: G3r with the 38797 known-bad arm; hexjoin's per-build table against every vault skills row): MEASURED, a vault run gives 119 on the 38797 vault and on the 38888 one; floor unchanged; 2026-09-28 CASTAI-Z1 (the z1-spell lane) +8, all vault-only (sec.12: the gapped connection set aside by name, the Zaishen tape's five multi-valued Mind Burn pairs exact; sec.12c: the set-aside, the whole corpus's FAILED set with the re-statements, I1 / M1, I2 / I3 / G2, G3 / C2c exact on the Zaishen tape, the confirming arm on the whole corpus): MEASURED, a vault run gives 117 (was 109, 4 red); floor unchanged -- a bare run dies at section 1 on the missing skills row 312 in the castai-z1 base tree exactly as here; 2026-09-27 the D6 review's repair +5 (sec.11c: the death batch order re-pinned, the payoff killing its own wearer (M5), the payoff killing the adjacent foe (M6), a second 179 arming no second payoff (R34-4); sec.11d: the dead target (R34-2); sec.12c rewritten per tape with the confirming-copy arm (EV-3, +1 there and the two exact pins re-scored on the witness)): MEASURED from the green run, 109 checks with the overlay = 104 + 5, floor 92 -> 97; 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 # vault/content/skill_labels.toml's label-tier row count per build its header declares,
@@ -60,7 +83,138 @@ check = LEDGER.ok
 LABEL_ROWS_BY_BUILD = {38797: 56, 38888: 55, 38974: 55}
 
 
+def _record(activation, aftercast, recharge, energy, attribute, profession, type_code,
+            target, skill_arguments, scale, duration=(0, 0), bonus_scale=(0, 0),
+            adrenaline=(0, 0), weapon_req=0, aoe_range=0.0, projectile=2077,
+            impact_visual=2077, touch_range=False):
+    return {"activation": activation, "aftercast": aftercast, "recharge": recharge,
+            "energy": energy, "adrenaline": adrenaline[0],
+            "adrenaline_units": adrenaline[1], "attribute": attribute,
+            "profession": profession, "type_code": type_code, "target": target,
+            "combo": 0, "combo_req": 0, "weapon_req": weapon_req, "aoe_range": aoe_range,
+            "skill_arguments": skill_arguments, "duration0": duration[0],
+            "duration15": duration[1], "scale0": scale[0], "scale15": scale[1],
+            "bonus_scale0": bonus_scale[0], "bonus_scale15": bonus_scale[1],
+            "projectile": projectile, "impact_visual": impact_visual,
+            "touch_range": touch_range, "half_range": False}
+
+
+# THE BARE MACHINE (2026-10-07). With RURIK_VAULT at an empty directory or at a
+# nonexistent path this file reached no verdict: section 1's first read,
+# `skill_scale_value(312, 0)`, raised ContentError (the reader's documented contract
+# on a rowless skill -- callers catch it), because the skills table is the vault's and
+# the tracked content carries 14 skills rows, none of these. No bare red here was a
+# server defect. Two kinds of section, two fixes:
+#   * a section whose SUBJECT is the vault -- section 1 (the extractor's endpoints
+#     against GWW's), section 5 (every skill in the effect table), sections 12-13 (the
+#     live corpus), section 14 (the label tier) and section 15 (RECORD against the
+#     vault) -- reads the vault's own tables and declares a skip, decided on the
+#     DIRECTORY (vaultpath.require_dir) and never on a missing row or an empty result;
+#   * a section whose subject is the SERVER's behaviour on a few skills -- 2-4 and
+#     6-11d -- runs on the rows below plus the tracked ones a bare machine has,
+#     which together REPLACE the skills table for those sections (`carried`), so a
+#     vault run takes exactly the bare path and cannot pass on a row a bare machine
+#     lacks.
+# The rows are skilltable.py's record as vault/content/skills.toml holds it, build
+# 38974 (measured numbers -- CLAUDE.md's gate), copied 2026-10-07; 312 / 317 / 322 /
+# 135 equal test_guards' copies of the same build. The ids are the ones these
+# sections were MEASURED reading off the vault's table on a vaulted run (a logging
+# table under the whole file): the default bar 316-323 (sections 7 / 11, through
+# bar_holds_adrenal), Healing Signet 1, Faintheartedness 135, Incendiary Bonds 179,
+# Mind Burn 185, Flare 194, Scourge Sacrifice 253 and Holy Strike 312. Section 15 holds
+# every one to the vault's loaded row, column for column, both ways. MEASURED with a
+# scratch mutant per row (RECORD less that row, the owner's vault): dropping any of 1,
+# 179, 185, 194, 253, 312, 317, 319, 320, 322 or 323 reddens the VAULT run (a FAIL or a
+# crash on the missing row); dropping 135, 316, 318 or 321 does not. Those four stay on
+# purpose: 135 is what makes sections 9 / 10's controls controls (Faintheartedness's
+# live bonus slot whose label is no condition -- rowless, both pass vacuously), and
+# 316 / 318 / 321 keep the bar the server walks the real one (317 alone is what arms it).
+# The attribute tables are NOT carried (test_guards' call, the same day): sections 7
+# and 9 reach attribute_state through hit_enemy, which on a bare machine refuses ("no
+# attribute cost rows") and its callers catch -- Critical Strikes reads 0, the weapon's
+# mastery None -- and no check here reads a value that moves with them: the green bare
+# run is what measured that. Section 6's ranks are the player row's (tracked). Nothing
+# else a carried section reads differs between a bare load and the vault's, row for
+# row (the same logging run), bar the label tier's rows inside the skill_effect scans,
+# none of them a skill these sections name.
+RECORD_BUILD = 38974
+RECORD = {
+    "1": _record(2.0, 0.75, 4, 0, 21, 1, 7, 0, 2, (82, 172)),   # Healing Signet, section 8's heal
+    "135": _record(1.0, 0.75, 8, 10, 7, 4, 4, 5, 5, (50, 50), duration=(4, 18),
+                   bonus_scale=(1, 3)),   # Faintheartedness, sections 9 / 10's hex
+    "179": _record(1.0, 0.75, 7, 10, 10, 6, 4, 5, 6, (20, 80), duration=(3, 3),
+                   bonus_scale=(1, 3), aoe_range=240.0),   # Incendiary Bonds, section 11c
+    "185": _record(1.0, 0.75, 5, 5, 10, 6, 5, 5, 6, (15, 60), bonus_scale=(1, 10),
+                   aoe_range=156.0),   # Mind Burn, section 11d
+    "194": _record(1.0, 0.75, 0, 5, 10, 6, 5, 5, 2, (20, 65), bonus_scale=(1800, 1800),
+                   aoe_range=156.0, projectile=343, impact_visual=344),   # Flare, sections 9 / 11
+    "253": _record(1.0, 0.75, 5, 5, 14, 3, 4, 5, 1, (100, 100), duration=(8, 20),
+                   aoe_range=156.0, impact_visual=463),   # Scourge Sacrifice, section 4
+    "312": _record(0.75, 0.75, 8, 5, 14, 3, 10, 5, 6, (10, 55), bonus_scale=(10, 55),
+                   touch_range=True),   # Holy Strike, sections 2 / 3 / 6 / 11
+    "316": _record(0.0, 0.0, 10, 5, 21, 1, 15, 0, 7, (10, 60), duration=(10, 20),
+                   bonus_scale=(1, 6), aoe_range=1000.0),   # the default bar, slot 1
+    "317": _record(0.0, 0.0, 0, 0, 17, 1, 3, 0, 1, (33, 33), duration=(5, 20),
+                   adrenaline=(4, 80)),   # Battle Rage, section 4; ARMS the default bar
+    "318": _record(0.0, 0.0, 0, 0, 17, 1, 16, 0, 7, (90, 300), duration=(20, 20),
+                   bonus_scale=(1, 10), adrenaline=(5, 120), aoe_range=20.0),   # Defy Pain, the bar
+    "319": _record(0.0, 0.0, 0, 0, 17, 1, 3, 0, 1, (25, 25), duration=(8, 20),
+                   adrenaline=(4, 80)),   # Rush, section 4's disabled set
+    "320": _record(0.0, 0.0, 10, 5, 20, 1, 14, 5, 4, (0, 0), bonus_scale=(3, 15),
+                   weapon_req=128),   # Hamstring, section 3's bonus-slot Crippled
+    "321": _record(0.0, 0.0, 8, 5, 51, 1, 14, 5, 0, (0, 0), weapon_req=185),   # the bar, slot 6
+    "322": _record(0.0, 0.0, 3, 5, 17, 1, 14, 5, 2, (10, 40),
+                   weapon_req=185),   # Power Attack, sections 3 / 6 / 9
+    "323": _record(0.0, 0.0, 7, 5, 21, 1, 14, 5, 2, (10, 40), duration=(2, 2),
+                   weapon_req=185),   # Desperation Blow, sections 3 / 6
+}
+
+
+@contextlib.contextmanager
+def _tables(**replace):
+    """WORLD's tables REPLACED by these for the block, then put back."""
+    import agents
+    tables = agents.WORLD.tables
+    kept = {k: tables[k] for k in replace if k in tables}
+    tables.update(replace)
+    try:
+        yield
+    finally:
+        for k in replace:
+            if k in kept:
+                tables[k] = kept[k]
+            else:
+                del tables[k]
+
+
+_TRACKED = []
+
+
+def carried():
+    """The skills table as a BARE machine holds it -- the tracked rows alone
+    (content/overrides/, `content.load(vault_dir="")`) -- plus RECORD's, for the
+    sections that read them. The tracked rows win a shared id, as they win the vault's
+    in content.load's merge order. They have to be here: section 10's Sever Artery 382
+    is a tracked row, and the first cut, RECORD alone, took it away and reddened 10."""
+    if not _TRACKED:
+        import agents
+        _TRACKED.append(agents.content.load(vault_dir="", extra_dirs=[]).rows("skills"))
+    table = {k: dict(v) for k, v in RECORD.items()}
+    table.update(_TRACKED[0])
+    return _tables(skills=table)
+
+
 def main():
+    with contextlib.ExitStack() as carry:
+        _sections(carry)
+    section_label_tier()
+    section_record_rows()
+    return LEDGER.verdict()
+
+
+def _sections(carry):
+    """Sections 1-13. `carry` holds `carried()` around 2-4 and 6-11d and nothing
+    around 1, 5 and the corpus, which read the vault's own tables."""
     import agents
     import authsrv
 
@@ -68,15 +222,33 @@ def main():
     # Both endpoints must reproduce or the interpolation is not the client's.
     # These four pairs are also the ones GWW independently lists, so a match is
     # two witnesses rather than our decoder agreeing with itself.
-    for skill_id, lo, hi, name in ((312, 10, 55, "Holy Strike"),
-                                   (322, 10, 40, "Power Attack"),
-                                   (323, 10, 40, "Desperation Blow"),
-                                   (276, 10, 70, "Restore Condition")):
-        got0 = authsrv.skill_scale_value(skill_id, 0)
-        got15 = authsrv.skill_scale_value(skill_id, 15)
-        check(got0 == lo and got15 == hi,
-              f"{name} ({skill_id}) scales {lo} -> {hi}",
-              f"rank 0 = {got0}, rank 15 = {got15}")
+    # THE BARE MACHINE (2026-10-07): the SUBJECT is the vault's table -- the extractor's
+    # numbers -- so this reads the loaded table, never RECORD (a carried row checked
+    # against the literal it was copied beside is no witness), and skips on an absent
+    # vault/content DIRECTORY. With the directory there and a row absent the check FAILS
+    # naming the miss: the reader raises ContentError on a rowless skill, its contract.
+    try:
+        vaultpath.require_dir("content", why="section 1: the endpoints in the vault's "
+                                             "skills table")
+    except SystemExit as exc:
+        LEDGER.skip("1. the endpoints in the vault's skills table (4 checks)",
+                    str(exc).splitlines()[0])
+    else:
+        for skill_id, lo, hi, name in ((312, 10, 55, "Holy Strike"),
+                                       (322, 10, 40, "Power Attack"),
+                                       (323, 10, 40, "Desperation Blow"),
+                                       (276, 10, 70, "Restore Condition")):
+            try:
+                got0 = authsrv.skill_scale_value(skill_id, 0)
+                got15 = authsrv.skill_scale_value(skill_id, 15)
+            except agents.content.ContentError as exc:
+                got0 = got15 = f"NO ROW ({str(exc).split('. Known:')[0]})"
+            check(got0 == lo and got15 == hi,
+                  f"{name} ({skill_id}) scales {lo} -> {hi}",
+                  f"rank 0 = {got0}, rank 15 = {got15}")
+
+    # Sections 2-4 are the SERVER's behaviour on a handful of skills: RECORD's rows.
+    carry.enter_context(carried())
 
     print("\n2. the shape between them is the client's formula")
     # value(rank) = max(0, round(lo + (hi-lo)*rank/15.0)), measured at
@@ -157,25 +329,40 @@ def main():
           "which is what makes it the discriminator: a decode ignoring the "
           "bitfield returns a plausible 25 here instead of refusing")
 
+    # Section 5's SUBJECT is every skill the server can resolve -- the vault's whole
+    # table, not RECORD's fifteen -- so the vault's own rows are put back for it.
+    carry.close()
+
     print("\n5. the unresolved tie-break cannot bite what we ship")
     # studies/combat 8c left half-up vs half-even open. Prove it is moot for
     # every skill the server can resolve, rather than assuming it.
-    ties = []
-    for row_id in sorted(agents.WORLD.rows("skill_effect")):
-        try:
-            lo = int(agents.WORLD.get("skills", str(row_id))["scale0"])
-            hi = int(agents.WORLD.get("skills", str(row_id))["scale15"])
-        except Exception:                                      # noqa: BLE001
-            continue
-        for rank in range(16):
-            exact = lo + (hi - lo) * rank / 15.0
-            if abs(exact - int(exact) - 0.5) < 1e-9:
-                ties.append((row_id, rank, exact))
-    check(not ties,
-          "no skill in the effect table lands on a .5 at any rank 0..15",
-          f"{ties} -- so half-up vs half-even changes nothing we send, and the "
-          f"client's +/-1.0 CRT adjustment stays an open question that costs "
-          f"us nothing today")
+    # THE BARE MACHINE (2026-10-07): skipped on an absent vault/content DIRECTORY.
+    try:
+        vaultpath.require_dir("content", why="section 5: every skill in the effect "
+                                             "table, against the vault's skills table")
+    except SystemExit as exc:
+        LEDGER.skip("5. the tie-break over the vault's skills table (1 check)",
+                    str(exc).splitlines()[0])
+    else:
+        ties = []
+        for row_id in sorted(agents.WORLD.rows("skill_effect")):
+            try:
+                lo = int(agents.WORLD.get("skills", str(row_id))["scale0"])
+                hi = int(agents.WORLD.get("skills", str(row_id))["scale15"])
+            except Exception:                                      # noqa: BLE001
+                continue
+            for rank in range(16):
+                exact = lo + (hi - lo) * rank / 15.0
+                if abs(exact - int(exact) - 0.5) < 1e-9:
+                    ties.append((row_id, rank, exact))
+        check(not ties,
+              "no skill in the effect table lands on a .5 at any rank 0..15",
+              f"{ties} -- so half-up vs half-even changes nothing we send, and the "
+              f"client's +/-1.0 CRT adjustment stays an open question that costs "
+              f"us nothing today")
+
+    # Sections 6-11d are the SERVER's behaviour again: RECORD's rows.
+    carry.enter_context(carried())
 
     print("\n6. the player's rank drives the player's damage")
     # THE CHAIN STEP 7 AND STEP 8 EXIST TO JOIN: the skill record names its
@@ -1105,6 +1292,10 @@ def main():
          authsrv.HEX_END_BURST, authsrv.SPELL_ENERGY_BONUS, authsrv.ENERGY_BONUS_PER_FOE,
          authsrv.AREA_DAMAGE, authsrv.skill_condition) = saved_b3
 
+    # The corpus reads the vault's own tables (hexjoin's 179 rank against the server's
+    # hex_end_damage), never RECORD's: the carried rows go back here.
+    carry.close()
+
     print("\n12. the corpus: one caster, one skill, one target is ONE value "
           "(spellhitjoin)")
     # P1-P4 in spellhitjoin's own words. A location roll on a set whose
@@ -1112,12 +1303,16 @@ def main():
     # FLOORS, not exact values -- the live corpus grows.
     # The skip is decided on the capture DIRECTORY, never on a failed read: a crash in a
     # reader is a crash, not a skip (2026-09-28).
+    # 2026-10-07: the skip covers 12, 12b, 12c and 13 (42 checks on the owner's vault:
+    # 25 + 1 + 14 + 2) and RETURNS TO main(), which still runs 14 and 15 -- until that
+    # day it returned the verdict from here and section 14 was never reached or declared.
     try:
         vaultpath.require_dir("captures", "live", why="section 12's corpus")
     except (Exception, SystemExit) as exc:                # noqa: BLE001  (require_dir exits)
-        LEDGER.skip("12. the corpus (spellhitjoin)",
+        LEDGER.skip("12-13. the corpus: spellhitjoin, location buckets, hexjoin, healjoin "
+                    "(42 checks: 12 25, 12b 1, 12c 14, 13 2)",
                     f"no live corpus to read on this machine: {exc!r}")
-        return LEDGER.verdict()
+        return
     unnamed, set_aside, refused_conns, named_census = [], [], [], []
     rows = spellhitjoin.census(unnamed=unnamed, set_aside=set_aside, refused=refused_conns,
                                named=named_census)
@@ -2363,6 +2558,14 @@ def main():
           f"a claim) -- WIKI (GWW, \"Reversal of Fortune\" Notes): healing "
           f"before damage")
 
+
+def section_label_tier():
+    """Section 14. Its own function since 2026-10-07, so that it runs -- or declares its
+    skip -- whether the corpus ran or not: its subject is the vault's label tier, not a
+    capture, and the corpus's early return used to take it along unannounced."""
+    import agents
+    import authsrv
+
     print("\n14. the LABEL tier through the SAME consumers (SKILLS-LT, DESKWORK-D4 step 4)")
     # vault/content/skill_labels.toml -- `python toolkit/clientscan/skilldesc.py
     # --emit-labels` -- carries a `tier = "label"` skill_effect row per plain
@@ -2513,7 +2716,45 @@ def main():
               "restored: the label row resolves again (the drop is a removal, not a "
               "rewrite)")
 
-    return LEDGER.verdict()
+
+def section_record_rows():
+    """Section 15, the carried rows against the vault's own -- the one check that says
+    sections 2-4 and 6-11d ran on the rows a vault run would have read.
+
+    Its SUBJECT is the vault's table, so it skips without one; but the skip is decided
+    on the vault/content DIRECTORY and on nothing that loaded. With the directory there
+    and the rows absent (a skills.toml that did not load), every row reads "absent" and
+    the check FAILS. Column for column BOTH ways: a column the vault's row has and RECORD
+    lacks is a difference too.
+    """
+    import agents
+
+    print("\n15. the rows this file carries, against the vault's own (2026-10-07)")
+    try:
+        vaultpath.require_dir("content", why="section 15: the vault's skills table, "
+                                             "which RECORD copies")
+    except SystemExit as exc:
+        LEDGER.skip("15. the carried rows against the vault's (1 check)",
+                    str(exc).splitlines()[0])
+        return
+    loaded = agents.WORLD.rows("skills")
+    off, builds = {}, {}
+    for k, row in RECORD.items():
+        got = loaded.get(k)
+        if got is None:
+            off[k] = "absent"
+            continue
+        builds[k] = getattr(got, "provenance", {}).get("build")
+        cols = sorted(c for c in set(row) | set(got) if got.get(c, "absent") != row.get(c, "absent"))
+        if cols:
+            off[k] = cols
+    check(not off,
+          f"every one of the {len(RECORD)} skills rows RECORD carries is the vault's own, "
+          f"column for column -- so sections 2-4 and 6-11d ran on the rows the vault's "
+          f"table would have given them",
+          f"off={off}, loaded builds={sorted(set(builds.values()), key=str)} (RECORD copied "
+          f"from {RECORD_BUILD}; a regenerated table that moves a carried column reds this, "
+          f"and the fix is to re-copy that row with its build)")
 
 
 if __name__ == "__main__":
