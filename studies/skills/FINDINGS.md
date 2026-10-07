@@ -9962,7 +9962,8 @@ of the [58] in `land_skill` (every body: hostiles, henchmen, heroes through
 `ally_cast_tick`) and in `cast_tick`'s E5 branch (the player). Rows: `content/world.toml`
 `skill_effect.180` (`triggers_on_cast = "Heal % of energy cost"`, source capture) and
 `skill_effect.28` (`triggers_on_cast = "Damage"`, source measured, extractor
-`skilldesc.py`). Locks: `toolkit/authsrv/test_trigcast.py` (22 bare, 29 with the vault).
+`skilldesc.py`). Locks: `toolkit/authsrv/test_trigcast.py` (30 bare, 37 with the vault —
+the review's fix pass added eight, §69.10).
 `SKILLS-CT<n>` = a finding of this section; convention:
 [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
@@ -10006,13 +10007,21 @@ printed, not dropped. The first run's 0.05 s episode tolerance called a completi
 
 ### 69.2 SKILLS-CT2 — the amount: paid energy × the client's scale slot as a percent
 
-OBSERVED, P2c. Every Elementalist bearer's words (cost 5 → 0.04144, cost 10 → 0.08288)
-are whole over ONE denominator only, 555, at ONE rank, 13: 23 = 5 × 460 % and 46 = 10 ×
-460 %, where 460 = interp(200, 500, 13), the record's own scale slot (bit set; 38797 /
-38833 / 38849 / 38888 / 38974 alike). Where a bearer's words reduce (25 / 480 = 5 / 96)
-the denominator and the rank trade off (192 at rank 0 … 480 at 15), and the bearer's
-DECLARED maximum — `0x009F [42, b, 480]` on :62557 — is among its fits; so is :54071
-agent 10's declared 555. Whether the percent is of the record's cost or of the cost PAID
+OBSERVED, P2c. Of the 17 bearers with clean words, **14** have words (cost 5 → 0.04144,
+cost 10 → 0.08288) that are whole over ONE denominator only, 555, at ONE rank, 13: 23 = 5 ×
+460 % and 46 = 10 × 460 %, where 460 = interp(200, 500, 13), the record's own scale slot
+(bit set; 38797 / 38833 / 38849 / 38888 / 38974 alike). The other **3** fit several
+(max, rank) pairs, every one consistent with the law — 20260913T210901 :60877 b15 eleven
+(75 … 225), 20260917T090355 :53310 b85 and 20260917T224104 :62557 b117 five each (192 …
+576): where a bearer's words reduce (25 / 480 = 5 / 96) the denominator and the rank trade
+off (192 at rank 0 … 480 at 15), and the bearer's DECLARED maximum — `0x009F [42, b, 480]`
+on :62557 — is among its fits; so is :54071 agent 10's declared 555. (This paragraph first
+said "every Elementalist bearer … ONE denominator"; the reader reads no profession and
+three bearers fit several — the review's RV-6, corrected 2026-10-07.) **The rounding is
+UNDISCRIMINATED**: every witnessed product is whole (the costs on tape are 5 and 10, the
+scale 200 + 20 × rank), so half-up, truncation and ceiling agree on all of them; the
+server's half-up is a choice, pinned by test_trigcast §4g (7 × 240 % → 17, 7 × 220 % →
+15). Whether the percent is of the record's cost or of the cost PAID
 is UNDISCRIMINATED: every bearer on tape paid full price. The server uses what the cast
 paid (the player's glyph-discounted `cast["cost"]`; a body's record cost, which is exactly
 what both body cast sites pay).
@@ -10021,7 +10030,9 @@ what both body cast sites pay).
 
 OBSERVED: a completion under no live 180 (74 — stripped 59, expired 9, dead 5, round end
 1); the 180 RE-CAST under a live 180 (0 of 2: the bearer re-casting its own trigger draws
-no word); a Resurrection Signet (0 of 5: a signet is not a spell —
+no word) — and after a refresh, ONE word, never two: the 11 spell completions that follow
+a second, unstripped 180 completion while the first is still inside its 60 s
+(20260928T103123 :50061 ×7, :58544 ×4) carry exactly one word each (§69.10); a Resurrection Signet (0 of 5: a signet is not a spell —
 `combatmath.is_spell_type`); a STOPPED cast (0 of 13 `[59]` ends). And 43 completions
 before each bearer's first 180 carry none. The server copies each: the hook gates on
 `_is_spell_skill`, skips an episode past its expiry and the bearer's own re-cast, and a
@@ -10064,21 +10075,40 @@ nothing of it lands (RECONSTRUCTION).
 
 ### 69.6 SKILLS-CT6 — what ships, and what is decided rather than measured
 
-* `on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None)` — every live
-  episode ON the caster whose row says `triggers_on_cast` fires, ascending buff id; returns
-  the count fired. `HEX_CAST_TRIGGERS` / `--no-hex-cast-triggers` reverts to the
+* `on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None)` — each trigger
+  SKILL live ON the caster (its row says `triggers_on_cast`) fires ONCE, ascending buff id;
+  returns the count fired. Where the caster holds two live episodes of one trigger skill (a
+  re-cast stacks one: `EffectTable.apply` allocates a new id, retail's own allocator) the
+  NEWEST fires — once per completion is OBSERVED (11 of 11 after a refresh, §69.3);
+  which of two differing episodes fires is RECONSTRUCTION (no tape holds two at different
+  ranks or from two hexers). The first cut fired every episode: a player who re-cast 180
+  drew two heals per spell (measured; three if re-cast at its 20 s recharge inside the 60 s
+  duration — the review's RV-1; bodies only under `--no-skip-live-effect`, because
+  CASTAI's `live_effect_hold` holds the re-cast by default). `HEX_CAST_TRIGGERS` / `--no-hex-cast-triggers` reverts to the
   pre-SKILLS-CT bytes (test_trigcast §7 lifts main()'s block and shows it flip the bool).
 * **Bodies** (`land_skill`): right ahead of the main [58] — OBSERVED slot. A hero's E5 / E3
   (sent at the top of `land_skill`) stay ahead of it: RECONSTRUCTION, no hero bearer on
-  tape. The dead-target, chain-gated and resurrection exits fire nothing (UNWITNESSED; the
-  quieter reading).
+  tape. **The dead-target exit fires it too, ahead of its [58]: OBSERVED 3 of 3** — the
+  live 180 completions whose 0x00A0 target was alive at the announce and carried the death
+  bit before the bearer's [58] (20260817T231139 :54071 b10 186 → 12, dies 764.549, [58]
+  764.549; b14 186 → 10, 769.218 / 769.736; :50286 b10 186 → 4, 376.285 / 376.744) each
+  carry the word. The first cut labelled this exit "UNWITNESSED; the quieter reading" and
+  sent none (the review's RV-2); the player's path has no dead-target exit ahead of its
+  hook, so the two paths now agree. The chain-gated and resurrection exits fire nothing
+  (UNWITNESSED; the player's failed chain step and its resurrection fire none either).
 * **The player** (`cast_tick`): behind the E5, right ahead of the [58] — RECONSTRUCTION
   (the body's slot). A failed chain step fires nothing: the E5 block's `_na_fail` is
   decided after the [58], so `player_chain_unmet` reads the same three arms ahead of it
   (784 and 973 are SPELLS with a chain requirement; test_trigcast §5b). The player's own
   resurrection spell completes through RESSIG-P's door ahead of this and fires none.
 * **A payoff that kills the caster** ends the completion: a body's cast slot is released
-  with no [58]; the player's batch stops, its E3 / E6 still close the cycle on their clocks.
+  with no [58] (at the dead-target exit too); the player's batch stops, its E3 / E6 still
+  close the cycle on their clocks; and no later payoff in the same hook fires (a dead
+  player's own 180 does not heal it — test_trigcast §5d).
+* **Deep Wound and the paid cost are locked, not just labelled**: the 180 heal goes through
+  `heal_agent(healing=True)` and a Deep-Wounded bearer's word is heal_agent's cut (§4f:
+  36 by HEAL-INT, CONTESTED by retail's 37, §69.4); the player is healed on `cast["cost"]`
+  under ENERGY, a discounted 3 → 13 at 440 %, not the record's 22 (§5f).
 * **180's energy-gain half is NOT modelled.** Its bonus slot (0..1, bit clear) is
   skilldesc's INDETERMINATE shape (two numbers, no rule for which the client prints), a
   body's energy is never on the wire, and no observer cast 180 — nothing to fit or to
@@ -10145,7 +10175,49 @@ appended.
    agent N: spell 185 completes -- S armour-ignoring from agent 1, ahead of the 58
    [SKILLS-CT, RECONSTRUCTION]`; at low health it dies of it and that Mind Burn never
    lands. Arm B: the hex is an icon, the hostile's casts cost it nothing.
+3. **A HERO bearing 180** (added by the review's RV-7: the hero path — `ally_cast_tick` →
+   `land_skill`, the hero's E5 / E3 ahead of the payoff, RECONSTRUCTION — is the one body
+   path cases 1–2 do not reach). 180 plus a cost-5 and a cost-10 FOE spell on the hero's
+   bar (185, and 191, a cost-10 foe spell; 186's target byte is not a foe's, so a hero
+   would aim it at an ally):
+
+   ```
+   python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --hero 1 --hero-body --hero-skills 180,185,191
+   ```
+
+   **The hero casts 180 only when HURT**: 180 is a self-kind skill and `ally_cast_tick`
+   routes it through `hostile_heal_target`, which holds it while the hero is above
+   `HERO_HEAL_AT` (90 %) — at full health the slot is held and this case tests nothing.
+   Let the hostile hit the hero first (pull it onto the hero), then fight beside it. Arm A:
+   once the hero's 180 is up, every 185 and 191 it finishes draws a blue `+N` on the HERO
+   (agent 200) at the instant its cast finishes, the 191 number twice the 185 one; the log
+   prints `effect 180 on agent 200: spell S completes -- … healed, ahead of the 58
+   [SKILLS-CT]`, behind the hero's E5. Arm B: no number on the hero, no such line.
 
 Score: each `[SKILLS-CT]` log line has its number on the client, on the right body, at the
-cast's finish; arm B has neither. A client assert, a number on the wrong body, or a heal
-on a bearer whose 180 has ended is a FAIL.
+cast's finish; arm B has neither. A client assert, a number on the wrong body, two numbers
+on one finish, or a heal on a bearer whose 180 has ended is a FAIL.
+
+### 69.10 SKILLS-CT7 — the review's fix pass (2026-10-07): one payoff per trigger skill, and the dead-target exit fires
+
+The lane's review (eight findings, RV-1..RV-8) was re-measured before anything changed;
+each was real. What it moved, labelled:
+
+* **One payoff per trigger SKILL per completion** (RV-1) — OBSERVED: 11 of 11 spell
+  completions after a 180 refresh (a second, unstripped 180 completion while the first is
+  inside its 60 s; 20260928T103123 :50061 ×7, :58544 ×4) carry ONE word, where the first
+  cut fired every live episode and the player (whose press has no AI gate) stacked two.
+  The newest episode fires (RECONSTRUCTION). test_trigcast §3e / §4d / §5e.
+* **The dead-target exit fires** (RV-2) — OBSERVED 3 of 3 (§69.6). test_trigcast §4e.
+* **The reader's Deep Wound verdict is three-valued** (RV-3): a word over a bearer with
+  several (max, rank) fits confirms when some fit predicts it (`trigjoin.dw_verdict`); the
+  first cut scored it False, so a later capture's confirming word would have reddened P2c
+  and §9c. No current verdict moved (all six Deep Wound words sit on a unique-fit bearer).
+  test_trigcast §9c (per-row law, floors) and §11a (bare).
+* **Locked rather than labelled** (RV-4, RV-5): Deep Wound's cut (§4f), the paid cost
+  (§5f), the rounding (§4g), the bearer's book A/B (§2c), the kill stopping a second payoff
+  (§5d). A mutation pass on a scratch copy reddened every one: 12 mutants aimed at the new
+  checks and 7 of the first cut's re-aimed at the restructured hook, 19 of 19 red.
+* **Labels** (RV-6): the rounding is UNDISCRIMINATED (§69.2); 14 of 17 bearers fit (555,
+  13) alone, not "every Elementalist bearer". **Runsheet** (RV-7): case 3. **`trigjoin
+  --json`** (RV-8) writes the dump alone to stdout.
