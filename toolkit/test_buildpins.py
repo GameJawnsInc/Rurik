@@ -28,7 +28,10 @@ a real address that must SURVIVE it -- because a filter that drops everything
 produces a census of zero and a very clean-looking report.
 
 No vault, no client, no socket: a classification defect is not a property of any
-binary. Floor 40, ~2 s.
+binary. Floor 66, ~30 s: one whole-tree scan, ~17 s since buildpins.SourceSlicer
+(DESKWORK-D13 step 1, 2026-10-07: 258 s -> 29 s, both measured on a loaded
+machine). This line said "Floor 40, ~2 s" long after both had stopped being true.
+Section 7 holds that slicer to `ast.get_source_segment` node for node.
 """
 import ast
 import json
@@ -45,7 +48,11 @@ sys.path.insert(0, HERE)
 import buildpins as BP                                       # noqa: E402
 import checks                                                # noqa: E402
 
-LEDGER = checks.Ledger("build-coupled census", floor=49)
+# 49 -> 63 on 2026-10-07: section 7, the cached slicer's differential and its four
+# sabotages (14 checks), measured green at 63. 63 -> 66 the same day after review
+# (EV-3): a fixture with non-ASCII on a multi-line node's first and last lines, and
+# the two slicers that cut one of those ends by character -- measured green at 66.
+LEDGER = checks.Ledger("build-coupled census", floor=66)
 check = checks.adopt(LEDGER)
 
 # One module holding the SAME address twice: once as prose, once as code. This
@@ -373,6 +380,240 @@ check(amap["clientscan/gatetrace.py"]["anchor"] == BP.ANCHOR_OWN,
       "that own-build is not guarded, because it would have read own-build on "
       "2026-08-29 while nothing in the tree read its BUILD at all",
       str(amap["clientscan/gatetrace.py"]))
+
+
+print("\n7. the cached slicer is ast.get_source_segment, exactly")
+# WHY THIS SECTION EXISTS (DESKWORK-D13 step 1, 2026-10-07). Every row's `text` --
+# what is_build_coupled() classifies and what a reader of --live sees -- came from
+# `ast.get_source_segment`, which re-splits the source up to the node on EVERY call.
+# One call per int literal made a scan quadratic in file length: authsrv.py at
+# 50,878 lines cost ~120 s, the whole tree ~235 s, and the suite paid it seven
+# times. `buildpins.SourceSlicer` splits once per file. It is only allowed to be
+# FASTER than the stock call, so it is held to it node for node, here, on inputs
+# chosen to break each way a hand-rolled slicer goes wrong -- and six such wrong
+# slicers are run and must redden, because a differential nobody has seen fail
+# could be comparing a function with itself.
+#
+# One fixture per rule the slicer must get right. Each is a module the parser
+# accepts, so the node positions come from the real parser and not from us.
+SLICE_FIXTURES = {
+    # Windows line ends: two characters, one line.
+    "CRLF": "A = 1\r\nB = 0x00487BC0\r\nC = (0x00512345,\r\n     2)\r\n",
+    # A lone CR ends a line for the parser; a slicer that splits on LF misses it.
+    "lone CR": "A = 1\rB = 0x00487BC0\rC = [\r    0x00512345]\r",
+    # A form feed does NOT end a line for the parser; str.splitlines() says it does.
+    "form feed": "A = 1\n\x0cB = 0x00487BC0\nX = 1 \x0c+ 0x00512345\n",
+    # Offsets are UTF-8 BYTES: three multi-byte characters ahead of the literal.
+    "non-ASCII before the literal":
+        'S = "été ✓ 測"; B = 0x00487BC0\n',
+    # Nodes spanning lines: first line cut from the column, last cut to it.
+    "multi-line node": ('CALL = f(0x00487BC0,\n         g("§", 1,\n'
+                        '           0x00512345))\nT = """x\ny"""\n'),
+    # Non-ASCII AHEAD of a multi-line node on its FIRST line, and inside it before
+    # its end on its LAST line -- the byte rule on the two cuts a multi-line node
+    # makes. The two fixtures above put their non-ASCII text on a single-line node or
+    # in a middle line, so a slicer cutting either end of a multi-line node by
+    # character passed all of them (review EV-3, 2026-10-07).
+    "non-ASCII on a multi-line node's end lines":
+        'S = "é✓"; CALL = f(1,\n         "ß", 0x00512345)\n',
+}
+
+
+def slice_mismatches(slicer_cls, src):
+    """(nodes compared, [(line, stock, got)]) over EVERY positioned node in `src`.
+
+    Every node, not only the int literals the Walker asks about, because a
+    multi-line call or a string after non-ASCII text is where a slicer breaks, and
+    the literals alone would leave those paths unexercised.
+    """
+    slicer = slicer_cls(src)
+    n, bad = 0, []
+    for node in ast.walk(ast.parse(src)):
+        if getattr(node, "lineno", None) is None:
+            continue
+        n += 1
+        want = ast.get_source_segment(src, node)
+        try:
+            got = slicer.segment(node)
+        except Exception as exc:                             # noqa: BLE001
+            got = f"<raised {type(exc).__name__}>"          # a bad cut can split UTF-8
+        if got != want:
+            bad.append((node.lineno, want, got))
+    return n, bad
+
+
+for name, src in SLICE_FIXTURES.items():
+    n, bad = slice_mismatches(BP.SourceSlicer, src)
+    check(n > 0 and not bad,
+          f"7a. the slicer agrees with the stock call on every node: {name}",
+          f"{n} node(s), {len(bad)} mismatch(es) {bad[:2]}")
+
+# A REAL file, because fixtures are only the cases somebody thought of. This one
+# is chosen for having both hard shapes in quantity -- nodes after non-ASCII text
+# on their own line, and multi-line nodes -- and that is CHECKED rather than
+# assumed, so the differential cannot pass by the file having gone easy.
+_real_rel = "schema/test_codec.py"
+with open(os.path.join(HERE, _real_rel), encoding="utf-8", errors="replace") as _fh:
+    _real = _fh.read()
+_real_lines = _real.splitlines(True)
+_hard_bytes = _multi = 0
+for _node in ast.walk(ast.parse(_real)):
+    if getattr(_node, "end_lineno", None) is None:
+        continue
+    _multi += _node.end_lineno != _node.lineno
+    _pre = _real_lines[_node.lineno - 1].encode()[:_node.col_offset]
+    _hard_bytes += any(b > 127 for b in _pre)
+check(_hard_bytes >= 5 and _multi >= 50,
+      f"7b. the real file {_real_rel} carries the hard shapes the fixtures model",
+      f"{_hard_bytes} node(s) after non-ASCII text on their line, {_multi} "
+      f"multi-line node(s) -- without them the next check proves little")
+n, bad = slice_mismatches(BP.SourceSlicer, _real)
+check(n > 1000 and not bad,
+      f"7c. and the slicer agrees with the stock call on every one of its nodes",
+      f"{n} node(s), {len(bad)} mismatch(es) {bad[:2]}")
+
+
+class _StockSlicer(BP.SourceSlicer):
+    """The pre-2026-10-07 behaviour: the stock call, per node."""
+
+    def segment(self, node, *, padded=False):
+        return ast.get_source_segment(self.src, node, padded=padded)
+
+
+def _scan_with(slicer_cls, path):
+    real = BP.SourceSlicer
+    BP.SourceSlicer = slicer_cls
+    try:
+        return BP.scan_file(path, HERE)
+    finally:
+        BP.SourceSlicer = real
+
+
+# The census rows themselves, through the Walker, on a real file that HAS rows.
+_rows_rel = "clientscan/movehook/readhook.py"
+_fast, _ferr = BP.scan_file(os.path.join(HERE, _rows_rel), HERE)
+_slow, _serr = _scan_with(_StockSlicer, os.path.join(HERE, _rows_rel))
+check(_fast == _slow and not _ferr and not _serr
+      and sum(1 for r in _fast if r["klass"] == BP.LIVE) >= 5,
+      f"7d. scan_file's rows on {_rows_rel} are identical through the cached "
+      f"slicer and the stock call",
+      f"{len(_fast)} row(s), "
+      f"{sum(1 for r in _fast if r['klass'] == BP.LIVE)} live -- the whole tree "
+      f"was compared once at a desk (PLAN-LOG, DESKWORK-D13); a per-run stock "
+      f"scan would cost the ~235 s this section exists to remove")
+
+# THE STRUCTURAL GUARD. Nothing above would notice the Walker quietly going back
+# to the stock call -- the answers would still agree, and the suite would pay the
+# quadratic again with every test green. So count the stock calls a scan makes.
+_stock_get = ast.get_source_segment
+_calls = []
+
+
+def _counting(*a, **k):
+    _calls.append(1)
+    return _stock_get(*a, **k)
+
+
+_tmp7 = tempfile.mkdtemp(prefix="rurik_pins7_")
+try:
+    _p7 = write(_tmp7, "mod.py", SYNTHETIC)
+    ast.get_source_segment = _counting
+    try:
+        _rows7, _e7 = BP.scan_file(_p7, _tmp7)
+        _scan_calls = len(_calls)
+        # A multi-line node with a tab AHEAD of it on its first line, the case
+        # `padded` exists for (it keeps tabs and form feeds, blanks the rest).
+        _ml_src = "X =\t(1,\n\x0c  0x00512345)\n"
+        _ml = ast.parse(_ml_src).body[0].value
+        _padded_ok = (BP.SourceSlicer(_ml_src).segment(_ml, padded=True)
+                      == _stock_get(_ml_src, _ml, padded=True))
+        _padded_calls = len(_calls) - _scan_calls
+    finally:
+        ast.get_source_segment = _stock_get
+finally:
+    shutil.rmtree(_tmp7, ignore_errors=True)
+check(_rows7 and _scan_calls == 0,
+      "7e. the Walker makes NO stock get_source_segment call -- the quadratic "
+      "cannot come back behind a green differential",
+      f"{len(_rows7)} row(s) from {_scan_calls} stock call(s)")
+check(_padded_ok and _padded_calls == 1,
+      "7f. while padded=True goes to the stock call itself, and agrees",
+      f"{_padded_calls} stock call(s) -- the fast path is proved only unpadded")
+
+
+# THE KNOWN-BAD ARMS. Each is the slicer with ONE rule broken, the way a
+# hand-rolled replacement plausibly breaks it, and each must disagree with the
+# stock call on the fixture written for that rule. If one of these went green, the
+# fixture above it would be decoration.
+class _CharOffsets(BP.SourceSlicer):
+    """Cuts by CHARACTER: right on ASCII, wrong after any multi-byte character."""
+
+    @staticmethod
+    def _cut(line, start=None, end=None):
+        return line[start:end]
+
+
+class _SplitLines(BP.SourceSlicer):
+    """str.splitlines(): also splits on form feed, which the parser does not."""
+
+    def lines(self):
+        return self.src.splitlines(True)
+
+
+class _LFOnly(BP.SourceSlicer):
+    """Splits on LF alone: a lone CR stops ending a line."""
+
+    def lines(self):
+        return [m[0] for m in re.finditer(r"(.*?(?:\n|$))", self.src)]
+
+
+class _OffByOne(BP.SourceSlicer):
+    """Indexes lines from 1: every segment comes from the line below."""
+
+    def lines(self):
+        return [""] + BP.SourceSlicer.lines(self)
+
+
+class _CharEnds(BP.SourceSlicer):
+    """Bytes everywhere except ONE end of a multi-line node, which it cuts by
+    character -- `first` picks which. Single-line nodes go through the real class."""
+
+    first = True
+
+    def segment(self, node, *, padded=False):
+        if padded or node.end_lineno == node.lineno:
+            return BP.SourceSlicer.segment(self, node, padded=padded)
+        lines = self.lines()
+        a, b = node.lineno - 1, node.end_lineno - 1
+        head = (lines[a][node.col_offset:] if self.first
+                else self._cut(lines[a], node.col_offset))
+        tail = (self._cut(lines[b], None, node.end_col_offset) if self.first
+                else lines[b][:node.end_col_offset])
+        return "".join([head, *lines[a + 1:b], tail])
+
+
+class _CharFirstLine(_CharEnds):
+    """Cuts a multi-line node's FIRST line by character, every other cut in bytes."""
+
+
+class _CharLastLine(_CharEnds):
+    """Cuts a multi-line node's LAST line by character, every other cut in bytes."""
+
+    first = False
+
+
+for arm, target in ((_CharOffsets, "non-ASCII before the literal"),
+                    (_SplitLines, "form feed"),
+                    (_LFOnly, "lone CR"),
+                    (_OffByOne, "CRLF"),
+                    (_CharFirstLine, "non-ASCII on a multi-line node's end lines"),
+                    (_CharLastLine, "non-ASCII on a multi-line node's end lines")):
+    red = sorted(name for name, src in SLICE_FIXTURES.items()
+                 if slice_mismatches(arm, src)[1])
+    check(target in red,
+          f"7g. SABOTAGE {arm.__name__.lstrip('_')}: the differential goes RED on "
+          f"the {target!r} fixture",
+          f"red on {red} -- {arm.__doc__}")
 
 
 sys.exit(LEDGER.verdict())

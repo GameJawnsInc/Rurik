@@ -43,7 +43,9 @@ address. `studies/crossbuild/FINDINGS.md` §7.1 and §8.
     is the defect this whole arc exists to remove.
 
 Needs the vault for every section: every claim is about ArenaNet's bytes, and a
-run that has seen none of them cannot refute anything. Floor 39, ~20 s.
+run that has seen none of them cannot refute anything. Floor 48, ~20 s -- most of
+it §1's whole-tree `buildpins` scan; 284 s -> 19 s on 2026-10-07 when that scan
+stopped being quadratic (DESKWORK-D13 step 1).
 """
 import os
 import subprocess

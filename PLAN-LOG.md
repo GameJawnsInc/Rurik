@@ -28,6 +28,35 @@ move back.
 
 ---
 
+### DESKWORK-D13 steps 1–2 -- 2026-10-07 -- **The suite's two quadratic costs are gone, and both fixes are proved exact rather than assumed.**
+- **Step 1:** `buildpins` now splits each file once (`buildpins.SourceSlicer`). HEAD's census and the new one over the whole tree both give 3,749 rows, 328 live, 0 problems and 2 skipped, row-identical. `scan_file(authsrv.py)` went from 128.1 to 8.7 s.
+- **Step 2:** `test_scrub`'s leak-search tail is now an aligned-block pigeonhole (`block_search`, B = 18). Before the old tail was deleted, old and new returned identical sets on the FULL corpus for all four texts searched: 16,512 / 0 / 330 / 4. Per call: 3.3–5.3 s against 313–541 s for the three texts the test searches with every secret; the originals, 259.7 s, are a desk calibration.
+- **Counts:** verdicts are unchanged. `test_updatecheck` (35) and `test_genericvalue` (48) keep their counts. `test_buildpins` 49 → 66 and `test_scrub` 78 → 91 gain the new sections.
+- **Times, loaded machine:** `test_updatecheck` 1,575 → 68–114 s, `test_buildpins` 258 → 22–39 s, `test_genericvalue` 284 → 14–24 s, `test_scrub` 2,348 → 703 s.
+- **Suite wall:** about 11–14 minutes come off a four-job full run (modelled; 12.7 min at the measured 703 s). The study's "28 minutes" was serial seconds.
+
+- **Record:** `studies/deskwork/PLAN.md` §3 D13's landing note: the four-row equivalence table, a per-stage load factor (the triage's own load is UNVERIFIED), and the wall model labelled RECONSTRUCTION. Commits `ee97b898` (step 1), `8c4ed57c` (step 2) and `06656c02` (review fixes).
+- **Step 1 detail:** `SourceSlicer` copies the stock call's semantics exactly:
+  - `ast._splitlines_no_ff`'s regex;
+  - UTF-8 byte columns;
+  - the stock call itself for `padded` and for any position the fast path was not proved on.
+
+  The quadratic is read from the stock source: one re-split per call, one call per literal. It is not inferred from timings. `test_buildpins` §7 (49 → 66 checks, floor 66) does the following:
+  - a node-for-node differential against `ast.get_source_segment` on six fixtures (CRLF, lone CR, form feed, non-ASCII before the literal, multi-line nodes, non-ASCII on a multi-line node's first and last lines) and on all 2,896 nodes of `schema/test_codec.py`;
+  - compares `scan_file` rows on `clientscan/movehook/readhook.py`;
+  - asserts a scan makes zero stock calls;
+  - runs six known-bad slicers, each red on its fixture. Review EV-3 added the sixth fixture and two arms: a slicer cutting a multi-line node's FIRST line by character used to pass every fixture and the whole real file.
+- **Step 2 detail:** test-only.
+  - §13 reuses `check_corpus`'s `found`.
+  - §14a plants secrets at all 18 alignments and at the 34/35 boundary, with a near miss. It also plants them flush with each END of the haystack: review CD-1/EV-1 found that a walk stopping a character or a block short of the last block, or skipping the first, went green on 8, 5 and 2 of 8 hash seeds.
+  - Five sabotages (a dropped offset, the block path from 34, the walk ending a character or a block short, the walk starting at B) must each lose exactly the predicted alignments, and they are red on every seed.
+  - §14's fixtures gained long secrets. Its real-corpus probe carries both arms and 30 near misses. It skips only on an ABSENT `vault/captures`.
+  - `test_scrub` floor 76 → 89, green 91.
+- **Not met:**
+  - `test_scrub` under 200 s, and the lane's realistic ≤ ~600 s: 703 s was the cleanest run.
+  - `search_all` end to end is 31–44 s per call, because its `findall` half is untouched. The ≤ 10 s goal is met only by the replaced tail.
+- **Open:** D13 steps 3–7. Step 3's full census is where the wall saving gets OBSERVED and `.suite-timings.json` refreshes.
+
 ### DIVERGENCE-D13.4 -- 2026-10-07 -- **The manifest family is settled at the desk: all three of D13.3's open items.**
 
 **What is settled:**

@@ -30,7 +30,11 @@ THE CHECKS THAT EARN THE FILE:
   * §4 refuses to write the baseline into any checkout of this repo, including
     the OTHER one, since a worktree's root is not the main checkout's.
 
-Sections 2-4 need no vault. §1 and §5 read the vaulted client. Floor 26, ~60 s.
+Sections 2-4 need no vault. §1 and §5 read the vaulted client. Floor 27, ~90 s:
+five whole-tree `buildpins` scans (§1's and §3's `capture()`, the two
+`updatecheck.py` subprocesses that reach one, and §5's), ~17 s each since
+DESKWORK-D13 step 1 (2026-10-07) made the scan linear. It was 1,575 s that
+morning, the scan quadratic in authsrv.py's length -- and this line said ~60 s.
 """
 import json
 import re

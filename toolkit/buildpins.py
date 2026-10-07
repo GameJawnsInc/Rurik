@@ -165,11 +165,88 @@ def enclosing_name(path_stack):
     return ".".join(names) if names else "-"
 
 
+# The parser's own line rule: `\r\n`, `\n` and a lone `\r` end a line and nothing else
+# does -- NOT a form feed, which `str.splitlines()` would split on and the tokenizer
+# treats as whitespace. This is `ast._splitlines_no_ff`'s pattern, copied rather than
+# imported because that name is private; test_buildpins.py §7 holds the copy to the
+# stock function by differential, so a drift in either reddens there.
+_PARSER_LINE = re.compile(r"(.*?(?:\r\n|\n|\r|$))")
+
+
+class SourceSlicer:
+    """`ast.get_source_segment(src, node)`, with the source split into lines ONCE.
+
+    WHY. The stock call re-splits the whole source up to the node's last line on
+    EVERY call (`_splitlines_no_ff(source, maxlines=end_lineno+1)`, read from
+    `inspect.getsource` on Python 3.14.4), and the Walker makes one call per int
+    literal -- so a file costs O(literals x lines), quadratic in its length. That is
+    the evidence for the quadratic: the stock source, not a timing. MEASURED
+    2026-10-07 (DESKWORK-D13 step 1): authsrv.py at 50,878 lines took 120-128 s per
+    `scan_file` and the whole tree 235-298 s (the triage's runs and this lane's, the
+    lane's on a machine sibling lanes were loading; the triage's load is UNVERIFIED),
+    and the suite paid a whole-tree scan seven times (test_updatecheck five,
+    test_genericvalue and test_buildpins one each). The study's 2026-09 probe had
+    54-68 s at 35k lines, which is consistent with that growth but cannot prove it
+    across two machines' loads. This class took the same two to 8.7 s and 16.9 s, with
+    every row, problem and skip identical to the stock call's over the whole tree.
+
+    THE SAME SEMANTICS, not similar ones, because a row's `text` is what
+    `is_build_coupled` classifies and what the baseline diff keys on:
+      * lines are split by `_PARSER_LINE` above, the stock pattern;
+      * `col_offset` / `end_col_offset` are UTF-8 BYTE offsets (that is what the
+        parser records), so a line is encoded before it is cut -- a character
+        slice is wrong on any line with non-ASCII text before the literal;
+      * `padded=True`, and any position the fast path was not proved on (a line
+        number below 1, an end before the start), go to the stock call itself.
+    test_buildpins.py §7 compares this against `ast.get_source_segment` node for
+    node on fixtures built to break each rule (CRLF, a lone CR, a form feed,
+    non-ASCII before the literal, multi-line nodes, non-ASCII on a multi-line
+    node's first and last lines) and on two real files, and shows six known-bad
+    slicers redden it.
+    """
+
+    def __init__(self, src):
+        self.src = src
+        self._lines = None
+
+    def lines(self):
+        """The source's lines, split by the parser's rule. Computed once."""
+        if self._lines is None:
+            self._lines = [m[0] for m in _PARSER_LINE.finditer(self.src)]
+        return self._lines
+
+    @staticmethod
+    def _cut(line, start=None, end=None):
+        """One line's `[start:end]` in UTF-8 BYTES -- the parser's unit, not str's."""
+        return line.encode()[start:end].decode()
+
+    def segment(self, node, *, padded=False):
+        try:
+            if node.end_lineno is None or node.end_col_offset is None:
+                return None
+            lineno = node.lineno - 1
+            end_lineno = node.end_lineno - 1
+            col_offset = node.col_offset
+            end_col_offset = node.end_col_offset
+        except AttributeError:
+            return None
+        if padded or lineno < 0 or end_lineno < lineno:
+            return ast.get_source_segment(self.src, node, padded=padded)
+        lines = self.lines()
+        if end_lineno == lineno:
+            return self._cut(lines[lineno], col_offset, end_col_offset)
+        return "".join([self._cut(lines[lineno], col_offset),
+                        *lines[lineno + 1:end_lineno],
+                        self._cut(lines[end_lineno], None, end_col_offset)])
+
+
 class Walker(ast.NodeVisitor):
     """Collects every build-coupled int literal, with where it lives."""
 
     def __init__(self, src, relpath):
         self.src, self.relpath = src, relpath
+        # One split per FILE rather than one per literal -- see SourceSlicer.
+        self.slicer = SourceSlicer(src)
         self.stack = []
         self.assign_to = []
         self.hits = []
@@ -198,7 +275,7 @@ class Walker(ast.NodeVisitor):
         # bool is a subclass of int; True is not an address.
         if not isinstance(node.value, int) or isinstance(node.value, bool):
             return
-        text = ast.get_source_segment(self.src, node)
+        text = self.slicer.segment(node)
         ok, kind = is_build_coupled(node.value, text)
         if not ok:
             return
