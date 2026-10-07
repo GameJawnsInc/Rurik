@@ -8614,8 +8614,12 @@ def _agtrack_maybe_repin(send, state, rec, now=None):
 # stop and --cast-stop pin (behind their own 0x002C, which has parked both
 # copies: a no-op); --cast-stop halt and --stop-answer=ack (bare: the copy halts
 # where it stands, which is CANCELWALK-F31's measured client behaviour, the body
-# landing on the sync copy); the transfer (the session ends). No send site is
-# added or moved. on_stop parks only a WALKING copy.
+# landing on the sync copy); the transfer (the session ends); and the operator's
+# --probe moving_die (probecombat._moving_die_steps: two bare 0x0028s while the
+# character runs, through run_probe's send -- the copy halts where it stands, the
+# decoded halt). No send site is added or moved. on_stop parks a WALKING copy, or
+# one standing on a due sidestep waypoint, which the tick would otherwise re-bake
+# toward the target after our halt.
 # --no-mirror-stop reverts: the KNOWN-BAD arm is the walk-in above.
 MIRROR_PARKS_ON_STOP = True   # False (--no-mirror-stop): the mirror walks through our halt.
 
@@ -8631,7 +8635,7 @@ def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
         now = time.time()
     if opcode == GAME_SMSG_AGENT_STOP_MOVING:
         # RANGERLOOP-F9 (MIRROR_PARKS_ON_STOP, the senders at the flag): both
-        # copies halt where they stand; on_stop parks only a walking copy.
+        # copies halt where they stand; on_stop parks a walking copy (or a due waypoint).
         if MIRROR_PARKS_ON_STOP:
             _agtrack_guard_call(state, "on_stop", now)
         return

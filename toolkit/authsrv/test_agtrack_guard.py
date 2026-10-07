@@ -43,8 +43,9 @@ ARGS_SRC = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
 # hostiles' client models): 89 on the 2026-09-06 green run.
 # Each from a real green run, never from a guess.  +13 at RANGERLOOP-F9
 # (2026-10-07, sec.16: the player's 0x0028 parks both copies, the scope of the
-# park, the authsrv feed and its flag): 104 on the green run.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=104)   # 1z-cy: +2; F9: +13
+# park, the authsrv feed and its flag): 104 on the green run.  +1 at the F9
+# review (16n: a 0x0028 on a due sidestep waypoint parks it): 105 on the green run.
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=105)   # 1z-cy: +2; F9: +14
 check = checks.adopt_named(LEDGER)
 
 
@@ -798,6 +799,39 @@ def section_stop():
     un = ag.AgTrackGuard()
     check("16g. an unseeded guard parks nothing and does not raise",
           un.on_stop(t0) == 0)
+    # 16n: the one DUE arrival on_stop must park. A sidestep waypoint's arrival is not
+    # an arrival: the tick's consume_waypoint re-bakes toward m_targetPoint, so a 0x0028
+    # landing between the waypoint's due ms and the guard's next tick (up to one 50 ms
+    # TICK_SECONDS) would leave both copies walking on toward the target -- F9's walk-in
+    # through a narrow window. The client's halt clears +0x48 and writes m_targetPoint
+    # = +inf (studies/movecode/FINDINGS.md 1d.4), so its copy cannot re-bake.
+    def _sidestepped(late_ms):
+        sg = seeded_guard(t0=t0 - 1.0)
+        sg.set_obstacles(lambda now: [(600.0, 30.0, 0.0, 0.0)])   # beside the path
+        sg.on_emit(0x2A, 1800.0, 0.0, 0, 0, now=t0)
+        t = t0
+        while t < t0 + 5.0 and not (sg.mirror.sync.is_waypoint and sg.mirror.sync.t_arrive):
+            t = round(t + 0.05, 6)
+            sg.tick(t)
+        if not (sg.mirror.sync.is_waypoint and sg.mirror.sync.t_arrive):
+            return None
+        wp = sg.mirror.sync.dest
+        ts = sg.epoch + (sg.mirror.sync.t_arrive + late_ms) / 1000.0
+        parked = sg.on_stop(ts)
+        sg.tick(ts)                                          # the guard's next tick
+        moved = [math.hypot(c.sync.position(sg._ms(ts + 2.0))[0] - wp[0],
+                            c.sync.position(sg._ms(ts + 2.0))[1] - wp[1])
+                 for c in (sg.mirror, sg.twin)]
+        return parked, moved, sg.mirror.sync.target
+    side = {late: _sidestepped(late) for late in (0, 40)}
+    check("16n. a 0x0028 landing on a DUE sidestep waypoint (at its due ms, and 40 ms "
+          "late, inside one tick) parks both copies ON the waypoint: two seconds and a "
+          "tick later neither has moved and m_targetPoint is gone -- the tick has "
+          "nothing to re-bake toward the target",
+          all(r is not None and r[0] == 2 and max(r[1]) < 0.5 and r[2] is None
+              for r in side.values()),
+          {k: None if r is None else (r[0], [round(x, 1) for x in r[1]], r[2])
+           for k, r in side.items()})
 
     # -- the authsrv feed: player-only, and behind its flag
     def fed(opcode, values, flag=True):

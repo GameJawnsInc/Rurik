@@ -331,12 +331,24 @@ class AgTrackGuard(object):
         SyncAgent.avoid_halt already uses -- but NOT through avoid_halt, whose
         counter authsrv's 1z-dj reads as "the avoidance pass halted the copy".
 
-        Only a WALKING copy is parked (its arrival armed and not yet due).  A
-        parked copy is left alone: the halt is gated on agent+0x20 & 0x20000
-        and changes nothing on a body that is not moving.  A copy whose
-        arrival is already due is left to tick(), whose consumption lands it
-        on the destination WITH that arrival's dispatch; parking it here would
-        drop the dispatch.
+        Parked: a WALKING copy (its arrival armed and not yet due), and a copy
+        standing on a DUE SIDESTEP WAYPOINT.  A parked copy is left alone: the
+        halt is gated on agent+0x20 & 0x20000 and changes nothing on a body
+        that is not moving.  A copy whose plain arrival is already due is left
+        to tick(), whose consume_arrival lands it on the destination -- where
+        the resolver already puts it -- WITH that arrival's dispatch; parking
+        it here would drop the dispatch and change nothing else.
+          A due WAYPOINT is different, and is parked here: consume_waypoint
+        does not land the copy, it re-bakes it toward m_targetPoint, so a
+        0x0028 between the waypoint's due ms and the guard's next tick (up to
+        one TICK_SECONDS, longer when combat_pass runs ahead of the tick)
+        would leave both copies walking on toward the target after our halt.
+        The client's halt clears +0x48 and writes m_targetPoint = +inf
+        (studies/movecode/FINDINGS.md 1d.4), so its copy cannot re-bake.  It
+        is parked on the waypoint, where position() puts it; the re-bake's
+        own evaluation is not fired -- the dispatch the client makes there
+        (that re-bake's, if its frame consumed the waypoint first, else the
+        teleport tail's) is covered by the MODEL-CHOICE below.
 
         MODEL-CHOICE, stated: the teleport's tail 0x006022A1 is a class-B
         AgTrack dispatch (studies/movement/FINDINGS.md sec.2.1), and this
@@ -351,7 +363,8 @@ class AgTrackGuard(object):
         n = 0
         for m in (self.mirror, self.twin):
             s = m.sync
-            if not s.walking(ms):
+            due_waypoint = s.is_waypoint and s.t_arrive != 0 and ms >= s.t_arrive
+            if not (s.walking(ms) or due_waypoint):
                 continue
             p = s.position(ms)
             if p is None:

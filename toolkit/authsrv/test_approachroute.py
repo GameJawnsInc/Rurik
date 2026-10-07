@@ -1085,6 +1085,21 @@ def f9_flight(v):
     return struct.unpack("<f", struct.pack("<I", int(v[3]) & 0xFFFFFFFF))[0]
 
 
+def f9_ref(out):
+    """The halt point WITHOUT reading either model: the drive's first 0x002A leg, from the
+    seeded origin toward the follow's own point at the run speed, dead-reckoned to the
+    0x0028's send instant -- where the client's two copies stand when the halt lands
+    (0x005FD7D0's halt-in-place parks each on its own current point). (inf, inf) when
+    the drive sent no follow or no halt, which fails every check that measures from it."""
+    fol = next(((t, v[1]) for t, op, v in out.get("sent", []) if op == OP_FOLLOW), None)
+    ht = out.get("halt_t")
+    if fol is None or ht is None:
+        return (math.inf, math.inf)
+    leg = math.hypot(fol[1][0], fol[1][1])
+    run = min(authsrv.DEFAULT_RUN_SPEED * (ht - fol[0]), leg)
+    return (fol[1][0] / leg * run, fol[1][1] / leg * run)
+
+
 def f9_drive(park, legacy=True):
     """The press, the approach, S16's halt, then 6.5 s of chain. -> dict of readings."""
     out = {"track": [], "probe": {}, "legacy": []}
@@ -1205,9 +1220,15 @@ def section_mirror_stop():
           "leg's eta plus at most one tick; the park cannot move the start",
           {"halt_d": round(d_halt, 1), "prev_d": round(d_pre, 1),
            "late_s": None if late is None else round(late, 3)})
+    # THE HALT POINT, independent of the park. `hx` above is the mirror read after the
+    # halt's tick, i.e. on_stop's OWN output: a park in the wrong place moves that
+    # reference with it (parked on the target's point, the arrows fly 0.000 s and agree
+    # with a want of 0.000 s). So 6b-6d and 6h measure against f9_ref's point instead.
+    ref = f9_ref(on)
+    d_ref = math.hypot(1800.0 - ref[0], ref[1])
     after = [(t, p, fr, tw) for t, p, fr, tw in on["track"]
              if ht is not None and ht <= t <= ht + 5.0 + 1e-6]
-    worst = max((math.hypot(p[0] - hx[0], p[1] - hx[1]) for _t, p, _f, _w in after),
+    worst = max((math.hypot(p[0] - ref[0], p[1] - ref[1]) for _t, p, _f, _w in after),
                 default=math.inf)
     frame_off = max((math.hypot(f[0] - p[0], f[1] - p[1]) for _t, p, f, _w in after),
                     default=math.inf)
@@ -1215,25 +1236,32 @@ def section_mirror_stop():
                    default=math.inf)
     check(len(after) >= 100 and worst <= 15.0 and frame_off < 1e-6 and twin_off < 1e-6,
           "6b. HEADLINE: for 5 s after the halt the mirror (_npc_mirror_pos) stays within "
-          "15 u of where the halt found it, _reach_frame reads that same point, and the "
-          "twin stands on it too -- the client's two copies stopped there",
-          {"ticks": len(after), "worst_u": round(worst, 2), "frame_off": frame_off,
-           "twin_off": twin_off})
-    want = d_halt / on.get("speed", 1600.0)
+          "15 u of the HALT POINT -- the 0x002A leg dead-reckoned to the 0x0028's send "
+          "instant, computed from the follow's own send, never read off the mirror on_stop "
+          "just moved -- _reach_frame reads that same point, and the twin stands on it too: "
+          "the client's two copies stopped there",
+          {"ticks": len(after), "ref": tuple(round(c, 1) for c in ref),
+           "worst_u": round(worst, 2), "frame_off": frame_off, "twin_off": twin_off})
+    want = d_ref / on.get("speed", 1600.0)
     probes = on.get("probe", {})
     check(set(probes) == {1.1, 2.5}
           and all(abs(probes[d] - want) <= 0.05 * want for d in probes),
           "6c. launch_player_projectile's flight at the halt +1.1 s and +2.5 s is "
-          "hypot(target - halt point) / speed within 5 % -- the arrow flies from where "
-          "the body stands",
+          "hypot(target - halt point) / speed within 5 %, the halt point 6b's dead-reckoned "
+          "one -- the arrow flies from where the body stands",
           {"want_s": round(want, 3), **{f"+{d}": round(v, 3) for d, v in probes.items()}})
     fl = on.get("flights", [])
-    check(len(fl) >= 2 and all(abs(f - want) <= 0.05 * want for f in fl)
+    band = ((reach - 15.0) / on.get("speed", 1600.0), reach / on.get("speed", 1600.0))
+    check(len(fl) >= 2 and band[0] - 1e-9 <= want <= band[1] + 1e-9
+          and all(abs(f - want) <= 0.05 * want for f in fl)
           and not on["avoid"] and on["n_avoid"] == 0,
-          "6d. the chain's own launches agree (RUN-T's prediction: roughly constant, "
-          "~0.93 s each), and no `kbd_leg avoid-halt` row fires after the halt -- the "
-          "mirror never walks into the target's disc, so 1z-dj never re-parks the model",
-          {"flights": [round(f, 3) for f in fl], "avoid_rows": len(on["avoid"])})
+          "6d. the chain's own launches agree with that want, which is itself the range's "
+          "flight ((1498 - 15) / 1600 to 1498 / 1600, ~0.927-0.936 s; RUN-T's prediction: "
+          "roughly constant, ~0.93 s each), and no `kbd_leg avoid-halt` row fires after "
+          "the halt -- the mirror never walks into the target's disc, so 1z-dj never "
+          "re-parks the model",
+          {"want_s": round(want, 4), "band": tuple(round(b, 4) for b in band),
+           "flights": [round(f, 3) for f in fl], "avoid_rows": len(on["avoid"])})
     bad_after = [p for t, p, _f, _w in bad["track"]
                  if bad.get("halt_t") is not None and abs(t - (bad["halt_t"] + 2.5)) < 0.026]
     walked = (math.hypot(bad_after[0][0] - bad["halt_at"][0], bad_after[0][1] - bad["halt_at"][1])
@@ -1270,14 +1298,17 @@ def section_mirror_stop():
           {"late_s": None if then is None else round(then, 3),
            "mirror_d": None if then_d is None else round(then_d, 1)})
     # -- the legacy sync model: send()'s own filter now lets our 0x0028 reach it
+    # Both measured from f9_ref's point, not from the mirror's park: this check is the
+    # LEGACY model's, and must neither lean on nor be broken by on_stop.
     lg = [(t, p) for t, p in on["legacy"] if ht is not None and ht <= t <= ht + 5.0 + 1e-6]
-    lg_worst = max((math.hypot(p[0] - hx[0], p[1] - hx[1]) for _t, p in lg if p is not None),
+    lg_worst = max((math.hypot(p[0] - ref[0], p[1] - ref[1]) for _t, p in lg if p is not None),
                    default=math.inf)
     lbad = f9_drive(True, legacy=False)
+    lref = f9_ref(lbad)
     lb = [p for t, p in lbad["legacy"]
           if lbad.get("halt_t") is not None and abs(t - (lbad["halt_t"] + 5.0)) < 0.026]
-    lb_walk = (math.hypot(lb[0][0] - lbad["halt_at"][0], lb[0][1] - lbad["halt_at"][1])
-               if lb and lb[0] is not None else 0.0)
+    lb_walk = (math.hypot(lb[0][0] - lref[0], lb[0][1] - lref[1])
+               if lb and lb[0] is not None and math.isfinite(lref[0]) else 0.0)
     check(len(lg) >= 100 and lg_worst <= 15.0 and lb_walk > 1000.0,
           "6h. THE LEGACY SYNC MODEL parks on the halt too: for 5 s after it _sync_position "
           "stays within 15 u of the halt point; under --no-legacy-stop it walks the 0x002A "
@@ -1437,10 +1468,14 @@ def section_mirror_stop_tape():
            "parked_u": None if off_on is None else round(off_on, 1)})
     tape = [f for _t, f in launches]
     check(len(pred_bad) == 3 and all(abs(p - f) <= 0.02 * f for p, f in zip(pred_bad, tape))
-          and len(pred_on) == 3 and all(p > 0.84 for p in pred_on),
+          and len(pred_on) == 3 and all(abs(p - 0.93) <= 0.03 for p in pred_on[:2])
+          and 0.84 < pred_on[2] < 0.90,
           "7c. the known-bad arm IS the tape: the blind mirror reproduces all three of "
           "RUN-T's flights (0.728, 0.282, 0.648 s) within 2 %; the parked mirror predicts "
-          "~0.93, 0.93 and 0.85 s -- the flights the runsheet scores",
+          "0.93 +- 0.03 s for the two launches after the first halt (the band the runsheet "
+          "scores) and ~0.85 s for the third -- the 2026-09-30 clock's late re-approach halt "
+          "(RANGERLOOP-F11, 7d), 134 u inside range; on today's clock 6f halts it at range, "
+          "so the re-run's third predicts ~0.93 s too",
           {"tape": [round(f, 3) for f in tape], "blind": [round(p, 3) for p in pred_bad],
            "parked": [round(p, 3) for p in pred_on]})
     # The legacy sync model on the same sends, through send()'s own filter: RUN-T's
