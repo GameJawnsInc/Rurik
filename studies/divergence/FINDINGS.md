@@ -4,6 +4,11 @@ Study arc: `studies/divergence/`. Written 2026-08-07 against the first live capt
 Vocabulary per `studies/character/FINDINGS.md`: OBSERVED, UPSTREAM, RECONSTRUCTION,
 CORROBORATED, CONTESTED, UNVERIFIED, NOT FOUND.
 
+**Identifiers.** `DIVERGENCE-D<n>` = a divergence section of this document, sub-sections
+included (`DIVERGENCE-D13.4`). Registered 2026-10-07; the bare `D<n>` headings below are
+grandfathered and mean the same sections. Convention:
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
 ---
 
 ## 1. What was measured
@@ -934,7 +939,7 @@ MAP_MANIFEST_REQUEST`, `0x0196 INSTANCE_MANIFEST_BODY`, `0x0197 INSTANCE_MANIFES
 three kinds), `0x0198 INSTANCE_MANIFEST_PHASE` — and the resolution appended to `0x0092`'s
 row. No server behaviour changed.
 
-### D13.4 Settled at the desk: the body, the hash, and the cache that picks the requests (2026-10-07)
+### DIVERGENCE-D13.4 Settled at the desk: the body, the hash, and the cache that picks the requests (2026-10-07)
 
 **Label:** per claim below. Desk only; nothing was run on a client. The tool is
 `toolkit/authsrv/manifestbody.py` and the test `toolkit/authsrv/test_manifestbody.py`
@@ -945,7 +950,7 @@ its own build's numbering. **No decoded file-id list, hash table, cache stamp or
 committed**: the test reads them out of the vault at run time and asserts shapes, counts
 and relations.
 
-**D13.4.1 The body (`0x0196`).** RECONSTRUCTION for the mechanism, OBSERVED for the layout.
+**DIVERGENCE-D13.4.1 The body (`0x0196`).** RECONSTRUCTION for the mechanism, OBSERVED for the layout.
 
 - Handler chains on 38797: `0x0198` 0x0084EE10 → 0x008522C0; `0x0196` 0x0084EDB0 →
   0x00852000; `0x0197` 0x0084EDE0 → 0x00852040; `0x019F` 0x0084EF80 → 0x00852320.
@@ -969,7 +974,7 @@ and relations.
   count == ids is a check the bytes could fail; a buffer one byte short fails it 646 of
   646.
 
-**D13.4.2 The hash.** OBSERVED as a relation; that the client never computes it is
+**DIVERGENCE-D13.4.2 The hash.** OBSERVED as a relation; that the client never computes it is
 RECONSTRUCTION.
 
 - `0x0197 [3, map, dword]`: the dword is CRC-32 (zlib's, ISO-HDLC) of the raw phase-1
@@ -988,7 +993,7 @@ RECONSTRUCTION.
   must deliver in the DONE the value its `0x019F` named, or the cache will disagree on the
   next session. Computing it retail's way is a fidelity choice, not a client check.
 
-**D13.4.3 The cache, and why a session asks for the maps it asks for.** RECONSTRUCTION for
+**DIVERGENCE-D13.4.3 The cache, and why a session asks for the maps it asks for.** RECONSTRUCTION for
 the mechanism, OBSERVED for the prediction.
 
 - **The record** is `Gw.dat` MFT file id 5, which binds plainly to row 8315 in all six
@@ -1052,7 +1057,7 @@ the mechanism, OBSERVED for the prediction.
   136 were asked. Map 416 was named and not asked, and no tape ever fetched it, so the run
   directory's own record already held its hash.
 
-**D13.4.4 The hazard for a server that sends `0x019F` (DESKWORK-D3).** Our server sends no
+**DIVERGENCE-D13.4.4 The hazard for a server that sends `0x019F` (DESKWORK-D3).** Our server sends no
 `0x019F` (authsrv's load burst is two PHASE pairs, each closed by a body-less DONE), so
 nothing on loopback is ever queued (0 requests in the 2026-09 gamesrv captures, D13.3). A
 future `0x019F` that names a hash differing from the run directory's file-id-5 table queues
@@ -1065,7 +1070,7 @@ two safe options: name exactly the hashes the run directory's own record holds
 not taken at all, which turns every named map into a request; and a kind-0 DONE with a
 non-zero dword writes the cache (ours sends 0).
 
-**D13.4.5 Still open.**
+**DIVERGENCE-D13.4.5 Still open.**
 
 - What kind 0's dword is. It is non-zero on 58 of 121 loads, and none of seven CRC
   relations over its own body fits (0 of 58). 34 of the 58 equal a kind-3 hash some session
