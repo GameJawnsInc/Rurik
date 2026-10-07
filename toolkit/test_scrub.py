@@ -43,6 +43,7 @@ mid-run cannot make the two disagree, because there is only one set of bytes.
     python toolkit/test_scrub.py
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -60,14 +61,14 @@ import scrub_captures as sc  # noqa: E402
 # 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 6 blind-spot
 # + 1 state census stamp + 4 snapshot red-team + 11 session store + 6 state refusal
 # + 2 destination + 16 unrecognised-field report + 7 opaque-exclusion
-# + 8 search-equivalence = 76 mandatory, plus 2 that need `vault/state` to exist.
-# MEASURED green 2026-08-15 at 78 over the whole capture tree with the store present
-# (70 before section 14, 47 before section 12).
+# + 8 search-equivalence + 8 aligned-block (14a) = 84 mandatory, plus 2 that need
+# `vault/state` to exist. MEASURED green 2026-10-07 at 86 over the whole capture tree
+# with the store present (78 before section 14a, 70 before section 14, 47 before 12).
 #
 # There is no bare-machine shape to floor separately: `main()` opens with
 # `vaultpath.require_dir("captures")`, so this file cannot run at all without the
 # vault. The only optional pair is the two real-store checks, which declare a skip.
-LEDGER = checks.Ledger("credential scrub", floor=76)
+LEDGER = checks.Ledger("credential scrub", floor=84)
 
 # Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
 # every record. Baked into the snapshot, so no pass can disagree about what was excluded.
@@ -77,6 +78,16 @@ SKIP = ("captures-scrubbed", "portal-scrubbed")
 # character no secret can contain -- otherwise a join could manufacture a match that is
 # not in the text. `search_all` checks that rather than trusting this comment.
 SEARCH_SEP = "\x00"
+
+# The block size of `block_search`'s pigeonhole. A secret of length L >= 2B-1 = 35
+# contains a whole haystack-aligned block wherever it occurs; the harvested secrets are
+# 36, 40 and 128 characters long bar a dozen, which keep the plain `in`. Why 18 and not
+# larger: B = 19 would need L >= 37 and push all 2,287 36-character secrets onto `in`.
+SEARCH_BLOCK = 18
+
+# How many near-miss negatives section 14 adds to its real-corpus probe. Each one costs
+# the naive scan a FULL pass over the corpus (it is absent, so nothing exits early).
+NEAR_MISSES = 30
 
 
 def harvest_secrets(snap):
@@ -219,6 +230,15 @@ def search_all(text, secrets):
     of secret cannot silently fall outside it. If the separator ever turns out to be a
     legal secret character the function does the slow, obviously-correct thing instead
     of risking a wrong answer.
+
+    THE SECOND REDUCTION (2026-10-07, DESKWORK-D13 step 2), and it is the same kind:
+    exact, never a sample. By then the corpus was 1.1 GB and 16,512 secrets, the
+    haystack ~164 MB, and the tail `{s for s in secrets if s in haystack}` was back to
+    being most of this file -- ~325 s per call, five calls, ~1,600 of ~1,880 s. That
+    tail is now `block_search`, which answers the identical set by a pigeonhole on
+    aligned blocks; its docstring carries the proof and section 14 the sabotages. The
+    old tail and the new one were run side by side on the FULL corpus before the old
+    one was deleted (PLAN-LOG, DESKWORK-D13).
     """
     if not secrets:
         return set()
@@ -228,7 +248,55 @@ def search_all(text, secrets):
     run = ("[" + re.escape("".join(sorted(alphabet))) + "]{"
            + str(min(len(s) for s in secrets)) + ",}")
     haystack = SEARCH_SEP.join(set(re.findall(run, text)))
-    return {s for s in secrets if s in haystack}
+    return block_search(haystack, secrets)
+
+
+def block_search(haystack, secrets, block=SEARCH_BLOCK, offsets=None, long_from=None):
+    """Exactly `{s for s in secrets if s in haystack}`, for ANY haystack and secrets.
+
+    THE PIGEONHOLE. Cut the haystack into blocks at multiples of `block` (B). Let a
+    secret s of length L >= 2B-1 occur at position p. The first block boundary at or
+    after p is q = p + o with 0 <= o <= B-1, and q + B <= p + (B-1) + B <= p + L. So the
+    whole block haystack[q:q+B] lies inside the occurrence and equals s[o:o+B] -- and q
+    is a block start the walk below visits, because q + B <= p + L <= len(haystack).
+    Hence: index every secret's B substrings s[o:o+B], o = 0..B-1, walk the haystack's
+    blocks ONCE, and for each block that matches an indexed substring, check the whole
+    secret really starts at q - o. Every occurrence is caught at its first block;
+    nothing is reported that `startswith` did not confirm. Secrets shorter than 2B-1
+    may contain no whole block, so they keep the plain `in` -- the predicate itself.
+
+    WHY THIS SHAPE. The index is over the SECRETS (16,512 x 18 keys), never over the
+    haystack, so it costs no text-sized memory beside a test already holding ~1 GB of
+    text; the haystack is walked once at 1/B of its length in dictionary lookups. At
+    full scale (164 MB) that is ~3 s against ~325 s for the comprehension.
+
+    `offsets` and `long_from` exist ONLY so section 14 can break this the two ways a
+    plausible implementation breaks -- drop an offset, or start the block path below
+    2B-1 -- and prove the checks there go red. Callers never pass them.
+    """
+    if long_from is None:
+        long_from = 2 * block - 1
+    if offsets is None:
+        offsets = range(block)
+    found = set()
+    want = {}
+    for s in secrets:
+        if len(s) < long_from:
+            if s in haystack:
+                found.add(s)
+            continue
+        for o in offsets:
+            want.setdefault(s[o:o + block], []).append((s, o))
+    get = want.get
+    for q in range(0, len(haystack) - block + 1, block):
+        hits = get(haystack[q:q + block])
+        if hits:
+            for s, o in hits:
+                # p >= 0 explicitly: a negative start would index from the END.
+                p = q - o
+                if p >= 0 and s not in found and haystack.startswith(s, p):
+                    found.add(s)
+    return found
 
 
 def check_corpus(src, snap):
@@ -307,8 +375,9 @@ def check_corpus(src, snap):
         # And immediately: what that check's OPAQUE_KEYS exclusion is covering for.
         # Run here rather than from main() because it needs this pass's scrubbed tree
         # and its harvested secrets, and re-scrubbing to get them would double a
-        # three-minute run for nothing.
-        check_the_opaque_exclusion_earns_itself(out, secrets)
+        # three-minute run for nothing. `found` goes with them: it IS `leaked(out,
+        # secrets)`, over the same unchanged tree, and section 13 used to recompute it.
+        check_the_opaque_exclusion_earns_itself(out, secrets, found)
 
         # --- properties the substitution promises ------------------------------
         lengths_ok, corr_ok = True, True
@@ -845,8 +914,12 @@ def check_destination_guard_and_real_store():
               f"{len(secrets)} value(s) checked against the same bytes the census read")
 
 
-def check_the_opaque_exclusion_earns_itself(out_dir, secrets):
+def check_the_opaque_exclusion_earns_itself(out_dir, secrets, filtered):
     """Section 13: what `leaked()`'s OPAQUE_KEYS exclusion is actually hiding.
+
+    `filtered` is `leaked(out_dir, secrets)` as the caller already computed it, over
+    the same tree, which nothing writes between the two -- passed in since 2026-10-07
+    rather than recomputed, which cost one full blob build and search per run.
 
     WHY THIS EXISTS, and it is a defect this session introduced and then caught.
     `leaked()` strips every key in `sc.OPAQUE_KEYS` from a record before searching it.
@@ -878,7 +951,7 @@ def check_the_opaque_exclusion_earns_itself(out_dir, secrets):
                 whole.append(fh.read())
     text = "\n".join(whole)
     del whole
-    hidden = search_all(text, secrets) - set(leaked(out_dir, secrets))
+    hidden = search_all(text, secrets) - set(filtered)
 
     # Which opaque field carries each hidden value. Only the hidden ones are looked up,
     # so this loop is over a handful rather than over the corpus.
@@ -1065,6 +1138,107 @@ def check_unrecognised_fields_are_reported():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _hexrun(n, tag):
+    """`n` deterministic lowercase-hex characters, the 40-character ARC4 keys' alphabet.
+
+    Deterministic so a red run reproduces; hex so a planted secret sits INSIDE a longer
+    run of its own alphabet, which is how an embedded leak looks to `search_all`.
+    """
+    out, i = "", 0
+    while len(out) < n:
+        out += hashlib.sha256(f"{tag}:{i}".encode()).hexdigest()
+        i += 1
+    return out[:n]
+
+
+def _plant(secret, residue, tag):
+    """A haystack holding `secret` embedded in a longer hex run, at a position whose
+    remainder mod SEARCH_BLOCK is `residue` -- so 0..B-1 sweeps every alignment."""
+    pre = _hexrun(SEARCH_BLOCK + residue, tag + ":pre")
+    return pre + secret + _hexrun(SEARCH_BLOCK, tag + ":post")
+
+
+def check_block_search_alignments():
+    """Section 14a: `block_search` at every alignment, and the two ways to break it.
+
+    Its proof turns on one quantity: o, the distance from an occurrence's start to the
+    first block boundary inside it, which takes every value 0..B-1 as the occurrence's
+    position runs through its residues mod B. So a secret is planted at all B residues,
+    at the boundary lengths either side of 2B-1, and the function is then broken in the
+    two places the proof leans on -- one offset left out of the index, and the block
+    path started one character too early -- and each break must lose a secret at
+    exactly the alignment the arithmetic predicts. Synthetic throughout; the real
+    corpus is section 14's next check.
+    """
+    print("\n14a. the aligned-block search at every alignment, and its two sabotages")
+    B = SEARCH_BLOCK
+
+    def sweep(length, secret=None, **sabotage):
+        """(residues where `secret` is missed, residues where the naive scan disagrees)."""
+        target = _hexrun(length, f"secret-{length}")
+        secret = secret or target
+        missed, disagree = [], []
+        for r in range(B):
+            hay = _plant(secret, r, f"hay-{length}-{r}")
+            got = block_search(hay, {target}, **sabotage)
+            if target not in got:
+                missed.append(r)
+            if got != {s for s in {target} if s in hay}:
+                disagree.append(r)
+        return missed, disagree
+
+    for length in (2 * B - 1, 36, 40, 128):
+        missed, disagree = sweep(length)
+        LEDGER.ok(not missed and not disagree,
+                  f"a {length}-character secret embedded at every one of the {B} "
+                  f"alignments is found",
+                  f"{B - len(missed)}/{B} found, {len(disagree)} disagreement(s) with "
+                  f"the naive scan" + (" -- 2B-1, the shortest length the block path "
+                                       "takes, exactly one whole block inside it"
+                                       if length == 2 * B - 1 else ""))
+
+    missed, disagree = sweep(2 * B - 2)
+    LEDGER.ok(not missed and not disagree,
+              f"a {2 * B - 2}-character secret, one short of the block path, is found at "
+              f"every alignment by the plain `in` it falls back to",
+              f"{B - len(missed)}/{B} found")
+
+    # A NEAR MISS: the secret with its last character changed. Its first aligned block
+    # is intact, so the index HITS -- and the whole secret is not there, so `startswith`
+    # must refuse it. This is the check a version that trusted the block would fail.
+    target = _hexrun(40, "secret-40")
+    near = target[:-1] + ("0" if target[-1] != "0" else "1")
+    missed, disagree = sweep(40, secret=near)
+    LEDGER.ok(len(missed) == B and not disagree,
+              "a near miss -- the secret with its last character changed -- is NOT "
+              "reported at any alignment, though its blocks match",
+              f"{len(missed)}/{B} correctly absent; a block hit is a candidate, and only "
+              f"the whole-secret compare makes it a finding")
+
+    # SABOTAGE 1: drop one offset from the index. The planted secret at position
+    # p = B + r has its first boundary at o = (-r) mod B, so leaving out offset d
+    # must lose it at residue (-d) mod B and nowhere else. All B of them.
+    wrong = {}
+    for d in range(B):
+        missed, _dis = sweep(2 * B - 1, offsets=[o for o in range(B) if o != d])
+        if missed != [(-d) % B]:
+            wrong[d] = missed
+    LEDGER.ok(not wrong,
+              f"SABOTAGE: dropping any ONE of the {B} offsets loses the {2 * B - 1}-"
+              f"character secret at exactly the alignment that needed it -- {B} of {B} "
+              f"red", f"offsets that misbehaved: {wrong}" if wrong else
+              "so every offset in the index is load-bearing and the sweep above sees it")
+
+    # SABOTAGE 2: start the block path at 2B-2. A (2B-2)-character secret whose first
+    # boundary is at o = B-1 has only B-1 characters after it -- no whole block -- so
+    # it must be lost at residue (-(B-1)) mod B = 1, and found everywhere else.
+    missed, _dis = sweep(2 * B - 2, long_from=2 * B - 2)
+    LEDGER.ok(missed == [(-(B - 1)) % B],
+              f"SABOTAGE: sending {2 * B - 2}-character secrets down the block path "
+              f"loses one at exactly the alignment with no whole block inside it",
+              f"missed at residue(s) {missed}; 2B-1 is the bound, not a tuning choice")
+
+
 def check_search_all_equals_the_naive_scan():
     """`search_all` is an optimisation of a SECURITY check, so it is proved equal to it.
 
@@ -1074,16 +1248,27 @@ def check_search_all_equals_the_naive_scan():
     a TOKENISING search -- split on delimiters, intersect with a set -- would be faster
     than either and would miss a secret embedded inside a longer run, which is exactly
     what a half-working scrubber leaves behind.
+
+    Since 2026-10-07 the tail is `block_search`, so 14a (`check_block_search_alignments`)
+    plants secrets at every alignment and runs its two sabotages, and the real-corpus
+    probe carries both arms and near misses rather than one arm's positives.
     """
     print("\n14. the fast leak search is the slow one, exactly")
-    secrets = {"player7@example.invalid", "AAAABBBBCCCCDDDD", "deadbeefcafe1234"}
+    # Two of the five are long enough for `block_search`'s block path (L >= 35) and
+    # three take its plain `in`, so every case below exercises BOTH arms -- before
+    # 2026-10-07 all three secrets here were 16-23 characters, which would have left
+    # the block path, the one carrying the real 36/40/128-character secrets, untried.
+    long40, long128 = _hexrun(40, "fixture-40"), _hexrun(128, "fixture-128")
+    secrets = {"player7@example.invalid", "AAAABBBBCCCCDDDD", "deadbeefcafe1234",
+               long40, long128}
 
     cases = {
-        "plain occurrence": 'x "email": "player7@example.invalid" y',
-        "EMBEDDED in a longer token": "prefixAAAABBBBCCCCDDDDsuffix",
-        "adjacent, no delimiter": "deadbeefcafe1234AAAABBBBCCCCDDDD",
-        "absent": "nothing to see, all pseudonymised",
-        "repeated many times": "AAAABBBBCCCCDDDD " * 50,
+        "plain occurrence": f'x "email": "player7@example.invalid" y "key": "{long40}"',
+        "EMBEDDED in a longer token": (f"prefixAAAABBBBCCCCDDDDsuffix "
+                                       f"0f{long40}9e beef{long128}cafe"),
+        "adjacent, no delimiter": f"deadbeefcafe1234AAAABBBBCCCCDDDD{long40}{long128}",
+        "absent": "nothing to see, all pseudonymised " + long40[:-1] + "z",
+        "repeated many times": ("AAAABBBBCCCCDDDD " + long128 + " ") * 50,
     }
     for name, text in cases.items():
         want = {s for s in secrets if s in text}
@@ -1100,21 +1285,42 @@ def check_search_all_equals_the_naive_scan():
     LEDGER.ok(search_all("anything", set()) == set(),
               "and an empty secret set searches to nothing rather than raising")
 
-    # And on the real tree, where the corpus is 179 MB and the secret set is thousands.
+    check_block_search_alignments()
+
+    # And on the real tree: 1.1 GB and 16,512 secrets on 2026-10-07 (179 MB and 6,716
+    # when this section was written). SKIPS ONLY ON AN ABSENT DIRECTORY. This used to
+    # catch every exception as a skip, which would have turned a corpus that failed to
+    # LOAD into a declared absence -- the failure checks.py exists to refuse.
     try:
-        snap = sc.Snapshot(vaultpath.require_dir("captures"), skip=SKIP)
+        root = vaultpath.require_dir("captures")
+    except SystemExit as exc:
+        LEDGER.skip("real-corpus equivalence", f"no vault/captures: {exc}")
+        return
+    try:
+        snap = sc.Snapshot(root, skip=SKIP)
         secrets = harvest_secrets(snap)
         text = "\n".join(snap.text(rel) for rel, _n in snap.jsonl())
-    except (Exception, SystemExit) as exc:                                       # noqa: BLE001
-        LEDGER.skip("real-corpus equivalence", f"corpus unreadable: {exc}")
+    except Exception as exc:                                                     # noqa: BLE001
+        LEDGER.ok(False, "the real corpus loads for the equivalence check",
+                  f"{type(exc).__name__}: {exc}")
         return
-    probe = sorted(secrets)[:150]
+    # The probe takes BOTH of block_search's arms on real data: every secret too short
+    # for the block path, the first long ones, and NEAR MISSES of those -- each with its
+    # last character changed, so its blocks are in the corpus and the whole value is
+    # (almost always) not, which only the whole-secret compare can tell apart. Before
+    # 2026-10-07 the probe was `sorted(secrets)[:150]`: positives only, all one arm.
+    short = sorted(s for s in secrets if len(s) < 2 * SEARCH_BLOCK - 1)
+    long_ = sorted(s for s in secrets if len(s) >= 2 * SEARCH_BLOCK - 1)[:150]
+    near = [s[:-1] + ("0" if s[-1] != "0" else "1") for s in long_[:NEAR_MISSES]]
+    probe = set(short) | set(long_) | set(near)
     slow = {s for s in probe if s in text}
-    fast = search_all(text, set(probe))
-    LEDGER.ok(slow == fast and len(probe) > 100,
+    fast = search_all(text, probe)
+    LEDGER.ok(slow == fast and len(long_) >= 100 and len(slow & set(long_)) >= 100
+              and len(near) == NEAR_MISSES,
               "and they agree on the REAL corpus, not only on fixtures",
-              f"{len(probe)} secrets over {len(text)/1e6:.0f} MB, {len(slow)} found "
-              f"by both")
+              f"{len(short)} short + {len(long_)} long + {len(near)} near-miss over "
+              f"{len(text)/1e6:.0f} MB; {len(slow)} found by both "
+              f"({len(slow & set(near))} of the near misses)")
 
 
 def main():

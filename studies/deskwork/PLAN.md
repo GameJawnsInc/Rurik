@@ -78,7 +78,9 @@ three overalls; ties broken by fewer sessions.
 - **D13 (spread 6)** is the leverage judge's first pick and the operator judge's last.
   Both are right about different things: steps 1–3 take about 28 minutes off every full
   suite for one session's work with the fix already probed row-identical, and the owner
-  feels none of it. The question is whether one session of infrastructure goes before
+  feels none of it. **(Corrected 2026-10-07: those 28 minutes were SERIAL seconds. At
+  `run_suite`'s four jobs the wall saving is ~11–14 minutes — see D13's landing note in
+  §3. Steps 1–2 landed that day.)** The question is whether one session of infrastructure goes before
   any fidelity route. (§8 Q2.)
 - **D14 (spread 4)**: the fidelity judge scored it low and said in the same breath that
   its absolute priority is higher than the score, because it is the one irreversible risk
@@ -1137,6 +1139,50 @@ quadratic secret scan, three full calls per run) and with `authsrv.py`
 nothing exercises a no-vault machine; `authsrv.py` regrew 7,887 lines and 271 definitions
 in eleven days with no tripwire.
 
+**Steps 1–2 LANDED 2026-10-07** (PLAN-LOG "DESKWORK-D13 steps 1–2"). Every figure below
+is OBSERVED on a machine five parallel lanes were also loading: in the desk equivalence
+run the scrub's harvest took 39.6 s and one `scrub_tree` pass 227 s, against 18.9 s and
+99.5 s in the unloaded triage the same morning, so read the absolute seconds as about twice an idle machine's.
+Ratios and identities are the result; the seconds are context.
+
+- **Step 1 (buildpins).** `buildpins.SourceSlicer` splits each file once with
+  `ast.get_source_segment`'s semantics exactly. HEAD's instrument against the new one over
+  the whole tree: 3,749 rows, 328 live, 0 problems, 2 skipped on both, and rows, problems,
+  skips and `baseline()` IDENTICAL. `scan_file(authsrv.py)` (50,878 lines) 128.1 → 8.7 s;
+  whole tree 298.3 → 16.9 s. Same check counts before and after: `test_buildpins` 258 →
+  29 s (49 → 63 checks with the new §7), `test_genericvalue` 284 → 19 s (48),
+  `test_updatecheck` 1,575 → 90 s (35). The study's probe (54–68 s at 35k lines) had
+  roughly doubled with the file, which is the quadratic it described.
+- **Step 2 (scrub).** `search_all`'s tail is `block_search`, the aligned-block pigeonhole
+  (B = 18; the 11 secrets under 35 characters keep `in`). Before the old tail was
+  deleted, both ran over the same haystack on the FULL corpus, once for each text the test
+  searches, and agreed exactly: the originals 16,512 = 16,512 found; the clean
+  `leaked()` blob 0 = 0; the unfiltered tree (§13) 330 = 330; the Password-dropped
+  re-scrub 4 = 4. The tail went from 260–541 s to 3.3–5.3 s per call. §13 now reuses
+  `check_corpus`'s `found`; §14a plants secrets at all 18 alignments and at 34/35, and its
+  dropped-offset and early-block-path sabotages each lose a secret at exactly the
+  predicted alignment. `test_scrub` 2,348 → 1,194 s, 78 → 86 checks (floor 76 → 84);
+  the after-run overlapped another session's `test_scrub` for 13 of its 20 minutes, so
+  1,194 s is an upper bound.
+- **Acceptance (a) is NOT met for `test_scrub` as written, and cannot be at this
+  corpus.** Of the three numbers it implies: the replaced tail is ≤ 5.3 s per call (met);
+  `search_all` end to end is 31–44 s per call (NOT the ≤ 10 s hoped for), because its
+  pre-existing first half, `re.findall` over ~1 GB to build the distinct-run haystack,
+  costs 26–37 s here and step 2 did not touch it; and `test_scrub` under 200 s is out of
+  reach — its non-search floor (harvest, two `scrub_tree` passes, two `leaked()` blob
+  builds, the remaining `findall`s and §14's naive probe) was ~500 s unloaded in the
+  triage. `test_updatecheck` under 200 s is met at 90 s.
+- **The "28 minutes" in this route's Value line was SERIAL seconds** (`test_scrub` 1,203 +
+  `test_updatecheck` 478 in the 09-16 timings). RECONSTRUCTION, modelled with
+  `run_suite.schedule()`'s order over four greedy workers on the 2026-09-29 timings file
+  (252 entries, 9,934 s serial, 2,484 s modelled wall): with this landing's four measured
+  times substituted (`test_scrub` scaled by the timings file's own 1,880/2,348 to
+  956 s), ~47 min of serial test time and ~12 min of wall come off a four-job full
+  run (41.4 → 29.7 min); at the triage's unloaded estimate for `test_scrub` (500–600 s)
+  it is ~54 and ~14 min. So ~11–14 minutes of wall, not 28. Contention, which
+  `run_suite`'s docstring measures as real at four jobs, is not in the model; step 3's
+  full census is where the wall number gets OBSERVED.
+
 **Keys.** INF-3, INF-2, INF-4, INF-5, CRP-11, INF-V3, INF-9, INF-14, CRIT-6 (the ceiling
 only; see §6 on CRIT-6 vs INF-12). Open at `TESTS.md`'s stale docstrings ("~60 s",
 "183 s"); `run_suite`'s docstring ("eleven" untested modules; now 24); the bare-machine
@@ -1144,12 +1190,12 @@ invariant in CLAUDE.md that no test exercises; the survey's own finding for the 
 
 **Steps.**
 
-1. **buildpins**: precompute the line list and offsets once per file, matching
+1. **LANDED 2026-10-07 (see above).** **buildpins**: precompute the line list and offsets once per file, matching
    `ast.get_source_segment`'s semantics exactly; a differential over the whole tree proves
    the rows identical (2,925 rows, 295 live = `test_buildpins.py:196`'s literal) pinned
    with a sabotage; re-time and fix the docstrings (probe: `scan_file(authsrv.py)`
    54–68 s → 3.4–3.8 s).
-2. **scrub**: step 0 passes `check_corpus`'s `leaked()` into §13 instead of recomputing
+2. **LANDED 2026-10-07 (see above).** **scrub**: step 0 passes `check_corpus`'s `leaked()` into §13 instead of recomputing
    (`test_scrub.py:873`; one of three ~250 s calls); then the aligned-block index — for
    secrets of length L any occurrence contains a whole aligned block of size
    B ≤ floor((L+1)/2), so B = 18 covers the 36/40/128 classes (13,955 secrets; the ~12
@@ -1177,7 +1223,8 @@ invariant in CLAUDE.md that no test exercises; the survey's own finding for the 
    do not raise the number". The carve-out itself (modularize pass 2) is the owner's call
    and is NOT scheduled here — see §6.
 
-**Acceptance.** (a) After steps 1–2, `test_scrub` and `test_updatecheck` each run under
+**Acceptance.** (a) *(Read the landing note above: met for `test_updatecheck` and for the
+equivalence, NOT for `test_scrub`'s 200 s.)* After steps 1–2, `test_scrub` and `test_updatecheck` each run under
 200 s with §14's equivalence and the planted-secret sabotage green, and the buildpins
 differential row-identical. (b) `--since` on a docs-only commit selects only the lint tests
 and an unnamed file escalates naming itself. (c) `--bare` classifies all 218 tests with
@@ -1185,8 +1232,9 @@ zero tracebacks under both fixtures. **FAILS** if the aligned-block index and th
 scan disagree on the real corpus — the optimisation is refused, since it is a security
 check.
 
-**Value.** About 28 minutes off every full suite and the scrub stops growing with the
-corpus; scoped runs honest instead of hand-picked; corpus reds named the day their tape
+**Value.** About 28 minutes off every full suite (SERIAL seconds — the wall saving at four
+jobs is ~11–14 minutes; corrected 2026-10-07 in the landing note above) and the scrub
+stops growing with the corpus; scoped runs honest instead of hand-picked; corpus reds named the day their tape
 lands; the bare-machine invariant tested for the first time since the repo went public.
 
 **Cost.** L overall; steps 1–3 are one session. **Client dependency:** none.
@@ -1618,6 +1666,8 @@ Each answerable in a word.
    protects against overwrite only.)
 2. **Suite cost first?** Spend one session on D13 steps 1–3 (about 28 minutes off every full
    run, the fix already probed row-identical) before any fidelity route — yes or no?
+   **Overtaken 2026-10-07: steps 1–2 landed as desk work (§3 D13's landing note), and the
+   28 minutes were serial — ~11–14 minutes of wall at four jobs. Step 3 is still open.**
 3. **Label-only skills?** May D4 serve skills whose numbers come from the archive's own
    description templates as a marked `label` tier in the sandbox (the "modelled" grade
    says so), so most of the 1,333 act rather than 54 — yes or no?
