@@ -2107,3 +2107,106 @@ counter rise by exactly the row's gold.
    Buy button is greyed before clicking (expected, from `20260818T235130`); if it is lit and
    the click sends `0x004D`, the server prints `BUY refused: purse … < price` and sends
    nothing — record which.
+
+## 13. The log heading's argument is a REGION, in the first string slot (RANGERLOOP-F5, 2026-10-07)
+
+**The finding.** `0x0049` and `0x0050` each carry three short coded strings, and the FIRST
+(s1) is what a quest with log flags 0 is filed under: the heading is string 1125
+(`%str1% Quests`, one argument), and the argument is s1. Ours sent the quest's own name in
+all three slots, so a flags-0 quest was filed under its own name plus the suffix
+(RANGERLOOP-F5, seen on our client 2026-09-30, CONFIRM-2026-09-30 §10). Retail's s1 is a
+one-unit REGION id, constant per home map (and per quest; the corpus cannot separate the
+two).
+
+**OBSERVED, static (build 38797, `codescan.py --dis` / `--xrefs`; every site below is
+re-read as bytes by `test_questflow.py` §18 through the stdlib PE reader).** The chain
+from the wire to the heading:
+
+| step | site | what it does |
+|---|---|---|
+| `0x0049` dispatcher `0x0091DB70` | `0x0091DB9D lea eax, [edx+0x1c] / push eax` | hands the message's first string (msg+0x1C; s2 at +0x2C, s3 at +0x3C, flags at +0x18) to the handler as `[ebp+0x18]`; the call is `0x0091DBAE` |
+| handler `0x0080F0A0` | `0x0080F0E2 push [ebp+0x18]` … `0x0080F10E mov [esi+8], eax` | s1 into the log record's `+0x08`; s2 into `+0x0C` (`0x0080F135` / `0x0080F161`); s3 into `+0x10`. The flags word reaches `+0x04` only on a NEW record (`0x0080F0DF`) |
+| `0x0050` dispatcher `0x0091DC70` → `0x0080F470` | `0x0091DC81 lea eax, [ecx+0xc]`; `0x0080F4CB push [ebp+0x10]` … `0x0080F4FA mov [esi+8], eax` | the replay's s1 lands in the same `+0x08` |
+| `0x0080DB40` (quest id, out) | `0x0080DB8B mov eax, [esi+8]` … `0x0080DB98 mov [edi], eax`; `0x0080DBB1 mov eax, [esi+4] / mov [edi+8], eax` | out[0] = `+0x08`, out[1] = `+0x0C`, out[2] = the flags |
+| heading `0x0057DC60` | `0x0057DC70..77` calls `0x0080DB40` into `[ebp-0xc]` | §1.4's sortCode switch on the flags: 0x10 → 0, 0x20 → 1, 0x40 → 2, none → 3 (`0x0057DCD2`); jump table `0x0057DDA8` = `0x57DD13, 0x57DD46, 0x57DD5B, 0x57DD77` |
+| arm 3 `0x0057DD77` | `push 0 / push [ebp-0xc] / push 0xa / push 0x465 / call 0x007C9410` | string 1125 with `+0x08` as its one argument (marker 0x0A) |
+| arm 2 `0x0057DD5B` | the same shape with `0x11678` | string 71800 (RC4-opaque) with the same argument |
+| arm 1 `0x0057DD46` | `push 0x464 / call 0x007C93F0` | string 1124, no argument: the flags-32 heading, which is why the 32 rows never showed the defect |
+
+This corrects §1.4 in one detail: only 1124 goes through the one-argument seam `0x007C93F0`;
+1125 and 71800 go through `0x007C9410` with s1 as their argument (1123's argument is the
+mission record's `+0x74`, as §1.4 says). The triage's read (`0x0057DD77` → `0x0080DB40` →
+record+8 ← `0x0080F0A0`'s first string) is CONFIRMED and extended to `0x0050`.
+
+**CORROBORATED, the live corpus** (`livewire.decode_conn`, 127 connections, the declared gap
+set aside; `test_questflow.py` §18): 137 log rows — 30 `0x0049`, 107 `0x0050` — for 24 quests
+on 15 captures. s1 is ONE unit on 137 of 137, never equal to s2, and constant per home
+map — every quest homed on one map carries the same word (seven quests on 146, seven on
+148): 146, 148 and 160 carry `0x3D64` (string 15460); 212, 238 and 242 `0x617D` (24701); 280
+`0x0E63` (3427); 449 `0x6185` (24709). `textrec.py` reads each as a region's name (labels,
+not committed). No quest is homed on two maps, so s1 is equally constant per QUEST, and the
+corpus does not say whether retail takes the word from the quest's record or from its map
+(corrected at review, 2026-10-07: the draft called it "a function of the home map" and then
+contrasted that with a per-quest column, which this 1:1 data cannot do). 47 rows have flags 0 or 2 — 45 exactly 0, 2 with the 0x004D's bit 1 —
+and every one of those is filed under arm 3. s2 is one value per quest and 24 distinct for
+24 quests, so it is read as the quest's own name (CORROBORATED by that alone). **s3 is NOT
+FOUND**: 4-5 units, never equal to s2, one value per quest, shared by up to three quests
+(15 values for 24). **Which slot the tracker and the 'Quest Added' toast draw is
+UNVERIFIED**: §0's runs put the name in all three.
+
+**What ships.** A quest row may carry `enc_region` — one coded unit, validated by
+`questdefs.region_units` (no marker below 0x100, no continuation word, no second unit; the
+loader refuses the row at startup otherwise) — and `questdefs.log_strings` builds
+(region, name, name) for `accept_quest` and `_replay_quests`. Both shipped rows carry
+`[0x3D64]`, the corpus's word for their giver's map 148. A row without the column still sends
+the name in s1. `--no-quest-region` sends the name in all three, the known-bad arm. The
+column is per QUEST, which the corpus permits rather than contradicts: s1 is constant per
+quest as well as per home map, so a per-quest column and a per-map rule agree on every
+retail row. Why it sits on the quest row is ours (RECONSTRUCTION, a design choice): a quest
+row is where the accept's words live, and every shipped quest is accepted on one map. That
+the word names a REGION rather than the quest rests on the three Pre-Searing homes sharing
+`0x3D64` across fifteen quests and on `textrec`'s reading. s3 keeps the name.
+
+**Owed: the client.** A flags-0 overlay of the errand, accepted on the client, should be
+filed under the region's heading rather than its own name, and `--no-quest-region` should
+bring the old heading back (runsheet in RANGERPRE.md's F5 entry).
+
+## 14. The skill-unlocked toast is the ACCOUNT's, and our gate read the connection (RANGERLOOP-F6, 2026-10-07)
+
+**The finding.** `0x001C` SKILL_UNLOCKED, the client's skill-unlocked toast, rides a
+granted skill's `0x00DC` only when the skill is new to the ACCOUNT (§10.2 already read the
+MANTID reward this way). Ours decided "new" against `state["skills_known"]` whenever no
+account list was stored: a per-connection set, empty at every connect. So every first
+grant toasted, a held skill included (skill 2 on our client, 2026-09-30).
+
+**OBSERVED, the live corpus** (`test_questflow.py` §16): every retail `0x00DC` joined to the
+account library in force at it — the last `0x001D` before it on the corpus's clock
+(capture, then t; t is the capture's own `wire.jsonl` clock, shared by its connections),
+plus every `0x001C` sent after that load. **19 of 19 agree**: a `0x001C` on the 7 skills
+outside the library (780 and 952 on `20260819T132414` :52606; 40 and 26 on
+`20260913T210901` :60877; 332 on `20260916T213125`; 277 on `20260917T090355`; 384 on
+`20260929T150923` :56064 921.161) and on none of the 12 inside it — 11 in the load's own
+`0x001D` (153, 105; 394, 446 twice; 2 at :60877 736.185; 382 and 1 twice) and 384 at
+:53756 1191.028, which :56064's `0x001C` had unlocked at 921.161 on the same capture's
+clock. The triage's 19 and its split stand; its one unverified step (absolute order across
+connections) is verified.
+
+**CORROBORATED: the library is the account's, and `0x001C` is what grows it.** The 38 `0x001D`
+in the corpus (one per connection, on 38 of 127) never drop an id across 11 distinct
+values — 8, 10, 16, 19, 21, 29, 32, 33, 34, 35, 38 skills — and each of the 6 skills a
+`0x001C` unlocked before a later load is in that load (780 and 952 → `20260821T152147`; 40
+and 26 → `20260914T005758`; 332 → `20260917T090355`; 277 → `20260917T124314`). 384 has no
+later load in the corpus.
+
+**What ships.** `authsrv.account_skills_held(state)`: the stored account list under
+`--persist`, else the `--unlocks` bitmap the load's `0x001D` carries (bounded by the served
+table, as the seed is), plus `skills_known`. `grant_skill` gates its `0x001C` on it;
+`--no-account-unlock-gate` restores the per-connection test as the known-bad arm. With the
+tape's own library (the `0x001D` at :59969 157.127, 38 skills) laid into `UNLOCKED`, q75's
+grants reproduce retail's accept batch — the lone `0x001C` 384's — with no `skills_known`
+fake (`test_questflow.py` §10).
+
+**What it changes for a run.** The default `--unlocks corpus` holds all 1,333 player-usable
+skills, so no grant of one of them toasts; a run that wants the toast (a tutorial-style
+rig) names a narrow `--unlocks` -- or `--no-account-unlock-gate` for the old behaviour. That
+is retail's behaviour for an account that already holds the skill.

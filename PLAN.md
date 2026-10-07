@@ -2314,8 +2314,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
   arrival lets the body walk on. Retail's order UNVERIFIED (CONFIRM §12.2).
 * **SLICE-F25's `0x002D` half** never reaches `_note_wire_move` (CONFIRM §12.4).
-* **RANGERLOOP-F2, F5, F6:** quest-granted item names draw unresolved; which field names a
-  flags-0 quest's heading; our accept re-unlocks skills the account holds.
+* **RANGERLOOP-F5, F6** shipped 2026-10-07 (PLAN-LOG); owed, their client runs with the
+  flag A/B (RANGERPRE §5). **F2:** a quest item draws the henchman's generic name
+  (`0x2186`); retail's keyed sword's file binds in no run archive -- a row ruling and a run.
 
 ### 8.2 Waiting on the owner, or on a live capture
 

@@ -227,7 +227,7 @@ flags = 0x22200100
 value = 0
 model_id = 6462
 quantity = 1
-enc_name = [0x2186]            # 8582, the one string id the wire carried
+enc_name = [0x2186]            # string id 8326 (word - 0x100), the one string id the wire carried
 # The four modifier words, verbatim from the wire (decode with
 # toolkit/clientscan/itemmods.py --decode WORD): a damage-type line, a damage
 # range, and two the henchman's own staff carried -- copied, not composed.
@@ -242,7 +242,7 @@ henchman body is followed at its create by ONE 0x0161 CREATE_NAMED_ITEM per weap
 and a 0x006D NPC_UPDATE_WEAPONS [agent, leadhand, offhand] naming them -- 12 of 12 \
 bodies across 20260817T231139 and 20260819T132414. This row is item 20 of \
 20260817T231139 (connection 50286), the level-20 Monk henchman's: file 112081, \
-type 26, flags 0x22200100, model 6462, name id 8582 and the four words, byte for \
+type 26, flags 0x22200100, model 6462, name unit 0x2186 (string id 8326) and the four words, byte for \
 byte; the Elementalist carried 94937/26 with the same words but one, another \
 player's staff 112081/26 with a value and a requirement word. The client's own \
 archive binds file 112081 (archive.binds_plainly, row 10668 on the slice run's \
@@ -250,6 +250,17 @@ Gw.dat). Given to the party's caster bodies (party_weapon_item) so the client \
 draws a STAFF attack from casting range instead of a punch -- the owner, H4's \
 run: "Tahlkora attacks, but from long range with a melee punch animation"."""
 
+# THE NAME UNIT 0x2186, READ RIGHT (RANGERLOOP-F2, 2026-10-07). A one-word coded id
+# is the word less 0x100 (toolkit/clientscan/codedstr.py), so 0x2186 names string
+# 8326 -- the generic name the client draws on henchman and other players' gear
+# (textrec.py resolves it; the text is not committed). These rows used to say
+# "name id 8582", which is the raw word; textrec reads no text at id 8582. The UNIT
+# is retail's own -- 1,480 of the corpus's 4,817 0x0161 declares carry exactly
+# [0x2186] -- and these rows are the henchmen's wire, so it stays: a quest that
+# grants starter_sword or starter_shield therefore shows that generic name
+# (RANGERLOOP-F2). Retail's quest sword is a different declare with a 4-unit keyed
+# name; studies/presearing/RANGERPRE.md's F2 entry has it and why no row here
+# takes it yet.
 [item.starter_sword]
 name = "a starter sword (the level-3 Warrior henchman's, retail wire; the range word ours)"
 file_id = 0x2AF56              # 175958
@@ -262,7 +273,7 @@ flags = 0x22000100
 value = 0
 model_id = 7937
 quantity = 1
-enc_name = [0x2186]            # 8582, the same generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the same generic name every henchman weapon carries
 # Two modifier words. The first is the wire's own damage-TYPE line (587 arg 2,
 # slashing). The second is the damage RANGE word (584): the tape's reads arg 3
 # arg2 3 (a 3-3 sword at level 3); this one is COMPOSED for the Starter Sword's
@@ -279,7 +290,7 @@ origin = "live"
 verified = """OBSERVED on ArenaNet's own wire (SLICE-H9, 2026-09-13): item 99 of \
 20260819T132414 (the low-level session, three level-3 henchmen), the Warrior \
 henchman's leadhand named by its 0x006D [agent, 99, 100] at the body's create -- \
-file 175958, type 27, flags 0x22000100, model 7937, name id 8582, the type word \
+file 175958, type 27, flags 0x22000100, model 7937, name unit 0x2186 (string id 8326), the type word \
 0x24B80200 byte for byte; the range word is OURS (see the field comment), the \
 Starter Sword's 2-3 in place of the tape's 3-3. The owner's own character in the \
 level-20 captures carried a 22133/27 sword whose file the slice archive does NOT \
@@ -314,8 +325,8 @@ capture = "20260819T132414"
 origin = "live"
 verified = """OBSERVED on ArenaNet's own wire (SLICE-H9, 2026-09-13): item 100 of \
 20260819T132414, the level-3 Warrior henchman's OFFHAND named by its 0x006D \
-[agent, 99, 100] -- file 176078, type 24, flags 0x20000200, model 7938, name id \
-8582, byte for byte; the armour word is OURS (see the field comment), the \
+[agent, 99, 100] -- file 176078, type 24, flags 0x20000200, model 7938, name unit \
+0x2186 (string id 8326), byte for byte; the armour word is OURS (see the field comment), the \
 Starter Shield's 3 in place of the tape's 0. The slice archive binds file 176078 \
 (archive.binds_plainly, row 76325). Given to the slice's character by \
 [party.slice] player_offhand; the client's 0x0147 weapon set carries it in the \
@@ -334,7 +345,7 @@ flags = 0x22200100
 value = 0
 model_id = 7931
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # Two modifier words, both retail's. The first is the damage-TYPE line (587 arg
 # 1, piercing -- the sword's is arg 2, slashing). The second is the damage
 # RANGE word (584): the henchman's pair reads arg 5 arg2 3 (3-5); this one is
@@ -351,7 +362,7 @@ origin = "live"
 verified = """OBSERVED on ArenaNet's own wire (DAGGERS-B2, 2026-09-17): the level-3 \
 Assassin henchman's leadhand, named by its 0x006D [agent 30, item, 0] and declared \
 by the same connection's 0x0161 -- file 175760, type 32, flags 0x22200100, model \
-7931, name id 8582, the type word 0x24B80100, byte for byte; the same item on four \
+7931, name unit 0x2186 (string id 8326), the type word 0x24B80100, byte for byte; the same item on four \
 more connections of 20260817T183756 and this tape (agent 6). The range word \
 0xA4880301 is the one the OWNER'S character's own daggers carried in this tape's \
 0x0147 weapon set (file 0x80025E00, model 6387 -- a deferred-fetch file the run \
@@ -363,7 +374,7 @@ archives bind file 175760 (archive.binds_plainly, row 76047 on run/slice and on 
 # ---- WEAPONS-W1: one retail item per weapon type this server did not hold ----
 #
 # Six rows, every byte retail's: each is a 0x0161 off the owner's own tapes, named by the
-# 0x006D of the body that held it, carrying the generic henchman name id 8582 and a file
+# 0x006D of the body that held it, carrying the generic henchman name (unit 0x2186, string id 8326) and a file
 # the run archives bind (archive.binds_plainly, both run/slice and the newest build's).
 # The extraction is toolkit/authsrv/weaponcensus.py's join; the type's attribute, swing
 # interval and weapon_req bit come from [weapon_type.*] in content/world.toml, never from
@@ -381,7 +392,7 @@ flags = 0x22000100
 value = 0
 model_id = 26886
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # 587 arg 2 (slashing) and 584 arg 28 arg2 8 -- an 8-28 axe with no requirement.
 modifiers = [0x24B80200, 0xA4881C08]
 
@@ -404,7 +415,7 @@ flags = 0x22200100
 value = 0
 model_id = 7940
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # 609 arg 1 (one of the two 2.475 s bow classes, WEAPONS-C6), 587 arg 1 (piercing), 584
 # arg 9 arg2 5 -- a 5-9 bow. NO 617 word: a bow without one shoots projectile 143.
 modifiers = [0x26180100, 0x24B80100, 0xA4880905]
@@ -427,7 +438,7 @@ flags = 0x22000100
 value = 0
 model_id = 3496
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # 587 arg 6 (a damage type this server does not read yet), 617 arg2 0 (the projectile
 # 0x00A4 field 5 will carry, WEAPONS-C3) and 584 arg 5 arg2 3 -- a 3-5 wand.
 modifiers = [0x24B80600, 0x26980000, 0xA4880503]
@@ -450,7 +461,7 @@ flags = 0x22200100
 value = 0
 model_id = 18161
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # 587 arg 11, 556 arg 5 (energy +5 -- unread on a weapon until WEAPONS-W5) and 584 arg 7
 # arg2 4 -- a 4-7 scythe. Item type 35's NAME is UPSTREAM (GWCA ItemType).
 modifiers = [0x24B80B00, 0x62C80500, 0xA4880704]
@@ -473,7 +484,7 @@ flags = 0x22000100
 value = 0
 model_id = 18163
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # 587 arg 1 (piercing), 556 arg 5 (energy +5, unread) and 584 arg 7 arg2 5 -- a 5-7 spear.
 modifiers = [0x24B80100, 0x62C80500, 0xA4880705]
 
@@ -495,7 +506,7 @@ flags = 0x20000100
 value = 0
 model_id = 30941
 quantity = 1
-enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+enc_name = [0x2186]            # string id 8326, the generic name every henchman weapon carries
 # One word: 556 arg 5 -- energy +5, no requirement (WEAPONS-C7's plain column).
 modifiers = [0x62C80500]
 
@@ -508,7 +519,7 @@ verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): the OFFH
 # ---- WEAPONS-W6a: what a ranged HOSTILE holds (item type 28, hostile-only) ----
 #
 # Two rows, every byte retail's. All 278 type-28 holdings in the corpus share ONE file
-# (111902) and the generic name id 8582; what differs is the model and the words. The
+# (111902) and the generic name, unit 0x2186 (string id 8326); what differs is the model and the words. The
 # player loader refuses both (the type row's `holder`).
 
 [item.hostile_bolt]
@@ -523,7 +534,7 @@ flags = 0x20000100
 value = 0
 model_id = 3454
 quantity = 1
-enc_name = [0x2186]            # 8582
+enc_name = [0x2186]            # string id 8326
 # 609 arg 0, 587 arg 3, 617 arg2 1 (the projectile -- and retail's 0x00A7 answers 3 behind
 # it, 145 of 145), 584 arg 5 arg2 3 -- a 3-5 weapon.
 modifiers = [0x26180000, 0x24B80300, 0x26980001, 0xA4880503]
@@ -547,7 +558,7 @@ flags = 0x20000100
 value = 0
 model_id = 15013
 quantity = 1
-enc_name = [0x2186]            # 8582
+enc_name = [0x2186]            # string id 8326
 # 609 arg 0, 587 arg 1 (piercing), 584 arg 3 arg2 1 -- a 1-3 weapon with NO 617: it shoots
 # the arrow, projectile 143 with the arrow flag, 1200 u/s.
 modifiers = [0x26180000, 0x24B80100, 0xA4880301]
