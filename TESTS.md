@@ -3660,7 +3660,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the corpus's for home 148, `region_units` accepting all 137 retail s1 and refusing every
   s2, 15 static sites' bytes on the pinned 38797 client and an arm-2 control. §6 and §11's
   three-slot pins re-aimed to [region, name, name]. Every new check was inverted by
-  monkeypatch (14 mutants) and went red. 143 checks; floor 61 -> 77 from the bare-machine
+  monkeypatch (17 mutants) and went red. 143 checks; floor 61 -> 77 from the bare-machine
   run.** **2026-09-30, RANGERPRE-S20 (QUESTFLOW-H4): the
   hand-in's items -- a quest row's `handin_items` (content item keys) are taken back with
   0x014D (`take_quest_item`: the lowest-id backpack item of that key that `grant_item`

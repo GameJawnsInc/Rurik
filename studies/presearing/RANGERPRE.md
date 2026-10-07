@@ -233,12 +233,66 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
     `APPROACH RE-PIN`. The link from the one to the other is RECONSTRUCTION, n = 1.
   - **RANGERLOOP-F2**: quest-granted items draw an unresolved name. `content/items.toml`
     `starter_shield`'s "name id 8582" disagrees with `codedstr`'s 8326 for unit `0x2186`.
+    **2026-10-07, desk (RESIDUE; no wire byte changed):** the comment is corrected in every
+    row that said it (17 sites in `content/items.toml`): `0x2186` is the coded WORD for
+    string id **8326** (word - 0x100, `codedstr.decode_id([0x2186]) == (8326, 1)`), the
+    generic name the client draws on henchman and other players' gear (`textrec.py` resolves
+    it; the text is not committed); `textrec` reads no text at id 8582. So the name is not
+    malformed: it is retail's own unit, OBSERVED on **1,480 of 4,817** `0x0161` declares in the
+    live corpus (3,427 single-unit names), and `starter_sword` / `starter_shield` are the
+    level-3 Warrior henchman's bytes, so the rows keep it. **What retail's quest sword is
+    (OBSERVED):** q75's accept on 20260929T150923 :56064 921.1613 declares item 704 -- file
+    `0x800024EE`, type 27, model 2982, a 4-unit keyed name `[0x2711, 0xBD98, 0xE24F, 0x7FAE]`,
+    and modifiers `[0x24B80200, 0xA4880302]`, **exactly `starter_sword`'s two words** (so the
+    row's range word, labelled composed, is retail's too) -- seen 4 times (:53753 993.353,
+    :53756 997.659, :56064 921.161, :59427 1216.783). q62's reward shield (item 1607, :53880
+    727.4875) is file `0x80002538`, type 24, model 2817, keyed `[0x2651, 0x8429, 0xD6A6,
+    0x3237]`, modifiers `[0x21A83205, 0x23480F00, 0xA3C80400]` -- NOT stat-identical to
+    `starter_shield` (armour 4, two more words). **Why no row takes the keyed name yet:**
+    (1) a retail-exact sword row is unsafe to declare -- `archive.binds_plainly` finds
+    `0x800024EE` in NONE of the run archives (`run/slice`, `2026-09-01_44fbd68767a8`,
+    `2026-09-30_8e50edfb8351`); the plain `0x24EE` binds row 8447, and a bit-31 id is a
+    pending replacement the client compares exactly (`archive.py`); the shield's
+    `0x80002538` likewise (plain `0x2538` is row 23136). (2) The default character cannot
+    hold a new row without moving a test-locked value: `[party.slice] player_weapon =
+    "starter_sword"` is pinned by `toolkit/harness/test_sandbox.py:211`. (3) A hybrid --
+    `starter_sword`'s bound file and model with item 704's name -- is a composed item with no
+    retail witness, and whether a keyed name draws on our client is a client question. So
+    F2's real fix is a ruling plus a run: either a player-only sword row on a bound file with
+    the keyed name (RECONSTRUCTION, run-confirmed), or serving `0x800024EE` from an archive
+    that binds it. Also seen in passing: `starter_hammer`'s `0x80009B60` binds in none of
+    those three run archives either.
   - **RANGERLOOP-F3**: `'anim'` draws neutral, not WIKI's green (retail's colour is
     UNVERIFIED), and space on it sends ATTACK.
   - **RANGERLOOP-F5**: a flags-0 quest's log heading reads as its own name (which field is
-    UNVERIFIED).
+    UNVERIFIED). **2026-10-07, desk -- shipped, client owed:** the field is the FIRST string
+    slot (s1) of `0x0049` / `0x0050`, OBSERVED static (`0x0091DB70` -> `0x0080F0A0` ->
+    record+8 -> `0x0080DB40` -> arm 3 at `0x0057DD77`, string 1125) and CORROBORATED on 137
+    of 137 retail log rows (one region unit, never s2, a function of the home map; 146 / 148 /
+    160 carry `0x3D64`). A quest row's `enc_region` goes in s1 (`questdefs.log_strings`), both
+    shipped rows carry `[0x3D64]`, `--no-quest-region` is the known-bad arm. s3 NOT FOUND.
+    [studies/quests/FINDINGS.md](../quests/FINDINGS.md) §13. **Runsheet** (loopback, the
+    owner's; the slice exe and archive, as CONFIRM §1): a run-only overlay directory whose
+    `quests.toml` is `[quest.rurik_first_errand]` copied whole (row and provenance; an
+    overlay row replaces the row wholesale) plus `quest_log_flags = 0`, named by
+    `$env:RURIK_CONTENT_EXTRA`; then `python toolkit/authsrv/authsrv.py --map 148 --party
+    slice --area errand,corridor`. Accept the errand and open the quest log: PREDICT it is
+    filed under the REGION's heading (string 1125 fed `0x3D64`), not under its own name.
+    Then the same launch with `--no-quest-region`: PREDICT its own name + the suffix, the
+    2026-09-30 heading, back. gamesrv.log's `QUEST_ADD[1463]` says log flags 0 in both.
   - **RANGERLOOP-F6**: our accept re-unlocks skills the account holds, and the client shows a
-    toast retail never draws.
+    toast retail never draws. **2026-10-07, desk -- shipped, client owed:** `grant_skill` now
+    gates its `0x001C` on `account_skills_held` (the stored list, else the `--unlocks` bitmap
+    the load's `0x001D` carried, plus `skills_known`); OBSERVED 19 of 19 retail grants
+    (`0x001C` iff outside the library in force), `--no-account-unlock-gate` the known-bad arm.
+    [studies/quests/FINDINGS.md](../quests/FINDINGS.md) §14. **Runsheet** (loopback, the
+    owner's): the same kind of overlay giving `rurik_first_errand` `accept_skills = [332,
+    331]`, and an account library that holds 332 but not 331 and keeps the slice bar --
+    `python toolkit/authsrv/authsrv.py --map 148 --party slice --area errand,corridor
+    --unlocks 382,384,385,322,346,1,2,380,332`. Accept: PREDICT one skill-unlocked toast, for
+    331 only (gamesrv.log: `SKILL_UNLOCKED(skill 331)` and none for 332; the slice bar is full,
+    so both are learned and not equipped). Then the same launch with
+    `--no-account-unlock-gate`: PREDICT two toasts, 332's and 331's -- the 2026-09-30 symptom.
   - **RANGERLOOP-F1** (no backpack grid under `--party slice`) is CLOSED: HEROINV fixed it on
     `main` (`5960cc68`, CONFIRMED on the client), and `rangerpre` took it at `30923224`. F4 (the
     client's re-select follows an allegiance change, CORROBORATED) and F7 (no PARTYMAX display

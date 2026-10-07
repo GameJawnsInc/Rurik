@@ -2308,7 +2308,7 @@ def section_17():
 
 # The static read (build 38797, the pinned client), re-read as bytes by the
 # stdlib PE reader: (VA, bytes, what the instruction is). OBSERVED with
-# codescan --dis / --xrefs; studies/quests/FINDINGS.md §2.5 has the chain.
+# codescan --dis / --xrefs; studies/quests/FINDINGS.md §13 has the chain.
 F5_SITES = [
     (0x0091DB9D, "8d421c50", "0x0049 dispatcher: lea eax, [edx+0x1c]; push eax -- s1 as the handler's [ebp+0x18]"),
     (0x0080F0E2, "ff7518", "0x0049 handler 0x0080F0A0: push [ebp+0x18] (s1)"),
