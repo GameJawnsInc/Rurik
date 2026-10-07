@@ -28,6 +28,11 @@ move back.
 
 ---
 
+### DEATHWALK-E5 known-bad launch -- 2026-10-06 -- **The same rig and plan with `--target-death-releases-now` (harness `20261006T195712`, tape `authsrv-20261006T195807-c1`): all 16 died to the heroes, 8 as the chain's target. All 8 judged deaths are `old-shape`: `[8, 0]` alone, 1-3 ms after the death, no `[3]`, 0.10-0.47 s ahead of D4's schedule. The next-start cell is exposed (6); the in-flight cell is UNEXPOSED (2 of 5).**
+
+- **Record:** `studies/movecode/RUN-DEATHWALK.md` §3c, with both arms side by side.
+- **Open:** one or two more known-bad launches to reach the in-flight floor (the plan allows +2).
+
 ### DEATHWALK-E5 pilot -- 2026-10-06 -- **One launch on the D4 arm (harness `20261006T193947`, tape `authsrv-20261006T194028-c1`): all 16 raiders died, 11 of them as the player's chain target, every judged killing blow a hero's (11-15). `e5_score.py` judged 5 in flight and 6 next start, all PASS: `[8, 0]` `[3]` at the due landing, or `[8, 0]` alone at the next due start, each within 1 ms of its wire-derived instant. Both floors were met in one launch. DEATHWALK-D4 now has its first client run.**
 
 - **Record:** `studies/movecode/RUN-DEATHWALK.md` §3b, with the pre-registration, the result against it, and what it does not show.
