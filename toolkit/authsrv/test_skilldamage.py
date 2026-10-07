@@ -80,7 +80,11 @@ check = LEDGER.ok
 # 2026-09-28, 38888 its regeneration (831's row drops out); 38974 the regeneration of
 # 2026-10-01, 55 rows MEASURED from its emit and identical by value to 38888's. Section
 # 14 FAILS on any other build rather than passing a table nobody measured.
-LABEL_ROWS_BY_BUILD = {38797: 56, 38888: 55, 38974: 55}
+# 2026-10-07, SKILLS-LW (studies/skills 67): + the 60 hit-gated rows on every build, MEASURED
+# from each build's own emit (skilldesc.py --exe X --dat Y --emit-labels): 38797 116 = 56 + 60,
+# 38888 115, 38974 115 = 55 + 60. Red against a vault file emitted before SKILLS-LW until the
+# merge installs the new emit -- the count is the file's, and the file is regenerated.
+LABEL_ROWS_BY_BUILD = {38797: 116, 38888: 115, 38974: 115}
 
 
 def _record(activation, aftercast, recharge, energy, attribute, profession, type_code,
@@ -2618,7 +2622,7 @@ def section_label_tier():
               "the rows say what they are: tier label, 187's area is spell_burst's "
               "(AREA_BURST), 220 reaches its one target; client-table provenance, every "
               "row stamped with the build its file declares, a build with a measured "
-              "expectation (38797: 56 rows; 38888: 55)",
+              "expectation (38797: 116 rows; 38888 and 38974: 115 -- SKILLS-LW's 60 included)",
               (dict(lab["187"]), dict(lab["220"]), f"file build {_lb}, row builds "
                f"{sorted(_lrb, key=str)}, rows {len(lab)}, expected "
                f"{LABEL_ROWS_BY_BUILD.get(_lb, 'NO EXPECTATION FOR THIS BUILD')}"))
