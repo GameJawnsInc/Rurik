@@ -28,7 +28,7 @@ on an empty result. The skill_effect rows are repo content and always load.
 CROSS-LANE (2026-10-07): desk-chan55 moves armour-ignoring spell damage (830's Holy
 damage among it) from property 16 to property 55 this pass. Every check here reads a
 damage word on ANY damage channel (16 / 17, or 55 with a negative fraction) EXCEPT the
-one check in section 3 that pins 830's channel, which says so and is the orchestrator's
+one check in section 2 that pins 830's channel, which says so and is the orchestrator's
 to re-point at merge.
 """
 import argparse
@@ -59,9 +59,11 @@ import vaultpath  # noqa: E402
 # MEASURED 2026-10-07: 24 checks bare (RURIK_VAULT at a nonexistent path AND at an
 # empty directory, both green with 2 declared skips), 28 on the vault (24 + section
 # 1b's 1 + section 6's 3). Each vault directory adds the checks its section runs.
+# RE-MEASURED 2026-10-07 after review RV-1 added section 4b (2 checks, bare-runnable):
+# 26 bare (both empty-vault arms, 2 declared skips), 30 on the vault.
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
-FLOOR_BARE = 24
+FLOOR_BARE = 26
 FLOOR = FLOOR_BARE + (1 if HAVE_VAULT_CONTENT else 0) + (3 if HAVE_LIVE else 0)
 LEDGER = checks.Ledger("areas over time: five client-table rows and the caster's death "
                        "(weapons 45)", floor=FLOOR)
@@ -607,6 +609,78 @@ def section_hostile():
               "and k = 2..5 the same on the player, then the area closes", str(st["player_health"]))
 
 
+def _serve_drops(st, send, takers, steps=6):
+    """Serve `steps` one-second instants; per step {taker: health lost} -- the player's
+    pool under the key PLAYER, a body's row otherwise."""
+    def hp(t):
+        return st["player_health"] if t == PLAYER else st["agents"][t]["health"]
+    out = []
+    for _ in range(steps):
+        h0 = {t: hp(t) for t in takers}
+        with contextlib.redirect_stdout(io.StringIO()):
+            _advance(st, send, 1.0)
+        out.append({t: h0[t] - hp(t) for t in takers})
+    return out
+
+
+def section_body_ramp():
+    print("\n4b. Savannah Heat cast by a BODY: a hostile's onto the player, a hero's onto two "
+          "hostiles -- the ramp on the body path")
+    # Added 2026-10-07 (review RV-1): sections 2-3 cast 1380 as the PLAYER only, so a
+    # body path that dropped the ramp (`_area_strike` handing body_spell_terms the flat
+    # area["amount"]) or an open_area that recorded it for the player's areas only stayed
+    # green on every run. Each want below is the body's own whole points of k x the
+    # interpolator's amount through the server's own armour and strike-level helpers --
+    # the ramp's k is the one factor these checks supply.
+    snd = lambda op, vals, label="", quiet=False: None   # noqa: E731
+    with _carried(), _Patched():
+        # (a) a hostile's 1380 through the real land_skill onto the player
+        st = _body_world((900.0, 0.0), skills=[[1380, 0.0, 20.0]], skill_ready=[0.0],
+                         casting=0, cast_target=PLAYER)
+        caster = st["agents"][FOE]
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.land_skill(snd, st, FOE, caster, 1)
+        area = (st.get("areas") or [None])[0]
+        rank = authsrv.agent_skill_rank(caster, 1380)
+        amount = float(authsrv.skill_scale_value(1380, rank))
+        mult = authsrv.strike_multiplier(authsrv.agent_strike_level(caster),
+                                         authsrv.spell_armour_for(1380))
+        drops = [d[PLAYER] for d in _serve_drops(st, snd, (PLAYER,))]
+        want = [authsrv._whole_points(amount * k * mult) for k in range(1, 6)] + [0.0]
+        check(area is not None and area["hostile"] is True and area["ramp"] == "elapsed"
+              and rank == authsrv.ENEMY_SKILL_RANK and drops == want
+              and len(set(drops[:5])) == 5 and not st.get("areas"),
+              "a hostile's 1380 through land_skill onto the player: tick k takes the body's "
+              "whole points of k x the interpolator's amount at ENEMY_SKILL_RANK against the "
+              "pieces' spell armour -- five DISTINCT drops, nothing at +6, the area closed",
+              f"drops {drops}, want {want}, ramp {area and area.get('ramp')}")
+        # (b) a hero's 1380 onto two hostiles inside its 240 u and one 44 u outside
+        st = _body_world((600.0, 0.0))
+        hero, foe = st["agents"][HERO], st["agents"][FOE]
+        hero.update(skills=[[1380, 0.0, 20.0]], skill_ready=[0.0], casting=0, cast_target=FOE)
+        foe.update(health=9000.0, max_health=9000.0, attacks_back=False)
+        st["agents"][11] = dict(foe, pos=(650.0, 0.0))
+        st["agents"][12] = dict(foe, pos=_outside(1380))
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.land_skill(snd, st, HERO, hero, 1)
+        area = (st.get("areas") or [None])[0]
+        amount = float(authsrv.skill_scale_value(1380, authsrv.agent_skill_rank(hero, 1380)))
+        level = authsrv.agent_strike_level(hero)
+        want = {t: [authsrv._whole_points(amount * k * authsrv.strike_multiplier(
+            level, authsrv.body_spell_armour(st, 1380, t, True))) for k in range(1, 6)] + [0.0]
+            for t in (FOE, 11)}
+        want[12] = [0.0] * 6
+        served = _serve_drops(st, snd, (FOE, 11, 12))
+        got = {t: [d[t] for d in served] for t in (FOE, 11, 12)}
+        check(area is not None and area["hostile"] is False and area["ramp"] == "elapsed"
+              and got == want and all(len(set(got[t][:5])) == 5 for t in (FOE, 11))
+              and not st.get("areas"),
+              "a hero's 1380 through land_skill: the two hostiles inside 240 u take the body's "
+              "whole points of k x the interpolator's amount at tick k (five distinct drops "
+              "each), the one 284 u off nothing, nothing at +6",
+              f"got {got}, want {want}")
+
+
 def section_revert():
     print("\n5. --no-area-tick-ramp: parsed, flipped by main() for real, and what it reverts")
     import serverargs                                                  # noqa: PLC0415
@@ -674,8 +748,8 @@ def section_revert():
           and src.count("tick_amount(area[\"amount\"], k, area.get(\"ramp\"),") == 1
           and '"ramp": area_tick_ramp(skill_id),' in src,
           "the source: AREA_TICK_RAMP at column 0, open_area records the row's ramp, and "
-          "_area_strike computes each tick's amount through areatime.tick_amount once, for "
-          "the player's and a body's words alike")
+          "_area_strike has ONE areatime.tick_amount call site (that a body's words carry its "
+          "result is section 4b's to show, by behaviour)")
 
 
 def section_tape():
@@ -696,15 +770,22 @@ def section_tape():
     rows = c["casts"]
     ks = sorted({k for r in rows for k in r["tick_ks"]})
     per_stamp = {s: sum(1 for r in rows if r["capture"] == s) for s in (Z1, Z2)}
+    # the server's own schedule for 197, read from its row (review RV-6: the message
+    # claimed it and no conjunct read it): the instants open_area would serve
+    with _carried():
+        server197 = [round(t, 6) for t in areatime.tick_instants(
+            0.0, authsrv.area_over_time(197, RANK)[1], authsrv.area_tick_period(197))]
     check(per_stamp == {Z1: 8, Z2: 12} and ks == list(range(1, 11))
+          and server197 == [float(k) for k in ks]
           and sc["p4"] and sc["p5r"] and sc["stray_r"] == []
           and sc["late_ticks"] == [(Z2, "51090", 390.03, 2.068, 2)]
           and sc["tick_instants"] == 97,
           "the twenty Zaishen Fire Storms (8 + 12): ticks only at k = 1..10 -- 97 tick "
           "instants within the reader's 0.05 s gate, and ONE late tick (51090 390.030 k = 2 "
           "at +2.068, P5r: inside the registered 0.100) -- the 350 at +0 / +3 / +6 on every "
-          "cast; the server's schedule for 197 is k = 1..10 from its row",
-          str((per_stamp, ks, sc["late_ticks"], sc["tick_instants"], sc["stray_r"])))
+          "cast; the server's schedule for 197, read off its row (area_over_time, "
+          "area_tick_period, tick_instants), is +k s for exactly those k",
+          str((per_stamp, ks, server197, sc["late_ticks"], sc["tick_instants"], sc["stray_r"])))
     r17 = [r for r in rows if r["capture"] == Z2 and r["port"] == "51199"
            and abs(r["announce_t"] - 562.188) < 0.01]
     tick10 = [x for x in (r17[0]["ticks"] if r17 else []) if x["k"] == 10]
@@ -763,6 +844,7 @@ def main():
     section_player_casts()
     section_known_bad()
     section_hostile()
+    section_body_ramp()
     section_revert()
     section_tape()
     return LEDGER.verdict()

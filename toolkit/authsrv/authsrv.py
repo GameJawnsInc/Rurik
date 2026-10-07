@@ -17321,7 +17321,7 @@ def area_tick_period(skill_id):
 # damage grows with the area's age.
 AREA_TICK_RAMP = True
 
-from areatime import tick_amount, TICK_RAMPS  # noqa: E402,F401  -- read by test_aotrows as authsrv.*
+from areatime import tick_amount, TICK_RAMPS  # noqa: E402  -- used by area_tick_ramp and _area_strike
 
 
 def area_tick_ramp(skill_id):

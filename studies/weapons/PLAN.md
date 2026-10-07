@@ -3178,11 +3178,11 @@ template text in the repo):
 
 | id | radius / duration | scale (rank 12) | bonus (rank 12) | template slots | flags |
 |---|---|---|---|---|---|
-| 1094 Breath of Fire | 156 / 5 | 10..40 (34) | -- | str1 FIRE_DAMAGE, str3 DURATION | AREA_ADJACENT |
-| 2222 Snow Storm | 156 / 5 | 30..40 (38) | -- | str1 COLD_DAMAGE, str3 DURATION | AREA_ADJACENT; attribute 51 (none) |
-| 830 Ray of Judgment | 156 / 5 | 10..50 (42) | 1..3 (3) | str1 HOLY_DAMAGE, str2 CONDITION_DURATION:Burning (governed, every second), str3 DURATION | AREA_ADJACENT |
-| 910 Spirit Rift | 156 / 3 | 25..125 (105) | 1..20 (16) | str1 LIGHTNING_DAMAGE, str2 CONDITION_DURATION:Cracked Armor, str3 DURATION read as a DELAY ("after N seconds") | ALL_FOES, AREA_ADJACENT |
-| 1380 Savannah Heat | 240 / 5 | 5..20 (17) | 5..20 (17), ENABLED, in no slot | str1 FIRE_DAMAGE with FOR_EACH, str3 DURATION | ALL_FOES, AREA_NEARBY |
+| 1094 Breath of Fire | 156 / 5 | 10..40 (34) | -- | str1 FIRE_DAMAGE, str3 DURATION | AREA_ADJACENT, TARGET_FOE |
+| 2222 Snow Storm | 156 / 5 | 30..40 (38) | -- | str1 COLD_DAMAGE, str3 DURATION | AREA_ADJACENT, TARGET_FOE; attribute 51 (none) |
+| 830 Ray of Judgment | 156 / 5 | 10..50 (42) | 1..3 (3) | str1 HOLY_DAMAGE, str2 CONDITION_DURATION:Burning (governed, every second), str3 DURATION | AREA_ADJACENT, TARGET_FOE |
+| 910 Spirit Rift | 156 / 3 | 25..125 (105) | 1..20 (16) | str1 LIGHTNING_DAMAGE, str2 CONDITION_DURATION:Cracked Armor, str3 DURATION read as a DELAY ("after N seconds") | ALL_FOES, AREA_ADJACENT, TARGET_FOE, UNMODELLED_CLASS -- the last a false positive: skilldesc's class regex matches the skill's own name at offset 7, no spirit, minion or pet recipient is involved, so the hand row stands (listed 2026-10-07 after review; the first draft omitted it) |
+| 1380 Savannah Heat | 240 / 5 | 5..20 (17) | 5..20 (17), ENABLED, in no slot | str1 FIRE_DAMAGE with FOR_EACH, str3 DURATION | ALL_FOES, AREA_NEARBY, TARGET_FOE |
 
 **What ships** (`content/world.toml` after `skill_effect.167`; `PLAN-LOG.md`):
 - **Five CLIENT-TABLE rows** -- `source = "client-table"`, `extractor =
@@ -3191,7 +3191,7 @@ template text in the repo):
   carries onto EVERY tick (Eruption 167's shape, §42); 910 adds `bonus_scale_means =
   "Cracked Armor"` and `tick_period = 3.0` -- `tick_instants(t0, 3, 3)` is one strike at
   +3.0, the word then Cracked Armor once per struck foe; 1380 adds `tick_ramp = "elapsed"`.
-- **The ramp** (`areatime.tick_amount`, re-exported; `authsrv.area_tick_ramp`;
+- **The ramp** (`areatime.tick_amount` and `TICK_RAMPS`, imported into authsrv for `_area_strike` and `area_tick_ramp`; `authsrv.area_tick_ramp`;
   `open_area` records it, `_area_strike` computes each tick's amount through it once, for
   the player's words and a body's alike): tick k deals k x the area's amount (x the period's
   seconds; Savannah Heat's period is 1), so 17, 34, 51, 68, 85 at rank 12. RECONSTRUCTION
@@ -3220,12 +3220,28 @@ on the connection (no revival, no re-create; the connection runs to +18.261); at
 (k = 10, phase -0.011) a CLEAN tick lands, `[16, 4, 10, -0.0629]` and `[16, 6, 10,
 -0.0629]` -- 1.502 s after the caster's death. Nothing else of agent 10's can explain it:
 its only other cast in the window is Incendiary Bonds 179 (completed +2.990, on agent 3,
-whose end fires seconds earlier and not on 4 / 6). Three things are said, not resolved:
-the cause of the death is UNOBSERVED (agent 8, the Zaishen Archer, dies in the SAME batch
-with the same flags, and neither has a damage word in the 2 s before on this stream); the
-k = 10 fraction on taker 4 (-0.0629) differs from its k = 1..2 value (-0.0642), which
-aotjoin's `pairs_varied` names and nothing here explains; and positions are leads, so who
-stood inside at k = 4..9 is untestable. **The tally of caster deaths with the area live:
+whose end fires seconds earlier and not on 4 / 6). **The death's context** (OBSERVED,
+`deepwoundjoin.sequence` over t 570.6..574.6; offsets from the completion): agent 10 is
+the OBSERVER's ally -- the Zaishen Mage, "the only enchanted body on our side"
+(studies/monsterai/FINDINGS.md Z2.P5); on this stream agent 3 strikes the observer (7)
+and agent 10, agent 10 strikes 3, 4 and 6, agent 8 strikes 3, agent 6 strikes the
+observer. Agent 10's last damage word is ONE property-55 word from agent 3 at +6.968
+(`0x00A0 [20, 10, 3, 487]`, then `0x00A3 [55, 10, 3, -0.0486]` -- CASTAI-ZF31's channel),
+1.519 s before its dead bit; agent 8 takes no word in the window. The observer dies at
++7.968 (`0x00F1 [7, 16]`, morale `0x00EE [10, -15]`, studies/character/FINDINGS.md's
+death signature), a batch at +8.237 sets the status words of agents 3, 4, 5 and 6 to 0
+(unexplained), and at +8.487 agents 8 and 10 are flagged dead TOGETHER, in one batch with
+the same flags, 0.519 s after the observer. Three things are said, not resolved. (1) The
+cause of agent 10's death is UNOBSERVED (the +6.968 word did not flag it dead, where the
+observer's own killing word and dead bit share one batch at +7.968 -- so no word on this
+stream marks the death; RECONSTRUCTION, n = 1 of that pairing), so **whether an ordinary
+combat death ends the area the same way is the limit of this n = 1**: what was seen is a
+clean tick, cause 10, after agent 10's dead bit, in a death that came with its fellow
+ally's and followed the observer's. (2) The k = 10 fraction on taker 4 (-0.0629) differs
+from its k = 1..2 value (-0.0642), which aotjoin's `pairs_varied` names and nothing here
+explains. (3) Positions are leads, so who stood inside at k = 4..9 is untestable. (Corrected 2026-10-07 after review: this paragraph first said "neither has a
+damage word in the 2 s before" of agents 8 and 10 -- false for agent 10; the lane's own
+read printed the word and the sentence missed it.) **The tally of caster deaths with the area live:
 1 positive, 3 inconclusive of 4** -- §41's two (20260817T231139 #10 +4.676, #13 +6.92, both
 areas empty), and #8 on `20260928T103123` :58544 (agent 9 dead at +8.05, nobody struck
 after k = 4). The server already KEPT the area (§42's RECONSTRUCTION, locked in
@@ -3248,9 +3264,12 @@ raw records** -- five of them areas over time (77: 131, 167: 300, 830: 2061, 108
 2222: 1956) and eleven that are not (488, 1639, 1643, 1646, 1647, 1651, 1705, 2298, 2799,
 2869, 3254). The triage called it "exactly the area-over-time rows plus 488 / 2298 / 2799 /
 3254" and missed seven. It is 2077 on 197, which draws 350 on the wire, so it cannot be the
-whole story for a ground effect; nothing of it ships. (b) Three of the eleven carry a
-RECIPIENT visual at `+0x7c` (196 and 1380: 346; 215: 381) and three a CASTER visual at
-`+0x78` (192: 340; 830: 1017; 1372: 1629); the server's `skill_visual` rows carry none of
+whole story for a ground effect; nothing of it ships. (b) Five of the eleven carry a
+RECIPIENT visual at `+0x7c` (196 and 1380: 346; 215: 381; 830: 1018; 1372: 1630) and two
+a CASTER visual at `+0x78` (830: 1017; 1372: 1629); among the three live areas, Meteor
+Shower 192 carries `+0x78` 340 (raw struct reads of the pinned 38797 image, table base
+0x587ed0, record 0xa4; corrected 2026-10-07 after review -- the first draft counted three
+and three, with 192 among "the eleven"). The server's `skill_visual` rows carry none of
 them, so nothing is sent, and whether retail draws them for an area is unknown (Fire
 Storm's are 2077).
 
@@ -3266,7 +3285,7 @@ had no browser). The one wiki read on disk that names one is the monster-AI page
 `vault/research/castai-2026-09-27/wiki-ai-pages.json`, which gives Savannah Heat as an area
 that scatters (MONSTERAI-S1's trigger fires on these rows' ticks with no code change).
 
-**The lock.** `toolkit/authsrv/test_aotrows.py` (24 checks bare, 28 with the vault: section
+**The lock.** `toolkit/authsrv/test_aotrows.py` (26 checks bare, 30 with the vault: section
 1b the carried rows against the vault's, section 6 the corpus). Through the real press and
 E5 over three hostiles inside and one outside: each area opens at the target's position
 with no word and no ground effect, ticks at exactly `tick_instants`, each word -amount /
@@ -3274,8 +3293,12 @@ max with the amount the interpolator's; 830's Burning on each struck foe every t
 once at +3.0 with Cracked Armor once; 1380 at k x 17. Known-bad arms that must fail: the
 row deleted, 910 without `tick_period`, 1380 without `tick_ramp`, 830's Burning on the first
 tick only. A hostile's 1094 through `land_skill` onto the player and a hero with the tape's
-tick shape. `--no-area-tick-ramp` parsed, its main() block EXECUTED (and the block without
-its `global` shown not to bind). On the vault: the twenty Zaishen casts, cast #17's
+tick shape. Section 4b (added after review): Savannah Heat cast by a BODY -- a hostile's
+onto the player and a hero's onto two hostiles inside and one outside -- tick k the body's
+whole points of k x the interpolator's amount, five distinct drops; before it, a body path
+that dropped the ramp stayed green. `--no-area-tick-ramp` parsed, its main() block EXECUTED (and the block without
+its `global` shown not to bind). On the vault: the twenty Zaishen casts against the
+server's 197 schedule read off its row, cast #17's
 post-death tick, and the server's hostile Fire Storm with its caster killed after k = 8
 still wording the player at k = 9 and 10 -- against the known-bad arm of an area that ends
 with its caster.

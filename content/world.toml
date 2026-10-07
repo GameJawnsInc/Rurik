@@ -3039,7 +3039,9 @@ projectile 2077 (none), impact_visual 2077 (none), duration 3 / 3, scale 25 -> 1
 20, skill_arguments 7, activation 2.0, recharge 5, energy 10. skilldesc --row 910: str3 \
 DURATION AGREE_FLAT 3/3, str1 LIGHTNING_DAMAGE AGREE_PROGRESSION 25/125, str2 \
 CONDITION_DURATION:Cracked Armor AGREE_PROGRESSION 1/20 (governed, no rider), flags ALL_FOES, \
-AREA_ADJACENT, TARGET_FOE; the duration slot is a DELAY -- the adjacent foes are struck once, \
+AREA_ADJACENT, TARGET_FOE, UNMODELLED_CLASS -- the last fires on the skill's own name (the class \
+regex's one hit, offset 7), not on a spirit, minion or pet recipient, so the hand row stands; \
+the duration slot is a DELAY -- the adjacent foes are struck once, \
 AFTER that many seconds, and suffer Cracked Armor (paraphrase). So `tick_period` = the \
 duration: one tick at +3.0, the word then Cracked Armor (2077) on each struck foe. Without the \
 period the schedule would be Fire Storm's 1 s -- three strikes at +1 / +2 / +3, the known-bad \
