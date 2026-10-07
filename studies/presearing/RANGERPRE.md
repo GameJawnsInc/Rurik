@@ -173,6 +173,8 @@ run (`bc8f409b`). **S19 is not built.**
 | RANGERPRE-S20 | QUESTFLOW-H4 | reward item + quest-item removal via one shared grant helper | L | **landed** `1c512339`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §3) |
 | RANGERPRE-S21 | WEAPONREFUSE-B | persist hand changes across loads (default ON since the run) | L | **landed** `3ab6b017`; **CONFIRMED** on the client ([CONFIRM](CONFIRM-2026-09-30.md) §1); the default flipped ON in `bc8f409b` |
 | RANGERPRE-S22 | CONDHIT | an attack skill's condition needs a landed strike (§5, found by S14's reviewer) | D | **landed** `4cd9172e` (2026-10-07, lane `desk-condhit`; §5); the client look is owed (a runsheet, not a run) |
+| RANGERPRE-S23 | BLINDCLOSE | a body's Blind-missed attack skill closes with its own `[46]`, not the swing's `[1]` (§5, found by S22) | D | **landed** `4ab669e0` (2026-10-07; PLAN-LOG "RANGERPRE-S23 and S24"; §5); the client look is owed (a runsheet, not a run) |
+| RANGERPRE-S24 | BODYBLIND | a Blinded body's attack skill on another body rolls Blind's miss (§5, found by S22) | D | **landed** `4ab669e0` (2026-10-07, with S23; §5); the client look is owed (the same runsheet) |
 
 **Deferred, with reasons** (critic's DEFER list): ROUTE-C corner-leg routing (contests
 MOVECODE-1z-dn.5's "no route" closure, conflicts with LOOT's pickup walk, and our A* picks a
@@ -253,7 +255,8 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   attack skill with `[1, body, 0]` where its block arm sends `[46, body, 0]` — retail's one
   attack-skill miss (above) carries `[46]`; (ii) `land_swing_on_body` never rolls Blind for an
   attack skill (`skill_id is None and blind_miss(...)`), so a Blinded body's attack skill on
-  another body always lands. (The 357.240 `[42, 117, 480]` first listed here as a third is
+  another body always lands. **Both FIXED 2026-10-07 as RANGERPRE-S23 and S24** (the item
+  after the runsheet below). (The 357.240 `[42, 117, 480]` first listed here as a third is
   not a divergence: it is MAXHP-1 / RANGERPRE-S10, the maximum declared before the observer's
   first landed word on 117, which ours sends too. The chain half, listed as a fourth, is
   DAGGERS-F16's, above.)
@@ -278,6 +281,72 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   `[6, T, 23]` in its batch. What would refute the fix: a bleed drawn on a miss or block in A
   or C, or an assert. UNKNOWN going in: whether the hostile's AI casts 380 on itself at all; if
   C shows no "block" in 60 s, record C as unexposed. Not a test of anything retail-side.
+- **RANGERPRE-S23 and S24 (2026-10-07): a BODY's attack skill under Blind** — S22's two
+  found-in-passing defects, fixed on the desk; the banner at `authsrv.BLIND_MISS_SKILL_CLOSE`.
+  **S23, the close.** `land_swing`'s Blind arm closed a body's attack skill with the plain
+  swing's `[1, body, 0]` where its block arm sends `[46, body, 0]`. **Retail's close follows
+  the ACTION, not the outcome (OBSERVED):** over the live corpus (`missjoin.fails`, every
+  `[38]` with its attacker's close in the batch; prediction stated first: `[1]` beside a plain
+  swing, `[46]` beside an attack skill, no body attack-skill miss on tape), both attack-skill
+  misses close `[46]` ahead of `[38, T, A, 3]` — 20260917T224104 :62557 349.147 (Jagged
+  Strike, above) and 443.448 (the 775 dual's first strike, DAGGERS-F17) — and the other 55
+  misses, every one a plain swing, close `[1]`: 29 the observer's under Blind, 26 a body's
+  (agent 120 at the observer, 20260916T213125 :57894; bufflog reads no 479 on 120, so their
+  cause is UNVERIFIED). On the witness connection alone the observer's four misses are
+  349.147 `[46]`, 433.145 `[1]`, 434.310 `[1]`, 443.448 `[46]` (`test_condhit` 1d). **The
+  body's `[46, body, 0]` then `[38, T, body, 3]` is RECONSTRUCTION**: both `[46]` misses are
+  the observer's, and it is that shape on the body's own close, which is `[46]` on its landed
+  attack skills (`land_skill`'s attack arm, SLICE-F24, 124 of 124 that closed) and `[1]` on
+  its missed plain swings (the 26). A body's skill SHOT carries neither close
+  (`_without_melee_close`), so its bytes do not move. The BLIND banner's "RECONSTRUCTION by
+  analogy" for the plain swing's `[1]` is OBSERVED since, and says so.
+  **S24, the roll.** `land_swing_on_body` rolled Blind only for a plain swing (`skill_id is
+  None`, since SLICE-H4's first cut `652db099`, no reason written), so a Blinded body's
+  attack skill on another body always landed — where the same skill at the player rolls
+  (`land_swing`'s player branch) and the player's own does (`hit_enemy`). It now rolls for
+  both, melee and the skill shot's arrival. **WIKI**: GWW "Blind" rev 2667383 (a 90 % chance
+  to miss with attacks) and "Hit" rev 2721374 ("Any time an attack is blocked or misses, there
+  is no hit" — so S22's gate keeps the condition off it too). No tape shows the case. An
+  unblinded body draws no random number (`blind_miss` rolls only under a live 479), so nothing
+  else moves.
+  **Flags:** `--no-blind-miss-skill-close` (S23) and `--no-body-skill-blind` (S24), separate,
+  the known-bad arms; together they restore every pre-2026-10-07 byte of both sites.
+  **Tests:** `test_condhit` §1d (the evidence), §10 (the fix at the player and at a body, both
+  directions, melee and the arrow, each beside its unblinded control), §11 (each flag as a
+  differential against its own fix), §12 (bare: the flags, `main()`'s wiring, the two sites);
+  floor 4 -> 7 bare, 38 with the vault. All nine §10-§12 checks are red on `ab39c182`; with
+  S23 alone inverted 10a-10c and 11a redden, with S24 alone 10b-10d, 11a, 11b and 12c.
+- **RANGERPRE-S23 / S24's client look — a RUNSHEET, owed, the owner's; not run.** Loopback,
+  ours-DH, caged; the owner drives. The standing hostile is given Sever Artery and a sword and
+  fights the slice's Monk hero (the softest body inside aggro, SLICE-H3's pick: AR 60 under
+  the Warrior's 80); the player Blinds it with 167 (the CONFIRM-2026-09-24 III3 route: `Blind
+  on agent 10: buff 1, 10.0s`); `--no-energy` lets the hostile's adrenal 382 fire every swing
+  and 167 be re-pressed at will. Three launches, each `python toolkit/harness/session.py
+  --keep-open --hold 240 --enemy --game-args "--party slice --enemy-health 2000 --no-energy
+  --enemy-skills 382 --enemy-weapon starter_sword --skills 167 <ARM>"`, with `<ARM>`: (A)
+  nothing; (B) `--no-body-skill-blind`; (C) `--no-blind-miss-skill-close`. In each, let the
+  hostile engage the hero, target the hostile and press 167 (slot 1) whenever its Blind icon
+  is down, for about 60 s. **PREDICTED in A**, on each Sever Artery the hostile completes on
+  the hero under a live Blind (about 9 in 10): the swing, a yellow "miss" over the HERO, no
+  damage number and NO Bleeding on the hero (no bleed visual, no degeneration arrows on its
+  party-window bar); gamesrv.log prints `attack_skill_finished: agent 10's skill 382 misses`,
+  `attack_fail: 10 -> <hero> miss (Blind)`, `agent 10 swung BLIND at agent <hero> and missed
+  (skill 382)` and S22's `the strike missed -- no condition` line. Strikes with no Blind up are
+  the control: a number and the Bleeding. **In B** the same strikes under Blind LAND — a number
+  and the Bleeding, the pre-fix look the WIKI refutes. **In C** the misses come back with the
+  swing's `[1]` (the log's `melee_attack_finished` where A printed `misses`). **UNKNOWN going
+  in, and the reason C is launched:** what the client draws for a body whose attack-skill
+  action never receives its `[46]`. For the PLAYER an un-sent `[46]` held the attack-skill
+  action open — the movement lock `ATTACK_FINISH_BATCH`'s comment records — so watch the
+  hostile after each missed strike in C against A: does it stand rooted, hold the skill pose,
+  skip or delay its next swing? Floor: 5 Blind-missed strikes per arm and 2 landed controls,
+  counted off the tape as `[38, H, 10, 3]` beside `[46, 10, 0]` (A; `[1, 10, 0]` in C) with no
+  `[16, H, 10, ..]` and no `[6, H, 23]` in its batch, where H is the hero's agent id (the log's
+  SLICE-H3 `targets` line). What would refute the fix: a number or a Bleeding drawn on the hero
+  from a strike the log shows Blind-missed in A, or an assert on A's `[46]`-then-`[38]` — the
+  body case is RECONSTRUCTION, and the client may reject it. UNKNOWN too: whether the hostile
+  engages the hero before the player (if the log's pick names the player, record the arm as
+  unexposed for S24 — it is then S23 at the player's site). Not a test of anything retail-side.
 - ~~The five test reds this capture caused (test_wearmap, test_adrenwire, test_movesync,
   test_routerbench, test_weaponcensus; test_npcdefs §8 would add two) are all confirming evidence
   breaking exact pins; the owner chose server diffs first, and they stay open.~~
