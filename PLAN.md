@@ -2002,18 +2002,18 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
   `standing` gate (step 5's deferred half — the `0x00B0`-climbs-by-2 field size is NOT FOUND). The per-map cap and the Leave CONFIRMED on the client (CONFIRM-2 §11).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle (every pass
-  LANDED 2026-09-22/23, PLAN-LOG). Still OPEN: §56.9's residuals (the instant E3's slot and the `[8]` hold pair, the E4→E5 tick gap, a hero's E4 and debit at its start); a 348 row (no armour-bonus mechanic to hang
+  LANDED 2026-09-22/23, PLAN-LOG). Still OPEN: §56.9's residuals (the instant E3's slot, the E4→E5 tick gap); a 348 row (no armour-bonus mechanic to hang
   it on); the hero's cure on screen (final-confirmation-needs-run; the hero's apply itself
   CONFIRMED on our wire 2026-09-23, 2 of 2 vs 0 of 2, as was the interrupt at the PLAYER,
   2 of 2 with the 24 s disable drawn — studies/deskwork/CONFIRM-2026-09-23.md; the player-to-hero
   direction is unwitnessed on every tape); the allied NONCOMBATANT retail's shout boosts
   and `allies_of` excludes (§56.7); 3(e) a hero's zero gain;
-  the `[62]` energy word (read, own-party-scoped, not shipped); the second refusal gate's
+  322's E4 ahead of its `[50]` (10 of 11; its `[62]` rides the `[50]`); the second refusal gate's
   variable (the recharge refusal's id is 1988, witnessed once on `20260913T210901`, §57);
   the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body
   or hero as interrupt VICTIM (RECONSTRUCTION, final-confirmation-needs-run) and the
-  windup-swing drop (UNOBSERVED); 229's recharge anchor (HSR proc vs start, a capture
-  campaign); NPC aftercast proper and attack-skill recharge cadence (unmeasured).
+  windup-swing drop (UNOBSERVED); a hero's adrenal debit; the attack-skill recharge
+  anchor (n = 2); NPC aftercast SHIPPED 2026-10-07, its client A/B owed (skills §65).
 * **DESKWORK-D4**: skill coverage in bulk. Steps 1–4 and residue passes 1–3 LANDED (skills
   §54–§55, §59, §60, §67; PLAN-LOG): **116 label rows on 38797, 115 on 38974** (plain 56 / 55 +
   SKILLS-LW's 60 hit-gated, the 60 all marked), `--no-skill-labels` reverting; passes 1–2

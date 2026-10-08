@@ -2781,7 +2781,7 @@ different channel.
   `aftercast` and `adrenaline` for every skill and none of them are read.
   **(2026-09-23: the interrupt half fell — DESKWORK-D5 step 2, `authsrv.interrupt_player`
   / `interrupt_body`, castmech §4; and the NPC recharge anchor moved to the cast's
-  completion, step 4, `rechargeprobe.py`.)**
+  completion, step 4, `rechargeprobe.py`. 2026-10-07: the aftercast is read and wired -- `NPC_AFTERCAST`, studies/skills §65.)**
 - **The effect is damage and nothing else.** Skill 276's real effect is not
   modelled; it deals a flat fraction like a harder swing.
 

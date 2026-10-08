@@ -111,7 +111,9 @@ import vaultpath                                               # noqa: E402
 # Floor from the BARE-MACHINE green run (RURIK_VAULT=C:/nonexistent-vault), 2026-09-28,
 # re-measured after CASTAI-R2: 36 -- section 1's predicate (20), section 5's rowless form
 # (5, the legacy property-61 check added) and section 6's source checks (11: the re-arm's
-# default and flag, and CASTAI-R2's flag). 81 with the vault. A driven section skips ONLY
+# default and flag, and CASTAI-R2's flag). 81 with the vault; 83 since 2026-10-07 (section
+# 2's after-close check runs on both NPC_AFTERCAST arms, and ON_SEQUENCE pins the default
+# arm's cadence). A driven section skips ONLY
 # when the vault is absent; a present vault missing a row is a FAIL (vault_skills /
 # rows_problem). RE-MEASURED 2026-10-07 after CASTAI-RM (section 7 runs on its CARRIED
 # rows, so it is bare-machine; section 8 is vault-only): 88 bare (36 + 52), 138 with the
@@ -128,8 +130,13 @@ import vaultpath                                               # noqa: E402
 # 2026-10-08 (the review's second round, VF-1): +1 on both machines -- section 7 (h)'s
 # removed Deep Freeze declaring the 0x0027 base back. MEASURED: 147 with the vault, 96 bare
 # (RURIK_VAULT=C:/nonexistent-vault, the same 4 declared skips).
+# 2026-10-08 (the pass-9 landing, CASTAI-RM + SKILLS-AC): +2 with the vault -- the
+# NPC_AFTERCAST lane's two vault-only section-2 checks (the aftercast-aware after-close
+# check and ON_SEQUENCE, re-recorded on the merged tree); it kept the old single floor of
+# 36. MEASURED at the merge: 149 with the vault, 96 bare (RURIK_VAULT at an empty
+# directory, 4 declared skips).
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
-FLOOR_VAULT = 147
+FLOOR_VAULT = 149
 FLOOR_BARE = 96
 LEDGER = checks.Ledger("cast gate (CASTAI)",
                        floor=FLOOR_VAULT if HAVE_VAULT_CONTENT else FLOOR_BARE)
@@ -152,7 +159,8 @@ TICK = 0.05
 T0 = 1_000_000.0
 FLAGS = ("SKIP_LIVE_EFFECT", "SELF_CAST_FORM", "CAST_FORM", "ENERGY", "NPC_FOLLOW",
          "CASTER_OPENING", "CONDITION_HEAL_RULE", "EFFECTS", "INSTANT_ANNOUNCE",
-         "LIVE_EFFECT_REARM", "HOSTILE_ALLY_SKILL_SELF", "REMOVAL_NEEDS_AFFLICTION")
+         "LIVE_EFFECT_REARM", "HOSTILE_ALLY_SKILL_SELF", "REMOVAL_NEEDS_AFFLICTION",
+         "NPC_AFTERCAST")
 BEAT = 0.25                          # authsrv.LIVE_EFFECT_REARM's default, as a LITERAL
 
 # THE KNOWN-BAD ARM'S LITERAL: the first 24 (tick index, skill) casts of fight(bar=the
@@ -161,6 +169,14 @@ BEAT = 0.25                          # authsrv.LIVE_EFFECT_REARM's default, as a
 # castai-impl/head_literal.py). The gate-off arm must reproduce it byte for byte:
 # round robin's own sequence, with the 253s every ~6.3 s that stack on the player.
 HEAD_SEQUENCE = None                 # filled in below from the recorded literal
+# THE DEFAULT ARM'S LITERAL (added 2026-10-07 after review, EV-6): the first 24 (tick,
+# skill) casts of `_hatcher_fight(True)` with NPC_AFTERCAST on, recorded from a green run
+# of the desk-aftercast lane (scratch impl-desk-aftercast/fix/record_on_sequence.py; two
+# runs identical, 79 casts in 120 s). Section 2's after-close check proves the gate's own
+# four facts but cannot say WHEN 253 comes back once its aftercast cover ends -- a 253
+# held 2 s past every aftercast, or released a tick late, left this file green -- so the
+# cadence is pinned whole, the way section 3 pins the known-bad arm.
+ON_SEQUENCE = None                   # filled in below from the recorded literal
 
 
 class Clock:
@@ -198,7 +214,7 @@ def arm(A=authsrv, clock=None, **flags):
             "ENERGY": False, "NPC_FOLLOW": False, "CASTER_OPENING": True,
             "CONDITION_HEAL_RULE": True, "EFFECTS": True, "INSTANT_ANNOUNCE": True,
             "LIVE_EFFECT_REARM": BEAT, "HOSTILE_ALLY_SKILL_SELF": True,
-            "REMOVAL_NEEDS_AFFLICTION": True}
+            "REMOVAL_NEEDS_AFFLICTION": True, "NPC_AFTERCAST": True}
     base.update(flags)
     for k, v in base.items():
         setattr(A, k, v)
@@ -393,14 +409,44 @@ def section_predicate():
 
 
 # ---------------------------------------------------------------------------------
-def _hatcher_fight(skip, secs=120.0, removal=True):
-    with arm(clock=Clock(T0), SKIP_LIVE_EFFECT=skip, REMOVAL_NEEDS_AFFLICTION=removal):
+def _hatcher_fight(skip, secs=120.0, removal=True, aftercast=True):
+    with arm(clock=Clock(T0), SKIP_LIVE_EFFECT=skip, REMOVAL_NEEDS_AFFLICTION=removal,
+             NPC_AFTERCAST=aftercast):
         st = hatcher_world(authsrv)
         with recording_consults() as seen, recording_removals() as rm_seen:
             rec = fight(authsrv, st, secs)
     rec["consults"] = seen
     rec["removals"] = rm_seen
     return rec
+
+
+def _after_close(rec, n253, closes, looks, aftercast_aware):
+    """(good, detail) for section 2's after-close check over one fight. With
+    `aftercast_aware`, a go tick inside the hostile's aftercast -- a [58] of its within
+    the 0.75 s before (NPC_AFTERCAST) -- owes no cast THAT tick; the gate's own facts
+    are owed on every close either way."""
+    f58 = [i for i, op, v in rec["sends"] if op == INT and v[:2] == [58, HOSTILE]]
+    win = int(round(0.75 / TICK))
+    good, detail = True, []
+    for c in closes:
+        tc = T0 + c * TICK - 1e-9
+        after = [(t, held) for t, held in looks if t >= tc]
+        if not after:
+            continue
+        t_first, held_first = after[0]
+        inside = [held for t, held in after if t < t_first + BEAT - 1e-6]
+        past = [(t, held) for t, held in after if t >= t_first + BEAT - 1e-6]
+        if not past:
+            continue
+        t_go, held_go = past[0]
+        k_go = int(round((t_go - T0) / TICK))
+        cast_inside = [i for i in n253 if c <= i < k_go]
+        cover = ([x for x in f58 if x <= k_go < x + win] if aftercast_aware else [])
+        detail.append((c, int(round((t_first - T0) / TICK)), k_go, held_first,
+                       all(inside), held_go, k_go in n253, cover[:1]))
+        good = (good and held_first and all(inside) and not held_go
+                and (k_go in n253 or bool(cover)) and not cast_inside)
+    return good, detail
 
 
 def section_hatcher():
@@ -455,31 +501,44 @@ def section_hatcher():
           f"{len(rm_looks)} looks, answers {sorted({o for *_x, o in rm_looks}, key=str)}, "
           f"{len(rm_lines)} lines")
     # AFTER A CLOSE: THE FIRST LOOK HOLDS FOR ONE BEAT, THE FIRST LOOK PAST IT CASTS.
+    # RE-AIMED 2026-10-07 (NPC_AFTERCAST, studies/skills 65): "cast on that very tick"
+    # now also needs the body OUT of its aftercast -- a CLOCK gate after this WORLD gate
+    # -- and on the default arm every go tick falls inside one (the Hatcher's 30-tick
+    # cycle, 0.75 s cast + 0.75 s aftercast, puts a [58] on each close's tick). So the
+    # check is run twice: on the default arm, the gate's own four facts on every close
+    # AND the cast on the go tick wherever no aftercast covers it, the cover itself
+    # named per close; and VERBATIM on --no-npc-aftercast, where all five go ticks cast.
+    # What the default arm does NOT claim (corrected after review, EV-6 / CD-5): that
+    # 253 is cast when its cover ends. The aftercast hold leaves last_slot alone and the
+    # next tick re-picks from the cursor, so a slot ready earlier in the scan takes the
+    # turn (traced: 253 held 416-419, 312 picked at 420 and cast at 425, 253 at 515) --
+    # round robin's business, pinned whole by ON_SEQUENCE just below.
     looks = [(t, held) for t, a, s, held in rec["consults"] if a == HOSTILE and s == SCOURGE]
-    good, detail = True, []
-    for c in closes:
-        tc = T0 + c * TICK - 1e-9
-        after = [(t, held) for t, held in looks if t >= tc]
-        if not after:
-            continue
-        t_first, held_first = after[0]
-        inside = [held for t, held in after if t < t_first + BEAT - 1e-6]
-        past = [(t, held) for t, held in after if t >= t_first + BEAT - 1e-6]
-        if not past:
-            continue
-        t_go, held_go = past[0]
-        k_go = int(round((t_go - T0) / TICK))
-        cast_inside = [i for i in n253 if c <= i < k_go]
-        detail.append((c, int(round((t_first - T0) / TICK)), k_go, held_first,
-                       all(inside), held_go, k_go in n253))
-        good = (good and held_first and all(inside) and not held_go and k_go in n253
-                and not cast_inside)
+    good, detail = _after_close(rec, n253, closes, looks, aftercast_aware=True)
     check(good and detail,
           "after each close the gate's FIRST look at 253 HOLDS it (the re-arm), every look "
           "inside the next 0.25 s holds, and the first look past the beat lets it through "
-          "and 253 is cast on that very tick -- no 253 inside the beat",
-          f"(close, first look, go tick, held first?, held inside?, held at go?, cast?) "
-          f"{detail}")
+          "-- no 253 inside the beat -- and the go tick either casts 253 or sits inside the "
+          "body's aftercast (NPC_AFTERCAST's clock gate; the cover named per close)",
+          f"(close, first look, go tick, held first?, held inside?, held at go?, cast?, "
+          f"covered by the [58] at tick) {detail}")
+    check(hat[:len(ON_SEQUENCE)] == ON_SEQUENCE,
+          "and the default arm's first 24 casts (tick, skill) equal the cadence recorded "
+          "with the aftercast on (ON_SEQUENCE: each cast starts the previous one's "
+          "activation + its 0.75 s aftercast after it; 253 back when round robin's "
+          "cursor comes round)",
+          f"{hat[:len(ON_SEQUENCE)]}")
+    rec_pre = _hatcher_fight(True, aftercast=False)
+    n253_pre = [i for i, a, s in rec_pre["casts"] if a == HOSTILE and s == SCOURGE]
+    closes_pre = rec_pre["closes"].get((P, SCOURGE), [])
+    looks_pre = [(t, held) for t, a, s, held in rec_pre["consults"]
+                 if a == HOSTILE and s == SCOURGE]
+    good_pre, detail_pre = _after_close(rec_pre, n253_pre, closes_pre, looks_pre,
+                                        aftercast_aware=False)
+    check(good_pre and detail_pre,
+          "  and under --no-npc-aftercast, verbatim: the first look past the beat lets it "
+          "through and 253 is cast on that very tick, every close",
+          f"{detail_pre}")
     held_while_live = sum(1 for _t, held in looks if held)
     check(held_while_live >= len(closes),
           "and the gate DID hold 253 while it was live (the arm is live, not vacuous)",
@@ -531,9 +590,12 @@ def section_hatcher():
 # ---------------------------------------------------------------------------------
 def section_known_bad():
     print("== 3. (b) the KNOWN-BAD arm: --no-skip-live-effect is the pre-CASTAI server ==")
-    # Both CASTAI gates off, by name: 19213513 had neither the live-effect gate nor the
-    # removal gate (CASTAI-RM, 2026-10-07), and its sequence casts 276 at the clean ally.
-    rec = _hatcher_fight(False, removal=False)
+    # Every gate 19213513 predates is off, by name: it had neither the live-effect gate
+    # nor the removal gate (CASTAI-RM, 2026-10-07: its sequence casts 276 at the clean
+    # ally) nor NPC_AFTERCAST (SKILLS-AC, 2026-10-07: with the aftercast on, every cast
+    # after the first waits 0.75 s past the previous [58] and the literal moves by exactly
+    # that). Both lanes re-aimed this arm separately; the pass-9 landing joined them.
+    rec = _hatcher_fight(False, removal=False, aftercast=False)
     hat = [(i, s) for i, a, s in rec["casts"] if a == HOSTILE]
     check(hat[:len(HEAD_SEQUENCE)] == HEAD_SEQUENCE,
           "the first 24 casts (tick, skill) equal 19213513's own -- round robin's sequence "
@@ -1077,15 +1139,19 @@ def rm_world(bar, who, ally_health=100.0, player_health=1e9):
     return st
 
 
-def rm_run(bar, who, secs=2.0, gate=True, setup=None, player_health=1e9, ally_health=100.0):
-    """Drive the real ticks for `secs` with the removal gate `gate`. The hostile runs
+def rm_run(bar, who, secs=2.0, gate=True, setup=None, player_health=1e9, ally_health=100.0,
+           aftercast=True):
+    """Drive the real ticks for `secs` with the removal gate `gate` (and NPC_AFTERCAST
+    `aftercast`: the pass-9 landing joined SKILLS-AC, whose hold moves a second cast's
+    tick, so an arm compared with 642d8957's bytes turns it off too). The hostile runs
     enemy_attack_tick, the hero ally_cast_tick; effect_tick first, as the world tick does.
     Every tick runs under bounded_picks: an overrun ends the run and is returned as
     rec["overrun"] (None on a healthy run), with no sends -- so every check reading the
     run goes red, and the spin check says why."""
     loop = "enemy_attack_tick" if who == HOSTILE else "ally_cast_tick"
     overrun = None
-    with rm_carried(), arm(clock=Clock(T0), REMOVAL_NEEDS_AFFLICTION=gate):
+    with rm_carried(), arm(clock=Clock(T0), REMOVAL_NEEDS_AFFLICTION=gate,
+                           NPC_AFTERCAST=aftercast):
         st = rm_world(bar, who, ally_health=ally_health, player_health=player_health)
         if setup is not None:
             setup(st)
@@ -1507,8 +1573,11 @@ def section_rm_known_bad():
     print("== 7. (i) KNOWN-BAD ARM: --no-removal-needs-affliction is 642d8957's bytes ==")
     bar = ((RESTORE, 0.75, 2.0), (ORISON, 1.0, 2.0))
     ph = float(agents.PLAYER_HEALTH)
-    got = {"hostile": rm_run(bar, HOSTILE, secs=2.0, gate=False)["sends"],
-           "hero": rm_run(bar, HERO, secs=2.0, gate=False, player_health=0.4 * ph)["sends"]}
+    # 642d8957 predates NPC_AFTERCAST as well (SKILLS-AC, merged in the same pass): its
+    # hold delays the second cast by its aftercast, so the byte comparison turns it off.
+    got = {"hostile": rm_run(bar, HOSTILE, secs=2.0, gate=False, aftercast=False)["sends"],
+           "hero": rm_run(bar, HERO, secs=2.0, gate=False, aftercast=False,
+                          player_health=0.4 * ph)["sends"]}
     on = {"hostile": rm_run(bar, HOSTILE, secs=2.0)["sends"],
           "hero": rm_run(bar, HERO, secs=2.0, player_health=0.4 * ph)["sends"]}
     for k in ("hostile", "hero"):
@@ -1730,6 +1799,19 @@ HEAD_SEQUENCE = [
     (141, 253), (164, 289), (180, 276), (220, 312), (236, 289), (252, 276), (268, 253),
     (291, 289), (307, 276), (347, 289), (363, 276), (388, 253), (409, 312), (425, 289),
     (441, 276), (481, 289), (497, 276),
+]
+ON_SEQUENCE = [
+    # (tick index, skill) -- fight(Hatcher bar), the live-effect gate, NPC_AFTERCAST AND
+    # REMOVAL_NEEDS_AFFLICTION on. RE-RECORDED 2026-10-08 at the pass-9 landing on the
+    # merged tree (the lane's record_on_sequence.py, LANE_ROOT = desk-pass9; two runs
+    # identical, 57 casts in 120 s): desk-removal's gate holds the Hatcher's 276 at its
+    # CLEAN hurt ally, so 276 leaves the cadence (the lane's own literal, recorded before
+    # the gate merged, opened (0, 276), (30, 253) ...). Gaps stay activation + 0.75 s:
+    # 35 ticks after 253, 30 after a 0.75 s spell; 289's longer waits are its recharge.
+    (0, 253), (35, 312), (65, 289), (120, 289), (175, 289), (218, 312), (248, 289),
+    (303, 289), (358, 289), (388, 253), (423, 312), (453, 289), (508, 289), (563, 289),
+    (606, 312), (636, 289), (691, 289), (746, 289), (776, 253), (811, 312), (841, 289),
+    (896, 289), (951, 289), (994, 312),
 ]
 
 

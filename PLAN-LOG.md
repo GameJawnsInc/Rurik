@@ -28,6 +28,79 @@ move back.
 
 ---
 
+### SKILLS-AC -- 2026-10-07 -- **NPC aftercast proper (DESKWORK-D5): a hostile, hero or henchman now waits out its spell's table aftercast before its next cast or swing. Until today it chained the next action one tick (~0.03 s) after the landing. Retail's other agents never start anything sooner than 0.704 s after the `[58]` of a table-aftercast-0.75 spell: 1,477 of 1,477 over 127 connections on four builds (38797 / 38833 / 38849 / 38888, each on its own build's table), whether the next action is a cast, a swing or an attack skill. The aftercast-0 control re-starts under 0.70 s 49 of 95 times -- every one a signet or a preparation -- so the floor is not a general pause after every action; for an aftercast-0 SPELL the column rule is WIKI and RECONSTRUCTION on tape (769, n = 6, never under 1.75 s). Our own recorder capture `authsrv-20260928T002701-c1` is the known-bad arm at 0.025 s. One OBSERVED exception, n = 2: a stance goes strictly inside the window (0.499 / 0.501), so the hold is a clock gate on the picked slot and not a stop ahead of `pick_skill`; shouts and type 16 ride it as RECONSTRUCTION. Shipped behind `NPC_AFTERCAST`; `--no-npc-aftercast` gives 642d8957's bytes, proven byte-identical on the fixtures. The survey's n = 872 was reproduced exactly and corrected to 1,477. Its hero-E3 witness is refuted as evidence. Its 229 "HSR vs start" clause is re-derived and closed without a campaign. A review pass the same day found five shipped behaviours no test held and added a proven-red check for each. The client A/B is owed.**
+
+- **The reader, `toolkit/authsrv/npcaftercast.py`** (new, stdlib). P1–P6 are registered in its docstring, with an AS RUN block beside them.
+  - It reuses `rechargeprobe._exe_tables` for the per-build table (its own cache keeps `+0x40` and the type code), `deepwoundjoin.sequence` / `whole_s2c` (`:65009` set aside by name), `spellhitjoin.observer_of`, and `timingjoin.load_ours` for `--ours`. It prints the connections' builds beside the vault's six tables; `--json`'s stdout is one JSON document.
+  - P1 HOLDS: min 0.704, p5 0.741, median 1.135, 0 under 0.70.
+  - P2 HOLDS: 527 of 1,477 (35.7 %) in [0.70, 0.80).
+  - P3 HOLDS: 49 of 95 over five aftercast-0 skills -- 2 (32 / 42), 433 (15 / 40), 435 (2 / 3), 432 (0 / 4), and the one spell 769 (0 / 6, min 1.75).
+  - P4 HOLDS: ours fails P1.
+  - P5 UNDECIDABLE; P6 REFUTED by 2 instants strictly inside the window (`p6_split`; a third, in the `[58]`'s own batch, is printed apart -- batch order flips on the same connection).
+- **Where the survey was wrong** (studies/skills §65.2, §65.4).
+  - Its 872 / 355 / 56 / 28 reproduce exactly when only `0x00A0` starts are read and the walk from a `[58]` crosses closes.
+  - The un-targeted `0x009F [60]` (the self cast) is a start too. 127 of its 872 rows were a self cast's `[58]` scored against the targeted cast before it.
+  - Its control is five skills, not one.
+  - Its "hero E5 → E3 = 0.000 (322 / 346 / 348)" rows are an attack, a stance and a shout, all table aftercast 0. The hero's E3 stays where it was; that is UNVERIFIED for a spell.
+- **The server** (`authsrv.py`).
+  - `NPC_AFTERCAST`, `npc_aftercast()` and `npc_aftercast_holds()` sit beside `npc_recharge_anchor`.
+  - `land_skill` stamps `aftercast_until` at the landing on a completed cast that is neither an attack nor an instant skill. A RESSIG `[59]` stop takes the stamp back.
+  - `enemy_attack_tick` holds a cast through a clock gate after the reach gate and before the pay gate (RV-1; test_castgate §6's order is unchanged around it), and holds a swing ahead of the plain swing's interval gate. An attack skill is held (OBSERVED: P1's 17 attack-skill starts, min 0.735); an instant passes.
+  - `ally_cast_tick` holds after the slot unpacks and ahead of the swing clock and the energy debit; `ally_attack_tick` after the cast-in-flight check.
+  - The hold leaves `last_slot` alone: the next tick re-picks from the cursor, so a slot ready earlier in the scan takes the turn (on the Hatcher, 312 before 253) -- round robin's business, Q19.
+  - Untouched: `pick_skill` (Q19), `hero_skill_messages` (the E3), and the `skill_ready` line test_agentlife pins.
+  - RECONSTRUCTION, labelled at the sites:
+    - party bodies take the hostile's rule;
+    - an interrupt, a cancel, a scatter cancel and a RESSIG stop stamp nothing;
+    - an attack skill and an instant stamp nothing. The 17 ranged-attack rows at 0.6–1.5 and the 15 instant rows at 0.75 stay CONTESTED (castmech §9);
+    - a shout or a type-16 skill inside the window (only a stance is witnessed).
+- **Tests.**
+  - New `test_npcaftercast.py`: 52 with the vault, 42 bare (floors per directory, measured with an empty and a nonexistent `RURIK_VAULT`). It carries the vault's rows 2, 253, 289, 281, 433, 1037, 397 and 10 at build 38974.
+  - Its 642d8957 start literals were recorded through a `git archive 642d8957` export, whose 63 sends were byte-identical to `--no-npc-aftercast`'s.
+  - PROVEN RED by 18 pre-loaded scratch mutants against a green control. The red counts per mutant:
+
+    | mutant | red |
+    |---|---|
+    | stamp removed | 9 |
+    | stamp halved | 7 |
+    | hostile cast gate removed | 3 |
+    | hostile swing hold removed | 4 |
+    | party cast hold removed | 2 |
+    | party swing hold removed | 1 |
+    | instants held | 1 |
+    | attacks and instants stamped | 4 |
+    | interrupt stamps | 1 |
+    | RESSIG take-back removed | 1 |
+    | main()'s `global` removed | 2 |
+    | flag renamed in serverargs | 1 |
+    | gate moved ahead of the reach gate | 1 |
+    | hero E3 withheld | 1 |
+    | default off | 2 |
+    | reader: un-targeted start dropped | 10 |
+    | reader: walk crosses closes | 3 |
+    | reader: floor at 0 | 6 |
+
+  - **The review pass** added a check for each defect that had left every test green, each PROVEN RED against a green control: attack skills let through the window (the predicate, the hostile site alone, the party site alone: 1 each -- a hostile and a hero, 253 / 281 → 397, the `[50]` at the `[58]` + 15 ticks, the tick after on the known-bad arm); the party site holding an instant (2); the party hold moved below the energy debit (1, a source lock beside the hostile's); the reader counting the own-batch instant (2); `--json`'s census lines on stdout (1).
+  - `test_castgate` re-aimed, not weakened (83). §2's after-close check owes the go-tick cast only where no aftercast covers it, and names the cover; it also runs verbatim on the off arm, where all five go ticks cast. The default arm's cadence is pinned whole (`ON_SEQUENCE`, the first 24 casts; red on a 253 over-held 2 s and on a release one or two ticks late). §3's 19213513 literal sets both reverts.
+  - `test_agentlife`: two fixtures expire the stamp by hand (705 / 694, unchanged).
+  - Green, one at a time with the vault: the affected set (212 files by a transitive import closure; 208 run, the four port-binders left to the orchestrator) and the six tree-wide lints. test_kbdsync went red once on three wall-clock section-30 checks under load and passed 324 of 324 re-run alone (the review saw the same flake on the 642d8957 export).
+  - test_recharge's bare red is pre-existing: 642d8957 gives the identical result.
+- **D5's other clauses, re-checked** (§65.7).
+  - Already closed: the `[8]` pair (912afe82 / 456e5d30), a hero's E4 (f56a13d9 / 01351dcd) and debit (050f8b4d), and the zero-recharge E5 (a6a3d34b / 4804b835).
+  - "The `[62]` energy word (not shipped)" is stale: HEROENERGY ships it and its client run confirmed it. What stays open is narrower, and it is the E4, not the word.
+    - On `20260914T005758` all 28 of the hero's `[62]` words sit in a cast's own batch. The attack skill 322's rides its own `[50]` start 11 of 11, which is where `ally_cast_tick` already sends ours.
+    - Retail opens 322's E4 0.393–8.479 s ahead of that `[50]` in 10 of 11; ours opens it in the `[50]`'s tick. OBSERVED, re-derived from this tree.
+    - A second review caught the first draft naming the `[62]`. The same misreading ("the strike, probably") now carries a dated correction in `authsrv.py`'s HEROENERGY comment and in studies/slice SLICE-F54 54.1.
+  - 229's anchor: the `weaponcensus` join, re-run from this tree, is identical. All three sub-recharge groups (229 twice, 102 once) hold a type-26 staff carrying 570, and every short gap is at or above `combatmath.halved_recharge`. `rechargeprobe` gives 9 of 10 discriminating skills anchored at completion. CORROBORATED, n = 3 groups.
+  - Newly listed: a hero's ADRENAL debit.
+  - Recorded only: the attack-skill strike anchor (n = 2: skill 327, agent 9, 20260817T231139).
+- **Studies.**
+  - studies/skills §65 (SKILLS-AC1–AC7).
+  - studies/slice SLICE-F54 54.1 and `authsrv.py`'s HEROENERGY comment (a comment only; the AST is identical): dated corrections. The hero's 322 `[62]` is paid at the `[50]` start, not the strike.
+  - Dated notes on the "no aftercast" lines in studies/monsterai/FINDINGS.md §5, studies/enemy/PLAN.md and studies/isle/PLAN.md.
+  - The `ENEMY_SKILL_BAR` comment corrected.
+- **Owed: the client A/B** (Hatcher + slice monk hero; final-confirmation-needs-run).
+
 ### CASTAI-ZF31 / SKILLS-CH1..CH3 (CHAN55) -- 2026-10-07 -- **An armour-ignoring NON-ATTACK skill's damage word now rides property 55, negative, at every damage-word door, and life steal is a mechanic. The rule is not "holy". Over the whole live corpus, the skills retail names ahead of the observer's word split with no overlap: 55 for exactly 102, 133, 143, 251, 272, 302 and 2809 (94 words), and 16 / 17 for 20 others. The client's own templates type the 55 side as shadow, steal, holy and untyped, so a "holy" key fails on 4 of the 7. Holy Strike 312 and Banish 252 now ride 55, and on a vault machine so do the label tier's 294, 1113 and 2212. Vampiric Gaze 153 now steals: the caster gains exactly what the target loses, the heal goes ahead of the word, and the recipient visual 276 goes out. That is retail's shape on the observer's own 13 of 13 casts and on a hostile's 143 at the player, 3 of 3. There are two revert flags, one per channel: `--no-armour-ignoring-on-55` and `--no-life-steal`. The client draw is owed as a loopback runsheet.**
 
 - **The rule.** `authsrv.spell_damage_prop(skill_id)` returns 55 when two things hold:
