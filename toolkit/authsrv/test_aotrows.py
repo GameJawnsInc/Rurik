@@ -11,10 +11,13 @@ applies Cracked Armor; 1380's `tick_ramp = "elapsed"` makes tick k deal k x its 
 ever cast on a live tape, so the wire is Fire Storm's OBSERVED shape reused --
 RECONSTRUCTION -- and what this file locks is that the server produces it from the rows.
 
-And the caster's death (weapons 45): the area OUTLIVES it, OBSERVED n = 1 on the
-second Zaishen tape (20260929T100038 :51199, the Fire Storm announced at 562.188: the
-caster dead at completion + 8.487, a clean tick at + 9.989 on foes 4 and 6). Section 6
-re-derives that witness with aotjoin and holds the server's locked behaviour against it.
+And the caster's death (weapons 45): the area OUTLIVES its caster's DEFEAT MARK,
+OBSERVED n = 1 on the second Zaishen tape (20260929T100038 :51199, the Fire Storm
+announced at 562.188: the caster's dead bit at completion + 8.487 -- the lost match's
+mark on every surviving party body, CASTAI-ZF25, not a kill in play -- and a clean tick
+at + 9.989 on foes 4 and 6). A caster killed in play has no witness. Section 6
+re-derives that witness and its context with aotjoin and the repo's decoder, and holds
+the server's locked behaviour against it.
 
     python toolkit/authsrv/test_aotrows.py
 
@@ -752,6 +755,40 @@ def section_revert():
           "result is section 4b's to show, by behaviour)")
 
 
+def _death_context(aj, stamp, port, row):
+    """What cast #17's caster death IS, read off the wire with the repo's decoder (review
+    VF-1, 2026-10-07: the study first called its cause UNOBSERVED and the batch before it
+    unexplained, where zaishenrun and CASTAI-ZF25 already read both). Returns the agents
+    whose 0x00F1 dead bit RISES within one batch of the caster's, the 0x00A2 [55] health
+    SETTERS (CASTAI-ZF25: a setter, the match end's reset) on the k = 10 takers between
+    the completion and that tick as (instant, agent, value), and the death and tick
+    instants. Match 4 (:51199) is a LOST match (studies/monsterai/FINDINGS.md 18.3), and
+    a lost match marks every surviving party body dead at ONE instant with its health
+    untouched (ZF25) -- the defeat mark; reading it as the match's end is zaishenrun's
+    RECONSTRUCTION, the two marks below are OBSERVED."""
+    root = vaultpath.require_dir("captures", "live", why="test_aotrows 6")
+    capdir = os.path.join(root, stamp)
+    conns = [ch["connection"] for ch in aj.tape.channel_files(capdir)
+             if ch["connection"].split("->")[0].rsplit(":", 1)[-1] == port]
+    seq = aj.deepwoundjoin.sequence(capdir, conns[0], aj.bufflog.Codec())
+    tc = row["completion_t"]
+    td = tc + next(o for o, d in row["caster_deaths"] if d)
+    tick10 = next(x for x in row["ticks"] if x["k"] == 10)
+    takers = {w[0] for w in tick10["fs_words"]}
+    last, co_dead, setters = {}, [], []
+    for _i, t, op, v in seq:
+        if op == aj.OP_STATUS and len(v) > 2:
+            dead = bool(int(v[2]) & aj.DEAD_BIT)
+            if dead and not last.get(v[1]) and abs(t - td) <= aj.BATCH:
+                co_dead.append(v[1])
+            last[v[1]] = dead
+        elif (op == aj.OP_FLOAT and len(v) > 3 and v[1] == aj.PROP_HEALTH_GAIN
+              and v[2] in takers and tc < t < tick10["t"]):
+            f = struct.unpack("<f", struct.pack("<I", int(v[3]) & 0xFFFFFFFF))[0]
+            setters.append((round(t, 4), v[2], round(f, 4)))
+    return sorted(co_dead), sorted(setters), round(td, 4), round(tick10["t"], 4)
+
+
 def section_tape():
     print("\n6. the caster's death on the Zaishen tapes, and the server's locked behaviour")
     Z1, Z2 = "20260928T103123", "20260929T100038"
@@ -791,17 +828,30 @@ def section_tape():
     tick10 = [x for x in (r17[0]["ticks"] if r17 else []) if x["k"] == 10]
     deaths = sorted((r["port"], round(r["announce_t"], 3), r["caster_deaths"], r["tick_ks"])
                     for r in rows if any(d for _t, d in r["caster_deaths"]))
-    check(len(r17) == 1 and r17[0]["caster"] == 10 and r17[0]["caster_deaths"] == [(8.487, True)]
-          and r17[0]["tick_ks"] == [1, 2, 3, 10] and len(tick10) == 1
-          and tick10[0]["clean"] and abs(tick10[0]["off"] - 9.989) < 0.0015
+    ok17 = (len(r17) == 1 and r17[0]["caster"] == 10 and r17[0]["caster_deaths"] == [(8.487, True)]
+            and r17[0]["tick_ks"] == [1, 2, 3, 10] and len(tick10) == 1)
+    # the death's CONTEXT (review VF-1): the caster's dead bit rises in ONE batch with a
+    # second party body's (agent 8, the Zaishen Archer), and both k = 10 takers (Z-Monks
+    # 4 and 6) take the match end's health setter 0.6085 (= 300/493, ZF25) at one
+    # instant BEFORE it -- the lost match's defeat mark, not a kill in play
+    ctx = _death_context(aj, Z2, "51199", r17[0]) if ok17 else None
+    co_dead, resets, t_dead, t_tick = ctx if ctx else ([], [], 0.0, 0.0)
+    check(ok17 and tick10[0]["clean"] and abs(tick10[0]["off"] - 9.989) < 0.0015
           and sorted(w[0] for w in tick10[0]["fs_words"]) == [4, 6]
           and deaths == [("51199", 562.188, [(8.487, True)], [1, 2, 3, 10]),
-                         ("58544", 597.109, [(8.05, True)], [1, 2, 3, 4])],
-          "cast #17 (20260929T100038 :51199, announced 562.188 by agent 10): the caster DEAD "
-          "at completion + 8.487 and a CLEAN tick at + 9.989 (k = 10) on foes 4 and 6 -- "
-          "the area OUTLIVES its caster, OBSERVED n = 1; the only other caster death on these "
-          "tapes (:58544, +8.05) ticked nobody after k = 4, inconclusive",
-          str((deaths, tick10)))
+                         ("58544", 597.109, [(8.05, True)], [1, 2, 3, 4])]
+          and co_dead == [8, 10]
+          and [(a, f) for _t, a, f in resets] == [(4, 0.6085), (6, 0.6085)]
+          and len({t for t, _a, _f in resets}) == 1 and resets[0][0] < t_dead < t_tick,
+          "cast #17 (20260929T100038 :51199, announced 562.188 by agent 10): the caster's "
+          "DEAD BIT at completion + 8.487 and a CLEAN tick at + 9.989 (k = 10) on foes 4 and "
+          "6; that dead bit is the lost match's DEFEAT MARK (CASTAI-ZF25), read here as its "
+          "two marks -- agent 8 flagged dead in the caster's batch, and both takers' "
+          "match-end setter 0x00A2 [55, foe, 0.6085] at one instant before it -- so the area "
+          "outlives its caster's defeat mark, OBSERVED n = 1, and a caster killed in play has "
+          "no witness; the only other caster death on these tapes (:58544, +8.05) ticked "
+          "nobody after k = 4, inconclusive",
+          str((deaths, tick10, co_dead, resets, t_dead, t_tick)))
     # The server against it: a hostile's Fire Storm, the caster killed between k = 8 and
     # k = 9 (the tape's +8.487), served to the end. The agreement: the tape ticks after
     # the death and every tape k after it is a k the server words after it. KNOWN-BAD

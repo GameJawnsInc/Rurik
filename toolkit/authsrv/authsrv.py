@@ -17193,9 +17193,11 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # re-sent after the caster died, n = 1) -- the server KEEPS the area, a dead
 # body caster's ticks resolving from its strike level snapshotted at the
 # completion. 2026-10-07 (weapons 45): OBSERVED n = 1 on the second Zaishen
-# tape -- a clean tick 1.5 s after the caster's death (1 positive, 3
-# inconclusive of 4 deaths); the strike level of a dead caster stays
-# RECONSTRUCTION (said at open_area).
+# tape, past a DEFEAT MARK -- a clean tick 1.5 s after the caster's dead bit,
+# the lost match's mark on its surviving party (CASTAI-ZF25), not a kill; a
+# caster killed in play has no witness (1 positive, 3 inconclusive of 4
+# deaths) and the kept area stays RECONSTRUCTION for it, as does the strike
+# level of a dead caster (said at open_area).
 #
 # The SHAPE is Fire Storm's; the other two rows content carries are WIKI +
 # RECONSTRUCTION (NOT FOUND on any tape, aotjoin P8): Meteor Shower 192
@@ -17215,10 +17217,11 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # `tick_ramp`: tick k deals k x its scale, area_tick_ramp below) -- all never
 # cast on a tape, so Fire Storm's shape is RECONSTRUCTION for them. Six stay
 # inert (77, 196, 215, 844, 1083, 1372): each needs a clause of its own.
-# THE CASTER'S DEATH (weapons 45): the area OUTLIVES it -- OBSERVED n = 1
-# (20260929T100038 :51199, Fire Storm cast at 562.188: the Zaishen Mage dead at
-# completion + 8.487, a clean tick at + 9.989 on two foes), the reading the
-# server already made.
+# THE CASTER'S DEATH (weapons 45): the area OUTLIVES its caster's DEFEAT
+# MARK -- OBSERVED n = 1 (20260929T100038 :51199, Fire Storm cast at 562.188:
+# the Zaishen Mage's dead bit at completion + 8.487, the lost match's mark, a
+# clean tick at + 9.989 on two foes), the reading the server already made; a
+# caster killed in play has no witness.
 #
 # Where it runs: the completion opens the area (open_area at the player's E5
 # and at a body's 58) and lands NOTHING on the target -- today's single word
@@ -18140,9 +18143,10 @@ def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, ao
     on state["areas"] that area_tick serves. A BODY caster's row is
     snapshotted (`caster_row`) so a caster killed or despawned mid-area still
     resolves its ticks at the strike level it had -- the area OUTLIVES its
-    caster (OBSERVED n = 1, weapons 45: a clean tick 1.5 s after the Zaishen
-    Mage's death; the snapshotted strike level is RECONSTRUCTION). Returns the
-    area."""
+    caster (OBSERVED n = 1 past a defeat mark, weapons 45: a clean tick 1.5 s
+    after the Zaishen Mage's lost-match dead bit; a caster killed in play has
+    no witness, and the snapshotted strike level is RECONSTRUCTION). Returns
+    the area."""
     radius, duration = aot
     now = time.time()
     period = area_tick_period(skill_id)

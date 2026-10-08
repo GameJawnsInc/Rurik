@@ -2907,9 +2907,11 @@ while the caster walks. Client (38797): type_code 5, TARGET BYTE 16, aoe_range 1
 foe's location. For 10 seconds, foes adjacent to that location are struck for 5...35 fire damage \
 each second". NOT modelled, said here: who stands inside 156 u at \
 each tick on the tape (every non-observer position is a lead). Whether the caster's death ends the \
-area was INCONCLUSIVE here (2 casts, both areas empty); 2026-10-07 (weapons 45) it is OBSERVED n = 1 \
-on 20260929T100038 :51199 -- a clean tick at completion + 9.989, 1.5 s after the caster's death -- \
-and the server keeps the area, as it did."""
+area was INCONCLUSIVE here (2 casts, both areas empty); 2026-10-07 (weapons 45) the area OUTLIVES \
+its caster's DEFEAT MARK, OBSERVED n = 1 on 20260929T100038 :51199 -- a clean tick at completion + \
+9.989, 1.5 s after the caster's dead bit, which is the lost match's mark on every surviving party \
+body (CASTAI-ZF25), not a kill in play; a caster killed in play has no witness (the one candidate, \
+:58544, struck nobody after) -- and the server keeps the area, as it did."""
 
 [skill_effect.192]
 scale_means = "Fire damage"

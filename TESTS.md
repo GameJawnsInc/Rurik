@@ -14022,7 +14022,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   (585, 120) reads 18-26, order-free, a 100 changes nothing, no repo item carries it.
   Floor 129 (114 + 15)),
   `toolkit/authsrv/test_aotrows.py` (**2026-10-07, studies/weapons/PLAN.md 45: five more
-  areas over time go live, and the caster's death gets its witness.** Breath of Fire 1094,
+  areas over time go live, and the caster's death gets a witness past a defeat mark.** Breath of Fire 1094,
   Snow Storm 2222, Ray of Judgment 830, Spirit Rift 910 and Savannah Heat 1380 carry
   client-table rows (`content/world.toml` after 167's); 910's `tick_period = 3.0` is one
   strike at +3.0, 1380's `tick_ramp = "elapsed"` makes tick k deal k x its scale
@@ -14056,10 +14056,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   (vault/captures/live) aotjoin over the two Zaishen tapes: 8 + 12 Fire Storms, k = 1..10
   only, 97 instants and ONE late tick (P5r), against the server's 197 schedule read off its
   row (+k s for exactly those k); cast #17 (:51199, 562.188) the caster dead at
-  +8.487 and a clean k = 10 tick at +9.989 on foes 4 and 6; the server's hostile Fire Storm,
+  +8.487 and a clean k = 10 tick at +9.989 on foes 4 and 6, and that dead bit's CONTEXT read off the
+  wire by `deepwoundjoin.sequence` (2026-10-07, review VF-1): agent 8 flagged dead in the caster's
+  batch and both takers' match-end setter `0x00A2 [55, foe, 0.6085]` at one instant before it --
+  the lost match's DEFEAT MARK (CASTAI-ZF25), not a kill in play; the server's hostile Fire Storm,
   its caster killed after k = 8, still words the player at k = 9 and 10, against the
   known-bad arm of an area that ends with its caster. MUTATION PASS (scratch, throwaway):
-  fifteen arms against sections 1-5 and 4b -- a control green at 26, and each of fourteen mutations reddens at least one check: `_area_strike` ignoring the ramp, `open_area` recording none, the condition on the first tick only, `AREA_TICK_RAMP` defaulting off, `tick_amount` always flat, `area_tick_ramp` ignoring the flag, a body's tick amount + 1 (an off-by-one on the body path, which §4 catches; the first draft listed it as "a body's tick off the ramp's amount", which it is not), a body's tick off the FLAT area amount and the ramp recorded for the player's areas only (both GREEN on the first draft, red on §4b), the ramp dropped for a party body's area only (red on §4b's hero check alone), and the rows mutated (830's Burning label dropped, 910's period dropped, 2222's label misspelt, 1094 given a period); and on the vault, §6's 197 schedule read as a 2 s period or a 9 s duration reddens its first check. 26 checks + 2 declared skips bare (`RURIK_VAULT` at a nonexistent path
+  fifteen arms against sections 1-5 and 4b -- a control green at 26, and each of fourteen mutations reddens at least one check: `_area_strike` ignoring the ramp, `open_area` recording none, the condition on the first tick only, `AREA_TICK_RAMP` defaulting off, `tick_amount` always flat, `area_tick_ramp` ignoring the flag, a body's tick amount + 1 (an off-by-one on the body path, which §4 catches; the first draft listed it as "a body's tick off the ramp's amount", which it is not), a body's tick off the FLAT area amount and the ramp recorded for the player's areas only (both GREEN on the first draft, red on §4b), the ramp dropped for a party body's area only (red on §4b's hero check alone), and the rows mutated (830's Burning label dropped, 910's period dropped, 2222's label misspelt, 1094 given a period); and on the vault, §6's 197 schedule read as a 2 s period or a 9 s duration reddens its first check, and five in-memory edits of the decoded :51199 stream each redden the cast-#17 check alone (agent 8's dead word dropped or moved 0.2 s later, taker 4's setter dropped, both setters moved after the death, taker 6's set to 1.0). 26 checks + 2 declared skips bare (`RURIK_VAULT` at a nonexistent path
   and at an empty directory alike), 30 vaulted; the floor is 26 + 1 per vault/content + 3
   per vault/captures/live, decided on the directories. ~45 s with the vault (the census of
   two captures), a few seconds bare. No socket, no client),

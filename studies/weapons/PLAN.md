@@ -3144,7 +3144,7 @@ Three close or correct this plan:
   and `skill_effect.204` now carries 10 / 85, build 38888 (rank 12: 70). The content overlay
   follows 38888 from that day; the pin stays 38797.
 
-## 45. Areas over time -- 2026-10-07: five more go live, and the caster's death gets its witness (desk pass 9, lane desk-aotrows)
+## 45. Areas over time -- 2026-10-07: five more go live, and the caster's death gets a witness past a defeat mark (desk pass 9, lane desk-aotrows)
 
 **Why now.** `PLAN.md` §8.1 carried two clauses this section answers: "the other eleven
 areas over time carry no row and are inert" and "whether a caster's death ends its area
@@ -3169,7 +3169,7 @@ P6 the twenty Zaishen casts tick only at k = 1..10 within 0.05 s.
 | P2 | HELD: `skill_damage(sid, 12)` = `skill_scale_value(sid, 12)` = 34 / 38 / 42 / 105 / 17; `skill_condition(830, 12)` = (480, 3.0), `(910, 12)` = (2077, 16.0). |
 | P3 | HELD (the server's schedule; RECONSTRUCTION as a claim about retail -- none of the five was ever cast on a live tape, aotjoin P8). |
 | P4 | HELD, behind the new field (below). |
-| P5 | HELD, with the offsets FROM THE COMPLETION (+2.011 after the announce): WEAPONS-C11 below. |
+| P5 | HELD, with the offsets FROM THE COMPLETION (+2.011 after the announce): WEAPONS-C11 below -- where the "death word" turns out to be the lost match's defeat mark, not a kill. |
 | P6 | WRONG in one tick: 97 tick instants inside the reader's 0.05 s gate at k = 1..10 only, and ONE late tick outside it (51090 390.030 k = 2 at +2.068 -- CASTAI-Z2's P5r, inside the registered 0.100). The triage's "all within about 0.05 s" carried the same error. |
 
 **The records and the templates** (OBSERVED; `skilltable.py`, and `skilldesc.py --row`
@@ -3209,7 +3209,8 @@ template text in the repo):
   pass (CASTAI-ZF31), and `test_aotrows` pins that one check with the cross-lane note.
   A condition on a FOE still sends no `[6]` id (Burning, Cracked Armor -- §8.1's known gap).
 
-**WEAPONS-C11 -- the area OUTLIVES its caster: OBSERVED, n = 1.** Re-derived with
+**WEAPONS-C11 -- the area OUTLIVES its caster's DEFEAT MARK: OBSERVED, n = 1; a caster
+killed in play: no witness (its one candidate is inconclusive).** Re-derived with
 `aotjoin.py --rows --stamp 20260928T103123 --stamp 20260929T100038` and a raw read of the
 connection through `deepwoundjoin.sequence`. Cast #17, `20260929T100038` :51199: agent 10
 (the Zaishen Mage) announces Fire Storm at 562.188 on agent 3, completes at +2.011
@@ -3218,7 +3219,7 @@ status word gains the dead bit at completion + 8.487 (`0x00F1 [10, 16]`, t 572.6
 body-death flags `0x0026 [10, 8]` behind it) and it is the LAST status word agent 10 gets
 on the connection (no revival, no re-create; the connection runs to +18.261); at +9.989
 (k = 10, phase -0.011) a CLEAN tick lands, `[16, 4, 10, -0.0629]` and `[16, 6, 10,
--0.0629]` -- 1.502 s after the caster's death. Nothing else of agent 10's can explain it:
+-0.0629]` -- 1.502 s after the caster's dead bit. Nothing else of agent 10's can explain it:
 its only other cast in the window is Incendiary Bonds 179 (completed +2.990, on agent 3,
 whose end fires seconds earlier and not on 4 / 6). **The death's context** (OBSERVED,
 `deepwoundjoin.sequence` over t 570.6..574.6; offsets from the completion): agent 10 is
@@ -3229,25 +3230,40 @@ observer. Agent 10's last damage word is ONE property-55 word from agent 3 at +6
 (`0x00A0 [20, 10, 3, 487]`, then `0x00A3 [55, 10, 3, -0.0486]` -- CASTAI-ZF31's channel),
 1.519 s before its dead bit; agent 8 takes no word in the window. The observer dies at
 +7.968 (`0x00F1 [7, 16]`, morale `0x00EE [10, -15]`, studies/character/FINDINGS.md's
-death signature), a batch at +8.237 sets the status words of agents 3, 4, 5 and 6 to 0
-(unexplained), and at +8.487 agents 8 and 10 are flagged dead TOGETHER, in one batch with
-the same flags, 0.519 s after the observer. Three things are said, not resolved. (1) The
-cause of agent 10's death is UNOBSERVED (the +6.968 word did not flag it dead, where the
-observer's own killing word and dead bit share one batch at +7.968 -- so no word on this
-stream marks the death; RECONSTRUCTION, n = 1 of that pairing), so **whether an ordinary
-combat death ends the area the same way is the limit of this n = 1**: what was seen is a
-clean tick, cause 10, after agent 10's dead bit, in a death that came with its fellow
-ally's and followed the observer's. (2) The k = 10 fraction on taker 4 (-0.0629) differs
-from its k = 1..2 value (-0.0642), which aotjoin's `pairs_varied` names and nothing here
-explains. (3) Positions are leads, so who stood inside at k = 4..9 is untestable. (Corrected 2026-10-07 after review: this paragraph first said "neither has a
-damage word in the 2 s before" of agents 8 and 10 -- false for agent 10; the lane's own
-read printed the word and the sentence missed it.) **The tally of caster deaths with the area live:
-1 positive, 3 inconclusive of 4** -- §41's two (20260817T231139 #10 +4.676, #13 +6.92, both
-areas empty), and #8 on `20260928T103123` :58544 (agent 9 dead at +8.05, nobody struck
-after k = 4). The server already KEPT the area (§42's RECONSTRUCTION, locked in
-test_weapons 30 (e)); that reading is now OBSERVED, n = 1. Still RECONSTRUCTION: a dead
-caster's ticks at its snapshotted strike level (the tape's takers are PvP players whose
-armour is unknown).
+death signature); a batch at +8.237 sets the status words of agents 3, 4, 5 and 6 to 0 and
+carries match 4's match-end RESETS, `0x00A2 [55, 3 / 4 / 6, 0.6085]` (= 300/493) and `[55,
+5, 1.0]` (CASTAI-ZF25's health setter; zaishenrun's resets at 572.437); and at +8.487
+agents 8 and 10 are flagged dead TOGETHER, in one batch with the same flags, 0.519 s
+after the observer. **What that dead bit is: the lost match's DEFEAT MARK, not a kill.**
+Match 4 is LOST (studies/monsterai/FINDINGS.md 18.3), and `python
+studies/monsterai/review/zaishenrun.py --capture 20260929T100038` lists its end marks at
+572.686: the Mage (agent 10) at a reconstructed 0.4955 of its health and the Archer
+(agent 8) at 0.9459, marked dead at one instant. CASTAI-ZF25 is OBSERVED as a pattern on
+matches 4 and 5 (a lost match marks every surviving party body dead at one instant,
+health untouched); reading it as the match's end is zaishenrun's RECONSTRUCTION. That is
+why no word on this stream marks the death. So **whether a caster killed in play ends its
+area has no witness**: what was seen is a clean tick, cause 10, after its caster's defeat
+mark and after the match-end resets, on two Monks reset to 300/493. `test_aotrows` §6
+reads both marks off the wire (agent 8 dead in the caster's batch; both takers' 0.6085
+setter at one instant before it). Two things are said, not resolved. (1) The k = 10
+fraction on taker 4 (-0.0629) differs from its k = 1..2 value (-0.0642), which aotjoin's
+`pairs_varied` names and nothing here explains. (2) Positions
+are leads, so who stood inside at k = 4..9 is untestable. (Corrected twice on 2026-10-07
+after review: the first draft said "neither has a damage word in the 2 s before" of
+agents 8 and 10 -- false for agent 10, whose one word the lane's own read printed; the
+second called the death's cause UNOBSERVED and the +8.237 batch unexplained, where
+zaishenrun and CASTAI-ZF25 already read both as match 4's end.) **The tally of caster
+deaths with the area live: 1 positive -- past a defeat mark, not a kill -- and 3
+inconclusive of 4** -- §41's two (20260817T231139 #10 +4.676, #13 +6.92, both areas
+empty), and #8 on `20260928T103123` :58544: agent 9 dead at +8.05 and nobody struck after
+k = 4. That one is the corpus's only caster KILLED IN PLAY: its dead bit rises alone, 29 s
+before the connection ends, at a reconstructed 0.0326 of its health (castethogram's
+`death_checks`, the instrument zaishenrun's marks read; RECONSTRUCTION) -- and it is
+inconclusive. The server already KEPT the area (§42's RECONSTRUCTION, locked in
+test_weapons 30 (e)); that reading is OBSERVED n = 1 only past a defeat mark, and stays
+RECONSTRUCTION for a caster killed in play. Still RECONSTRUCTION: a dead caster's ticks
+at its snapshotted strike level (the takers' armour is unknown: §41's are PvP players,
+:51199's the Zaishen Monks).
 
 **WEAPONS-C12 -- the eleven, read: what each of the six left needs** (OBSERVED,
 `skilldesc --row` on the pinned 38797 client, labels and flags only; none cast on tape):
@@ -3299,12 +3315,17 @@ whole points of k x the interpolator's amount, five distinct drops; before it, a
 that dropped the ramp stayed green. `--no-area-tick-ramp` parsed, its main() block EXECUTED (and the block without
 its `global` shown not to bind). On the vault: the twenty Zaishen casts against the
 server's 197 schedule read off its row, cast #17's
-post-death tick, and the server's hostile Fire Storm with its caster killed after k = 8
+tick after its caster's dead bit with that bit's defeat-mark context read off the wire
+(agent 8 dead in the same batch, both takers' match-end setter before it; added in the
+second review, and each of five in-memory edits of the decoded stream reddens it), and
+the server's hostile Fire Storm with its caster killed after k = 8
 still wording the player at k = 9 and 10 -- against the known-bad arm of an area that ends
 with its caster.
 
 **Left (OUT of this lane, carried on `PLAN.md` §8.1 and here):** Maelstrom 215, Chaos Storm
-77, Searing Heat 196's end rider, 844 / 1083 / 1372's clauses (WEAPONS-C12); bodies'
+77, Searing Heat 196's end rider, 844 / 1083 / 1372's clauses (WEAPONS-C12); a caster
+KILLED IN PLAY with its area live and struck after (WEAPONS-C11: no witness; the one
+candidate, :58544, is inconclusive); bodies'
 adjacent damage and Cyclone Axe (no witness anywhere in the corpus); the `+0x80` and
 visual-column leads (UNVERIFIED); the wiki reads; and a client run of the new rows (the
 owner's, after landing -- the runsheet is in the lane's report).
