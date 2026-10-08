@@ -479,7 +479,9 @@ def section_bodies_and_own():
               and words(sent3, P55) == [],
               f"6{'c' if sid == BANISH else 'd'}2. and the revert arm puts the own cast back on "
               f"16", words(sent3, P16, P55))
-    # an AREA's tick on the same rule, both casters (a holy row under a synthetic area)
+    # an AREA's tick on the same rule, both casters (a holy row under a synthetic area).
+    # RECONSTRUCTION, like 6c / 6d: no armour-ignoring area over time is on any tape; the
+    # rule is carried over from retail's periodic split by type (study section 68.2).
     for caster_kind in ("player", "body"):
         st = {"agents": {FOE: body("foe", HOSTILE, (60.0, 0.0)),
                          HATCHER: body("hatcher", HOSTILE, (0.0, 300.0)),
@@ -501,8 +503,9 @@ def section_bodies_and_own():
                       (P55, MONK, HATCHER, f32r(-0.2))])
         check(w55 == want and w16 == [],
               f"6e. an area's tick ({caster_kind} caster) takes the cast's rule: a holy row's "
-              f"ticks ride 55 (retail's periodic damage splits by type: 272's pulses 64/64 on "
-              f"55, Fire Storm 197's ticks 12/12 on 16)", (w55, w16))
+              f"ticks ride 55 (RECONSTRUCTION: no armour-ignoring area over time is on tape; "
+              f"retail's periodic damage splits by type: 272's pulses 64/64 on 55, Fire Storm "
+              f"197's ticks 12/12 on 16)", (w55, w16))
 
 
 def section_source():
