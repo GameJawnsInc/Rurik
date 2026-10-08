@@ -35,27 +35,50 @@ registered form beside the corrected one rather than rewriting it):
       net word is negative; a degeneration apply on a running ramp sends the
       effects-only sum (the natural term drops to 0, not natural - degen).
 
-WHAT THE CORPUS SAID (`score`; numbers in the study, never typed here):
+WHAT THE CORPUS SAID (`score`, printed by `main`; the study carries every
+number, and the few quoted here are the run of 2026-10-07 / 10-08 that the
+study records -- re-run `main` rather than trust them):
   * P2 as registered is REFUTED IN PART: a natural first step also follows,
     by 5.00 s, the wearer's OWN attack (the swing's start, its hit, a ranged
     launch 0x00A4), a FOE's activation aimed AT the wearer (landed or not:
-    20260824T074002 hostile 29, 2 of 2), and any skill's LANDING on it (four
-    friendly Windborne Speed landings). P2(c) as registered -- any own
-    activation -- is refuted outright: a self heal (Healing Signet) never
-    resets the ramp. `ANCHOR_CLASSES` is the corrected set; `first_steps`
-    scores both. Two members are carried WITHOUT a binding witness, and
+    20260824T074002 hostile 29, 2 of 2), and a skill's LANDING on it (four
+    friendly Windborne Speed landings -- an ENCHANTMENT's; a HEAL's landing
+    is the next bullet). P2(c) as registered -- any own activation -- is
+    refuted outright: a self heal (Healing Signet) never resets the ramp.
+    `ANCHOR_CLASSES` is the corrected set; `first_steps` scores both. ONE
+    member binds no first step of a SCORED kind (the observer, hostiles), and
     `score`'s binding census says so: OWN_CAST (the wearer's offensive skill
-    completion -- RECONSTRUCTION by analogy with the swing; its one candidate,
-    20260917T224104 hostile 117, is CONTESTED, and its [58] shares a batch with
-    its own 0x00A4). And a FRIENDLY activation aimed at the wearer is NOT an
-    anchor (FRIEND_ACT, reported only): the zero rides it, but on
-    20260928T103123 :50061 an ally's interrupted cast at the observer left the
-    timer where it was (n=1) -- a case this reader cannot score, because a
-    natural run starts from a zero word and that ramp was already counting.
-    Before the review split it out (2026-10-07, EV-2) a friendly activation
-    was TARGETED; the split moves no number (P2 19 of 19, 21 of 22, the
-    binding census unchanged), because every friendly witness binds on its
-    LANDING, which comes later.
+    completion -- RECONSTRUCTION by analogy with the swing). The one scored
+    step it would put on time, 20260917T224104 hostile 117's (5.000 s after a
+    [58] whose batch also holds its own 0x00A4, an OWN_HIT), binds on a later
+    Bleeding end instead and is the CONTESTED 0.78 s. On the UNSCORED 'other'
+    kind (PvP players, tokens att1 / att2) OWN_CAST does bind two on-time
+    first steps (`p2_owncast_other`): 20260929T100038 :62925 agent 6 with no
+    other anchor in reach, and 20260928T103123 :58544 agent 4 with a LOSS in
+    the same instant (the sort credits OWN_CAST; the LOSS alone puts it on
+    time too). They are reported, never scored -- that kind's first steps
+    are unreliable (a minority on time: another player's 0x0042 never
+    reaches the observer, so an invisible effect's word passes for a step)
+    -- so the label stays RECONSTRUCTION. And one class is REPORTED, never
+    an anchor: a FRIENDLY activation aimed at the wearer (FRIEND_ACT): the
+    zero rides it, but on 20260928T103123 :50061 an ally's interrupted cast
+    at the observer left the timer where it was (n=1) -- a case this reader
+    cannot score, because a natural run starts from a zero word and that
+    ramp was already counting. Before the review split it out (2026-10-07,
+    EV-2) a friendly activation was TARGETED; the split moves no number (P2
+    19 of 19, 21 of 22, the binding census, and the 'other' kind's counts
+    unchanged), because every friendly witness binds on its LANDING, which
+    comes later.
+  * A FRIENDLY HEAL's LANDING (`heal_landings`: a non-foe [20] whose batch
+    carries a positive 55 from the same caster on the wearer) is still
+    classed TARGETED, and NOTHING SCORED BEARS ON IT: no observer or hostile
+    first step is bound by one (`p2_heal_bound`). The unscored kind leans
+    AGAINST it anchoring (`p2_heal_crossed`): two PvP players' first steps
+    run 5.000 s from their own OWN_CAST straight across a teammate's heal
+    landing (20260817T231139 :54071 agent 13, 2.08 s before its step;
+    20260929T100038 :62925 agent 3, 3.48 s before), and most of that kind's
+    EARLY first steps are early only against a heal landing. CONTESTED, and
+    that is the label the server's reset at a hero heal's landing wears.
   * The natural ramp CAPS AT +7 (`cap_witnesses`): with health still below
     the maximum (no [32] for seconds after), no word ever carries an 8th step.
   * Property 32 (GV_MAX_HP_REACHED, 0x009F [32, agent, 0]) ends a positive
@@ -217,20 +240,26 @@ def timeline(seq, build=None):
                  projectile's lands a flight after the release that anchors)
       OWN_CAST   the agent's completion [58|46] of an activation it AIMED AT A
                  FOE (a different allegiance token, neither 'nonc') --
-                 carried, binds no on-time step (RECONSTRUCTION)
+                 carried, binds no on-time step of a SCORED kind
+                 (RECONSTRUCTION; two of the unscored 'other' kind, reported)
       TARGETED   a FOE's activation naming the agent, and any skill's landing
                  on it ([20, agent, caster])
       FRIEND_ACT a NON-foe's activation naming the agent (reported, not an
                  anchor: an interrupted one kept the timer, :50061)
       SELF_CAST  the agent's completion of a skill aimed at itself or an ally
                  (scored as NOT an anchor -- P2(c)'s refutation)
-    """
+    and "heal_landings" {agent: [t]}: the TARGETED landings that are a
+    NON-foe's HEAL (a positive 55 from the same caster on the agent within
+    BATCH) -- reported beside the anchors, never removed from them (CONTESTED,
+    the module docstring)."""
     s2c = [(t, op, v) for _i, t, op, v in seq]
     out = {"observer": adrenjoin.whose_agent(s2c), "tokens": {}, "build": build,
            "words": collections.defaultdict(list), "hmax": collections.defaultdict(list),
            "anchors": collections.defaultdict(list), "full": collections.defaultdict(list)}
     ev = {"applies": [], "removes": []}
     aimed = {}                       # caster -> target of its last activation
+    landings = []                    # (t, target, caster): every [20] on another agent
+    heals = collections.defaultdict(list)    # (target, cause) -> [t] of a positive 55
     for t, op, v in s2c:
         if op == OP_CREATE and len(v) > 12:
             out["tokens"][v[1]] = int(v[12]).to_bytes(4, "big").decode("latin1")
@@ -262,6 +291,8 @@ def timeline(seq, build=None):
                 out["anchors"][v[3]].append((t, "DEALT"))
         elif op == OP_FLOAT_T and v[1] == PROP_ARMOR_IGNORING and _f32(v[4]) < 0:
             out["anchors"][v[2]].append((t, "LOSS"))
+        elif op == OP_FLOAT_T and v[1] == PROP_ARMOR_IGNORING and _f32(v[4]) > 0:
+            heals[(v[2], v[3])].append(t)           # a heal: no anchor, reported below
         elif op == OP_LAUNCH:
             out["anchors"][v[1]].append((t, "OWN_HIT"))
         elif op == OP_INT and v[1] in PROP_SWING_DONE:
@@ -278,6 +309,7 @@ def timeline(seq, build=None):
             aimed[v[2]] = v[2]                      # untargeted: self
         elif op == OP_INT_T and v[1] == PROP_EFFECT_ON_TARGET and v[2] != v[3]:
             out["anchors"][v[2]].append((t, "TARGETED"))
+            landings.append((t, v[2], v[3]))
         elif op == OP_INT and v[1] in PROP_COMPLETIONS:
             caster = v[2]
             target = aimed.pop(caster, None)
@@ -285,6 +317,10 @@ def timeline(seq, build=None):
                 out["anchors"][caster].append((t, "OWN_CAST"))
             else:
                 out["anchors"][caster].append((t, "SELF_CAST"))
+    out["heal_landings"] = collections.defaultdict(list)
+    for t, target, caster in landings:
+        if not foes(caster, target) and any(abs(th - t) <= BATCH for th in heals.get((target, caster), ())):
+            out["heal_landings"][target].append(t)
     out["episodes"] = bufflog.episodes(ev)
     return out
 
@@ -378,7 +414,7 @@ def negative_ends(tl, agent):
 
 # The anchor sets the study compares. REGISTERED is P2 as written before the
 # run; ANCHOR_CLASSES is the corpus's own (OWN_CAST carried by analogy, binding
-# nothing); ACTIVATIONS adds P2(c)'s refuted reading (any own activation, self
+# no step of a scored kind); ACTIVATIONS adds P2(c)'s refuted reading (any own activation, self
 # casts included) and keeps the friendly activations it scored before the
 # TARGETED split, so its numbers did not move with it.
 REGISTERED = ("LOSS", "NEGEND")
@@ -651,6 +687,43 @@ def score(rows, **arm):
                                    for f in first_steps(tl, ANCHOR_CLASSES, delay)
                                    if f["kind"] in ("player", "hostile") and f["on_time"])
     out["p2_binding_class"] = dict(by_class)
+    # THE UNSCORED KIND, and the heal landing -- reported, never scored (2026-10-08,
+    # the verifier's VF-1). 'other' first steps are unreliable (another player's
+    # 0x0042 never reaches the observer), but two things on them bear on labels:
+    # where OWN_CAST binds a step, and steps that run from an OWN_CAST straight
+    # across a friendly heal's landing (every anchor in between a heal landing).
+    other = [(stamp, conn, tl, f) for stamp, conn, tl in rows
+             for f in first_steps(tl, ANCHOR_CLASSES, delay) if f["kind"] == "other"]
+    out["p2_binding_class_other"] = dict(collections.Counter(
+        f["class"] for _s, _c, _t, f in other if f["on_time"]))
+    out["p2_owncast_other"] = sorted(
+        (s, c, f["agent"], round(f["t"], 3), round(f["delay"], 3))
+        for s, c, _t, f in other if f["on_time"] and f["class"] == "OWN_CAST")
+    out["p2_heal_bound"] = collections.Counter()
+    out["p2_heal_crossed"] = []
+    for stamp, conn, tl in rows:
+        for f in first_steps(tl, ANCHOR_CLASSES, delay):
+            ag = f["agent"]
+            heal = collections.Counter(tl["heal_landings"].get(ag, ()))   # instant -> heal landings
+            anchors = sorted(list(tl["anchors"].get(ag, ()))
+                             + [(t, "NEGEND") for t in negative_ends(tl, ag)])
+            targeted = collections.Counter(t for t, c in anchors if c == "TARGETED")
+
+            def all_heal(t):            # EVERY TARGETED at instant t is a friendly heal's landing
+                return targeted[t] > 0 and heal[t] == targeted[t]
+
+            if f["class"] == "TARGETED" and all_heal(f["anchor"]):
+                when = "on_time" if f["on_time"] else ("early" if f["delay"] < delay else "late")
+                out["p2_heal_bound"][f"{f['kind']} {when}"] += 1
+            for oc in (t for t, c in anchors if c == "OWN_CAST"
+                       and abs(f["t"] - t - delay) <= TOL):
+                between = [(t, c) for t, c in anchors
+                           if oc < t <= f["t"] + 1e-6 and c in ANCHOR_CLASSES]
+                if between and all(c == "TARGETED" and all_heal(t) for t, c in between):
+                    out["p2_heal_crossed"].append((stamp, conn, ag, f["kind"], round(f["t"], 3),
+                                                   round(f["t"] - oc, 3),
+                                                   round(f["t"] - between[-1][0], 3)))
+    out["p2_heal_crossed"].sort()
     iv = [x for _s, _c, tl in rows for x in step_intervals(tl, step)]
     for kind in ("player", "hostile", "other"):
         ks = [x for x in iv if x[0] == kind]
@@ -692,6 +765,15 @@ def score(rows, **arm):
     return out
 
 
+def jsonable(sc):
+    """`score`'s dict with every tuple KEY named as text: cap_tops is keyed by
+    (kind, top), which json refuses as a key -- `--json` raised on it until
+    2026-10-08."""
+    return {k: ({" ".join(map(str, kk)) if isinstance(kk, tuple) else kk: vv
+                 for kk, vv in v.items()} if isinstance(v, dict) else v)
+            for k, v in sc.items()}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--json", action="store_true")
@@ -700,7 +782,7 @@ def main():
     rows = census(set_aside=aside)
     sc = score(rows)
     if args.json:
-        print(json.dumps(sc, indent=1, default=str))
+        print(json.dumps(jsonable(sc), indent=1, default=str))
         return 0
     print(f"connections {sc['connections']}; set aside {[(a['capture'], a['connection']) for a in aside]}")
     print(f"P1 apply words scored {sc['p1_scored']}, match {sc['p1_match']}; by skill "
@@ -711,6 +793,11 @@ def main():
         for kind in ("player", "hostile", "other"):
             print(f"P2 [{name:11s}] {kind:7s} {sc[f'p2_{name}_{kind}']}")
     print(f"   the binding anchor class of each on-time first step: {sc['p2_binding_class']}")
+    print(f"   UNSCORED 'other' kind (reported): its on-time binders {sc['p2_binding_class_other']}; "
+          f"OWN_CAST binds {sc['p2_owncast_other']}")
+    print(f"   friendly HEAL landings binding a first step, by (kind, timing): "
+          f"{dict(sc['p2_heal_bound'])}; steps run 5 s from an OWN_CAST straight across one "
+          f"(capture, connection, agent, kind, t, from OWN_CAST, from the heal): {sc['p2_heal_crossed']}")
     for kind in ("player", "hostile", "other"):
         print(f"P3 {kind:7s} {sc[f'p3_{kind}']}")
     print(f"CAP: runs that stop below the maximum, by (kind, top): {dict(sc['cap_tops'])}; "

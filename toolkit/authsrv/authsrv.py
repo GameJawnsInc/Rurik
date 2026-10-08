@@ -17564,13 +17564,19 @@ def hex_target_dead(state, agent_id):
 #         that never landed (OBSERVED on a hostile target; the player by the
 #         shared law). The zero rides the activation.
 #       - a cast LANDING on the player: four FRIENDLY Windborne Speed landings
-#         (20260916T213125, 20260917T090355), each step 5.00 s after the [20].
+#         (20260916T213125, 20260917T090355), each step 5.00 s after the [20]
+#         -- an ENCHANTMENT's landing. A friendly HEAL's landing (a hero's
+#         heal) resets too, and that is CONTESTED: no observer or hostile step
+#         bears on it, while on regenjoin's unscored PvP kind two players' steps
+#         run 5.000 s from their own cast at a foe straight across a teammate's
+#         heal landing (p2_heal_crossed; studies/skills 64.3).
 #     A FRIENDLY body's cast in flight at the player HOLDS the level at 0
 #     without restarting the timer: the zero rides a friendly activation (2 of
 #     2 with a ramp up, 090355), and an INTERRUPTED one left the observer's
 #     timer where it was (20260928T103123 :50061, n=1, at level 0).
-#     RECONSTRUCTION, binding no step: the player's own cast completing at a
-#     foe (by analogy with the swing); a hostile landing that deals nothing
+#     RECONSTRUCTION, binding no observer or hostile step: the player's own
+#     cast completing at a foe (by analogy with the swing; two PvP players'
+#     steps, regenjoin's unscored kind, do bind on it); a hostile landing that deals nothing
 #     (one CONTESTED witness, hex 31 on :50061); the hold lasting the whole
 #     flight and the level resuming after an interrupt; a Deep Wound being no
 #     loss for a HURT player (studies/isle 8.4 saw a full one); and the clock
@@ -27514,10 +27520,14 @@ def cast_tick(send, state, conn_id):
             cast["e5_sent"] = True
             # SKILLS-RG: a cast COMPLETING at a foe resets the player's natural
             # ramp -- RECONSTRUCTION by analogy with the swing (regenjoin's
-            # OWN_CAST binds no on-time first step; its one candidate,
-            # 20260917T224104 hostile 117, is CONTESTED and its [58] shares a
-            # batch with its own 0x00A4 launch). One at itself or an ally does
-            # not: OBSERVED, Healing Signet never reset a ramp on the corpus.
+            # OWN_CAST binds no on-time first step of the observer or a
+            # hostile; the one such step it would explain, 20260917T224104
+            # hostile 117's, binds on a later Bleeding end, CONTESTED, and its
+            # [58] shares a batch with its own 0x00A4 launch. Two PvP players'
+            # steps -- the unscored kind -- do bind on it: 20260929T100038
+            # :62925 agent 6 alone, 20260928T103123 :58544 agent 4 with a LOSS
+            # in the same instant). One at itself or an ally does not:
+            # OBSERVED, Healing Signet never reset a ramp on the corpus.
             if ((state.get("agents", {}).get(cast.get("target")) or {}).get("allegiance")
                     == agents.ALLEGIANCE_HOSTILE):
                 natural_reset(state, PLAYER_AGENT_ID, "its own cast at a foe", now)
@@ -39315,7 +39325,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
         # landings, each step 5.00 s after the [20]); a hostile landing that
         # deals nothing is RECONSTRUCTION (hex 31 on :50061, CONTESTED), and so
         # are the completion standing in for a projectile spell's arrival and
-        # a chain-gated body skill that lands on nobody below.
+        # a chain-gated body skill that lands on nobody below. A friendly
+        # HEAL's landing (a hero's) is CONTESTED: nothing scored bears on it,
+        # and two PvP players' steps ran 5.000 s from their own cast straight
+        # across a teammate's heal landing (regenjoin's p2_heal_crossed,
+        # 20260817T231139 :54071 agent 13, 20260929T100038 :62925 agent 3).
         natural_reset(state, PLAYER_AGENT_ID,
                       f"agent {agent_id}'s skill {skill_id} landing on it")
     _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})

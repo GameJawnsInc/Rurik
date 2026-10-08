@@ -10008,8 +10008,9 @@ OBSERVED (`first_steps`, `step_intervals`, `cap_witnesses`):
   The binding anchor of each on-time first step: observer LOSS 4, NEGEND 8, OWN_HIT 2,
   OWN_START 1, TARGETED 4; hostile LOSS 10, NEGEND 8, OWN_HIT 1, TARGETED 2.
 - **The anchors** (`regenjoin.ANCHOR_CLASSES`; each OBSERVED class below binds at least one
-  on-time step -- OWN_CAST, the last, binds none and is carried as RECONSTRUCTION, which
-  test_regenjoin §2 now asserts both ways):
+  on-time step -- OWN_CAST, the last, binds none of the SCORED kinds (observer, hostiles) and is
+  carried as RECONSTRUCTION, which test_regenjoin §2 asserts both ways; it does bind two steps of
+  the unscored 'other' kind, below):
   - LOSS: a damage word ([16|17] < 0) or a negative 55 on the agent.
   - NEGEND: the end of a window in which the agent's net word was negative -- degeneration is a
     continuous loss and the timer runs from its last instant (16 cases, 64.4).
@@ -10031,7 +10032,9 @@ OBSERVED (`first_steps`, `step_intervals`, `cap_witnesses`):
       under an Isle NPC's Windborne Speed 160, 20260917T090355 three times (398.877, 412.877,
       426.879) and 20260916T213125 once (502.521) -- a FRIENDLY cast -- each step 4.992 to
       5.000 s after the [20], 0.75 s after the activation. OBSERVED, n = 4, one skill, one NPC
-      kind.
+      kind -- an ENCHANTMENT's landing. **A friendly HEAL's landing is SKILLS-RG8, CONTESTED**
+      (below the OWN_CAST bullet): regenjoin still classes it TARGETED, and the server resets on
+      it.
     - (c) **a FRIENDLY activation is NOT an anchor** (`FRIEND_ACT`, reported, 473 on the
       corpus): the zero rides it where the ramp was up (090355 at 412.126 and 426.129: +5 ->
       0), but on 20260928T103123 :50061 ally 8's Word of Healing 282 at the observer (204.514)
@@ -10047,11 +10050,46 @@ OBSERVED (`first_steps`, `step_intervals`, `cap_witnesses`):
     on the cast's LAST tick: 1.1 s late on hostile 29's shape and 4.0 s late on :50061's (the
     evidence review's simulation through the real natural_tick).
   - OWN_CAST (RECONSTRUCTION): the agent's completion [58|46] of an activation aimed at a foe.
-    It binds no on-time step: its one candidate (224104 agent 117, a life-steal's [58] at
-    408.526, -5.000 s) is the CONTESTED case below, where NEGEND is later -- and that [58]
-    shares its batch with 117's own 0x00A4 launch [117, ..., 403], so even that instant is an
-    OWN_HIT. Carried by analogy with the attack (OWN_START / OWN_HIT) because nothing on the
-    corpus refutes it.
+    It binds no on-time step of a SCORED kind: the one such step it would put on time (224104
+    agent 117, a life-steal's [58] at 408.526, -5.000 s) is the CONTESTED case below, where
+    NEGEND is later -- and that [58] shares its batch with 117's own 0x00A4 launch [117, ...,
+    403], so even that instant is an OWN_HIT. **On the unscored 'other' kind it binds two
+    on-time first steps** (re-derived 2026-10-08 for the verifier's VF-1; `score`'s
+    `p2_owncast_other`, printed by `main`): 20260929T100038 :62925 agent 6 ('att2') at 263.458,
+    4.999 s after its [58] with no other anchor in reach (without OWN_CAST its latest anchor is
+    an OWN_HIT 7.60 s back), and 20260928T103123 :58544 agent 4 ('att2') at 629.118, 5.002 s
+    after a [58] that shares its instant with a LOSS (the sort credits OWN_CAST; the LOSS alone
+    puts it on time too). Three more 'other' steps sit 5.000 s after an OWN_CAST with a later
+    anchor in between (SKILLS-RG8). Carried by analogy with the attack (OWN_START / OWN_HIT)
+    because nothing on the corpus refutes it; the PvP steps lean toward it, and the label stays
+    RECONSTRUCTION because that kind is unscored (below).
+  - **SKILLS-RG8 -- a friendly HEAL's landing: CONTESTED** (2026-10-08, found re-reading VF-1's
+    witnesses raw; `regenjoin.timeline`'s `heal_landings` -- a non-foe [20] whose batch carries
+    a positive 55 from the same caster on the agent -- and `score`'s `p2_heal_bound` /
+    `p2_heal_crossed`). Still classed TARGETED; reported beside it, never removed:
+    - nothing SCORED bears on it: no observer or hostile first step is bound by a heal landing,
+      on time or not (the four TARGETED (b) witnesses are a heal-free enchantment);
+    - two PvP players' first steps run 5.000 s from their own OWN_CAST STRAIGHT ACROSS a
+      teammate's heal landing, every anchor in between a heal landing: 20260817T231139 :54071
+      agent 13 ('att1'; [58] 651.878, ally 12's skill 282 activated at it 654.049, landed
+      654.800 with two positive 55s, step 656.879 -- 2.078 s after the heal) and
+      20260929T100038 :62925 agent 3 ('att2'; [58] 258.459, ally 4's landing 259.977 with a
+      positive 55, step 263.458 -- 3.481 s after it). A third, :51199 agent 3 (530.167 ->
+      535.166 across heal landings at 534.165), is muddied by a negative window ending in the
+      heal's batch, so the reader does not count it;
+    - and 14 of the 'other' kind's 20 EARLY first steps are early only against a heal landing
+      (bound by one, 0.0 to 4.4 s before the step). Some of those are an invisible effect's
+      word (another player's 0x0042 never reaches the observer; two sit 0.0 s after the
+      landing), so the count is a lean, not a witness.
+    So the three exactly-5.000 s steps across a heal (two clean, one muddied; within 1.5 ms
+    of 5.000 each) are hard to call chance, and they say a
+    heal's landing did NOT restart a PvP player's timer, where an enchantment's landing (b)
+    restarted the observer's. Both can hold (a landing that APPLIES an effect resets, a bare
+    heal does not), and nothing on the corpus separates them for the player. **The server's
+    land_skill resets on ANY landing at the player, a hero's heal included, and wears this
+    CONTESTED at the call site**. Our own client cannot settle it (on loopback our server
+    decides the reset and the client only draws the word); a RETAIL tape where a hero or ally
+    heals the observer while its ramp is counting does (64.7 item 1).
 - **Not anchors, each refuted by a case**: the agent's own self or ally skill (Healing Signet
   completions inside running ramps, 20260917T090355; Resurrection Signet at an ally,
   :54071); a condition or hex landing with no caster activation (124314: Blind at -0.204 s
@@ -10067,9 +10105,12 @@ OBSERVED (`first_steps`, `step_intervals`, `cap_witnesses`):
 - **CONTESTED, n = 1, named in the test**: 20260917T224104 agent 117 at 413.526 stepped +1 0.78 s
   after its Bleeding ended (NEGEND) -- 5.000 s after its own life-steal completion. Every other
   degeneration end anchors (64.4). Unexplained; the agent was casting through the window.
-- **Other PLAYERS' ramps** (PvP, tokens att1 / att2; 28 runs): 4 of 28 on time, 20 early. Their
-  0x0042 never reaches the observer, so a regeneration skill is invisible and its +k reads
-  as a step; reported, never scored.
+- **Other PLAYERS' ramps** (PvP, tokens att1 / att2; 28 first steps): 7 of 28 on time, 20
+  early, 1 late under the corrected anchors (`P2 [anchors] other`; on-time binders OWN_HIT 4,
+  OWN_CAST 2, OWN_START 1). Their 0x0042 never reaches the observer, so a regeneration skill is
+  invisible and its +k reads as a step; reported, never scored. (Until 2026-10-08 this line
+  read "4 of 28 on time" -- the [registered] and [activations] count, not the anchors'; the
+  TARGETED split did not move it either, re-run with the pre-split classing: 7 / 20 / 1.)
 
 ### 64.4 SKILLS-RG4 — P5 reconciled: zero while the EFFECTS are a loss
 
@@ -10144,16 +10185,19 @@ after it.
   - a FOE's activation aimed at the player (enemy_attack_tick, from the activation, landed or
     not: 64.3 TARGETED (a), OBSERVED on a hostile target, the player by the shared law).
   - a cast's LANDING on the player (land_skill, any caster: 64.3 (b), OBSERVED for a friendly
-    enchantment; a hostile landing that deals nothing is RECONSTRUCTION, as are the completion
-    standing in for a projectile spell's arrival and a chain-gated body skill that lands on
-    nobody).
+    enchantment; a friendly HEAL's landing is CONTESTED, SKILLS-RG8; a hostile landing that
+    deals nothing is RECONSTRUCTION, as are the completion standing in for a projectile spell's
+    arrival and a chain-gated body skill that lands on nobody).
   - and a FRIENDLY body's cast in flight at the player HOLDS the level at 0 without touching the
     anchor (64.3 (c)): an interrupted one gives the ramp back. A hostile's in-flight cast holds
     nothing. The first cut polled ANY body's cast at the player and re-anchored on every tick
     of it, so its timer ran from the cast's last tick (EV-2).
   **A hero's heal at the player therefore holds the player's ramp from its activation and
-  restarts it at its landing** -- OBSERVED for an NPC's friendly enchantment, RECONSTRUCTION
-  for a hero's heal. DIVERGENCE: retail's reset zero rides the event's batch; ours goes out
+  restarts it at its landing** -- OBSERVED for an NPC's friendly enchantment; for a hero's
+  heal the hold is RECONSTRUCTION and the restart at the landing is CONTESTED (SKILLS-RG8: two
+  PvP players' timers ran straight across a teammate's heal landing; the alternative, a bare
+  heal's landing leaving the timer alone, would let the ramp resume on its old anchor once the
+  heal lands). DIVERGENCE: retail's reset zero rides the event's batch; ours goes out
   on the next world tick. AT A DEATH the natural level reads 0 on a corpse (the review's
   EV-5: the first cut's strip sent the remaining POSITIVE rate inside the death batch, a 446
   + natural death read +3 pips there), so the strip -- or, with no effect to strip, kill_player's
@@ -10184,7 +10228,11 @@ after it.
 
 1. **The owed client look** (a runsheet in the PLAN-LOG entry): the ramp's green arrows and the
    rising bar after a hit, the reset on the next hit, [32] at full; 288 from a hero under
-   Bleeding; each A/B on the three flags.
+   Bleeding; each A/B on the three flags. Arm 1's hero-heal watch is not a client question
+   alone: the server restarts the ramp at the heal's landing, so the look cannot refute it --
+   **SKILLS-RG8 is settled by a RETAIL tape** (a live capture where a hero or ally heals the
+   observer while its ramp is counting: does the first step come 5.0 s after the heal's [20],
+   or 5.0 s after the earlier anchor?), and until then the land_skill reset stays CONTESTED.
 2. **The label-tier rows that follow**: skilldesc CONSUMERS for HEALTH_REGEN / HEALTH_DEGEN
    would serve 53, 54 and 126 (plain degeneration hexes) and 288 (now a hand row) -- deferred
    so desk-hitlabels' re-pin of test_skilldesc is the only one moving those pins this pass.

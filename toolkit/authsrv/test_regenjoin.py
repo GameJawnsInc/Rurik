@@ -14,6 +14,8 @@ decode RAISES -- the one set-aside is a manifest-declared gap, asserted with
 capgaps.audit): P1-P5, the cap, property 32, and the known-bad arms (a 3 s delay, a
 1 s step, separate caps, an unsigned clamp) scored on the same rows, each red.
 """
+import collections
+import json
 import os
 import sys
 import time
@@ -36,9 +38,13 @@ HAVE_CAPTURES = os.path.isdir(vaultpath.vault_path("captures", "live"))
 # AND at a nonexistent path, sections 0 and 2 declared skips) 21; with the vault 50
 # (section 0: 7, section 2: 22). Decided on the DIRECTORIES, never on what loaded.
 # The review fix (same day): +1 bare (1c', the TARGETED / FRIEND_ACT split) and +1 in
-# section 2 (OWN_CAST binds nothing, EV-1): 22 bare, 52 with the vault, from the green runs.
-FLOOR_BARE = 22
-FLOOR_VAULT = FLOOR_BARE + (7 if HAVE_CONTENT else 0) + (23 if HAVE_CAPTURES else 0)
+# section 2 (OWN_CAST binds no scored-kind step, EV-1): 22 bare, 52 with the vault, from
+# the green runs. Round 2 (2026-10-08, the verifier's VF-1): +3 bare (1c'' the heal-landing
+# reader, 1c''' score's two reports on a hand-built PvP player, 1c'''' --json) and +2 in
+# section 2 (OWN_CAST on the unscored kind; the heal-landing evidence): 25 bare, 57 with the
+# vault, from the green runs.
+FLOOR_BARE = 25
+FLOOR_VAULT = FLOOR_BARE + (7 if HAVE_CONTENT else 0) + (25 if HAVE_CAPTURES else 0)
 LEDGER = checks.Ledger("retail's health regeneration", floor=FLOOR_VAULT)
 check = checks.adopt(LEDGER)
 
@@ -139,6 +145,70 @@ def section_arithmetic():
           "anchor: :50061's interrupted ally cast kept the timer), and the friendly LANDING is "
           "TARGETED; P2(c)'s ACTIVATIONS keeps FRIEND_ACT so its numbers did not move",
           f"{sorted(tlt['anchors'][25])}")
+    # 1c''. a FRIENDLY HEAL's landing (2026-10-08, VF-1's follow-on): reported in
+    # `heal_landings` and never removed from the anchors -- a non-foe [20] with a positive 55
+    # from the SAME caster on the same agent within BATCH. A foe's, a bare landing, a heal
+    # 0.2 s late, another caster's heal and a negative 55 are not.
+    ally = (0, 1.0, 0x0020, [0x0020, 30, 0x30000000, 0, 5, (0.0, 0.0), 0, 0, 0, 0.0, 0, 0,
+                             int.from_bytes(b"play", "big")])
+
+    def a3(t, prop, target, cause, f):
+        return (0, t, OP_A3, [OP_A3, prop, target, cause, _bits(f)])
+
+    def land(t, target, caster):
+        return (0, t, OP_A0, [OP_A0, 20, target, caster, 500])
+    seqh = seq[:5] + [npc, ally,
+                      land(40.8, 25, 87), a3(40.8, 55, 25, 87, 0.10),     # the NPC's heal lands
+                      land(50.0, 25, 117), a3(50.0, 55, 25, 117, 0.05),   # a FOE's
+                      land(60.0, 25, 30),                                  # a bare landing
+                      land(70.0, 25, 30), a3(70.2, 55, 25, 30, 0.10),     # its heal 0.2 s late
+                      land(80.0, 25, 30), a3(80.0, 55, 25, 87, 0.10),     # another caster's heal
+                      land(90.0, 25, 30), a3(90.0, 55, 25, 30, -0.10)]    # a negative 55
+    tlh = regenjoin.timeline(seqh)
+    targeted = [t for t, c in sorted(tlh["anchors"][25]) if c == "TARGETED"]
+    check(dict(tlh["heal_landings"]) == {25: [40.8]} and targeted == [40.8, 50.0, 60.0, 70.0, 80.0, 90.0],
+          "a FRIENDLY HEAL's landing is the one with a positive 55 from the same caster in its "
+          "batch (a foe's, a bare landing, a heal 0.2 s late, another caster's heal and a negative "
+          "55 are not) -- reported in heal_landings, every landing still TARGETED",
+          f"{dict(tlh['heal_landings'])} {targeted}")
+    # 1c'''. and the two reports `score` builds on it, on an UNSCORED PvP player: 40 ('att2')
+    # casts at 41 ('att1') and completes at 102.0 (OWN_CAST); a heal lands on it at 104.0; its
+    # first natural step at 107.0 is 5.0 s from the OWN_CAST and 3.0 s from the heal. The
+    # control: the same landing from the FOE 41 is no heal landing, so nothing is reported.
+    def mk(agent, tok):
+        return (0, 1.0, 0x0020, [0x0020, agent, 0x30000000, 0, 5, (0.0, 0.0), 0, 0, 0, 0.0, 0, 0,
+                                 int.from_bytes(tok, "big")])
+
+    def pvp(healer):
+        return regenjoin.score([("S", "C", regenjoin.timeline(
+            [seq[0], mk(40, b"att2"), mk(41, b"att1"), mk(42, b"att2"),
+             (0, 1.0, OP_9F, [OP_9F, 42, 40, 480]),
+             (0, 100.0, OP_A0, [OP_A0, 60, 40, 41, 68]), word(101.0, 40, 0),
+             (0, 102.0, OP_9F, [OP_9F, 58, 40, 0]),
+             land(104.0, 40, healer), a3(104.0, 55, 40, healer, 0.05),
+             word(107.0, 40, 1)]))])
+    mate, foe = pvp(42), pvp(41)
+    got = (mate["p2_heal_crossed"], dict(mate["p2_heal_bound"]), foe["p2_heal_crossed"],
+           dict(foe["p2_heal_bound"]), mate["p2_owncast_other"], mate["p2_binding_class_other"])
+    check(got == ([("S", "C", 40, "other", 107.0, 5.0, 3.0)], {"other early": 1}, [], {}, [], {}),
+          "score's reports: a PvP player's step 5.0 s from its own OWN_CAST straight across a "
+          "TEAMMATE's heal landing is CROSSED, and bound by that landing it is EARLY (3.0 s); the "
+          "same landing from a FOE reports neither", f"{got}")
+    # 1c''''. `--json`: score's cap_tops is keyed by (kind, top) tuples, which json refuses as
+    # keys (the flag raised on it until 2026-10-08); jsonable names each such key as text
+    raw = {"cap_tops": collections.Counter({("hostile", 7): 5}), "n": 1}
+    try:
+        json.dumps(raw)
+        refused = False
+    except TypeError:
+        refused = True
+    try:
+        back = json.loads(json.dumps(regenjoin.jsonable(raw)))
+    except TypeError as e:
+        back = repr(e)
+    check(refused and back == {"cap_tops": {"hostile 7": 5}, "n": 1},
+          "--json: a tuple-keyed count is refused by json as it stands, and jsonable writes it with "
+          "its key as text", f"{back}")
     # 1d. the cap reader: a ramp that stops at 7 below the maximum is a witness, one that
     # stops because the [32] arrives is not
     ramp = [word(30.0, 117, 0)] + [word(35.0 + 2 * k, 117, k + 1) for k in range(7)]
@@ -264,9 +334,26 @@ def section_corpus():
           "every OBSERVED anchor class binds at least one on-time first step (LOSS, NEGEND, "
           "OWN_START, OWN_HIT, TARGETED -- OWN_CAST is the one carried member left out)", f"{bound}")
     check(bound.get("OWN_CAST", 0) == 0,
-          "OWN_CAST (the wearer's own cast completing at a foe) binds NO on-time first step: it is "
-          "carried by analogy with the swing, RECONSTRUCTION -- the label the server's cast_tick "
-          "reset wears (the review's EV-1)", f"{bound}")
+          "OWN_CAST (the wearer's own cast completing at a foe) binds NO on-time first step of a "
+          "SCORED kind (the observer, hostiles): it is carried by analogy with the swing, "
+          "RECONSTRUCTION -- the label the server's cast_tick reset wears (the review's EV-1)",
+          f"{bound}")
+    oc = sc["p2_owncast_other"]
+    check({(s, a) for s, _c, a, _t, _d in oc} >= {("20260929T100038", 6), ("20260928T103123", 4)}
+          and all(abs(d - regenjoin.NATURAL_DELAY) <= regenjoin.TOL for _s, _c, _a, _t, d in oc),
+          "...and on the UNSCORED 'other' kind (PvP players) it does bind on-time first steps: "
+          "20260929T100038 :62925 agent 6 with no other anchor in reach, 20260928T103123 :58544 "
+          "agent 4 with a LOSS in the same instant -- reported, never scored (most of that kind's "
+          "steps are off time), so the label stays RECONSTRUCTION (the verifier's VF-1)",
+          f"{oc} {sc['p2_binding_class_other']}")
+    hb, hx = sc["p2_heal_bound"], sc["p2_heal_crossed"]
+    check(not any(k.split()[0] in ("player", "hostile") for k in hb) and hb.get("other early", 0) >= 10
+          and {(s, a) for s, _c, a, *_r in hx} >= {("20260817T231139", 13), ("20260929T100038", 3)},
+          "a friendly HEAL's landing: no observer or hostile first step is bound by one (nothing "
+          "scored bears on it), while two PvP players' steps run 5.0 s from their own OWN_CAST "
+          "straight across a teammate's heal landing and most of that kind's early steps are early "
+          "only against one -- why the server's reset at a heal's landing is CONTESTED",
+          f"{dict(hb)} {hx}")
     bad = regenjoin.score(rows, delay=3.0)
     check(bad["p2_anchors_player"]["on_time"] == 0 and bad["p2_anchors_hostile"]["on_time"] == 0,
           "KNOWN-BAD ARM, a 3 s delay: no first step is on time", f"{bad['p2_anchors_player']}")
