@@ -10622,6 +10622,237 @@ person reads as gating a shipped row's NUMBER on anything but a landing (our pat
 mis-read it: §55.3's standing weakness); a string in the overlay outside
 `OVERLAY_VOCABULARY` (`test_skilldesc` §3).
 
+## 68. SKILLS-CH — armour-ignoring damage on a NON-ATTACK rides property 55, not "holy" damage; and life steal as a mechanic, OBSERVED both directions (Vampiric Gaze 153 own casts 13 of 13, a hostile's 143 at the player 3 of 3) (2026-10-07; CHAN55, CASTAI-ZF31)
+
+**Status: SHIPPED, behind two revert flags** (`--no-armour-ignoring-on-55`; `--no-life-steal`,
+§68.3). Lock: `toolkit/authsrv/test_chan55.py`. `SKILLS-CH<n>` = a finding of this section;
+convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md). Closes the CASTAI-ZF31
+row of [studies/monsterai/FINDINGS.md](../monsterai/FINDINGS.md) §18.2 ("our server sends
+Holy Strike on 16: an escalation"). ZF18 (Deep Wound re-applied stacks) is NOT this section:
+concurrent condition re-application is the next pass's CONDCONC lane.
+
+### 68.1 SKILLS-CH1 — the rule is "armour-ignoring damage on a non-attack", and the client's own templates are what discriminate it (OBSERVED; the triage's direction CORROBORATED, two of its specifics corrected)
+
+**The census, re-derived 2026-10-07 at 642d8957** (`spellhitjoin.census(named=...)`, whose
+`named_words` reads the wire's own name for the observer's damage, `0x009F [10, obs, S]`, ahead
+of the word). 127 connections; 20260928T103123 :65009 set aside by its own manifest (capgaps),
+nothing else refused. **OBSERVED:**
+
+| channel | skills named ahead of the word (words) |
+|---|---|
+| **55, negative** | 102 (1), 133 (1), 143 (3), 251 (6), 272 (64), 302 (11), 2809 (8) — **94 words, 7 skills** |
+| 16 / 17 | 179, 185, 186, 194, 197, 222, 229, 230, 271, 322, 327, 334, 336, 338, 340, 341, 392, 393, 399, 426 — **20 skills** |
+
+No skill is on both. **The client's own description templates** (`skilldesc.py`'s parse, our
+label names only; build 38797) type the two sides:
+
+| skill | type | labels | | skill | type | labels |
+|---|---|---|---|---|---|---|
+| 102 | 5 | SHADOW_DAMAGE, LIFE_STEAL | | 179 185 186 194 197 271 | 4/5/6 | FIRE_DAMAGE (+ riders) |
+| 133 | 5 | SHADOW_DAMAGE | | 222 229 230 | 4/5 | LIGHTNING_DAMAGE |
+| 143 | 5 | LIFE_STEAL, COUNT | | 322 327 334 336 338 341 426 | 14 | PLUS_DAMAGE (327, 341 also DAMAGE) |
+| 251 272 302 | 4/6/5 | HOLY_DAMAGE | | 340 392 393 | 14 | none / CONDITION_DURATION |
+| 2809 → 219 | 5 | DAMAGE (untyped) | | 399 | 14 | DAMAGE (untyped) |
+
+2809 is the PvP split of 219 (CASTAI-ZF6) and outside the player corpus; it reads through its
+parent, so its untyped reading is **CORROBORATED** (the parent's template, not the split's).
+So **"armour-ignoring label (holy, shadow, steal, untyped) on a skill that is not an ATTACK
+(type 14)" separates the census exactly — 7 of 7 onto 55, 20 of 20 onto 16 / 17** — and is the
+wiki's own split (WIKI, GWW "Damage" sec. Properties, rev. 2020-08-11, already cited at
+`authsrv.ARMOUR_RESPECTING_MEANS`: shadow, holy and untyped skill damage ignore armour). **A
+rule keyed on "holy" fails on 4 of the 7** (102 and 133 shadow, 143 a steal, 2809 untyped).
+The attack exclusion is load-bearing: without it 327, 341 and 399 (untyped DAMAGE on an attack)
+would be predicted on 55, where retail named all three on 16 / 17 (`test_chan55` 8b3, the
+known-bad arm). §63's "UNDISCRIMINATED" is superseded: the wire alone did not discriminate,
+the templates do.
+
+**Where the triage was right and wrong.** Direction and every census number reproduce exactly.
+Two specifics do not: its "399, 4 words" on 16 / 17 counts body victims — the named census
+(observer only) has 399 × 1; and its list of plain single-target steals (153, 156, 1077, 152)
+omits nothing but should say why **1075** is not in it (type 5, target 5, one LIFE_STEAL slot —
+but a radius of 312 and a duration bit, so not plain).
+
+### 68.2 SKILLS-CH2 — the server: one helper keyed on the row, every damage-word door the player's and a body's spells use (RECONSTRUCTION for the casts no tape holds)
+
+`authsrv.spell_damage_prop(skill_id)` → 55 when the **loaded** `skill_effect` row's
+`scale_means` is standalone damage outside `ARMOUR_RESPECTING_MEANS` ("Holy damage",
+"Armor-ignoring damage" today), or a steal (§68.3), **and** the skill's `type_code` is not 14;
+16 otherwise, for no skill, or for a skill with no `skills` row (the type is unknown). Never the
+word "holy", never a parsed label string. **`--no-armour-ignoring-on-55` moves only the words
+this rule routes** (312, 252, the label tier's holy rows) back to 16: a steal keeps 55 at both
+doors — its channel is OBSERVED and its revert is `--no-life-steal` — and
+`armour_ignoring_damage`'s words (Empathy and its kind) were on 55 before this lane and stay
+there. (The first cut said the flag put "every skill's damage word" on 16, and under it the
+player's own steal went to 16 while a body's stayed on 55; the review's EV-4, `test_chan55` 9i.)
+The doors:
+
+- **`body_spell_word`** — the player branch's word and, through `hurt_agent_row(prop=)`, the
+  body branch's. Every body spell path lands here (`land_skill`, the projectile's arrival, the
+  area, the burst, Mind Burn's adjacent, an area's tick, the hex end's body half). At the
+  player the order is unchanged: the gain, the interrupt run, `[10, player, skill]`, the word.
+  Bodies and foes get no `[10]` (the corpus's [10] names the observer's damage only).
+- **`hit_enemy(exact=…, spell_skill=sid)`** — a new keyword, separate from `skill_id` (which is
+  the ATTACK skill a swing carries and gates the strike's own terms). Threaded explicitly from
+  the eight player-spell sites (`land_player_spell_shot`, `land_player_spell_area`,
+  `burst_player_spell`, `adjacent_player_spell` ×2, `_area_strike`, `burst_player_caster_area`,
+  `cast_tick`'s one-target word). The first-word `[42]` (MAXHP-1) still rides immediately ahead.
+- **Not routed, on purpose:** `hex_end_burst`'s player half (its only row, Incendiary Bonds 179,
+  is fire — 16 OBSERVED, 5 of 5 named) and a blocked attack skill's punishment (an ATTACK's
+  damage, the rule's own exclusion). Both would answer 16 by the rule anyway; the residue is
+  an asymmetry nobody can observe today — a future armour-ignoring HEX END would ride 55 on the
+  body half and 16 on the player half.
+- **Areas over time take the same rule** (decided, RECONSTRUCTION): retail's PERIODIC damage
+  splits by type exactly as a cast's does — Balthazar's Aura 272's pulses 64 of 64 on 55,
+  Fire Storm 197's ticks 12 of 12 on 16 (`AREA_TICK_PERIOD`'s own OBSERVED witness), each
+  named by `[10]` — and no area-over-time spell of an armour-ignoring type is on any tape.
+  (The first cut cited Zealot's Fire 271's 115 on 16 here; 271 is not a tick but a PAYOFF
+  riding an ally-targeted cast's completion batch — `spellhitjoin`'s PAYOFF rule, CASTAI-ZF30 —
+  the review's EV-3.) So `_area_strike` threads the spell id (player
+  caster) and goes through `body_spell_word` (body caster). The same pass's desk-aotrows lane
+  adds a "Holy damage" area-over-time row (830); by this rule its ticks ride 55 with no line of
+  its own, and a check there that reads 830's tick words on 16 alone would redden at the merge
+  (the orchestrator re-checks it).
+
+**What moves today.** Hand rows Holy Strike 312 (the fixture Hatcher's bar) and Banish 252 (the
+map-168 corridor Monks' bar, and a party Monk's); on a vault machine the label tier's holy rows
+294, 1113, 2212. The number and the arithmetic are unchanged — only the property. Labels at the
+call sites: OBSERVED for a hostile's armour-ignoring spell at the observer and body-to-body;
+RECONSTRUCTION for the player's own holy cast and a hero's (no tape holds either; the corpus's
+own-cast witness of the channel is the steal, §68.3).
+
+### 68.3 SKILLS-CH3 — life steal: one amount moved, the heal AHEAD of the word in both directions (OBSERVED), and the server's three doors
+
+**Read off the wire first** (`toolkit/authsrv/stealjoin.py`, new; re-run 2026-10-07 over the
+whole corpus, :65009 set aside by its manifest). **OBSERVED:**
+
+- **The observer's OWN Vampiric Gaze (153), 13 of 13 completions** on 7 connections of 3
+  captures (20260807T143055 ×2, 20260928T103123 ×5, 20260929T100038 ×6). Every E5 batch:
+  `0x00E5 [me, 153, 0]`, `[58, me, 0]`, `[20, foe, me, 276]` (the visual), then
+  **`[55, me, me, +h]` immediately followed by `[55, foe, me, −d]`** — the only thing ever
+  between the two is the foe's `[42, foe, max]` (2 of 13: :58544 593.854, :51090 437.052),
+  i.e. MAXHP-1's first-word declaration — then `[8, me, 0]` `[8, me, 1]`. **No `[10]`, no
+  16 / 17, no gain.** `|h| == |d|` in points 13 of 13, each fraction times its own agent's
+  last property-42 maximum: **18 ×2, 46 ×11**. 18 is 153's scale0 exactly (rank 0, the
+  Necromancer session); 46 is interp(18, 60, 10 / 15) exactly (the rank is RECONSTRUCTION;
+  the table agreement CORROBORATED). **A `[42, me, max]` rides between the E5 and the heal on
+  7 of 13** (238.151, 465.746, 593.854, 437.052, 527.415, 561.348, 129.665), and **every one
+  of the 7 re-declares an UNCHANGED maximum** — its value equals the last `[42, me]` before the
+  E5 (100, 480, 480, 374, 480, 446, 480) — while the other 6 carry none; the time since the last
+  declaration does not split them (1.1–49.5 s with, 3.4–26.8 s without), and no trigger is
+  derived. (`stealjoin`'s `self_max` / `self_max_prior`, `test_chan55` 11d. The first cut said
+  "4 of 13" from a context reader that looked at 4 of the 7 connections — the review's EV-1.)
+  **The visual `[20, foe, me, 276]` is in 13 of 13** (`stealjoin`'s `visual`), the client's own
+  +0x7c for row 153 (`skilltable.py`, build 38797; `test_chan55` 8c2). The **known-bad
+  reader** (the word first, the heal after it) finds **0** of the 13: the order is the tape's,
+  not the search's.
+- **A hostile's steal at the observer: 143, 3 of 3** (20260916T213125 :57894, caster 104, at
+  391.979, 445.361, 477.850): **`0x00CF [25, 9]`, `[55, 104, 104, +0.08542]`, `[10, 25, 143]`,
+  `[55, 25, 104, −0.08542]`, four consecutive messages** (41 of 480; heal fraction == word
+  fraction, the caster's maximum is not on the wire, so the absolute equality there is
+  RECONSTRUCTION). Of the 94 named 55 words at the observer only these three carry the
+  caster's heal: 102 ×1 (shadow plus a CONDITIONAL steal) has none in its batch, and 133 ×1
+  carries the caster's 10 % self-sacrifice `[55, 4, 4, −0.1]` ahead of the gain instead.
+
+**The server** (`LIFE_STEAL` / `--no-life-steal`; RECONSTRUCTION wherever no tape orders it):
+
+- **The row.** `content/world.toml` `skill_effect.153`, a **capture** row (20260929T100038,
+  live) with the client table and the 13-of-13 witness in `verified`: `scale_means = "Life
+  stealing"` — **OUR label** for the template's `LIFE_STEAL` slot (`skilldesc.HAND_FAMILY`
+  maps it, so the referee reads the hand row AGREE). GWW's own progression name for Vampiric
+  Gaze is **UNVERIFIED** (the page is owed; no browser this pass). `skill_steal(sid, rank)`
+  reads it — the scale as stated, no taker modifier — and `spell_damage_prop` puts a steal row
+  on 55.
+- **The visual.** `content/world.toml` `skill_visual.153`, `recipient = 276`, a client-table
+  row (build 38797) marked `since = "CHAN55"` so `send_skill_visual` sends nothing for it under
+  `--no-life-steal` — that arm stays the pre-lane server's bytes, as `--no-instant-announce`
+  does for the SKILLS-IA rows. It puts `[20, target, caster, 276]` behind the 58 on both the
+  player's and a body's cast. (The first cut had no row and called its batch "retail's" —
+  the review's EV-2.)
+- **The player's own cast** — `cast_tick`, an arm beside the standalone one →
+  `player_life_steal`: `hit_enemy(exact=…, spell_skill=153)` with the heal in its
+  `before_damage` slot, so the batch runs in retail's order: E5, 58, the visual, `[42, me]`
+  when it MOVED (`declare_player_max`), the heal `[55, me, me, +h]`, the foe's first-word
+  `[42]`, the word `[55, foe, me, −d]`. No `[10]`, no gain. **The `[42, me]` is CONTESTED**:
+  retail re-declares an unchanged maximum on 7 of 13 and our moved-only rule sends it on none
+  in a session (the maximum is seeded at the create) — a named divergence, §68.4.
+- **A body's cast** (hostile or party, at the player or a body) — `land_skill`, after
+  `resolve_heal`, its amount and fraction computed before the 58 (the refusal contract) →
+  `body_life_steal` → `armour_ignoring_damage(…, before_word=heal)`. The new hook seats the
+  caster's heal **after the gain and ahead of `[10]`** at the player — 143's four messages,
+  message for message — and ahead of the body's maximum and word at a body
+  (RECONSTRUCTION: no body-on-body steal is ordered on tape; the own cast's heal-first order
+  is used). **`body_spell_word` is not a steal door**: a steal row has no projectile, area or
+  burst, and `land_skill`'s steal arm returns before every branch that reaches it.
+- **The heal is `heal_agent(caster, caster, the same whole amount, healing=False)`** — WIKI
+  (GWW "Deep Wound", rev. 2026-03-02, heal_agent's own citation): the reduction "does not
+  affect life stealing". Overheal is sent as for every heal (SKILLS-HN).
+
+**Recorded, NOT shipped** (the brief's rule: no witness, no row):
+
+| skill | shape | why not |
+|---|---|---|
+| 156, 1077 | type 10 (touch), target 5, one LIFE_STEAL slot, 29..74 | UNWITNESSED — the same wire is predicted, no tape casts either |
+| 152 | type 5, target byte 14 (an animated undead), LIFE_STEAL 100..400 | UNWITNESSED, and its target byte is not a foe |
+| 1075 | type 5, target 5, one LIFE_STEAL slot, 15..60 | not plain: a 312 radius and a duration bit |
+| the other 28 LIFE_STEAL rows | area, conditional, hex, multi-slot | RECOGNISED, not SERVED (`skilldesc.CONSUMERS`) |
+
+### 68.4 What stays open, and what would refute this section
+
+- **The cap.** All 13 own steals stole the full amount: 11 of them from foes whose health is
+  unknown, and the other 2 (agent 40 on 20260807T143055 :64103, maximum 96 from its `[42]`)
+  reconstructible from its create at 88 and 37 left (RECONSTRUCTION: full at the create, no
+  regeneration modelled), so neither was near it. A steal larger than what the target has
+  left: does the word carry the raw amount (retail's damage words do, `_damage_fraction`'s
+  census) and does the heal carry it too? UNVERIFIED; ours sends the full amount both ways. A
+  runsheet item, and the "Life stealing" page is owed.
+- **The caster's `[42, me]` ahead of the heal — CONTESTED, a named divergence.** Retail sends
+  it on 7 of 13 own steals, every one an UNCHANGED maximum, and none on the other 6; ours keeps
+  `declare_player_max`'s moved-only rule and so sends it on none in a session. The trigger is
+  not derived (not the time since the last declaration); it closes on the first reading that
+  splits the 7 from the 6 by something the server knows.
+- **Taker modifiers** (Frenzy's double, a conversion) are not applied to a steal —
+  RECONSTRUCTION; the same owed page would say.
+- **A body victim's adrenaline.** `armour_ignoring_damage`'s body branch charges a hero
+  nothing (Empathy's existing gap, shared); `hurt_agent_row`'s JARIN charge is not reached.
+- **The client draw.** Our client's drawing of a negative 55 at the player from a holy
+  spell, and of the steal pair, is unverified on loopback — the runsheet below.
+- **The label tier's breadth lever**: the triage counted about 39 plain spell / touch / hex
+  skills in the armour-ignoring families (holy, shadow, untyped, steal) RECOGNISED, not SERVED
+  (its count, not re-derived here); the helper now exists for the L lane that serves them.
+
+**Refuted if:** a retail armour-ignoring non-attack skill's word named on 16 / 17, or an
+armour-respecting one on 55; an attack skill's untyped damage on 55; an own steal whose heal
+follows its word, or whose two amounts differ; a hostile steal whose heal follows the `[10]`.
+
+### 68.5 The runsheet (owed to the owner, after landing — loopback, our client, the fixture Hatcher)
+
+RUNBOOK's three-terminal loop; the game server line is the only one that changes. Every arm is
+one server start; the captures go to the vault as usual.
+
+1. **A — Holy Strike at the player, default.** `python toolkit/authsrv/authsrv.py --explorable
+   --enemy-skills 312` (the Hatcher casts only Holy Strike). Stand in its reach and let it cast.
+   **The fixture casts at `ENEMY_SKILL_RANK` 12** — its row carries no `attributes` — so Holy
+   Strike's 10..55 deals **46** (10 + 45 × 12 / 15), not the scale0 10 the unit test pins
+   (`test_chan55` casts at rank 0). EXPECT on the wire per cast: `0x00CF`, `[10, me, 312]`,
+   `0x00A3 [55, me, 10, −46/max]` and no 16 (the log line `skill 312 deals 46 to the player
+   (armour-ignoring, CHAN55)`); on screen a damage number and the bar down 46. Watch how the
+   client draws the number (colour, size) against a swing's.
+2. **B — the same under `--no-armour-ignoring-on-55`.** EXPECT `[16, me, 10, −46/max]`.
+   Compare the two draws: same number, same bar, any visible difference is the finding.
+3. **A — Vampiric Gaze on the Hatcher.** `python toolkit/authsrv/authsrv.py --explorable
+   --practice-target --skills 153`. Hit the Hatcher once or twice first, then cast 153 at it.
+   EXPECT the visual `[20, 10, me, 276]` behind the 58, a blue `+18` over the player (rank 0 in
+   attribute 4, which the default ranks do not carry) and the Hatcher's bar down 18 in the same
+   instant; the log's `skill 153 steals`. Repeat with the player hurt (the bar rises 18), at the
+   Hatcher's full health, and once at a few HP left (the overkill — write down what the number
+   shows; ours sends the full 18 both ways, UNVERIFIED). Note whether the 276 effect draws on
+   the Hatcher.
+4. **B — the same under `--no-life-steal`.** EXPECT the energy spent and nothing drawn — no
+   visual, no number, no bar moving.
+
+(The first cut of arms 1 and 2 said 10 — the scale0 — where the fixture deals 46; the review's
+CD-1.)
+
 ## 69. SKILLS-CT — trigger-on-cast payoffs: Aura of Restoration 180 heals its bearer IMMEDIATELY ahead of every spell completion (OBSERVED, 256 of 257), Deep Wound cuts that heal, and Backfire 28 rides the same hook (RECONSTRUCTION) (2026-10-07)
 
 **Status: SHIPPED ON, behind `--no-hex-cast-triggers`; the client confirmation is OWED

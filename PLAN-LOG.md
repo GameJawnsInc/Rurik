@@ -28,6 +28,58 @@ move back.
 
 ---
 
+### CASTAI-ZF31 / SKILLS-CH1..CH3 (CHAN55) -- 2026-10-07 -- **An armour-ignoring NON-ATTACK skill's damage word now rides property 55, negative, at every damage-word door, and life steal is a mechanic. The rule is not "holy". Over the whole live corpus, the skills retail names ahead of the observer's word split with no overlap: 55 for exactly 102, 133, 143, 251, 272, 302 and 2809 (94 words), and 16 / 17 for 20 others. The client's own templates type the 55 side as shadow, steal, holy and untyped, so a "holy" key fails on 4 of the 7. Holy Strike 312 and Banish 252 now ride 55, and on a vault machine so do the label tier's 294, 1113 and 2212. Vampiric Gaze 153 now steals: the caster gains exactly what the target loses, the heal goes ahead of the word, and the recipient visual 276 goes out. That is retail's shape on the observer's own 13 of 13 casts and on a hostile's 143 at the player, 3 of 3. There are two revert flags, one per channel: `--no-armour-ignoring-on-55` and `--no-life-steal`. The client draw is owed as a loopback runsheet.**
+
+- **The rule.** `authsrv.spell_damage_prop(skill_id)` returns 55 when two things hold:
+  - the loaded `skill_effect` row is standalone damage outside `ARMOUR_RESPECTING_MEANS`, or a steal;
+  - the skill's type is not 14.
+  Otherwise it returns 16. A skill with no `skills` row keeps 16.
+  - The rule never keys on the word "holy" and never parses a label.
+  - The attack exclusion is load-bearing. Without it, 327, 341 and 399 (untyped damage on an attack) would go to 55, and retail named all three on 16 / 17.
+  - `--no-armour-ignoring-on-55` moves only the words this rule routes back to 16. A steal keeps 55 at both doors, because its revert is `--no-life-steal`.
+- **The doors.**
+  - `body_spell_word` routes the player's word, and a body's word through `hurt_agent_row(prop=)`.
+  - `hit_enemy` gets a new `spell_skill=` keyword, threaded from the eight player-spell sites.
+  - Areas over time follow the same rule (RECONSTRUCTION: retail's periodic damage splits by type, 272's pulses 64 of 64 on 55 and Fire Storm 197's ticks 12 of 12 on 16; no armour-ignoring area over time is on tape).
+  - `hex_end_burst`'s player half and the block punishment stay on 16. Fire is OBSERVED on 16, and the punishment is an attack's.
+  - Bodies get no `[10]`.
+- **Life steal.**
+  - **The rows.** `content/world.toml` gains `skill_effect.153`, a live capture row labelled "Life stealing". That is our label; GWW's own name is UNVERIFIED. It also gains `skill_visual.153`, `recipient = 276`, a client-table row (build 38797) marked `since = "CHAN55"`. That marker keeps it silent under `--no-life-steal`, the way `--no-instant-announce` treats its rows.
+  - **The player's cast** goes through `cast_tick` to `player_life_steal`, which is `hit_enemy` with the heal in `before_damage`. The batch: E5, 58, `[20, foe, me, 276]`, `[42, me]` when the maximum moved, the heal, the foe's first-word `[42]`, the word.
+  - **A body's cast** goes through `land_skill` to `body_life_steal`, then `armour_ignoring_damage`'s new `before_word` hook. At the player that gives the gain, the caster's heal, `[10]` and the word, which is 143's four messages exactly.
+  - **The heal** is `heal_agent(healing=False)`, so Deep Wound does not cut it, at either door (WIKI, the "Deep Wound" citation the repo already carries).
+  - **Not shipped.** 156, 1077 and 152 share the shape but are UNWITNESSED, so they are recorded and not shipped. 1075 is not plain: it has a radius.
+- **The join.** New `toolkit/authsrv/stealjoin.py` reads both directions.
+  - It finds all 13 own completions with the heal before the word, and the foe's `[42]` between them on 2 of 13.
+  - It finds the visual 276 on 13 of 13.
+  - It finds a `[42, me]` ahead of the heal on 7 of 13, and every one of those 7 re-declares an UNCHANGED maximum. Ours sends it only when the maximum moved, so in a session it sends none. This is CONTESTED, a named divergence in study §68.4.
+  - Its known-bad reader, which wants the word first, finds 0 of 13.
+  - 143 ×3 are the only steal-shaped batches of the 94 named 55 words.
+- **Where the triage was wrong.** It was right on direction and on every census number. Its "4 words" for 399 counts body victims; the observer-only census has 1. And 1075 belongs on the list of single-slot steals, excluded for its radius.
+- **The review fixed (EV-1..EV-6, CD-1..CD-4, all verified first):**
+  - the `[42, me]` count, 7 of 13 and not 4;
+  - the missing visual row;
+  - the areas-over-time witness: 271 is a payoff, not a tick;
+  - one flag splitting the steal's channel;
+  - the runsheet's Holy Strike: the fixture casts at `ENEMY_SKILL_RANK` 12, so 46, not 10;
+  - a "no gain" check that could not fail: the cost stub was still in place through `cast_tick`;
+  - the body door's `healing=False`, which had no check;
+  - the affected-test list;
+  - and, in a second round (VF-2), `test_chan55` 6e's missing RECONSTRUCTION label on the areas-over-time rule, which TESTS.md now carries too.
+- **Tests.** New `test_chan55.py`, registered in TESTS.md: 39 checks bare and 49 on the vault.
+  - Run against older trees it reports 31 reds against 642d8957, 15 against the channel commit, and 5 against the lane before review.
+  - Nineteen mutants at the lane's two commits, seven more for the review's new checks, and one for 6e's relabelled message, each redden their own checks.
+  - With both flags off, a 23-scenario differential is byte-identical to 642d8957.
+  - Two checks were re-aimed to read 55, each with the reason in its comment: `test_skilldamage`'s Holy Strike control and `test_agentlife`'s party Banish.
+  - `test_guards` §9's caller set now names `player_life_steal`.
+  - `skilldesc.HAND_FAMILY` maps "Life stealing" to LIFE_STEAL.
+- **Not this lane.** ZF18 (Deep Wound re-applied stacks) is next pass's CONDCONC lane; `apply_condition` is untouched.
+- **Open, in `studies/skills/FINDINGS.md` §68.4-68.5:**
+  - the steal's cap at the target's remaining health (UNVERIFIED). On 11 of 13 the foe's health is unknown, and the other 2 were never near the cap;
+  - what triggers retail's unchanged `[42, me]` re-declare (CONTESTED);
+  - taker modifiers on a steal (not applied; RECONSTRUCTION);
+  - the loopback runsheet: the Hatcher's Holy Strike (46 at rank 12) and a 153 cast on it, each with its flag on and off.
+
 ### SKILLS-CT -- 2026-10-07 -- **Trigger-on-cast payoffs, read off retail first and then built: under a live Aura of Restoration (180) every spell its bearer completes carries ONE self-heal word IMMEDIATELY ahead of the bearer's [58] -- 256 of 257 live completions over 7 captures, 19 bearers, the one miss after a Drain Enchantment onto the bearer; one word, never two, after a refresh (11 of 11); still there when the spell's target died mid-cast (3 of 3, Random Arenas characters) -- worth the paid energy x the client's own 200..500 % slot (23 / 46 over 555 at rank 13), and Deep Wound cuts it. `authsrv.on_cast_triggers` ships it beside Empathy's `on_attack_triggers`, ahead of the [58] in `land_skill` (its dead-target exit included) and in the player's E5 batch, ONE payoff per trigger skill per completion, with Backfire (28) on the same hook in the other direction (the hexer's scale, armour-ignoring, onto the hexed caster -- RECONSTRUCTION, no tape). A HOSTILE whose fight target dies mid-cast never reaches that exit (the tick's corpse branch drops the cast) -- recorded, not fixed. `--no-hex-cast-triggers` reverts. The client confirmation is owed (skills §69.9, three cases).**
 
 - **The reader first** (`toolkit/authsrv/trigjoin.py`, `dcd094b2`): predictions registered before the first run; P1 ("the FIRST b-word of the batch") FAILED on 10 mixed instants -- P1c, the word right before the 58, holds 256 / 257; P2 ("the cost-10 word is exactly twice the cost-5") FAILED on one Deep-Wounded bearer -- P2c holds: 12 / 12 clean pairs, 14 of the 17 bearers with clean words fit (555, rank 13) alone and 3 fit several (max, rank) pairs, all consistent, the declared [42] maxima inside the fits, the six Deep Wound words exactly round(0.8 h) over 455. The rounding of the heal itself is UNDISCRIMINATED (every witnessed product is whole). P3 holds (74 not-live completions, none with a word); a 180 re-cast, a signet and a stopped cast draw none (0 / 2, 0 / 5, 0 / 13). Three known-bad arms redden: a fixed heal, the word after the 58, `heal_agent`'s truncating cut.

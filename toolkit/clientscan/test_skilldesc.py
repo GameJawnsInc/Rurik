@@ -1189,13 +1189,22 @@ if records is not None:
     grades = skilldesc.census(records, hand_rows)
     g = collections.Counter(grades.values())
     n_ep = sum(1 for r in records.values() if effects.applies_effect(r))
+    # RE-AIMED 2026-10-08 (the DESKWORK pass-9 landing): this ended `g["nothing"] >= 800`, a
+    # content-side count pinned as a floor -- the ENG-7 shape the comment above refuses -- and
+    # pass 9's hand rows (weapons 45's five areas, CHAN55's 153, CASTAI-RM's 301, SKILLS-CT's
+    # 180 / 28, ...) took it to 798 on good news. It now states exactly which rows resolve
+    # nothing: every corpus row with neither a hand row nor an EFFECT_TYPES type, derived from
+    # the rows loaded (the by-type check below does the same for the Spells).
+    n_plain = sum(1 for sid, r in records.items()
+                  if sid not in hand_rows and not effects.applies_effect(r))
     check(g["modelled"] == n_hand and sum(g.values()) == 1333
           and g["episode-only"] + g["episode-refused"] + sum(1 for sid in hand_rows if sid in records
                                                               and effects.applies_effect(records[sid])) == n_ep
-          and g["episode-refused"] >= 40 and g["nothing"] >= 800,
+          and g["episode-refused"] >= 40 and g["nothing"] == n_plain,
           f"what the server resolves today: {n_hand} carry a row (54 on 2026-09-22, at least 4 of them "
           f"inert), every EFFECT_TYPES row not in hand is an episode or a refusal (419 + 45 that day), "
-          f"the rest nothing (815)", dict(g))
+          f"the rest -- every row with neither a hand row nor an episode type -- nothing "
+          f"({n_plain}; 815 on 2026-09-22)", dict(g))
     cbt = skilldesc.census_by_type(records, grades, rep)
     n_hand_14 = sum(1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 14)
     # RE-AIMED 2026-10-07 (studies/weapons 45): this was `cbt[5]["nothing"] >= 268` (269 since

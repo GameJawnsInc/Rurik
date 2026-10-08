@@ -819,12 +819,17 @@ def section_concurrency():
     # hurt_agent_row, degen_tick, heal_agent, ...). And Mind Burn's adjacent packet
     # lands through `adjacent_player_spell`, cast_tick's helper (a body's through
     # `adjacent_body_spell`, land_skill's). The same two tick sites, no new one.
+    # CHAN55 (studies/skills 68.3, 2026-10-07): the player's own LIFE STEAL lands
+    # through `player_life_steal`, cast_tick's helper and nobody else's -- the same
+    # tick site, no new one (a body's steal goes through armour_ignoring_damage).
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
                       "projectile_tick", "land_player_skill_shot",
                       "land_player_spell_shot", "land_player_spell_area",
                       "burst_player_spell", "burst_player_caster_area",
-                      "_area_strike", "hex_end_burst", "adjacent_player_spell"}
+                      "_area_strike", "hex_end_burst", "adjacent_player_spell",
+                      "player_life_steal"}
+          and callers_of("player_life_steal") == {"cast_tick"}
           and callers_of("hex_end_burst") == {"effect_tick", "strip_effects"}
           and callers_of("effect_tick") == {"handle"}
           and callers_of("strip_effects") == {"kill_agent", "kill_player"}

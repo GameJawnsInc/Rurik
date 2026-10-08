@@ -1057,6 +1057,9 @@ HAND_FAMILY = {
     # CASTAI-ZF21: Distracting Shot 399's own progression name (GWW); the client's
     # template reads "deals only %str1% damage", which the parser labels DAMAGE.
     "Armor-ignoring damage": {Label.DAMAGE},
+    # CHAN55 (studies/skills 68.3): Vampiric Gaze 153's hand row -- OUR label for the
+    # template's steal slot (GWW's own progression name is UNVERIFIED, not read).
+    "Life stealing": {Label.LIFE_STEAL},
     "Damage reduction": {Label.DAMAGE_REDUCTION},
     "Heal": {Label.HEAL}, "Healing": {Label.HEAL}, "Maximum heal": {Label.HEAL},
     "Heal per energy lost": {Label.HEAL},

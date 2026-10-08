@@ -453,13 +453,15 @@ def section_player_casts():
               "830: Burning (480) for 3 s on each of the three struck foes at EVERY tick -- "
               "15 applies over five ticks, none on the one outside (Eruption's shape)",
               str(per_tick))
-        # CROSS-LANE PIN: 830's channel. desk-chan55 moves armour-ignoring spell damage
-        # (Holy damage) to property 55 this pass; today the player's tick goes out on 16.
-        # The orchestrator re-points THIS check at merge (55 with a negative fraction).
+        # CROSS-LANE PIN: 830's channel. RE-POINTED 2026-10-08 at the pass-9 landing, as this
+        # lane planned: desk-chan55 (CASTAI-ZF31, skills 68) moved armour-ignoring damage on a
+        # non-attack to property 55, and _area_strike's player arm threads spell_skill=sid,
+        # so the holy tick now rides 55 with a negative fraction (words() admits 55 only
+        # negative). Before the merge it was [16]; --no-armour-ignoring-on-55 restores that.
         props = sorted({v[0] for _o, _w, b in results[830][3] for v in words(b)})
-        check(props == [16],
-              "830's tick words ride property 16 today (CROSS-LANE: desk-chan55 re-points "
-              "this one check to 55 at merge; every other check reads any damage channel)",
+        check(props == [55],
+              "830's tick words ride property 55, negative (CHAN55's armour-ignoring rule, "
+              "merged; every other check reads any damage channel)",
               str(props))
         # 910: ONE strike at +3.0, then Cracked Armor once per struck foe
         P.conds.clear()

@@ -762,6 +762,28 @@ endpoint differs by the same 2026-08-26 balance update as Orison's, and the
 client's 56 is what this server deals. The doubling against summoned
 creatures is not modelled; nothing in the slice is summoned."""
 
+# CHAN55 (studies/skills 68.3, SKILLS-CH3): Vampiric Gaze -- a LIFE STEAL. The target
+# loses the scale on property 55 (negative) and the caster gains the same amount on 55
+# (positive, to itself); authsrv.SCALE_MEANS_STEAL / skill_steal, --no-life-steal.
+[skill_effect.153]
+scale_means = "Life stealing"  # OUR label for the template's LIFE_STEAL slot; GWW's own name UNVERIFIED
+[skill_effect.153.provenance]
+source = "capture"
+capture = "20260929T100038"
+origin = "live"
+verified = """OBSERVED 13 of 13: every completion of the observer's own 153 in the live
+corpus (stealjoin.py; 20260807T143055 x2, 20260928T103123 x5, 20260929T100038 x6, on 7
+connections) carries, in its E5 batch, [55, me, me, +h] immediately followed by
+[55, foe, me, -d] with |h| == |d| once each fraction is multiplied by its own agent's
+maximum from the wire's [42]s -- 18 twice and 46 eleven times -- and no [10], no 16 / 17
+in the pair. 18 is the scale0 below exactly; 46 is interp(18, 60, 10 / 15) exactly (the
+rank is RECONSTRUCTION; the table agreement CORROBORATED). Client table (build 38974, the
+vault's skills row): id 153, type_code 5 (a spell), target byte 5 (a foe), attribute 4,
+10 energy, 1 s activation, 8 s recharge, scale 18 -> 60, skill_arguments 2 (scale). The
+client's own description template labels %str1% LIFE_STEAL 18..60 and nothing else
+(skilldesc.py; build 38797). The progression's GWW name is not read this pass (no
+browser): "Life stealing" is our label, and HAND_FAMILY maps it to LIFE_STEAL."""
+
 [skill_effect.253]
 [skill_effect.253.provenance]
 source = "wiki"
@@ -1879,6 +1901,20 @@ source = "client-table"
 extractor = "toolkit/clientscan/skilltable.py"
 build = 38797
 verified = "s_skill row 312, +0x7c = 556; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+# CHAN55 (studies/skills 68.3): Vampiric Gaze's recipient visual, which the steal's own
+# batch carries ahead of the heal. `since = "CHAN55"` marks it as the lane's, as the
+# SKILLS-IA rows below are marked: send_skill_visual sends nothing for it under
+# --no-life-steal, so that arm is the pre-lane server's bytes (no row). A marker, not a
+# fact about the client -- the value is the table's.
+[skill_visual.153]
+recipient = 276
+since = "CHAN55"
+[skill_visual.153.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 153, +0x7c = 276 (+0x78 = 2077, none); extracted 2026-10-07 from the pinned 38797 snapshot, the wire's own [20, foe, me, 276] in 13 of 13 of the observer's 153 completion batches (stealjoin.py `visual`)."
 
 [skill_visual.316]
 caster = 562

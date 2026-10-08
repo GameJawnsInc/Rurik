@@ -4472,6 +4472,20 @@ ARMOUR_RESPECTING_MEANS = frozenset({"Fire damage", "Cold damage",
 # `Maximum heal` on Reversal of Fortune.
 SCALE_MEANS_HEAL = {"Heal", "Maximum heal", "Healing"}
 
+# LIFE STEAL (CHAN55, studies/skills 68.3, SKILLS-CH3): the label of a row whose scale is
+# health STOLEN -- the target loses it on the armour-ignoring channel (55, negative) and
+# the caster gains the same amount (55, positive, to itself). OUR label for the client
+# template's LIFE_STEAL slot (skilldesc.py); GWW's own progression name for it is
+# UNVERIFIED (the "Vampiric Gaze" page is owed, no browser this pass). OBSERVED both
+# directions: the observer's own Vampiric Gaze 153, 13 of 13 completions on 7 connections
+# -- [55, me, me, +h] then [55, foe, me, -d], |h| == |d| (18 x 2, 46 x 11), no [10], no
+# 16 / 17 (stealjoin.py); a hostile's 143 at the observer, 3 of 3 -- the gain, the
+# caster's [55, c, c, +h], [10, me, 143], [55, me, c, -d] (studies/skills 53.5).
+# LIFE_STEAL off (--no-life-steal) is the known-bad arm: a steal row resolves to nothing
+# at all, the energy spent for no effect -- every session before 2026-10-07.
+SCALE_MEANS_STEAL = {"Life stealing"}
+LIFE_STEAL = True
+
 # THE LABEL TIER (SKILLS-LT, 2026-09-23, studies/skills 55; DESKWORK-D4 step 4).
 # vault/content/skill_labels.toml carries `tier = "label"` skill_effect rows
 # that toolkit/clientscan/skilldesc.py --emit-labels generates from the
@@ -4532,6 +4546,66 @@ def _is_attack_skill(skill_id):
     except Exception:                                          # noqa: BLE001
         return False
     return int(row["type_code"]) == ATTACK_TYPE_CODE
+
+
+# CHAN55 (studies/skills 68, SKILLS-CH1; CASTAI-ZF31): WHICH PROPERTY A SKILL'S DAMAGE
+# WORD RIDES. Retail names the observer's damage ahead of the word with [10, obs, S]
+# (spellhitjoin.named_words), and over the whole live corpus (127 connections, the
+# manifest-gapped :65009 set aside by name) the skills it names split with NO overlap:
+# property 55, NEGATIVE fraction, for exactly {102, 133, 143, 251, 272, 302, 2809} --
+# 94 words -- and 16 / 17 for 20 others. OBSERVED. The client's own description
+# templates type the 55 side SHADOW (102, 133), a steal slot (143), HOLY (251, 272,
+# 302) and untyped damage (2809, the PvP split of 219); the 16 / 17 side FIRE,
+# LIGHTNING, the attack skills and 399 (untyped, but an ATTACK). So the rule is
+# "armour-ignoring damage on a non-attack" -- WIKI's own split (ARMOUR_RESPECTING_MEANS'
+# banner) -- and NOT "holy": a holy key fails on 4 of the 7 (102, 133, 143, 2809).
+# Keyed on the LOADED ROW, never on a label string's words: a standalone damage label
+# outside ARMOUR_RESPECTING_MEANS ("Holy damage", "Armor-ignoring damage"), or a
+# SCALE_MEANS_STEAL row, on a skill whose type is not ATTACK_TYPE_CODE. RECONSTRUCTION
+# for the player's own holy cast and a hero's (no tape holds either); the corpus's
+# own-cast witness of the channel is the steal 153, 13 of 13 on 55 (studies/skills 68). An unknown type (no skills row) keeps
+# 16: the rule cannot say "not an attack" without it. AN AREA'S TICKS TAKE THE SAME RULE
+# (_area_strike, both casters): retail's PERIODIC damage splits by type exactly as a
+# cast's does -- Balthazar's Aura 272's pulses 64 of 64 on 55, Fire Storm 197's ticks 12
+# of 12 on 16, each named by [10] -- so a holy area over time on 55 is RECONSTRUCTION by
+# that split (no area-over-time spell of an armour-ignoring type is on any tape).
+# (Zealot's Fire 271's 115 on 16 is NOT a tick: it is a payoff riding an ally-targeted
+# cast's completion batch -- spellhitjoin's PAYOFF rule, CASTAI-ZF30.)
+# NOT ROUTED, on purpose: hex_end_burst's player half (Incendiary Bonds 179, fire --
+# 16 OBSERVED, 5 of 5 named) and a blocked attack skill's punishment (an ATTACK's,
+# the rule's own exclusion) keep hit_enemy's 16.
+# --no-armour-ignoring-on-55 reverts THE WORDS THIS RULE ROUTES -- Holy Strike 312,
+# Banish 252, the label tier's holy rows -- back to 16, as this server sent until
+# 2026-10-07. It does not touch a STEAL (its channel is OBSERVED, 13 of 13 own and 3 of
+# 3 hostile, and its own revert is --no-life-steal), nor armour_ignoring_damage's words
+# (Empathy and its kind), which rode 55 before this lane and still do.
+ARMOUR_IGNORING_ON_55 = True
+
+
+def spell_damage_prop(skill_id):
+    """The property a SKILL's damage word rides: GV_ARMOR_IGNORING (55) when the
+    loaded skill_effect row is armour-ignoring damage, or a steal, on a non-attack
+    skill (the banner above), PROP_DAMAGE (16) otherwise -- 16 for no skill or for a
+    skill with no skills row, and 16 for every non-steal row under
+    --no-armour-ignoring-on-55 (a steal keeps 55: --no-life-steal is its revert)."""
+    if not skill_id:
+        return agents.PROP_DAMAGE
+    means = skill_effect_row(skill_id).get("scale_means")
+    steal = means in SCALE_MEANS_STEAL                         # 13 of 13 own on 55
+    if not steal and not ARMOUR_IGNORING_ON_55:
+        return agents.PROP_DAMAGE
+    ignoring = steal or (
+        SCALE_MEANS_DAMAGE.get(means) == "standalone"
+        and means not in ARMOUR_RESPECTING_MEANS)
+    if not ignoring:
+        return agents.PROP_DAMAGE
+    try:
+        type_code = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
+    except Exception:                                          # noqa: BLE001
+        return agents.PROP_DAMAGE
+    if type_code == ATTACK_TYPE_CODE:
+        return agents.PROP_DAMAGE
+    return agents.GV_ARMOR_IGNORING
 
 
 # THE INSTANT SKILL (DESKWORK-D5, 2026-09-25; studies/skills 56.9, SKILLS-IA;
@@ -5411,6 +5485,27 @@ def skill_heal(skill_id, rank):
         return None
     # The vault-boundary guard `skill_damage` carries, for the same reason and
     # with the same narrow catch -- this is the arm `land_skill` reaches.
+    try:
+        return skill_scale_value(skill_id, rank)
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return None
+
+
+def skill_steal(skill_id, rank):
+    """How much health this skill STEALS at `rank` (CHAN55, SCALE_MEANS_STEAL's
+    banner), or None -- not a steal row, not resolved at the cast, no skills
+    row (skill_damage's vault-boundary guard), or --no-life-steal. The amount
+    is the scale as stated: the corpus's 13 own steals are the scale exactly
+    (18 = 153's scale0 at rank 0; 46 = interp(18, 60, 10 / 15)), and no taker
+    modifier is applied to it -- RECONSTRUCTION, the wiki's "Life stealing"
+    page (owed) is what would say whether Frenzy or a conversion touches it."""
+    if not LIFE_STEAL:
+        return None
+    if skill_effect_row(skill_id).get("scale_means") not in SCALE_MEANS_STEAL:
+        return None
+    if not _resolves_at_cast(skill_id):
+        return None
     try:
         return skill_scale_value(skill_id, rank)
     except agents.content.ContentError:
@@ -16179,13 +16274,16 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
                     spell_ar, amount, conn_id):
     """The word of a body's spell on `tid` and its bookkeeping: a party body
     or a hostile through hurt_agent_row (SLICE-H3 / H4), the player through
-    its pool -- the gain ahead of the damage, the word, the death."""
+    its pool -- the gain ahead of the damage, the word, the death. The word's
+    property is the skill's row's (CHAN55, spell_damage_prop): 55 for
+    armour-ignoring damage on a non-attack, 16 otherwise, on both branches."""
+    prop = spell_damage_prop(skill_id)                     # CHAN55
     if tbody:
         # SLICE-H3: the spell was at a party body; SLICE-H4: or a party
         # body's spell at a hostile -- the row's allegiance decides the
         # reward inside.
         hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id,
-                       f"skill {skill_id}")
+                       f"skill {skill_id}", prop=prop)
         # DESKWORK-D5 step 2: the spell's interrupt on a BODY -- RECONSTRUCTION.
         interrupt_body(send, state, tid, state.get("agents", {}).get(tid), conn_id,
                        skill_id, agent_id)
@@ -16216,8 +16314,9 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
     # [16], 16 + 10 + 9 of the 92 (adrenjoin's order census).
     skill_damage_word(send, skill_id, f"a body's skill {skill_id} at the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
-         f"skill {skill_id} deals {dealt:.0f} to the player")
+         [prop, PLAYER_AGENT_ID, agent_id, frac],
+         f"skill {skill_id} deals {dealt:.0f} to the player"
+         + (" (armour-ignoring, CHAN55)" if prop == agents.GV_ARMOR_IGNORING else ""))
 
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
@@ -16715,7 +16814,8 @@ def land_player_spell_shot(send, state, conn_id, shot, connected=True):
     _res = hit_enemy(send, state, tid, conn_id,
                      exact=player_spell_amount(state, sid, tid, spell["amount"]), swing=False,
                      armed=True, projectile=True,
-                     label=f"skill {sid}'s projectile lands", before_damage=before)
+                     label=f"skill {sid}'s projectile lands", before_damage=before,
+                     spell_skill=sid)                                  # CHAN55
     if _res == "landed":
         # DESKWORK-D5 step 2: the player's interrupting SPELL (Lightning
         # Javelin 230) on a body -- RECONSTRUCTION; at the player retail puts
@@ -16861,7 +16961,8 @@ def land_player_spell_area(send, state, conn_id, shot, radius, connected=True):
         res = hit_enemy(send, state, foe, conn_id,
                         exact=player_spell_amount(state, sid, foe, spell["amount"]), swing=False,
                         armed=True, projectile=True,
-                        label=f"skill {sid}'s burst reaches agent {foe}")
+                        label=f"skill {sid}'s burst reaches agent {foe}",
+                        spell_skill=sid)                               # CHAN55
         if res == "landed":
             landed += 1
         if vis is not None and res == "landed":
@@ -17134,7 +17235,8 @@ def burst_player_spell(send, state, conn_id, cast, amount, rank, radius):
     for foe in foes:
         res = hit_enemy(send, state, foe, conn_id,
                         exact=player_spell_amount(state, sid, foe, float(amount)), swing=False,
-                        armed=True, label=f"skill {sid} bursts on agent {foe}")
+                        armed=True, label=f"skill {sid} bursts on agent {foe}",
+                        spell_skill=sid)                               # CHAN55
         if res != "landed":
             continue
         landed += 1
@@ -18077,13 +18179,14 @@ def adjacent_player_spell(send, state, conn_id, cast, amount, rank, radius):
     landed, twins = [], []
     for foe in sorted(foes):
         res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False, armed=True,
-                        label=f"skill {sid} on agent {foe}")
+                        label=f"skill {sid} on agent {foe}", spell_skill=sid)   # CHAN55
         if res != "landed":
             continue
         landed.append(foe)
         if bonus and energy_bonus_holds(state, PLAYER_AGENT_ID, foe, target):
             res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False,
-                            armed=True, label=f"skill {sid}'s energy bonus on agent {foe}")
+                            armed=True, label=f"skill {sid}'s energy bonus on agent {foe}",
+                            spell_skill=sid)                           # CHAN55
             if res != "landed":
                 continue
             twins.append(foe)
@@ -18239,7 +18342,8 @@ def _area_strike(send, state, conn_id, area, now):
         for foe in foes:
             res = hit_enemy(send, state, foe, conn_id,
                             exact=player_spell_amount(state, sid, foe, amount), swing=False,
-                            armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}")
+                            armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}",
+                            spell_skill=sid)            # CHAN55: the tick takes the cast's rule
             if res == "landed":
                 struck.append(foe)
     else:
@@ -18396,7 +18500,8 @@ def burst_player_caster_area(send, state, conn_id, cast, found, inflicted, rank,
         if amount is not None:
             res = hit_enemy(send, state, foe, conn_id,
                             exact=player_spell_amount(state, sid, foe, amount), swing=False,
-                            armed=True, label=f"skill {sid} bursts from the caster on agent {foe}")
+                            armed=True, label=f"skill {sid} bursts from the caster on agent {foe}",
+                            spell_skill=sid)                           # CHAN55
             if res != "landed":
                 continue
             landed += 1
@@ -23613,8 +23718,14 @@ def ground_items_tick(send, state, conn_id):
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
               skill_strike=False, skill_id=None, before_damage=None,
-              projectile=False, damage_mult=1.0):
+              projectile=False, damage_mult=1.0, spell_skill=None):
     """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `spell_skill` names the SPELL an `exact` amount belongs to, for its word's
+    property only (CHAN55: spell_damage_prop -- 55 for armour-ignoring damage on
+    a non-attack). It is not `skill_id`, which is the ATTACK skill a swing
+    carries and gates the strike's own terms; an `exact` with no spell_skill
+    keeps 16 (the hex end, the block punishment).
 
     `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
     weapon strike -- the roll, the armour exponent, the critical, the
@@ -23807,6 +23918,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                                             # this against each foe's OWN armour
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
+    if exact is not None and spell_skill is not None:
+        prop = spell_damage_prop(spell_skill)            # CHAN55: 55 or 16, by the row
     frac = _damage_fraction(dealt, agent["max_health"], prop,
                             ("one critical" if critical else label)
                             + (f" +{bonus_damage:.0f}" if bonus_damage else ""))
@@ -27606,6 +27719,7 @@ def cast_tick(send, state, conn_id):
             # does nothing to the target at all.
             _label_tier_note(cast["skill_id"], conn_id, "the player's")   # SKILLS-LT
             found = skill_damage(cast["skill_id"], rank)
+            _steal = skill_steal(cast["skill_id"], rank)             # CHAN55 (None: no steal)
             # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX's radius and
             # its on-cast hit (Deep Freeze, Ice Spikes: `hits_on_cast`), read
             # here beside `found` (None for every hex) and landed in the arm
@@ -27914,13 +28028,20 @@ def cast_tick(send, state, conn_id):
                     _st_res = hit_enemy(send, state, target, conn_id, exact=player_spell_amount(
                                             state, cast["skill_id"], target, float(found[0])),
                                         swing=False, armed=True,
-                                        label=f"skill {cast['skill_id']}")
+                                        label=f"skill {cast['skill_id']}",
+                                        spell_skill=cast["skill_id"])  # CHAN55
                     if _st_res == "landed":
                         # SKILLS-LV: the row's knock-down on the one target the
                         # word landed on (231, 294) -- after the word, the
                         # burst arms' order (RECONSTRUCTION for a damage row)
                         nonattack_knock_down(send, state, cast["skill_id"], target,
                                              conn_id, "the player's")
+            elif target and _steal is not None and not _na_fail \
+                    and not target_dead(state, target):
+                # CHAN55 (studies/skills 68.3): the player's own LIFE STEAL -- the
+                # heal to the player, then the foe's word on 55, in the E5's batch
+                # (13 of 13 own Vampiric Gazes). A dead target steals nothing.
+                player_life_steal(send, state, conn_id, cast["skill_id"], target, _steal)
             elif target and _ahex_hit is not None and not _na_fail \
                     and not target_dead(state, target):
                 # studies/weapons 43: an AREA HEX that hits on cast bursts its
@@ -28230,6 +28351,11 @@ def send_skill_visual(send, state, caster_id, skill_id, target_id, conn_id):
         # they send nothing. (The review's EV-1 / CD-1: the first cut sent
         # the [21] under both arms and called the arm "today's bytes".)
         return
+    if not LIFE_STEAL and row.get("since") == "CHAN55":
+        # The same exactness for --no-life-steal: Vampiric Gaze 153's [20, foe, me,
+        # 276] (13 of 13 own completions) came in with CHAN55, and that arm is "a
+        # steal row resolves to nothing", the server before 2026-10-07 -- no row.
+        return
     caster_vis = row.get("caster")
     if caster_vis is not None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -28363,9 +28489,17 @@ def aura_off(send, state, agent_id, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max=None, skill_id=None):
+                           declare_max=None, skill_id=None, before_word=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction]. Kills through the same doors a hit does.
+
+    `before_word` (CHAN55, a life steal's heal to its caster) is called once the
+    damage is certain to land, in retail's slot: at the PLAYER after the gain and
+    ahead of [10, player, skill] (143 at the observer, 3 of 3: 0x00CF, the
+    caster's [55, c, c, +h], [10], the word); at a BODY ahead of its maximum and
+    word (the own steal's order: the heal then the word 13 of 13, the foe's
+    first-word [42] between them on 2 of 13 -- RECONSTRUCTION for a body victim of
+    a body). Never called when nothing lands.
 
     THE MAXIMUM (property 42) IS DECLARED ONLY WHEN IT MOVED (DESKWORK-D5 3(a)):
     the PLAYER branch goes through `declare_player_max`, which sends the 42 only
@@ -28411,6 +28545,8 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             player_gains_adrenaline(
                 send, state, pools.damage_units(amount / pool), time.time(),
                 conn_id, f"{amount:.0f} armour-ignoring damage taken ({what})")
+        if before_word is not None:
+            before_word()                       # CHAN55: a steal's heal, gain -> heal -> [10]
         # 3(b): the skill the word belongs to, when the caller knows it. On a
         # hex-triggered 55 (Empathy punishing the player's attack) this is
         # INFERRED from the every-skill-damage rule (skill completions at the
@@ -28436,6 +28572,8 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     # due must precede it. It sat after the declare until 2026-09-30, which
     # changed nothing then -- the provoke sends nothing.
     provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
+    if before_word is not None:
+        before_word()                           # CHAN55: a steal's heal, ahead of the 42
     # MAXHP-1: the player's first word on the body (or the first after its
     # maximum moved) carries the 42 right before it; a hero's Empathy none.
     declare_body_max_on_hit(send, agent, target_id, source_id, what,
@@ -28465,6 +28603,60 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             print(f"[c{conn_id}] PARTY AGENT {target_id} IS DEAD -- it waits "
                   f"for a resurrection (SLICE-H3)", flush=True)
     return amount
+
+
+# ---- CHAN55: LIFE STEAL (studies/skills 68.3, SKILLS-CH3) -------------------------
+#
+# A steal is ONE amount moved: the target loses it on 55 (negative) and the caster
+# gains it on 55 (positive, to itself) -- |heal| == |damage| 13 of 13 on the observer's
+# own Vampiric Gaze. The heal is heal_agent(healing=False): WIKI (GWW "Deep Wound", rev.
+# 2026-03-02, heal_agent's own citation) -- the reduction "does not affect life
+# stealing". The heal rides AHEAD of the damage word in both directions on tape; a heal
+# sent after the word is the known-bad order. NOT MODELLED, named here: a cap at the
+# target's remaining health (the 13 own steals all stole the full amount; 11 of them on
+# foes whose health is unknown, and the other 2 -- agent 40 on 20260807T143055 :64103,
+# reconstructed from its create at 88 and 37 left -- were never near it; retail's
+# damage words carry the raw overkill, _damage_fraction's census) -- UNVERIFIED, a
+# runsheet item; taker modifiers (Frenzy, a conversion) are not applied to a steal --
+# RECONSTRUCTION (skill_steal).
+
+
+def player_life_steal(send, state, conn_id, skill_id, target, amount):
+    """The player's own steal on a hostile: hit_enemy's exact word on 55 (its
+    spell_skill names the steal row) with the heal in before_damage. Behind cast_tick's
+    E5, 58 and the visual [20, foe, me, 276] (skill_visual.153; 13 of 13 own
+    completions): the caster's [42, me, max] when it MOVED, the heal, the foe's
+    first-word [42], the word. No [10] and no gain (the caster's own cast). Returns
+    hit_enemy's verdict.
+
+    THE [42, me] IS CONTESTED. Retail sends it between the E5 and the heal on 7 of the
+    13 own steals (238.151, 465.746, 593.854, 437.052, 527.415, 561.348, 129.665) and
+    every one of the 7 re-declares an UNCHANGED maximum (the last [42, me] before the
+    E5 carries the same value); the other 6 have none, and no trigger is derived
+    (stealjoin.py's `self_max`). declare_player_max's "only when it moved" rule is
+    kept, so in a session -- the maximum seeded at the create -- ours sends none of
+    the 7: a named divergence, studies/skills 68.4."""
+    amount = _whole_points(float(amount))
+
+    def _heal():
+        declare_player_max(send, state, f"maximum declared ahead of skill {skill_id}'s steal")
+        heal_agent(send, state, PLAYER_AGENT_ID, PLAYER_AGENT_ID, amount, conn_id,
+                   healing=False)
+    return hit_enemy(send, state, target, conn_id, exact=amount, swing=False, armed=True,
+                     label=f"skill {skill_id} steals", spell_skill=skill_id,
+                     before_damage=_heal)
+
+
+def body_life_steal(send, state, conn_id, caster_id, skill_id, tid, amount):
+    """A body's steal on `tid` (the player, a party body, a hostile): the word through
+    armour_ignoring_damage with the caster's heal in its before_word slot -- at the
+    player the gain, the heal, [10, me, skill], the word (143's batch, 3 of 3)."""
+    amount = _whole_points(float(amount))
+    return armour_ignoring_damage(
+        send, state, tid, caster_id, amount, conn_id,
+        f"agent {caster_id}'s skill {skill_id} steals", skill_id=skill_id,
+        before_word=lambda: heal_agent(send, state, caster_id, caster_id, amount, conn_id,
+                                       healing=False))
 
 
 def on_attack_triggers(send, state, attacker_id, conn_id):
@@ -33159,9 +33351,12 @@ def hostile_target(state, agent_id, agent, now):
     return best[1]
 
 
-def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
+def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what,
+                   prop=None):
     """`dealt` health off agent row `tid`, on the same property-16 channel a
-    hit on any agent rides ([16, TARGET, cause, fraction]). A PARTY body
+    hit on any agent rides ([16, TARGET, cause, fraction]) -- or on `prop`
+    when the caller names one (CHAN55: body_spell_word's 55 for an
+    armour-ignoring skill; the fraction is the same either way). A PARTY body
     (SLICE-H3) dies through kill_agent with no kill reward -- a party death
     pays nobody; a HOSTILE (SLICE-H4, the party's own hit) dies with the
     reward, the objective and the morale the player's hit pays: the party's
@@ -33192,7 +33387,7 @@ def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
         agent_adrenaline(row).on_damage_taken(
             dealt / float(row["max_health"] or 1.0), now)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, tid, attacker_id, frac],
+         [agents.PROP_DAMAGE if prop is None else prop, tid, attacker_id, frac],
          f"{what}: {dealt:.0f} to {'agent' if hostile else 'party agent'} {tid}")
     print(f"[c{conn_id}] {'agent' if hostile else 'party agent'} {tid} "
           f"({row.get('name', '?')}) takes {dealt:.0f} from agent "
@@ -39627,6 +39822,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # apply_effect as a consequence; no skill on this bar both hexes and
     # damages, so nothing today can observe the reordering.)
     damage = skill_damage(skill_id, _rank)
+    # CHAN55 (studies/skills 68.3): a LIFE STEAL on the cast's target -- its amount and
+    # its fraction computed HERE, before the 58 (the refusal contract above); the word
+    # and the caster's heal go out at the end through body_life_steal.
+    _steal = skill_steal(skill_id, _rank) if (damage is None and _tid != agent_id) else None
+    if _steal is not None:
+        _steal = _whole_points(float(_steal))
+        _damage_fraction(_steal, (state["agents"][_tid]["max_health"] if _tbody
+                                  else player_max_health(state)),
+                         agents.GV_ARMOR_IGNORING, f"skill {skill_id}'s steal")
     # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX that hits on cast
     # (Deep Freeze, Ice Spikes) -- its scale is the burst's amount, every
     # foe's terms computed below before the 58, the words behind the hexes
@@ -39929,6 +40133,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
                           agent.get("cast_target"), conn_id)
     divine_favor_word(send, state, skill_id, agent_id, agent.get("cast_target"),
                       conn_id)                                     # SKILLS-EX6
+    if _steal is not None:
+        # CHAN55: the steal -- at the player the gain, the caster's heal, [10], the
+        # word (143 at the observer, 3 of 3); at a body the heal, then the word.
+        agent["casting"] = None
+        body_life_steal(send, state, conn_id, agent_id, skill_id, _tid, _steal)
+        return
 
     # The damage and its fraction were computed BEFORE the 58 went out (the
     # guard block at the top); from here on this is emission and bookkeeping
@@ -51180,6 +51390,23 @@ def main():
         print("NO BONUS REQUIRES SPELL: Savage Shot 426's +13..28 lands on every hit, "
               "whatever the target is doing (WIKI and retail: only on a spell, "
               "CASTAI-ZF21).", flush=True)
+
+    if a.no_armour_ignoring_on_55:
+        global ARMOUR_IGNORING_ON_55
+        ARMOUR_IGNORING_ON_55 = False
+        print("NO ARMOUR-IGNORING ON 55: the damage words spell_damage_prop routes -- "
+              "Holy Strike 312, Banish 252, the label tier's holy rows -- ride property "
+              "16, as until 2026-10-07 (retail: an armour-ignoring non-attack skill's "
+              "word rides 55, negative -- 94 words, 7 skills, no overlap; CHAN55). A "
+              "steal keeps 55 (--no-life-steal is its revert).", flush=True)
+
+    if a.no_life_steal:
+        global LIFE_STEAL
+        LIFE_STEAL = False
+        print("NO LIFE STEAL: a life-steal row (Vampiric Gaze 153) resolves to nothing -- "
+              "its energy spent for no effect, as until 2026-10-07 (retail: the caster "
+              "gains what the target loses, 13 of 13 own casts, 3 of 3 at the player; "
+              "CHAN55).", flush=True)
 
     if a.no_interrupt_chain_hold:
         global INTERRUPT_CHAIN_RETAKES_HOLD
