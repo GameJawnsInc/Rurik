@@ -1065,6 +1065,9 @@ HAND_FAMILY = {
     "Heal per energy lost": {Label.HEAL},
     "+ Maximum health": {Label.MAX_HEALTH}, "+ Max health": {Label.MAX_HEALTH},
     "Health degeneration": {Label.HEALTH_DEGEN},
+    # SKILLS-RG (2026-10-07, studies/skills 64): the hand rows 446 and 288 name it,
+    # and the parse reads both slots HEALTH_REGEN at str1 -- AGREE, not NOT_COMPARABLE.
+    "Health regeneration": {Label.HEALTH_REGEN},
     "Health threshold %": {Label.HEALTH_PERCENT},
     "Energy": {Label.ENERGY, Label.ENERGY_LOSS}, "Energy gain": {Label.ENERGY},
     "Energy loss": {Label.ENERGY_LOSS, Label.ENERGY},

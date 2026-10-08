@@ -3201,6 +3201,34 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the pre-2026-09-09 wire, where the only status "
                          "messages were death and revive. Retail sends the "
                          "word behind every such apply and close.")
+    ap.add_argument("--no-health-regen", action="store_true",
+                    help="SKILLS-RG REVERT (studies/skills 64): property 44 is "
+                         "degeneration only, the server before 2026-10-07 -- no "
+                         "`Health regeneration` row counts, no positive rate is "
+                         "sent, nothing raises health over time, and the "
+                         "conditions are capped at 10 BEFORE the hex rows are "
+                         "added (cap-then-add). Wrong on retail's apply words: "
+                         "446 +3 and 288 +8 arrive as nothing (814's +5 is "
+                         "unmodelled either way: it has no row), and 288 on "
+                         "20260928T103123 :50061 read -13 + 8 = -5, which a "
+                         "server that cannot regenerate never sends. A hex row "
+                         "with no client record raises under both arms, as it "
+                         "always did.")
+    ap.add_argument("--no-natural-regen", action="store_true",
+                    help="SKILLS-RG REVERT: the player gets NO natural health "
+                         "regeneration -- its health never recovers except by a "
+                         "heal. Retail ramps +1 pip every 2.0 s from 5.0 s after "
+                         "the last reset (regenjoin.py: 19 of 19 observer first "
+                         "steps, 45 of 45 steps) to +7 (the hostiles' cap, the "
+                         "player's by the same law). The A/B arm for any probe "
+                         "that scores an exact health delta.")
+    ap.add_argument("--no-max-hp-reached", action="store_true",
+                    help="SKILLS-RG REVERT: a positive regeneration rate that ends "
+                         "on a FULL agent goes out as the [44] zero instead of "
+                         "0x009F [32, agent, 0]. Retail never does: 113 of 113 "
+                         "[32]s follow a positive word and 6 of 6 regen closes at "
+                         "full carry one; the client's [32] handler sets the bar "
+                         "full and the regen to 0 itself (0x008181E5).")
     ap.add_argument("--regen-zero-signed", action="store_true",
                     help="RANGERPRE-S3 REVERT: a health-regeneration rate that "
                          "returns to zero (a condition's expiry) goes out as "

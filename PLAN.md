@@ -2056,6 +2056,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   25 s combat clock; whether retail's clear counts from a zero `0x00CF` is NOT OBSERVED
   (every zero on RB sits inside a run of other gains). A hero's zero gain is still not
   sent (`hero_pool_gain`), unread on JARIN's tape either way.
+* **SKILLS-RG** (skills §64): regen, the natural ramp and [32] shipped ON, unrun -- runsheet in PLAN-LOG; next in §64.7.
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
@@ -2111,7 +2112,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Areas over time and scatter** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §41–§45, [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §16
 
-* **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a condition on a FOE sends no `[6]` id (Burning 25, Dazed 28, Cracked Armor / Weakness 29); a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy; retail's `[61]` for a player's own cast.
+* **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy.
 * **Six areas over time stay inert** (77, 196, 215, 844, 1083, 1372; WEAPONS-C12); no ground-visual id for 192 / 167 / the new five; wiki pages owed; a caster killed in play is unwitnessed (WEAPONS-C11).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
 * **CASTAI's residue** (monsterai §17-18.5; §7 Q19): which READY skill a normal-mode monster fires (round robin stays; three Zaishen bars are not round robin, Z1.P6); the AI TIER (CASTAI-W2); heal thresholds on another ally; area-hex wearers ungated (CASTAI-R3); upkeep enchantments (289, 290) open no episode; Smite Hex 302 and Drain Enchantment 68 unmodelled (CASTAI-RM6).
