@@ -371,6 +371,7 @@ def section_attack_skill_roots():
 
 def section_clean_restart():
     import authsrv
+    from test_position_trust import frozen
 
     print("\n4. a press after a cancel schedules from NOW, not from the "
           "cancelled cast's ghost")
@@ -383,7 +384,9 @@ def section_clean_restart():
         _press(authsrv, send, state, skill=105)
         authsrv.cancel_on_move(send, state, 0)
         now = time.time()
-        _press(authsrv, send, state, skill=153)
+        # The press lands AT `now` (`frozen`): it schedules off its own clock, and the
+        # 0.05 s tolerance below was all the wall clock it had to get there.
+        frozen(now, _press, authsrv, send, state, skill=153)
         fresh = state["pending_casts"][-1]
         check(abs((fresh["e5_at"] - now) - 2.0) < 0.05,
               "the new cast's E5 sits one activation out -- the queue law "
@@ -539,11 +542,18 @@ def section_landing_split():
     """
     import authsrv
     import time as _t
+    from test_position_trust import frozen
 
     print("\n7. ANIMREF-RE 32: the landing splits movement into two regimes")
 
     def move_at(offset_from_start):
-        """Open a swing, jump the clock `offset` seconds in, then move."""
+        """Open a swing, jump the clock `offset` seconds in, then move.
+
+        The move lands AT the swing's armed_at (`frozen`) and `windup` is the server's own
+        lands_at - armed_at. Both used to be the wall clock: the move raced the 0.775 s
+        windup (regime 1 red when it expired), and `windup` -- read a moment after the
+        stamp -- came up short by whatever ran in between, so regime 2's +0.05 s rewind
+        left the landing still ahead once that passed 50 ms."""
         sent = []
         send = lambda op, vals, label="", quiet=False: \
             sent.append((op, vals, label))
@@ -554,11 +564,11 @@ def section_landing_split():
         authsrv.attack_tick(send, state, 0)              # START, arms the swing
         # Move the swing's landing into the past or future by rewinding it.
         sw = state["player_swing"]
-        windup = sw["lands_at"] - _t.time()
+        windup = sw["lands_at"] - sw["armed_at"]
         sw["lands_at"] -= offset_from_start
         state["player_last_swing"] -= offset_from_start
         sent.clear()
-        authsrv.cancel_on_move(send, state, 0)
+        frozen(sw["armed_at"], authsrv.cancel_on_move, send, state, 0)
         stops = [v for op, v, _l in sent
                  if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                  and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
@@ -652,6 +662,7 @@ def section_landing_split():
 
 def section_cancel_action_door():
     import authsrv
+    from test_position_trust import frozen
 
     print("\n6. the 0x0028 door: the one that reaches a held cast")
     # The run that forced this arm: 20260823T101329, where the operator's
@@ -734,7 +745,9 @@ def section_cancel_action_door():
     authsrv.begin_attack(send, state, 10, 0)
     authsrv.attack_tick(send, state, 0)                    # arm the swing
     sent.clear()
-    authsrv.cancel_action(send, state, 0)
+    # Esc AT the swing's armed_at (`frozen`), mid-windup as the corpus instants were: the
+    # door's [3] reads its own clock against lands_at, 0.775 s after the stamp.
+    frozen(state["player_swing"]["armed_at"], authsrv.cancel_action, send, state, 0)
     pair = [(op, v) for op, v, _ in sent]
     # THE ORDER IS STILL THE POINT and it is still pinned -- what changed
     # is that the second half only exists when something SET the hold. An
@@ -837,6 +850,7 @@ def section_skill_stop_windup():
     between the swings of a live chain [3] on 4 of 374, races."""
     import authsrv
     import time as _t
+    from test_position_trust import frozen
 
     print("\n8. MOVECODE-1z-ds.24: a skill press stops only a windup, never an instant's")
     STOP = authsrv.agents.GV_ATTACK_STOPPED
@@ -861,7 +875,17 @@ def section_skill_stop_windup():
                 sw["lands_at"] -= 5.0
                 authsrv.attack_tick(send, state, 0)
             sent.clear()
-            _press(authsrv, send, state, skill=42, copy=7, target=(10 if attack else 0))
+            # "Inside the windup" is the press AT the swing's own armed_at (`frozen`), 0 s
+            # into its 0.775 s. On the wall clock the rest of attack_tick and the press ran
+            # inside it, and an expired windup is a press BETWEEN swings: 8b/8d's stops go
+            # red on the machine's speed, and 8a goes green whether or not the instant's
+            # exemption works, because a between-swing instant sends no [3] either.
+            target = 10 if attack else 0
+            if phase == "windup":
+                frozen(sw["armed_at"], _press, authsrv, send, state, skill=42, copy=7,
+                       target=target)
+            else:
+                _press(authsrv, send, state, skill=42, copy=7, target=target)
             stops = [v for op, v, _l in sent if op == 0x009F and v[0] == STOP]
             cancel = state.get("player_swing_cancel")
             landed = None
@@ -921,6 +945,13 @@ def section_skill_stop_windup():
         sent.clear()
         return state, send, sent, agent
 
+    # 8f-h's "inside one tick, mid-windup" is every door AT the swing's armed_at, as in
+    # press_in above: on the wall clock their [3]s were the 0.775 s windup outlasting
+    # the doors, and an expired one reds all three on the machine's speed.
+    def mid(st):
+        t = st["player_swing"]["armed_at"]
+        return lambda fn, *a, **kw: frozen(t, fn, *a, **kw)
+
     HOLD = authsrv.agents.GV_DISABLED
     saved = (authsrv.skill_timing, authsrv._is_instant_skill, authsrv._is_attack_skill)
     try:
@@ -929,11 +960,12 @@ def section_skill_stop_windup():
         authsrv._is_instant_skill = lambda sid: sid == 42
         authsrv.skill_timing = lambda sid: ((0.0, 0.0, 8.0) if sid == 42 else (0.5, 0.0, 8.0))
         st, send, sent, agent = armed()
-        _press(authsrv, send, st, skill=42)
+        at = mid(st)
+        at(_press, authsrv, send, st, skill=42)
         assert st.get("pending_casts"), "the instant must be accepted for 8f to mean anything"
-        _press(authsrv, send, st, skill=394, target=10)
+        at(_press, authsrv, send, st, skill=394, target=10)
         stops = [v for op, v, _l in sent if op == 0x009F and v[0] == STOP]
-        authsrv.attack_tick(send, st, 0)
+        at(authsrv.attack_tick, send, st, 0)
         check(stops == [[STOP, PLAYER, 0]] and st.get("player_swing") is None
               and agent["health"] == 100.0,
               "8f. a stance then an attack skill inside one tick, mid-windup: the attack skill "
@@ -942,8 +974,9 @@ def section_skill_stop_windup():
               f"stops={stops} health={agent['health']}")
         # 8g: a stance, then Esc in the same tick: release + [3], the swing dropped
         st, send, sent, agent = armed()
-        _press(authsrv, send, st, skill=42)
-        authsrv.cancel_action(send, st, 0)
+        at = mid(st)
+        at(_press, authsrv, send, st, skill=42)
+        at(authsrv.cancel_action, send, st, 0)
         seq = [("8:%d" % v[2]) if v[0] == HOLD else "3" for op, v, _l in sent
                if op == 0x009F and v[0] in (HOLD, STOP)]
         check(seq == ["8:0", "3"] and st.get("player_swing_cancel") == "cancel action",
@@ -951,8 +984,9 @@ def section_skill_stop_windup():
               "not silence", f"{seq}")
         # 8h: Esc then a move in the same tick: ONE [3]
         st, send, sent, agent = armed()
-        authsrv.cancel_action(send, st, 0)
-        authsrv.cancel_on_move(send, st, 0, moved=40.0)
+        at = mid(st)
+        at(authsrv.cancel_action, send, st, 0)
+        at(authsrv.cancel_on_move, send, st, 0, moved=40.0)
         stops = [v for op, v, _l in sent if op == 0x009F and v[0] == STOP]
         check(len(stops) == 1,
               "8h. Esc then a move inside one windup's tick: one [3] -- the second door sees the "

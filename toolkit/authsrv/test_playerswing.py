@@ -74,13 +74,19 @@ def _rewind(state, seconds):
 
 def section_two_phases():
     import authsrv
+    import time as _t
+    from test_position_trust import frozen
 
     print("1. a swing is a START, a windup, then the landing -- not one call")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = _state()
-    authsrv.begin_attack(send, state, 10, 0)
-    authsrv.attack_tick(send, state, 0)
+    # The press, the START and the undue tick all run AT t1 (`frozen`): "due a windup
+    # out" was the wall clock against lands_at within 0.25 s, and "an undue swing does
+    # not land early" was a second tick racing the 0.775 s windup.
+    t1 = _t.time()
+    frozen(t1, authsrv.begin_attack, send, state, 10, 0)
+    frozen(t1, authsrv.attack_tick, send, state, 0)
 
     # THE DENOMINATOR THAT WAS READ BACKWARDS, and it is why the hold
     # left this file: castmech 3c censuses the prop-8 HOLDS and finds 4 of
@@ -103,14 +109,13 @@ def section_two_phases():
     expect = authsrv.swing_windup(authsrv.ATTACK_INTERVAL)
     check(swing is not None and swing["target"] == 10,
           "and arms a swing at the clicked target", f"{swing}")
-    import time as _t
-    check(swing and abs((swing["lands_at"] - _t.time()) - expect) < 0.25,
+    check(swing and abs((swing["lands_at"] - t1) - expect) < 0.25,
           f"due a windup out: {expect:.3f}s = SWING_WINDUP_RATIO x the "
           f"declared {authsrv.ATTACK_INTERVAL}s -- the same arithmetic the "
           f"agents use",
-          f"lands in {swing['lands_at'] - _t.time():.3f}s" if swing else "none")
+          f"lands in {swing['lands_at'] - t1:.3f}s" if swing else "none")
 
-    authsrv.attack_tick(send, state, 0)
+    frozen(t1, authsrv.attack_tick, send, state, 0)
     check(len(sent) == 2, "an undue swing does not land early (the start and its hold, "
           "nothing more)", f"{len(sent)} sends")
 
@@ -839,6 +844,7 @@ def section_click_leg_eta():
     """
     import authsrv
     import time as _t
+    from test_position_trust import frozen
 
     print("\n8. ANIMREF-RE 37: the click-walk latch ends when the LEG does")
 
@@ -848,6 +854,11 @@ def section_click_leg_eta():
           f"CLICK_LATCH_LEG_ETA = {authsrv.CLICK_LATCH_LEG_ETA}")
     W = authsrv.GRANT_LOCAL_WINDOW
     now = _t.time()
+    # EVERY VERDICT BELOW IS READ AT `now` (`frozen`, test_position_trust): the legs
+    # are stamped off this one instant and _player_body_moving reads the server's own
+    # `time.time()`, so on the wall clock 8a's "0.5 s into a 1.0 s leg" had 0.5 s of
+    # margin and 8c/8f/8g 1.5 s, all of it spent by whatever ran in between.
+    moving_at_now = lambda s: frozen(now, authsrv._player_body_moving, s)   # noqa: E731
 
     # 8a. the leg record: 288 u at the declared 288 u/s is 1.0 s, from the
     # last report when the client has spoken since the previous click.
@@ -862,7 +873,7 @@ def section_click_leg_eta():
           "the click, starting from the last accepted report",
           f"p0={leg and leg['p0']} dist={leg and leg['dist']:.1f} "
           f"eta-t0={leg and leg['eta'] - t0:.3f}")
-    check(authsrv._player_body_moving(st) is True,
+    check(moving_at_now(st) is True,
           "0.5 s into a 1.0 s leg the body is MOVING -- 31's chain pause "
           "must keep pausing through a real click-walk (the known-bad arm "
           "of the other direction)",
@@ -871,7 +882,7 @@ def section_click_leg_eta():
     # the old 3.0 s window, the body is PARKED and the swing may open.
     st["click_moving_at"] = now - 1.5
     leg["t0"], leg["eta"] = now - 1.5, now - 0.5
-    check(authsrv._player_body_moving(st) is False,
+    check(moving_at_now(st) is False,
           "1.5 s after a 1.0 s click the body is PARKED -- under the 3.0 s "
           "constant it read as moving for another 1.5 s and the press was "
           "starved; this is the 60.6% deficit as one assertion",
@@ -882,7 +893,7 @@ def section_click_leg_eta():
     st2["click_moving_at"] = t0
     leg2 = authsrv._click_leg_arm(st2, (1440.0, 0.0), t0, silent=False)
     check(leg2 is not None and abs(leg2["eta"] - (t0 + 5.0)) < 1e-6
-          and authsrv._player_body_moving(st2) is True,
+          and moving_at_now(st2) is True,
           "3.5 s into a 1440 u (5.0 s) click the body is STILL MOVING -- "
           "the constant declared it parked at 3.0 s and would open a "
           "swing on a walking body",
@@ -920,7 +931,7 @@ def section_click_leg_eta():
     # bound this latch -- the constant does, as before.
     st5 = {"click_moving_at": now - 1.5, "click_leg": dict(leg, t0=now - 9.0,
                                                           eta=now - 8.0)}
-    check(authsrv._player_body_moving(st5) is True,
+    check(moving_at_now(st5) is True,
           "a leg whose stamp is not THIS latch's is a leftover: the latch "
           "falls back to the constant (still inside 3.0 s -> moving), so a "
           "click with no placeable start never reads as parked by accident",
@@ -932,7 +943,7 @@ def section_click_leg_eta():
                "click_leg": {"t0": now - 1.5, "p0": (0.0, 0.0),
                              "dest": (288.0, 0.0), "dist": 288.0,
                              "speed": 288.0, "eta": now - 0.5}}
-        check(authsrv._player_body_moving(st6) is True,
+        check(moving_at_now(st6) is True,
               "REVERT ARM --click-latch-window: the same parked leg reads "
               "as moving until the 3.0 s constant expires -- 34's shape, "
               "reproducible on purpose",
@@ -946,14 +957,17 @@ def section_click_leg_eta():
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append(
         (op, vals, label))
+    # Both presses land AT t0 + 0.5 (`frozen`): the known-bad arm's 1.0 s leg is
+    # walking for 0.5 s of wall clock past its stamp and begin_attack + attack_tick
+    # ran inside that, so under load its "still WAITS" read the machine's speed.
     state = _state()
     state["client_pos"] = (0.0, 0.0)
     t0 = _t.time() - 0.5
     state["click_moving_at"] = t0
     authsrv._click_leg_arm(state, (86.4, 0.0), t0, silent=False)
-    authsrv.begin_attack(send, state, 10, 0)
+    frozen(t0 + 0.5, authsrv.begin_attack, send, state, 10, 0)
     sent.clear()
-    authsrv.attack_tick(send, state, 0)
+    frozen(t0 + 0.5, authsrv.attack_tick, send, state, 0)
     started = [v for op, v, _l in sent
                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                and v[0] == authsrv.agents.GV_ATTACK_STARTED]
@@ -970,9 +984,9 @@ def section_click_leg_eta():
     t0 = _t.time() - 0.5
     state2["click_moving_at"] = t0
     authsrv._click_leg_arm(state2, (288.0, 0.0), t0, silent=False)
-    authsrv.begin_attack(send, state2, 10, 0)
+    frozen(t0 + 0.5, authsrv.begin_attack, send, state2, 10, 0)
     sent.clear()
-    authsrv.attack_tick(send, state2, 0)
+    frozen(t0 + 0.5, authsrv.attack_tick, send, state2, 0)
     started2 = [v for op, v, _l in sent
                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                 and v[0] == authsrv.agents.GV_ATTACK_STARTED]
@@ -1021,6 +1035,7 @@ def section_reach_and_approach():
     import authsrv
     import struct
     import time as _t
+    from test_position_trust import frozen
 
     print("\n9. ANIMREF-RE 38: the reach, and the approach that walks the body "
           "into it")
@@ -1302,28 +1317,33 @@ def section_reach_and_approach():
         # warp when pressing W and attacking", 20261001T185315): no click latch,
         # so the snap guard's model was the bare last report -- the body as it was
         # up to a second ago. It is now that report advanced along its heading.
+        # EACH TICK RUNS AT THE INSTANT ITS REPORT IS AGED FROM (`frozen`): the estimate
+        # reads the server's own clock, so "(0, 288) within 2 u" was 6.9 ms of wall clock
+        # between the stamp and that read, and ROUND 2's ages sit 0.3 s under the 2.0 s
+        # cap and the 100 u reprieve.
         def kbd_state(copy_xy, age=1.0):
             st = fresh((0.0, 3000.0), player_xy=copy_xy)
+            t = _t.time()
             st["client_pos"] = (0.0, 0.0)
-            st["client_pos_at"] = _t.time() - age
+            st["client_pos_at"] = t - age
             st["client_heading"] = (0.0, 766.0, 1, st["client_pos_at"])
-            return st
-        st = kbd_state((0.0, 288.0))           # the copy where the body is (135.21's shape)
-        authsrv.attack_tick(send, st, 0)
+            return st, t
+        st, t = kbd_state((0.0, 288.0))        # the copy where the body is (135.21's shape)
+        frozen(t, authsrv.attack_tick, send, st, 0)
         check(repins(sent) == [] and len(follows(sent)) == 1,
               "KEYBOARD, the copy at the body: the report 1.0 s old advanced 288 u "
               "along its heading IS the copy, so no re-pin -- where the bare report "
               "re-pinned 288 u behind (the short backwards warp)",
               f"repins {repins(sent)}")
-        st = kbd_state((0.0, 1900.0))          # the copy run ahead (128.40's shape)
-        authsrv.attack_tick(send, st, 0)
+        st, t = kbd_state((0.0, 1900.0))       # the copy run ahead (128.40's shape)
+        frozen(t, authsrv.attack_tick, send, st, 0)
         rp = repins(sent)
         check(len(rp) == 1 and abs(rp[0][1][0]) < 0.5 and abs(rp[0][1][1] - 288.0) < 2.0,
               "KEYBOARD, the copy 1,612 u ahead: the re-pin lands on the ESTIMATED "
               "body (0, 288), not on the 1 s old report (0, 0)",
               f"repins {rp}")
-        st = kbd_state((0.0, 288.0), age=3.0)  # past the measured ages: no estimate
-        authsrv.attack_tick(send, st, 0)
+        st, t = kbd_state((0.0, 288.0), age=3.0)   # past the measured ages: no estimate
+        frozen(t, authsrv.attack_tick, send, st, 0)
         rp = repins(sent)
         check(len(rp) == 1 and rp[0][1] == [0.0, 0.0],
               "a report older than KBD_BODY_ESTIMATE_MAX_AGE is not advanced: the "
@@ -1331,22 +1351,22 @@ def section_reach_and_approach():
         # ROUND 2 (20261001T192303, "still warping ... Q or E to strafe then
         # attack"): the client is silent 1.3-1.7 s under a lead chain, and strafes
         # walk at their family rate.
-        st = kbd_state((0.0, 1.7 * 288.0), age=1.7)
-        authsrv.attack_tick(send, st, 0)
+        st, t = kbd_state((0.0, 1.7 * 288.0), age=1.7)
+        frozen(t, authsrv.attack_tick, send, st, 0)
         check(repins(sent) == [],
               "ROUND 2: a report 1.7 s old (the strafe session's ages) is still "
               "advanced -- the cap is the measured 2.0 s -- so no re-pin",
               f"repins {repins(sent)}")
-        st = kbd_state((0.0, 1.5 * 0.66 * 288.0), age=1.5)
+        st, t = kbd_state((0.0, 1.5 * 0.66 * 288.0), age=1.5)
         st["client_heading"] = (0.0, 766.0, 4, st["client_pos_at"])   # a strafe
-        authsrv.attack_tick(send, st, 0)
+        frozen(t, authsrv.attack_tick, send, st, 0)
         check(repins(sent) == [],
               "ROUND 2: a strafe (movementType 4) is advanced at its family rate, "
               "0.66 x 288 u/s -- 285 u in 1.5 s -- so no re-pin",
               f"repins {repins(sent)}")
-        st = kbd_state((0.0, 700.0), age=3.0)
-        st["kbd_kill_point"], st["kbd_kill_at"] = (0.0, 700.0), _t.time()
-        authsrv.attack_tick(send, st, 0)
+        st, t = kbd_state((0.0, 700.0), age=3.0)
+        st["kbd_kill_point"], st["kbd_kill_at"] = (0.0, 700.0), t
+        frozen(t, authsrv.attack_tick, send, st, 0)
         check(repins(sent) == [],
               "ROUND 2: past the cap, the press's OWN fresh lead kill is the body "
               "(it matched the estimate within 80 u at 20 of 22 kills that day): "
@@ -1354,8 +1374,8 @@ def section_reach_and_approach():
         _sv_kbe = authsrv.KBD_BODY_ESTIMATE
         authsrv.KBD_BODY_ESTIMATE = False
         try:
-            st = kbd_state((0.0, 288.0))
-            authsrv.attack_tick(send, st, 0)
+            st, t = kbd_state((0.0, 288.0))
+            frozen(t, authsrv.attack_tick, send, st, 0)
             rp = repins(sent)
             check(len(rp) == 1 and rp[0][1] == [0.0, 0.0],
                   "KNOWN-BAD (--no-kbd-body-estimate): the same press re-pins at the "
@@ -1435,6 +1455,7 @@ def section_press_supersedes_and_move_ends():
     """
     import authsrv
     import time as _t
+    from test_position_trust import frozen
 
     print("\n10. ANIMREF-RE 39: the press supersedes the walk; a move ends "
           "the chain")
@@ -1483,9 +1504,11 @@ def section_press_supersedes_and_move_ends():
         return st
 
     # 10a. IN REACH: a press mid-leg ends the leg, re-pins the body where the
-    # model puts it (288 u along), and the swing opens on the very next tick
+    # model puts it (288 u along), and the swing opens on the very next tick.
+    # The press lands AT 1.0 s into the leg (`frozen`): it models the body on its
+    # own clock, and 288 +/- 1 u is 3.5 ms of wall clock after walking()'s stamp.
     st = walking((350.0, 0.0))
-    authsrv._press_supersedes(send, st, 0, 10)
+    frozen(st["click_moving_at"] + 1.0, authsrv._press_supersedes, send, st, 0, 10)
     authsrv.begin_attack(send, st, 10, 0)
     repins = [v for op, v, _l in sent if op == UP]
     check(st.get("click_moving_at") is None and st.get("click_leg") is None
@@ -1506,7 +1529,7 @@ def section_press_supersedes_and_move_ends():
     # 10b. OUT OF REACH: the same press, target 900 u out: re-pin, then the
     # tick sends the follow from the re-pinned point and no swing yet
     st = walking((900.0, 0.0))
-    authsrv._press_supersedes(send, st, 0, 10)
+    frozen(st["click_moving_at"] + 1.0, authsrv._press_supersedes, send, st, 0, 10)
     authsrv.begin_attack(send, st, 10, 0)
     sent.clear()
     authsrv.attack_tick(send, st, 0)
@@ -1688,9 +1711,10 @@ def section_press_supersedes_and_move_ends():
           f"pins {pins}, latch kept {st.get('click_moving_at') == latch}, rows {spared}")
     st = own_follow()
     st["approach"] = None                                  # arrived by distance...
-    st["click_leg"]["eta"] = _t.time() + 0.6               # ...before its eta
-    pins, rows = repress(st)
-    check(pins == [] and authsrv._player_body_moving(st)
+    t10l = _t.time()                                       # (`frozen`: 0.6 s of wall clock
+    st["click_leg"]["eta"] = t10l + 0.6                    # held the press and the read)
+    pins, rows = frozen(t10l, repress, st)                 # ...before its eta
+    check(pins == [] and frozen(t10l, authsrv._player_body_moving, st)
           and [r["arrived"] for r in rows if r["kind"] == "press_spared"] == [False],
           "10l. arrived BY DISTANCE before the eta: spared too, and the body still reads as "
           "walking until the leg's eta -- retail's walk-in gate, not a pin and a swing at once",
@@ -2810,6 +2834,7 @@ def section_dead_press():
     import time
     import authsrv
     import leadgeom
+    from test_position_trust import frozen
 
     print("\n19. 1z-ds.15: a dead player's press orders nothing; the order dies with the player")
 
@@ -2839,16 +2864,18 @@ def section_dead_press():
         st.update({"client_pos": (30.0, 0.0), "client_pos_at": t - 0.1, "client_plane": 0,
                    "kbd_moving_at": t - 0.1, "heading": (0.0, 766.0), "heading_mt": 1,
                    "pathmap": _PM(), "player_dead": dead, "player_health": 100.0})
-        return st
+        return st, t
 
     def press(on, dead=True):
         sent, rec = [], _Rec()
         send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
-        st = walking_dead(dead)
+        st, t = walking_dead(dead)
         saved = authsrv.PRESS_REFUSES_DEAD_PLAYER
         authsrv.PRESS_REFUSES_DEAD_PLAYER = on
         try:
-            authsrv.begin_attack(send, st, 10, 0, rec=rec)
+            # AT the report's 0.1 s age (`frozen`): the press reckons the walking body on
+            # its own clock, and it leaves the 128 u reach 0.33 s after this stamp.
+            frozen(t, authsrv.begin_attack, send, st, 10, 0, rec=rec)
         finally:
             authsrv.PRESS_REFUSES_DEAD_PLAYER = saved
         return st, sent, rec
@@ -2889,7 +2916,7 @@ def section_dead_press():
         sent = []
         send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
         t = time.time()
-        st = walking_dead(True)
+        st, _t_report = walking_dead(True)
         st.update({"click_moving_at": t - 0.2,
                    "click_leg": leadgeom._leg_record((0.0, 0.0), (0.0, 300.0), t - 0.2, 288.0)})
         saved = authsrv.PRESS_REFUSES_DEAD_PLAYER
@@ -2998,8 +3025,12 @@ def section_dead_press():
     authsrv.begin_attack(send, st, 10, 0)
     authsrv.attack_tick(send, st, 0)
     sent.clear()
-    authsrv.cancel_action(send, st, 0)                    # Esc: its [3] goes out
-    authsrv.kill_player(send, st, 0, "test")              # a bleed-out before the tick
+    # Both doors AT the swing's armed_at (`frozen`). On the wall clock an expired windup
+    # made this VACUOUS: Esc sends no [3] after the landing time and the death sends one
+    # for the overdue swing (19i), so "ONE [3]" held whether or not the death saw the drop.
+    t19k = st["player_swing"]["armed_at"]
+    frozen(t19k, authsrv.cancel_action, send, st, 0)       # Esc: its [3] goes out
+    frozen(t19k, authsrv.kill_player, send, st, 0, "test")  # a bleed-out before the tick
     stops = [v for op, v, _l in sent if op == INT and v == STOP]
     check(len(stops) == 1,
           "19k. MOVECODE-1z-ds.33: Esc in the windup, then a death before the tick: ONE [3] -- the "
@@ -3086,6 +3117,7 @@ def section_follow_tick_holds_swing():
     follows carry the player's own start within 25 ms."""
     import time
     import authsrv
+    from test_position_trust import frozen
 
     print("\n23. 1z-ds.36: the follow's own tick opens no swing")
     DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
@@ -3121,8 +3153,10 @@ def section_follow_tick_holds_swing():
         authsrv.FOLLOW_TICK_HOLDS_SWING = on
         later = []
         try:
-            tick(st, (mirror, 0.0), authsrv.begin_attack, 10, 0)
-            first = tick(st, (mirror, 0.0), authsrv.attack_tick, 0)
+            # The press and its tick AT t0 (`frozen`): the 64.5 u follow leg is 0.224 s at
+            # 288 u/s, and the re-read that holds the start sits inside the same tick.
+            frozen(t0, tick, st, (mirror, 0.0), authsrv.begin_attack, 10, 0)
+            first = frozen(t0, tick, st, (mirror, 0.0), authsrv.attack_tick, 0)
             leg = st.get("click_leg")
             if leg is not None:                      # the leg's eta has passed
                 leg["eta"] = time.time() - 0.01
@@ -3199,6 +3233,7 @@ def section_stop_disc_ends_follow():
     of 458 own follows, re-paths included, carry an own start within 25 ms."""
     import time
     import authsrv
+    from test_position_trust import frozen
 
     print("\n25. DEATHWALK-D1: a follow inside its stop disc is arrived on the re-path tick")
     DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
@@ -3221,7 +3256,14 @@ def section_stop_disc_ends_follow():
 
     def due_repath(frame_x, on=True):
         """A follow sent 0.52 s ago toward a target 400 u out, its leg still ~0.6 s short of its
-        eta, the re-path due (the target walked 20 u in), the frame `frame_x` on the axis."""
+        eta, the re-path due (the target walked 20 u in), the frame `frame_x` on the axis.
+
+        BOTH TICKS RUN AT ONE INSTANT `t` (`frozen`, test_position_trust), and the 0.52 s is the
+        stamps' shift alone. On the wall clock the leg's ~0.59 s of remaining eta was spent by
+        two attack_ticks and the checks' own reads -- 25a's `left > 0.3` is 0.29 s of margin,
+        and past 0.59 s the live leg no longer holds the swing and 25a/25d's "no start" read
+        the machine's speed. Returns (state, first ops, re-path ops, the leg's eta less `t`, t).
+        """
         saved = (authsrv.STOP_DISC_ENDS_FOLLOW, authsrv.FOLLOW_TICK_HOLDS_SWING,
                  authsrv.ATTACK_APPROACH)
         authsrv.STOP_DISC_ENDS_FOLLOW = on
@@ -3230,7 +3272,8 @@ def section_stop_disc_ends_follow():
             st = _state()
             st["agents"][10]["pos"] = (400.0, 0.0)
             st.update(attacking=10, player_health=100.0, player_dead=False)
-            first = tick(st, (0.0, 0.0))                 # the new follow, run 320 u
+            t = time.time()
+            first = frozen(t, tick, st, (0.0, 0.0))      # the new follow, run 320 u
             d = 0.52                                     # shift the follow's stamps together
             st["click_moving_at"] -= d
             leg = st["click_leg"]
@@ -3243,21 +3286,22 @@ def section_stop_disc_ends_follow():
             f = st["follow_order_at"]
             st["follow_order_at"] = (f[0] - d, f[1], f[2])
             st["agents"][10]["pos"] = (380.0, 0.0)       # the target walked in
-            ops = tick(st, (frame_x, 0.0))
-            return st, first, ops, leg["eta"] - time.time()
+            ops = frozen(t, tick, st, (frame_x, 0.0))
+            return st, first, ops, leg["eta"] - t, t
         finally:
             (authsrv.STOP_DISC_ENDS_FOLLOW, authsrv.FOLLOW_TICK_HOLDS_SWING,
              authsrv.ATTACK_APPROACH) = saved
 
-    st, first, ops, left = due_repath(310.0)             # 70 u from the target, inside 80
+    st, first, ops, left, t25 = due_repath(310.0)        # 70 u from the target, inside 80
     check(DEST in first and ops == [] and st.get("approach") is None
-          and st.get("approach_closed") == 10 and authsrv._player_body_moving(st)
+          and st.get("approach_closed") == 10
+          and frozen(t25, authsrv._player_body_moving, st)
           and left > 0.3,
           "25a. 70 u inside the 80 u stop on the re-path tick: NO 0x002A and NO start -- the "
           "arrival branch closes the follow and the live leg holds the swing",
           f"first {first} ops {ops} approach {st.get('approach')} "
           f"closed {st.get('approach_closed')} leg left {left:.3f} s")
-    _s, _f, ops0, _l = due_repath(310.0, on=False)
+    _s, _f, ops0, _l, _t = due_repath(310.0, on=False)
     check(ops0 == [DEST, START],
           "25b. KNOWN-BAD ARM (--repath-inside-stop): the zero-run re-path and the start in one "
           "call, 0x002A first -- the 47-of-49 class", f"ops {ops0}")
@@ -3269,7 +3313,7 @@ def section_stop_disc_ends_follow():
     check(later == [START],
           "25c. once the live leg's eta passes, the start opens -- with no 0x002A in that call",
           f"ops {later}")
-    _s, _f, opsc, _l = due_repath(250.0)                 # 130 u out: run 50 u
+    _s, _f, opsc, _l, _t = due_repath(250.0)             # 130 u out: run 50 u
     check(opsc == [DEST],
           "25d. CONTROL: 130 u out the re-path still goes (run 50 u) and no start opens -- the "
           "condition touches only a body already inside its stop", f"ops {opsc}")
@@ -3291,6 +3335,7 @@ def section_target_death_holds():
     input before then releases through its own door. Ours released on the next tick with no [3]."""
     import time
     import authsrv
+    from test_position_trust import frozen
 
     print("\n26. DEATHWALK-D4: the target's death holds to the chain's next scheduled event")
     INT, START = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -3326,6 +3371,14 @@ def section_target_death_holds():
         sent.clear()
         return st, sent, send
 
+    def in_windup(st):
+        """Run a call AT the swing's armed_at (`frozen`). "The target dies with the swing in
+        its windup" was the death tick racing the 0.775 s windup on the wall clock: expired,
+        26a/26b/26e/26g read red, and 26f went green whether or not the new press cancelled
+        the release, because the release had already gone out at the death."""
+        t = st["player_swing"]["armed_at"]
+        return lambda fn, *a, **kw: frozen(t, fn, *a, **kw)
+
     def tick(st, sent, send, rec=None):
         sent.clear()
         authsrv.attack_tick(send, st, 0, rec=rec)
@@ -3338,8 +3391,9 @@ def section_target_death_holds():
         # 26a/b. IN FLIGHT: nothing at the death; [8, 0] [3] at the due landing, no [1].
         st, sent, send = armed()
         sw = st.get("player_swing")
+        at = in_windup(st)
         st["agents"][10]["dead"] = True
-        at_death = tick(st, sent, send)
+        at_death = at(tick, st, sent, send)
         pend = st.get("target_death_release") or {}
         check(sw is not None and st.get("action_hold") == 1 and at_death == []
               and pend.get("cell") == "in-flight"
@@ -3349,7 +3403,7 @@ def section_target_death_holds():
               "the hold stays up, the swing stays armed and the release is scheduled at its due "
               "landing (retail: nothing at the death, 20 of 20)",
               f"sent {at_death} pend {pend.get('cell')} hold {st.get('action_hold')}")
-        early = tick(st, sent, send)
+        early = at(tick, st, sent, send)
         pend["at"] = time.time() - 0.001
         sw["lands_at"] = pend["at"]
         rows = []
@@ -3387,10 +3441,11 @@ def section_target_death_holds():
 
         # 26e. A DOOR IN THE WINDOW: a move carries its own [8, 0] and [3]; nothing later.
         st, sent, send = armed()
+        at = in_windup(st)
         st["agents"][10]["dead"] = True
-        tick(st, sent, send)
+        at(tick, st, sent, send)
         sent.clear()
-        authsrv.cancel_on_move(send, st, 0, moved=50.0)
+        at(authsrv.cancel_on_move, send, st, 0, moved=50.0)
         door = shape(sent)
         st["target_death_release"]["at"] = time.time() - 0.001
         after = tick(st, sent, send)
@@ -3402,11 +3457,12 @@ def section_target_death_holds():
 
         # 26f. A NEW ORDER in the window cancels it; the old target's release never comes.
         st, sent, send = armed()
+        at = in_windup(st)
         st["agents"][99] = _fresh_agent()
         st["agents"][10]["dead"] = True
-        tick(st, sent, send)
+        at(tick, st, sent, send)
         sent.clear()
-        authsrv.begin_attack(send, st, 99, 0)
+        at(authsrv.begin_attack, send, st, 99, 0)
         st["target_death_release"] and st["target_death_release"].__setitem__(
             "at", time.time() - 0.001)
         after = tick(st, sent, send)
@@ -3417,11 +3473,12 @@ def section_target_death_holds():
 
         # 26g. THE PLAYER DIES in the window: the kill's own [3] stops the kept swing.
         st, sent, send = armed()
+        at = in_windup(st)
         st["agents"][10]["dead"] = True
-        tick(st, sent, send)
+        at(tick, st, sent, send)
         sent.clear()
         st["player_health"] = 1.0
-        authsrv.kill_player(send, st, 0)
+        at(authsrv.kill_player, send, st, 0)
         kill = shape(sent)
         after = tick(st, sent, send)
         check("3" in kill and st.get("target_death_release") is None and "3" not in after,
@@ -3807,6 +3864,7 @@ def section_press_stop_hold():
     landing. Driven through the real begin_attack and attack_tick, the landing included."""
     import time
     import authsrv
+    from test_position_trust import frozen
 
     print("\n9l. 1z-ds.6: the press stop holds the walk gate to the next input")
 
@@ -3831,6 +3889,9 @@ def section_press_stop_hold():
         return [v[2] for op, v, _l in rows if op == INT and v[0] == GV8 and v[1] == PLAYER]
 
     def walking(hold=True):
+        """The press AT the report's 0.1 s age (`frozen`), and `t` for the tick that opens
+        the swing: the body is reckoned on the server's own clock and walks out of the
+        128 u reach 0.33 s after this stamp, which turns the stop into a pin and a follow."""
         sent = []
         send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))  # noqa: E731
         t = time.time()
@@ -3841,19 +3902,19 @@ def section_press_stop_hold():
         saved = authsrv.PRESS_STOP_HOLDS
         authsrv.PRESS_STOP_HOLDS = hold
         try:
-            authsrv.begin_attack(send, st, 10, 0)
+            frozen(t, authsrv.begin_attack, send, st, 10, 0)
         finally:
             authsrv.PRESS_STOP_HOLDS = saved
-        return st, send, sent
+        return st, send, sent, t
 
-    st, send, sent = walking()
+    st, send, sent, t9l = walking()
     seq = [("8:%d" % v[2]) if op == INT and v[0] == GV8 else op for op, v, _l in sent]
     check(seq == [PIN, "8:1", HALT] and st.get("press_hold") is True
           and st.get("action_hold") == 1,
           "9l-a. the press batch is the pin, [8, me, 1], then the 0x0028 -- retail's hold "
           "ahead of its stop (40 of 42 in one instant), our pin ahead of both", f"{seq}")
     sent.clear()
-    authsrv.attack_tick(send, st, 0)
+    frozen(t9l, authsrv.attack_tick, send, st, 0)
     opened = [l for op, _v, l in sent if "player swings" in l]
     sent.clear()
     _rewind(st, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
@@ -3869,12 +3930,12 @@ def section_press_stop_hold():
           "9l-c. the next movement report releases it ([8, me, 0], the 26-of-42 cause) and "
           "the mark goes with it", f"{holds(sent)}")
 
-    st2, send2, sent2 = walking()
+    st2, send2, sent2, t9d = walking()
     st2.pop("press_hold", None)          # not a subscript: a mutation must FAIL here, not abort
     _sa9 = authsrv.ATTACK_START_HOLDS
     authsrv.ATTACK_START_HOLDS = False   # 1z-ds.31's start re-marks it; this is the exemption's control
     try:
-        authsrv.attack_tick(send2, st2, 0)
+        frozen(t9d, authsrv.attack_tick, send2, st2, 0)
         sent2.clear()
         _rewind(st2, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
         authsrv.attack_tick(send2, st2, 0)
@@ -3884,7 +3945,7 @@ def section_press_stop_hold():
           "9l-d. CONTROL: the same landing with the mark gone releases the hold -- the "
           "exemption, not the landing path, is what keeps it", f"{holds(sent2)}")
 
-    st3, send3, sent3 = walking()
+    st3, send3, sent3, _t3 = walking()
     sent3.clear()
     authsrv._approach_send(send3, st3, 0, 10, st3["agents"][10], time.time())
     ops3 = [("8:%d" % v[2]) if op == INT and v[0] == GV8 else op for op, v, _l in sent3]
@@ -3892,7 +3953,7 @@ def section_press_stop_hold():
           "9l-e. a NEW follow releases it first, adjacent to the 0x002A (retail's "
           "re-approach shape, RANGERPRE-S16)", f"{ops3}")
 
-    st4, _send4, sent4 = walking(hold=False)
+    st4, _send4, sent4, _t4 = walking(hold=False)
     seq4 = [op for op, _v, _l in sent4]
     check(seq4 == [PIN, HALT] and holds(sent4) == [] and not st4.get("press_hold"),
           "9l-f. KNOWN-BAD ARM (--no-press-stop-hold): the pin and the halt with no hold -- "
