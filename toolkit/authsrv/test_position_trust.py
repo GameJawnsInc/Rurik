@@ -353,7 +353,8 @@ def frozen(t, fn, *a, **kw):
     code that judges it on its OWN `time.time()`: whatever runs between the
     stamp and that read is inside the window, so under load the verdict is the
     machine's speed. test_kbdsync section 30 armed a 0.5 s windup, then ran a
-    press and a drive that compiles the 0x003D arm (~0.27 s idle) before the
+    press and a drive that then re-extracted the 0x003D arm on every call (~0.27 s
+    idle; cached since 2026-10-08, see receive_arm) before the
     server's `now < lands_at`, and with nine lanes at 99 % CPU 30b, 30c and
     30k went red on a diff that touched none of it (2026-10-08). Pinned, the
     server reads the instant the check meant."""
@@ -370,9 +371,40 @@ def fresh(pos=ANCHOR, plane=0, seen=1000.0):
 
 
 _PARSED_ARMS = {}   # (path, mtime_ns, size) -> authsrv.py's syntax tree; see receive_arm
+_COMPILED_ARMS = {}  # ((path, mtime_ns, size), opcode_name, params, op) -> the arm's code object
 
 
-def receive_arm(opcode_name, params):
+def _authsrv_key():
+    path = authsrv.__file__
+    st = os.stat(path)
+    return (path, st.st_mtime_ns, st.st_size)
+
+
+def _authsrv_tree(key):
+    tree = _PARSED_ARMS.get(key)
+    if tree is None:
+        tree = ast.parse(open(key[0], encoding="utf-8").read())
+        _PARSED_ARMS.clear()
+        _COMPILED_ARMS.clear()
+        _PARSED_ARMS[key] = tree
+    return tree
+
+
+def authsrv_tree():
+    """authsrv.py's syntax tree: the one receive_arm extracts from, under the
+    same key and invalidation (path, mtime_ns, size -- an edit re-parses).
+
+    For a lock that walks the whole file. Each full `ast.parse` is ~7-13 s, and
+    a test that parsed its own copy beside receive_arm's paid it twice
+    (test_kbdsync section 34, test_playerswing sections 11 and 19, this file's
+    section 7, until 2026-10-08). READ-ONLY: the tree is shared by every caller
+    in the process and every arm compiled from it, so a lock that mutates it
+    must `ast.parse` a copy of its own.
+    """
+    return _authsrv_tree(_authsrv_key())
+
+
+def receive_arm(opcode_name, params, op="=="):
     """The SHIPPED body of one `elif opcode == NAME:` arm, as a callable.
 
     WHY THIS EXISTS AND WHY IT IS NOT A PARAPHRASE. Sections 7 to 9 lock the
@@ -400,39 +432,67 @@ def receive_arm(opcode_name, params):
     BEFORE drive_heading calls this: re-parsing on every call put the parse inside
     FENCE_LATCH_MAX_AGE's 8 s window, and under load the latch read as expired
     (a neighbour printed shut_for 12.093 s; 2026-09-23, DESKWORK merges).
+
+    SO IS THE ARM'S CODE OBJECT, per (that key, opcode_name, params, op), since
+    2026-10-08. Caching the parse alone still left every call walking the whole
+    52k-line tree to find the arm and compiling its body: 0.16-0.37 s per call,
+    nearly all of it the walk (the compile is ~3 ms), and test_kbdsync's
+    drive_heading paid it once per drive. Now ~0.05 ms. The `def` is still
+    EXECUTED on every call, against `authsrv.__dict__` as it stands then, so
+    every caller gets a fresh function
+    whose globals are the server's live module dict -- a flag flipped between
+    calls is seen exactly as before -- and an edit to authsrv.py changes the key,
+    so the arm is re-extracted and recompiled. A missing arm is not cached: it
+    raises on every call.
+
+    `op="in"` lifts an `elif opcode in (..., NAME, ...):` arm instead -- the
+    0x0026 arm is `opcode in (GAME_CMSG_ATTACK_AGENT, GAME_CMSG_INTERACT_PLAYER)`
+    -- off the same cached tree, under the same key, with the same loud failure.
+    test_kbdsync section 34 and test_playerswing section 19 each parsed their
+    own copy of the file for it until 2026-10-08.
     """
-    path = authsrv.__file__
-    st = os.stat(path)
-    key = (path, st.st_mtime_ns, st.st_size)
-    tree = _PARSED_ARMS.get(key)
-    if tree is None:
-        tree = ast.parse(open(path, encoding="utf-8").read())
-        _PARSED_ARMS.clear()
-        _PARSED_ARMS[key] = tree
-    node = None
-    for n in ast.walk(tree):
-        if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
-                and isinstance(n.test.left, ast.Name)
-                and n.test.left.id == "opcode"
-                and len(n.test.comparators) == 1
-                and isinstance(n.test.comparators[0], ast.Name)
-                and n.test.comparators[0].id == opcode_name):
-            node = n
-    if node is None:
-        raise AssertionError(
-            f"no `elif opcode == {opcode_name}:` arm in authsrv.py -- the "
-            f"extractor must FAIL LOUDLY rather than hand back an empty body, "
-            f"which would make every behaviour check below pass vacuously")
-    args = ast.arguments(posonlyargs=[], args=[ast.arg(p) for p in params],
-                         vararg=None, kwonlyargs=[], kw_defaults=[],
-                         kwarg=None, defaults=[])
-    fn = ast.FunctionDef(name="_arm", args=args, body=node.body,
-                         decorator_list=[], returns=None, type_params=[])
-    mod = ast.Module(body=[fn], type_ignores=[])
-    ast.fix_missing_locations(mod)
+    if op not in ("==", "in"):
+        raise ValueError(f"receive_arm op {op!r}: '==' or 'in'")
+    params = tuple(params)
+    key = _authsrv_key()
+    path = key[0]
+    code = _COMPILED_ARMS.get((key, opcode_name, params, op))
+    if code is None:
+        tree = _authsrv_tree(key)
+        node = None
+        for n in ast.walk(tree):
+            if not (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                    and isinstance(n.test.left, ast.Name)
+                    and n.test.left.id == "opcode"
+                    and len(n.test.comparators) == 1):
+                continue
+            right = n.test.comparators[0]
+            if op == "==":
+                if isinstance(right, ast.Name) and right.id == opcode_name:
+                    node = n
+            elif (isinstance(n.test.ops[0], ast.In)
+                    and isinstance(right, ast.Tuple)
+                    and any(isinstance(e, ast.Name) and e.id == opcode_name
+                            for e in right.elts)):
+                node = n
+        if node is None:
+            arm = (f"opcode == {opcode_name}" if op == "==" else
+                   f"opcode in (..., {opcode_name}, ...)")
+            raise AssertionError(
+                f"no `elif {arm}:` arm in authsrv.py -- the "
+                f"extractor must FAIL LOUDLY rather than hand back an empty body, "
+                f"which would make every behaviour check below pass vacuously")
+        args = ast.arguments(posonlyargs=[], args=[ast.arg(p) for p in params],
+                             vararg=None, kwonlyargs=[], kw_defaults=[],
+                             kwarg=None, defaults=[])
+        fn = ast.FunctionDef(name="_arm", args=args, body=node.body,
+                             decorator_list=[], returns=None, type_params=[])
+        mod = ast.Module(body=[fn], type_ignores=[])
+        ast.fix_missing_locations(mod)
+        code = compile(mod, path, "exec")
+        _COMPILED_ARMS[(key, opcode_name, params, op)] = code
     ns = {}
-    exec(compile(mod, authsrv.__file__, "exec"),               # noqa: S102
-         authsrv.__dict__, ns)
+    exec(code, authsrv.__dict__, ns)                           # noqa: S102
     return ns["_arm"]
 
 
@@ -617,7 +677,7 @@ def main():
           "same corpus holds 13 grant-triggered displacements that do NOT land "
           "on a granted point, so disarming the destination may fix nothing. "
           "One watched run decides it")
-    src = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    src = authsrv_tree()   # receive_arm's cached parse; every lock below only reads it
     echoes = []
     for node in ast.walk(src):
         if not (isinstance(node, ast.If) and isinstance(node.test, ast.Name)

@@ -2085,8 +2085,10 @@ def section_press_ends_kbd_latch():
           "and the cast-stop still never see it",
           f"readers {_reads}")
     import ast as _ast
+    # test_position_trust's cached parse of the same file (section 19's arm lift reuses it)
+    from test_position_trust import authsrv_tree
     n_kbd_writes = sum(
-        1 for node in _ast.walk(_ast.parse(src))
+        1 for node in _ast.walk(authsrv_tree())
         if isinstance(node, _ast.Assign)
         for tgt in node.targets
         if isinstance(tgt, _ast.Subscript)
@@ -2829,7 +2831,6 @@ def section_dead_press():
     kill dies with the player. 20261002T124708 39.10: a press handled in the killing-blow instant
     pinned and halted the corpse and set `attacking`; 0.055 s after the rise the tick sent a
     2325 u follow. Retail walks 0 of 23 risen bodies before their own input (risejoin.py)."""
-    import ast
     import time
     import authsrv
     import leadgeom
@@ -2898,31 +2899,18 @@ def section_dead_press():
           "order -- the gate is the death, not the press",
           f"{[l[:30] for _o, _v, l in sentc]}")
 
-    # The REAL 0x0026 arm (lifted out of the receive loop as test_position_trust's
-    # receive_arm does; that one matches `opcode == NAME`, this arm is `opcode in (...)`).
-    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
-    node = None
-    for n in ast.walk(tree):
-        if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
-                and isinstance(n.test.left, ast.Name) and n.test.left.id == "opcode"
-                and len(n.test.ops) == 1 and isinstance(n.test.ops[0], ast.In)
-                and isinstance(n.test.comparators[0], ast.Tuple)
-                and any(isinstance(e, ast.Name) and e.id == "GAME_CMSG_ATTACK_AGENT"
-                        for e in n.test.comparators[0].elts)):
-            node = n
-    check(node is not None, "the 0x0026 arm is found in the source -- the drive below is real")
-    if node is None:
+    # The REAL 0x0026 arm, lifted out of the receive loop by test_position_trust's
+    # receive_arm (`op="in"`: this arm is `opcode in (...)`), off the tree section 11
+    # already parsed -- this section parsed a copy of its own until 2026-10-08.
+    from test_position_trust import receive_arm
+    try:
+        arm = receive_arm("GAME_CMSG_ATTACK_AGENT", ("values", "state", "rec", "send", "conn_id"),
+                          op="in")
+    except AssertionError:
+        arm = None
+    check(arm is not None, "the 0x0026 arm is found in the source -- the drive below is real")
+    if arm is None:
         return
-    args = ast.arguments(posonlyargs=[], args=[ast.arg(p) for p in
-                                               ("values", "state", "rec", "send", "conn_id")],
-                         vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
-    mod = ast.Module(body=[ast.FunctionDef(name="_arm", args=args, body=node.body,
-                                           decorator_list=[], returns=None, type_params=[])],
-                     type_ignores=[])
-    ast.fix_missing_locations(mod)
-    ns = {}
-    exec(compile(mod, authsrv.__file__, "exec"), authsrv.__dict__, ns)   # noqa: S102
-    arm = ns["_arm"]
 
     def arm_press(on):
         sent = []
