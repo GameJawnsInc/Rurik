@@ -77,6 +77,7 @@ import checks                                                  # noqa: E402
 import agents                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
+from test_position_trust import frozen                         # noqa: E402
 
 # Floor from the green run of 2026-09-30 with RURIK_VAULT at an EMPTY directory (sections 3
 # and 5 declared skips): 32 -- 21 for ROUTE-A (20 until the review follow-up added 1r) and
@@ -175,7 +176,13 @@ def approach(weapon, distance=2000.0):
     sent.clear()
     if st.get("approach") is not None:
         age_leg(st)
-    authsrv.attack_tick(send, st, 1)
+        authsrv.attack_tick(send, st, 1)
+    else:
+        # In range, the press opened the swing and this tick sits in its windup: AT the
+        # swing's armed_at (`frozen`). On the wall clock it was a bow's 1.1375 s windup
+        # read by the tick's own clock, and past it 1m's `near == []` caught the landing.
+        armed_at = (st.get("player_swing") or {}).get("armed_at", time.time())
+        frozen(armed_at, authsrv.attack_tick, send, st, 1)
     return st, send, sent, pressed
 
 
