@@ -2025,7 +2025,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   heal; 943, 1262; the 98 GATED conditional rows by family (§67.7: 5 named-condition and 6
   knocked-down next, on existing consumers), the HIT_NOT_EVALUATED spells (4 on 38797, 3 on
   38974), §67.2's other refusals (778 1636 866 995 1037 1514 1728), §67.3's unmarked residue
-  (888 889 1022 1696), `authsrv`'s knock-down banner (355, §67.2); the knock-downs left
+  (888 889 1022 1696); the knock-downs left
   marked (192, 3425; the 60's 296 777 2135 behind a predicate, 163 358 844 timed); 840's
   self-Poison, 1113's four ticks, 1033 (a tooltip run), 784's Poison CONTESTED 2 of 4 (§60.8);
   then the 924 RECOGNISED and §54.4's two-consumer proposal (the owner's call); (iii) step 5
@@ -2057,6 +2057,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   (every zero on RB sits inside a run of other gains). A hero's zero gain is still not
   sent (`hero_pool_gain`), unread on JARIN's tape either way.
 * **SKILLS-RG** (skills §64): regen, the natural ramp and [32] shipped ON, unrun -- runsheet in PLAN-LOG; next in §64.7.
+* **SKILLS-EX** (skills §66): Expertise and Divine Favor shipped ON, unrun -- runsheet in PLAN-LOG; open in §66.6.
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
@@ -2113,9 +2114,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Areas over time and scatter** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §41–§45, [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §16
 
 * **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy.
-* **Six areas over time stay inert** (77, 196, 215, 844, 1083, 1372; WEAPONS-C12); no ground-visual id for 192 / 167 / the new five; wiki pages owed; a caster killed in play is unwitnessed (WEAPONS-C11).
+* **Six areas over time stay inert** (77, 196, 215, 844, 1083, 1372; WEAPONS-C12); no ground-visual id for 192 / 167 / the new five; wiki pages owed; a caster killed in play is unwitnessed (WEAPONS-C11); the client run owed (runsheet: weapons §45's last block).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
 * **CASTAI's residue** (monsterai §17-18.5; §7 Q19): which READY skill a normal-mode monster fires (round robin stays; three Zaishen bars are not round robin, Z1.P6); the AI TIER (CASTAI-W2); heal thresholds on another ally; area-hex wearers ungated (CASTAI-R3); upkeep enchantments (289, 290) open no episode; Smite Hex 302 and Drain Enchantment 68 unmodelled (CASTAI-RM6).
+* **CASTAI-RM** (monsterai §18.5): the removal gate and Remove Hex 301 shipped ON, unrun -- runsheet in PLAN-LOG.
 * **The Zaishen tapes' server residue** (monsterai §18.2, §18.4): ZF16's open halves, a body's busy window and next swing (PLAN-LOG); Deep Wound re-applied stacks (ZF18); Zealot's Fire's payoff and Balthazar's Aura's tick unmodelled (ZF30); CHAN55's runsheet, steal cap and [42, me] (skills §68.4); a hit after the killing blow keeps its adrenaline gain (ZF34); naming c2s `0x0042` is the owner's (ZF35).
 * **Builds 38888/38974** (crossbuild §10-11): `item_modifiers` stays 38797's until `itemmods.py` reads 38888's text sites; hero `bar_to_store` write-back untested; serving a 38974 client is refused (not built).
 * **Typed creature armour: witnesses past the Warrior** (the Ranger's bonus typed "+30 vs. elemental", its untyped +10 withdrawn -- PLAN-LOG 2026-09-27, Ranger; the Assassin / Dervish / Paragon columns withdrawn whole, 3 x level on every hit -- PLAN-LOG 2026-09-27, the three columns; no witness separates the readings for any of the four, and no hostile of the last three is on tape at all): a creature Warrior's +20 now meets physical damage only (WIKI + the owner's Daggers on def 3113, one definition; PLAN-LOG 2026-09-27). A non-physical weapon hit skips it too (a wand's chaos, a staff's holy; PLAN-LOG 2026-09-27, later) -- with NO weapon witness: 355 non-physical weapon shots on tape, none on a hostile Warrior; a single-weapon capture on one would settle it. A preparation's own damage too (Kindle / Ignite Arrows' fire; PLAN-LOG 2026-09-27, latest), also with no witness (the corpus's only preparation words hit a level-1 Mesmer). Also open: a witness for the Ranger and for the three columns (a fight with a Factions or Nightfall Paragon settles its 20 cheaply). The PLAYER's side is typed too (a hostile's Kindle Arrows word meets the pieces' elemental 25; PLAN-LOG 2026-09-27, last), and none of the preparation or weapon halves has a retail witness yet.

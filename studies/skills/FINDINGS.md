@@ -10140,8 +10140,11 @@ a Bleeding (-3) -- is exactly that window, and is named there as the thing it te
 ### 64.5 SKILLS-RG5 — property 32 ends a positive rate on a full agent
 
 OBSERVED: `0x009F [32, agent, 0]` (GV_MAX_HP_REACHED) appears 113 times, and **every one
-follows a POSITIVE [44]** (113 of 113): 85 with nothing else in the batch (a ramp or a regen
-skill filling the bar), 22 riding a heal, 6 riding a regen effect's close. **The regen closes
+follows a POSITIVE [44]** (113 of 113): 85 with nothing else in the batch (a natural ramp, or
+a regen skill whose close the observer cannot see as 0x0044 -- two PvP players' Troll Unguent
+446, each [32] 13.0 s after its visible completion: 20260928T103123 :50061 agent 6 at 186.976,
+20260817T231139 :54071 agent 8 at 758.828; none of the 113 sits strictly inside a live regen
+episode, visible or not -- the pass-9 landing's seam review, REGEN-2), 22 riding a heal, 6 riding a regen effect's close. **The regen closes
 are not silent** (the triage's "0 of 6 carry a word"): all 7 carry a [32] (6, at full) or a
 [44] (1: 288 on :50061 under degeneration, the remaining net). A later reset of a [32]'d agent
 sends no zero word (four L and two T resets after a [32]), while a reset below the maximum
@@ -10214,7 +10217,13 @@ after it.
   as [32, agent, 0] instead of the [44] zero; below the maximum, the [44] zero (a [32] would
   set a hurt client's bar full). Retail also sends [32] when a HEAL fills a regenerating bar
   (22 on the corpus); ours sends it on the next world tick when the natural term drops at full
-  -- the heal path itself is unchanged (UNVERIFIED on our client either way).
+  -- when the natural term is the whole rate. With a regen row live, the natural drop at full
+  re-sends the ROW's positive [44] and [32] waits for the row's close. That is retail's shape on
+  20260817T231139 :54071 agent 8 (n = 1, a PvP player): the 446 completion at 745.800 reads +4
+  (row 3 + natural 1), +5 at 747.300, then +3 at 748.508 with nothing naming the agent (the
+  natural drop at a full bar, RECONSTRUCTION), and [32] alone at the row's close at 758.828; the
+  6 visible regen closes at full witness only the [32] at the close (REGEN-2). The heal path
+  itself is unchanged (UNVERIFIED on our client either way).
 - **Rows** (content/world.toml, after 108's block, client-table / skilltable.py / build 38974):
   446 (`Health regeneration` scale + `opens_episode = "skill"`, the "Charge!" door: type 10 is
   not an effect type) and 288 (`Health regeneration` scale, an enchantment by type).
@@ -11070,7 +11079,9 @@ arrow only. **(3)** an Assassin with daggers presses 782 (a lead), 780 (an off-h
 at the same foe -- 777 is a DUAL attack (its combo 3; the bonus rides the second strike's
 cast too), so **two** words, each the daggers' roll + its bonus on a landed strike, and the foe
 does NOT fall, wherever its allies stand (the fall is dropped, `CLAUSE_KNOCKDOWN`); 777
-pressed cold, `[38, foe, me, 2]` and nothing. **(4)** the same presses under `gamesrv_args =
+pressed cold, `[38, foe, me, 2]` TWICE, half a second apart (the second behind `[47, me, 0]`;
+a failed dual still makes two attacks -- DAGGERS-F10, retail 4 of 4; DAGGERS-B6), the recharge
+zeroed (E5 0), no damage, no Bleeding (corrected at the pass-9 landing, PLAYER-3). **(4)** the same presses under `gamesrv_args =
 ["--no-skill-labels"]`: 391 and 400 deal the weapon's word alone (no Bleeding, no +3); in the
 daggers arm **only 777's bonus disappears** -- 782 and 780 are HAND rows
 (`content/world.toml`), so 782 still Bleeds and 780 still adds its bonus. (The first runsheet
@@ -11098,8 +11109,8 @@ line with a token 391 does not carry; corrected by the fix pass, review EV-6.)
   the `HIT_NOT_EVALUATED` spells (4 on 38797, 3 on 38974) wait on a spell's landing reading
   the projectile's arrival for its condition too; a BODY's chain-gated attacks (776 777 976
   986 1022 2135 land with no lead, §67.4) beside the hand rows' 775 780 781; §67.3's unmarked
-  residue (888 889 1022's stance end, 1696's cost, 1547's misnamed mark); `authsrv`'s
-  `--no-label-knockdowns` banner naming 355 (§67.2); a server flag for this set alone; the
+  residue (888 889 1022's stance end, 1696's cost, 1547's misnamed mark); (`authsrv`'s
+  `--no-label-knockdowns` banner naming 355 -- CLOSED at the pass-9 landing, WIRING-1); a server flag for this set alone; the
   seven rows §67.2 refuses, each waiting on what its reason names -- 778 1636 a judged target
   requirement, 866 the limit, 995 1037 1514 1728 the early end; the 60's falls left marked
   -- 296 777 2135 behind a predicate (the knock-down sentence guard), 163 358 844 timed --
@@ -11266,7 +11277,9 @@ The doors:
 
 **What moves today.** Hand rows Holy Strike 312 (the fixture Hatcher's bar) and Banish 252 (the
 map-168 corridor Monks' bar, and a party Monk's); on a vault machine the label tier's holy rows
-294, 1113, 2212. The number and the arithmetic are unchanged — only the property. Labels at the
+294, 1113, 2212 -- and 296, once the SKILLS-LW emit (sha a1c61f9a) is installed as the vault's
+`skill_labels.toml`, by the same loaded-row rule (before that 296 has no row and rides 16; 294
+and 296 are signets, type 7; the pass-9 landing's seam review, PLAYER-2). The number and the arithmetic are unchanged — only the property. Labels at the
 call sites: OBSERVED for a hostile's armour-ignoring spell at the observer and body-to-body;
 RECONSTRUCTION for the player's own holy cast and a hero's (no tape holds either; the corpus's
 own-cast witness of the channel is the steal, §68.3).

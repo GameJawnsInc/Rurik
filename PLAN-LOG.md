@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### DESKWORK pass 9's landing -- 2026-10-08 -- **The nine pass-9 lanes (skills and their effects) landed one at a time on `desk-pass9`, and a read-only review of the SEAMS between them -- each lane was reviewed only alone -- found one code defect: a damage word that a same-tick heal outweighs did not reset the player's natural ramp. Five reviewers read the seams and a skeptic tried to refute every finding: 11 findings, 2 refuted, 9 fixed here. The full suite on the merged tree before these fixes: 277 of 279 green, 18,122 checks, 2,766 s at 4 jobs. The two reds were the label overlay's own checks, which wait on the install at the landing on main.**
+
+- **The pass.** Orchestrator session 00b618d0 died on a usage limit with every implementer done and 7 of 15 reviews saved; session 7d9e4fe2 resumed it (wf_56ba4bf9-1c7: the 8 missing reviews, a fixer, a read-only verifier and a second fixer per lane, 35 agents, none lost). Merge order: hitlabels, snare, aotrows, expertise, removal, castrig, chan55, aftercast, regen; each lane's entry below is its own.
+- **Re-aimed at the merge, each MEASURED on the merged tree and shown red under its mutation:**
+  - `test_mechanics` floors 357 bare / 399 vault (SLICE-F48b +13 and CASTAI-RM +1 from the same base).
+  - `test_castgate`: the fixture carries both REMOVAL_NEEDS_AFFLICTION and NPC_AFTERCAST; section 3's known-bad arm and section 7 (i)'s 642d8957 byte comparison turn both off; ON_SEQUENCE re-recorded (the removal gate holds the Hatcher's 276 at its clean ally, so 276 leaves the cadence; 57 casts, two runs identical); floors 149 / 96.
+  - `test_npcaftercast`: the party loop's source lock follows desk-expertise's `body_skill_cost`.
+  - `test_aotrows`: 830's channel pin [16] -> [55], as both lanes planned.
+  - `test_skilldesc`: the census conjunct `nothing >= 800` (798 once this pass's hand rows merged) became the exact derived set -- every row with neither a hand row nor an episode type.
+  - `authsrv.land_skill`: desk-expertise's Divine Favor word, then desk-chan55's steal return (Divine Favor's scope cannot reach a steal); `_area_strike`: aotrows' ramped amount with chan55's `spell_skill`.
+- **The seam review (wf_40ed7b81-8ee), fixed:**
+  - REGEN-1 / PLAYER-1 (two reviewers independently; minor, latent: Backfire 28 is on no bar). natural_tick's reset was a net health FALL between ticks, so Backfire's 55 beside Aura of Restoration's or the cast's own heal reset nothing, against regenjoin's own LOSS anchor (a damage word, OBSERVED). The four damage-word doors -- `body_spell_word`, `armour_ignoring_damage`, `land_swing`'s hit and its preparation's second word -- now call `natural_reset`; degeneration (no word) stays the net-fall test's. `--no-natural-regen` / `--no-health-regen` still revert it (natural_reset is a no-op under either). test_healthregen +2: the masked case with its known-bad arm, and the door lock.
+  - WIRING-2 (minor): `capture_flags` swept authsrv's globals, `agtrack_guard` and `pathmap`, so SLICE-F48b's `episodemods.SNARE_OVERRIDES_BOOST` -- the switch of slice 48.7.1's A/B -- never reached a capture header. `episodemods` joins the companion sweep; test_mechanics 8c +1.
+  - WIRING-1: the `--no-label-knockdowns` banner and `skill_knocks_down`'s docstring name SKILLS-LW's 355 (six on the 38974 overlay); its §8.1 and skills 67.6 items close.
+  - WIRING-4: CASTAI-RM's runsheet (the CASTAI-RM entry's "the runsheet below") and AOTROWS' (weapons §45, "in the lane's report") were never in the tree -- both pasted; §8.1 gains SKILLS-EX's and CASTAI-RM's unrun lines and §45's run on the areas bullet.
+  - Records only: REGEN-2 (skills 64.5 / 64.6 on property 32 -- the skeptic refuted half the reviewer's own rewording: two of the 85 batch-alone [32]s are invisible 446 closes, not a natural ramp); PLAYER-2 (skills 68.2: 296 rides 55 once the overlay installs; 294 and 296 are both signets); PLAYER-3 (skills 67.5: a cold 777 fails TWICE, DAGGERS-F10); STATUSWORDS-1 (the snare-hex banner: the pre-snare word comes back, boosted under a boost); WIRING-3 (TESTS.md's test_mechanics floors).
+  - Refuted: NPCORDER-1 (a body's Aura of Restoration heal sized from the record cost -- latent until Expertise's scope widens to spells, and test_attribpassive section 8 already reddens on that change); WIRING-1 as a seam defect (fixed anyway as cleanup).
+- **Owed:** every behaviour in the nine entries below is UNRUN on the client -- one consolidated runsheet sits in session 7d9e4fe2's scratchpad (land/runsheet-pass9.md), each lane's own text in its study or entry. At the landing on main: the SKILLS-LW overlay into `vault/content/skill_labels.toml` (115 rows, sha256 a1c61f9a...) and, after it, `python toolkit/updatecheck.py --before` (desk-regen's ask).
+
 ### SKILLS-RG -- 2026-10-07 -- **Health regeneration: the server sends a POSITIVE property 44 for the first time. Retail's law is re-derived off the live corpus by the new `regenjoin.py` before a server line was written: an apply's [44] word is the SIGNED pip sum of the wearer's live episodes under ONE clamp to +-10 (28 of 28; 288 under -13 of degeneration read -5); the natural ramp is +1 pip every 2.0 s from 5.0 s after the last reset, capped at +7 (19 of 19 observer first steps, 45 of 45 steps; the cap on five hostile runs stopping at 7 below the maximum, the player's by the same law); it is zero while the effects are a loss; and property 32 ends a positive rate at full health (113 of 113, the client's own handler zeroing the regen). Shipped ON behind `--no-health-regen`, `--no-natural-regen` (the player only) and `--no-max-hp-reached`, with hand rows 446 and 288. Two reviews the same day moved the resets onto events (a foe's activation, a landing, a friendly cast's hold) and closed four wrong branches; a third pass (2026-10-08) scoped OWN_CAST's "binds nothing" to the scored kinds and found a friendly HEAL's landing CONTESTED (SKILLS-RG8). Desk-only: the client look is owed (the runsheet below).**
 
 - **The instrument first** (`toolkit/authsrv/regenjoin.py`, `test_regenjoin.py`: 25 checks bare, 57 with the vault; studies/skills §64.1). The predictions were registered before the first run. Two were refuted in part, and the module keeps each registered form beside its correction. P2 as registered took the anchor to be the last LOSS only: 13 of 19 observer first steps were on time. The late ones each had a later anchor of another class -- the agent's own swing start, its strike or ranged LAUNCH (not the arrow's arrival), a FOE's activation aimed at it, or a skill LANDING on it -- and with those, 19 of 19 observer and 21 of 22 hostile steps are on time. The one exception (20260917T224104 agent 117, 0.78 s after a Bleeding end) is named CONTESTED in the test. P2(c), "any own activation", is refuted (a self heal). P5's "zero while degeneration is live" is refined to "zero while the effects' sum is a loss": on :50061 the ramp ran +3 -> +4 -> +5 under hex 31 with the effects at +3. Each known-bad arm (a 3 s delay, a 1 s step, separate caps, an unsigned clamp) is red on the same rows. OWN_CAST (the agent's own cast completing at a foe) binds NO on-time step of the observer or a hostile and is carried as RECONSTRUCTION; the test asserts both that and that every OBSERVED class binds one. On the unscored 'other' kind (PvP players) it does bind two (20260929T100038 :62925 agent 6 alone; 20260928T103123 :58544 agent 4 with a LOSS in the same instant) -- reported by `score`, asserted, and the label stays RECONSTRUCTION because that kind's first steps are mostly off time (7 of 28; the study read "4 of 28", the registered count, until round 2 re-derived it). `--json` raised on a tuple key until the same pass.
@@ -244,6 +263,74 @@ move back.
   - Named, unowned: joining 275's retail completion batch (on tape since 20260929T100038) against remove_conditions' batch.
   - push_attributes after a hex removal has no check, and can have none until a hex moves attributes (review round 2, VF-1).
 - **Client confirmation** is owed: the runsheet below, owner-driven. Amended by the review: no `--practice-target`, which stopped the hostile swinging and casting (review EV-1). `--hostile-target-player` is added, because by default the hostile fights Tahlkora herself, whom 276 can never target. B1's heal expectation is one word per 276, with the amount scaled by the conditions removed (review CD-8).
+
+  The runsheet (the lane's final text, pasted at the pass-9 landing -- the seam review's WIRING-4 found it was never in the tree):
+
+  ```text
+  RUNSHEET -- CASTAI-RM, the slice party's Restore Condition. Owner-driven, loopback, after
+  landing. Four arms of about 90 s each. Announce each arm before launching it. You play by
+  mouse and do NOT attack the hostile: stand and let it hit you. The server sends no scripted
+  input.
+
+  AMENDED 2026-10-07 by the review. The first version passed --practice-target, which stops
+  the standing hostile from swinging AND casting, so no arm could have produced its
+  expectation (EV-1). And without --hostile-target-player the hostile fights the softest
+  party body (SLICE-H3), which is Tahlkora herself. 276 can never name its own caster
+  (target byte 4), so the player, her only 276 target, would never be hurt or bled.
+  --enemy-health 2000 keeps the hostile standing for the arm, as RANGERPRE-S22's runsheet
+  does.
+
+  Pre-flight (PowerShell):
+  python toolkit/authsrv/test_castgate.py
+  It must print ALL CHECKS PASSED (149 with the vault since the pass-9 landing; 147 at the lane). Before you read any arm, confirm
+  that the hostile is swinging at YOU.
+
+  A1 -- gate ON, a fight with NO conditions:
+  python toolkit/harness/session.py --enemy --keep-open --game-args "--party slice --map 146 --explorable --hostile-target-player --enemy-health 2000 --no-enemy-skills"
+  EXPECT:
+  - The hostile's plain swings take you under 90 %.
+  - Tahlkora casts Orison 281 at you (0x00A0 [60, <hero>, 1, 281]; log "party agent <hero>
+    (...) casts skill 281 at 1").
+  - ZERO 276 announces.
+  - The server log prints "party agent <hero> holds skill 276: target other ally, and
+    nobody carries a condition [CASTAI-RM]" at most once per 5 s.
+
+  A2 -- the same command, KNOWN-BAD:
+  python toolkit/harness/session.py --enemy --keep-open --game-args "--party slice --map 146 --explorable --hostile-target-player --enemy-health 2000 --no-enemy-skills --no-removal-needs-affliction"
+  EXPECT:
+  - 276 is announced at you while you are under 90 % and clean.
+  - The log prints "skill 276 removed no condition from agent 1 ... nothing healed".
+  - No [CASTAI-RM] line.
+
+  B1 -- gate ON, a BLEEDING foe:
+  python toolkit/harness/session.py --enemy --keep-open --game-args "--party slice --map 146 --explorable --hostile-target-player --enemy-health 2000 --no-energy --enemy-skills 382 --enemy-weapon starter_sword"
+  --no-energy and the sword follow RANGERPRE-S23's runsheet: they let the hostile's adrenal
+  Sever Artery 382 fire every swing. --no-energy also frees Tahlkora's energy, which changes
+  how often she casts but not whom she casts at. If 382 is refused or never lands, use
+  --enemy-skills 220 (Blinding Flash: Blind, also a condition 276 cures).
+  EXPECT:
+  - After each Bleeding lands on you, Tahlkora casts 276 at you (0x00A0 [60, <hero>, 1,
+    276]) at ANY health, near full included.
+  - The bleed icon clears (0x0044 on your effect list).
+  - ONE heal word on you per 276. Its amount is the per-condition heal times the number of
+    conditions removed: one Bleeding, one per-condition heal (CD-8; resolve_heal sends a
+    single heal).
+  - No 276 is cast while you carry no condition.
+
+  B2 -- the same command, KNOWN-BAD:
+  python toolkit/harness/session.py --enemy --keep-open --game-args "--party slice --map 146 --explorable --hostile-target-player --enemy-health 2000 --no-energy --enemy-skills 382 --enemy-weapon starter_sword --no-removal-needs-affliction"
+  EXPECT:
+  - A Bleeding at or above 90 % health is NOT cured.
+  - 276 goes out only while you are under 90 %, and at you while you are clean too.
+
+  Read after each arm:
+  - The server console's [CASTAI-RM] lines and its "casts skill 276 at" lines.
+  - On screen: Tahlkora's cast bar and your bleed icon.
+
+  A pass is A1 with no 276 and B1 curing at full health, each set against its known-bad
+  arm. What would refute the fix: a 276 announce in A1, or a Bleeding at or above 90 % left
+  uncured in B1 while Tahlkora is idle and has the energy.
+  ```
 
 ### SKILLS-EX -- 2026-10-07 -- **Two primaries now act on every caster.**
 

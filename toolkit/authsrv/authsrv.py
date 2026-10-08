@@ -16351,6 +16351,8 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
                        skill_id, agent_id)
         return
     state["player_health"] = max(0.0, state["player_health"] - dealt)
+    if dealt > 0:
+        natural_reset(state, PLAYER_AGENT_ID, f"a damage word (agent {agent_id}'s skill {skill_id})")  # SKILLS-RG (REGEN-1)
     # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
     # for the caster: that half of the rule says WEAPON hit, and a cast is not
     # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that
@@ -17565,7 +17567,9 @@ def area_tick_ramp(skill_id):
 #     rides episodemods.move_speed_terms with no code of its own: 0x0027
 #     [foe, base x 0.34] at the apply -- over ANY open boost too, since a
 #     snare past the -50 cap drops the boosts (SLICE-F48b, episodemods'
-#     SNARE_OVERRIDES_BOOST) -- and the base back at the end -- Teinai's
+#     SNARE_OVERRIDES_BOOST) -- and the pre-snare word back at the end,
+#     whether it expires or is removed (the base, or the boosted word while
+#     a boost is open: SLICE-F48b P9) -- Teinai's
 #     Prison 1097 OBSERVED 6/6 (288 x 0.34 = 97.92), Deep Freeze's exact
 #     arithmetic. And 0x00F1 bit 0x400 while it is live (SNARE_STATUS_BIT).
 #   * a target DEAD at the completion lands NOTHING -- no episode on a corpse
@@ -17890,7 +17894,14 @@ def natural_level(state, agent_id):
 def natural_reset(state, agent_id, why, now=None):
     """Restart the agent's natural ramp at `now`: its level goes to 0 on the
     next natural_tick, which sends the change. The player's only (SKILLS-RG,
-    the banner above HEALTH_REGEN); a no-op for anybody else."""
+    the banner above HEALTH_REGEN); a no-op for anybody else.
+
+    The four DAMAGE-WORD doors call it too (body_spell_word, armour_ignoring_damage,
+    land_swing's hit and its preparation's second word): regenjoin scores a damage
+    word or a negative 55 on the agent as a LOSS anchor (OBSERVED), and natural_tick's
+    net-fall test cannot see one a same-tick heal outweighs -- Backfire's payoff beside
+    Aura of Restoration's or the cast's own heal (the pass-9 landing's seam review,
+    REGEN-1 / PLAYER-1). Degeneration sends no word and stays the net-fall test's."""
     if not (HEALTH_REGEN and NATURAL_REGEN) or agent_id != PLAYER_AGENT_ID:
         return
     row = state.setdefault("natural_regen", {}).setdefault(
@@ -28806,6 +28817,8 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
                                         f"maximum declared ahead of {what}"))
         frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
         state["player_health"] = max(0.0, state["player_health"] - amount)
+        if amount > 0:
+            natural_reset(state, PLAYER_AGENT_ID, f"a damage word ({what})")  # SKILLS-RG (REGEN-1)
         if ENERGY:
             # SKILLS-AD (studies/skills 53.5, shipped 53.6): property-55
             # damage charges adrenaline too -- RB's three life steals at the
@@ -31118,8 +31131,9 @@ def refuse_move_while_down(state, conn_id, opcode):
 
 def skill_knocks_down(skill_id):
     """`knocks_down = true` on the row (Hammer Bash, Heavy Blow; SKILLS-LV: the
-    label rows the gate emits it on -- 187 231 294 784 1086 -- unless
-    --no-label-knockdowns, which ignores a LABEL-tier row's field only)."""
+    label rows the gate emits it on -- 187 231 294 784 1086, and SKILLS-LW's 355
+    behind its landed hit: 6 on the 38974 overlay -- unless --no-label-knockdowns,
+    which ignores a LABEL-tier row's field only)."""
     try:
         row = agents.WORLD.get("skill_effect", str(skill_id))
     except Exception:                                          # noqa: BLE001
@@ -39859,6 +39873,8 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
             pools.damage_units(dealt / player_max_health(state)),
             _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
+    if dealt > 0:
+        natural_reset(state, PLAYER_AGENT_ID, f"a damage word (agent {agent_id}'s hit)")  # SKILLS-RG (REGEN-1)
     if _prep_vis is not None:                            # WEAPONS-W2f
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID, agent_id, _prep_vis],
@@ -39873,6 +39889,7 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
          + (" (converted)" if conversion is not None else ""))
     if _prep_pts > 0.0:                                  # WEAPONS-W2f: the second word
         state["player_health"] = max(0.0, state["player_health"] - _prep_pts)
+        natural_reset(state, PLAYER_AGENT_ID, f"a damage word (agent {agent_id}'s preparation)")  # SKILLS-RG (REGEN-1)
         if _prep_vis is not None:
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
                  [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID, agent_id, _prep_vis],
@@ -42005,7 +42022,11 @@ def capture_flags():
     # stdlib-only, so importing it here is free on the bare-machine path too. It also
     # picks up SEAM_AWARE_ROUTE, which has had a revert flag since 1z-bb and was
     # likewise unrecorded until now.
-    for modname in ("agtrack_guard", "pathmap"):
+    # SLICE-F48b's switch, SNARE_OVERRIDES_BOOST (--snare-multiplies-boost), lives in the
+    # `episodemods` leaf and authsrv keeps no copy (test_mechanics 8c locks that), so its
+    # registered A/B (slice 48.7.1) was unrecorded until `episodemods` joined this tuple
+    # (the pass-9 landing's seam review, WIRING-2); WEAKNESS_ATTRIBUTES rides along.
+    for modname in ("agtrack_guard", "pathmap", "episodemods"):
         # IMPORTED, not looked up. `sys.modules.get` was the first draft and
         # RUN-1zAH caught it in the act: the guard is imported LAZILY at
         # character placement, which is AFTER this header row is written, so
@@ -51903,7 +51924,8 @@ def main():
         global LABEL_KNOCKDOWNS
         LABEL_KNOCKDOWNS = False
         print("NO LABEL KNOCK-DOWNS: a LABEL-tier row's knocks_down (187, 231, 294, 784, "
-              "1086) is ignored on every path; the hand rows' stand [SKILLS-LV]", flush=True)
+              "1086, and SKILLS-LW's 355 behind its landed hit -- 6 on the 38974 overlay) is "
+              "ignored on every path; the hand rows' stand [SKILLS-LV, SKILLS-LW]", flush=True)
     if a.no_condition_flat_constants:
         global CONDITION_FLAT_CONSTANTS
         CONDITION_FLAT_CONSTANTS = False

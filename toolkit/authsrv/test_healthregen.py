@@ -63,8 +63,10 @@ HAVE_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 # Floors from the green runs of 2026-10-07: 38 bare (RURIK_VAULT at an empty directory and at
 # a nonexistent path; section 0 a declared skip), 40 with the vault (section 0: 2). The review
 # fix the same day (EV-2..EV-8, CD-1..CD-3): 53 bare, and section 0 holds 5 carried rows -- 58
-# with the vault. Both from green runs.
-FLOOR_BARE = 53
+# with the vault. Both from green runs. 2026-10-08 (the pass-9 landing's seam review,
+# REGEN-1): +2 on both machines -- section 4's masked damage word (with its known-bad arm)
+# and section 5's damage-door lock; MEASURED 55 bare (empty RURIK_VAULT, 1 skip) / 60 vault.
+FLOOR_BARE = 55
 LEDGER = checks.Ledger("health regeneration on the server",
                        floor=FLOOR_BARE + (5 if HAVE_CONTENT else 0))
 check = checks.adopt(LEDGER)
@@ -701,6 +703,39 @@ def section_natural():
           "degen_tick steps the ramp itself and spends it on an effect-less state: +1 pip for "
           "1 s is +2 health, the word sent once", f"{st['player_health']} {words(sent)}")
 
+    # A DAMAGE WORD OUTWEIGHED BY A SAME-TICK HEAL (2026-10-08, the pass-9 landing's seam
+    # review, REGEN-1 / PLAYER-1). desk-castrig puts Backfire's armour-ignoring 55 and a heal
+    # (Aura of Restoration's payoff, the cast's own) in ONE completion; the net health change
+    # is then no fall, so the net-fall test missed the loss while regenjoin scores a damage
+    # word as a LOSS anchor (OBSERVED). The damage doors now reset. KNOWN-BAD ARM: the server
+    # before the fix -- simulated by dropping only the damage doors' resets -- keeps +7.
+    def masked(drop_damage_resets):
+        st = fresh(50.0)
+        _ramp(st, 100.0)
+        authsrv.natural_tick(nop, st, 0)
+        real = authsrv.natural_reset
+
+        def only_others(state, agent_id, why, now=None):
+            if not why.startswith("a damage word"):
+                real(state, agent_id, why, now)
+        if drop_damage_resets:
+            authsrv.natural_reset = only_others
+        try:
+            quiet(authsrv.armour_ignoring_damage, nop, st, PLAYER, FOE, 35.0, 0, "a Backfire-shaped payoff")
+            quiet(authsrv.heal_agent, nop, st, PLAYER, PLAYER, 40.0, 0)
+        finally:
+            authsrv.natural_reset = real
+        h = st["player_health"]
+        sent, send = collector()
+        quiet(authsrv.natural_tick, send, st, 0)
+        return authsrv.natural_level(st, PLAYER), rates(sent), round(h, 1)
+    fixed, pre_fix = masked(False), masked(True)
+    check(fixed == (0, [0.0], 55.0) and pre_fix == (7, [], 55.0),
+          "a 35-point 55 on the player under a +7 ramp, outweighed by a 40-point heal in the "
+          "same tick (50 -> 55, no net fall): the damage word resets the ramp -- level 0, the "
+          "[44] zero -- and the KNOWN-BAD ARM without the damage doors' reset keeps +7 and "
+          "sends nothing", f"fixed {fixed} pre-fix {pre_fix}")
+
 
 def section_source():
     print("== 5. the flags, main()'s wiring, and the hook sites ==")
@@ -769,6 +804,19 @@ def section_source():
           "review's CD-1): the player's swing start, strike, ranged release and cast at a foe; "
           "a foe's activation at the player; a landing on it. A FRIENDLY activation "
           "(ally_cast_tick) and a body's shot never call it", f"{sites} {named}")
+    # The DAMAGE-WORD doors (2026-10-08, the pass-9 landing's seam review, REGEN-1): one reset
+    # per subtraction from the player's health that sends a word, each naming the player.
+    doors = {fn: [ast.unparse(c.args[1]) for c in resets(fn)
+                  if isinstance(c.args[2], ast.JoinedStr)
+                  and isinstance(c.args[2].values[0], ast.Constant)
+                  and str(c.args[2].values[0].value).startswith("a damage word")]
+             for fn in ("body_spell_word", "armour_ignoring_damage", "land_swing", "degen_tick")}
+    check(doors == {"body_spell_word": ["PLAYER_AGENT_ID"],
+                    "armour_ignoring_damage": ["PLAYER_AGENT_ID"],
+                    "land_swing": ["PLAYER_AGENT_ID", "PLAYER_AGENT_ID"], "degen_tick": []},
+          "the damage-word doors reset the player's ramp: a body's spell word, an armour-"
+          "ignoring 55, a hit and its preparation's second word -- and degeneration (no word) "
+          "stays the net-fall test's", f"{doors}")
     guards = {fn: guard_of(fn) for fn in ("hit_enemy", "enemy_attack_tick", "land_skill")}
     check(guards == {"hit_enemy": "(swing or skill_strike) and (not projectile)",
                      "enemy_attack_tick": "cast_target == PLAYER_AGENT_ID",

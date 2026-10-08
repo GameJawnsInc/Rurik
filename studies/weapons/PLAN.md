@@ -3329,4 +3329,55 @@ KILLED IN PLAY with its area live and struck after (WEAPONS-C11: no witness; :58
 and §41's two are inconclusive); bodies'
 adjacent damage and Cyclone Axe (no witness anywhere in the corpus); the `+0x80` and
 visual-column leads (UNVERIFIED); the wiki reads; and a client run of the new rows (the
-owner's, after landing -- the runsheet is in the lane's report).
+owner's, after landing -- the runsheet is this section's last block, RUN-AOTROWS-1 / 2).
+
+**The runsheet (RUN-AOTROWS-1 / 2, owner-driven, after landing).** The lane's final text, pasted
+at the pass-9 landing (the seam review's WIRING-4: it lived only in the lane's report).
+
+```text
+RUNSHEET -- weapons §45, AOTROWS. Loopback only (the ours-DH build, caged). The owner drives and the owner judges. Run after the lane lands on main. PowerShell from C:\gd\Rurik.
+
+RUN-AOTROWS-1: the player's Breath of Fire on a four-foe cluster.
+  python toolkit/harness/session.py --enemy --keep-open --hold 240 --game-args "--enemies 4 --enemy-cluster 100 --enemy-passive --enemy-hit 0.02 --no-enemy-skills --skills 1094"
+
+Operator steps:
+- Swing once to provoke the group, as in weapons §42.1 run A.
+- Press skill 1 on a member of the cluster.
+- Stand clear so you can see the group scatter.
+
+Expected (gamesrv.log, then the client):
+- The open line: `[DESKWORK-D6] the player's skill 1094 opens area #1: 156 u at (...), 5 tick(s) every 1 s for 5 s, 10 each, NO ground effect (no visual id is known)`. It reads 10 because the default Warrior holds rank 0 in Fire Magic (10..40 at rank 0).
+- Five tick lines at +1..+5, each striking every hostile within 156 u.
+- On screen: damage numbers above each struck foe, five times (amounts after armour). No number at the completion.
+- No ground fire is drawn, because none is sent.
+- MONSTERAI-S1 scatter: the group breaks off at the second tick and holds off until the area closes.
+- A/B control: re-run with `--no-scatter` added inside --game-args. All four foes should stand in the area.
+
+Questions registered before the run:
+- (Q1) Numbers on every foe inside, five times, and none on a foe outside?
+- (Q2) Does the client draw ANY ground visual of its own? Expected: no. A yes is evidence for the record's +0x80 / +0x7c leads.
+- (Q3) Does the scatter come at the second tick?
+
+RUN-AOTROWS-2: a hostile's Snow Storm on the player.
+  python toolkit/harness/session.py --enemy --keep-open --hold 120 --game-args "--enemy-skills 2222"
+
+Operator steps:
+- Stand still and let the standing hostile cast.
+- On the second cast, walk out of the 156 u radius while the area is live.
+
+Expected:
+- The hostile's [58] at its 1.0 s activation, with no 0x00A1 and no ground visual.
+- Then per tick: 0x00CF, [10, me, 2222], the word. The damage is 38 cold at ENEMY_SKILL_RANK 12, against the armour pieces' elemental armour at the hostile's strike level.
+- The client's damage monitor names Snow Storm (run C showed "x6 Fire Storm").
+- Five ticks, then the area closes. After you walk out, no further ticks reach the player.
+- The hostile recasts after its 10 s recharge.
+
+Questions registered:
+- (Q4) Does the monitor name Snow Storm?
+- (Q5) Is no ground visual drawn?
+- (Q6) Does walking out stop the ticks?
+
+Not testable on our client, and not asked:
+- Retail's ground ids for these skills.
+- Retail's behaviour when a caster dies. It was observed n = 1, and only past a lost match's defeat mark (WEAPONS-C11); a caster killed in play has no retail witness. A loopback run tests our server, which keeps the area, and not retail.
+```
