@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 
 import math                 # noqa: E402
+import time                 # noqa: E402
 import authsrv              # noqa: E402
 import checks               # noqa: E402
 # The arm extractor is test_position_trust's and is IMPORTED rather than
@@ -46,6 +47,13 @@ import checks               # noqa: E402
 # extractor drifting apart is exactly the failure this repo keeps recording.
 # Importing is safe -- that file guards its main() behind __name__.
 from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
+# So is the frozen clock. The server judges its windows on its OWN `time.time()` -- a
+# windup `now < lands_at`, a follow's eta, a kill point 288 u/s x an age -- so a check
+# that stamps one off the wall clock and then runs server code races that code, and
+# drive_heading alone compiles the 0x003D arm on every call (0.26-0.37 s idle,
+# 2026-10-07). Section 30 went red under load that way (2026-10-08); `frozen` pins the
+# instant the check meant. It was section 35's Clock35 here, a third copy.
+from test_position_trust import frozen                        # noqa: E402
 
 # Parse once HERE, before any check stamps an absolute time into a state: the
 # fence checks set fence_shut_at and then call drive_heading, and a ~7 s parse
@@ -77,13 +85,17 @@ ARGS_SRC = open(os.path.join(os.path.dirname(os.path.abspath(authsrv.__file__)),
 
 def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
                   d1=False, state=None, since=10.0, hold=True, kill=True,
-                  carry=False, matched=True, fence=True):
+                  carry=False, matched=True, fence=True, at=None):
     """One 0x003D through the SHIPPED heading arm. Returns (state, wire).
     `since` is the age of the last grant when the report arrives: 10 s
     clears any floor; 0.1 s is refused `heading-rate` (1z-y) ONLY under
     `--kbd-grant-floor 0.5`, the arm this file sets where it pins the hold --
     the shipped floor is 0.0 since MOVECODE-1z-cw (retail answers every
-    report), and section 26 pins that."""
+    report), and section 26 pins that.
+    `at` pins the server's clock for the arm (`frozen`): the report arrives AT
+    that instant however long this call takes. Pass it whenever the caller stamped
+    a window the arm will judge -- a windup's `lands_at`, an eta -- or the window
+    includes this call's own compile. None (the default) is the wall clock."""
     st = state if state is not None else {
         "pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
     w, r = Sent(st), FakeRec()
@@ -101,11 +113,13 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
     authsrv.KBD_LEAD_FENCE_GATE = fence
     authsrv.PLANE_CARRY = carry
     try:
-        import time as _t
-        w.now = _t.time() - since
+        w.now = (time.time() if at is None else at) - since
         st["grant_at"] = w.now
         st["_rec"] = r
-        arm(values, st, r, w, 0)
+        if at is None:
+            arm(values, st, r, w, 0)
+        else:
+            frozen(at, arm, values, st, r, w, 0)
     finally:
         (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
          authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD,
@@ -2600,7 +2614,11 @@ def main():
         saved = authsrv.PRESS_STOPS_BODY
         authsrv.PRESS_STOPS_BODY = on
         try:
-            authsrv.begin_attack(w, st, FOE29, 0, rec=r)
+            # The press lands AT `t` (`frozen`): 29a's reckoned pin is 0.42 s x 288 u/s
+            # within 1 u, i.e. 3.5 ms of wall clock between this stamp and begin_attack's
+            # own read, and a preemption under load moved it; and the pin's stamp is then
+            # exactly `t`, which section 30's helpers order their reports against.
+            frozen(t, authsrv.begin_attack, w, st, FOE29, 0, rec=r)
         finally:
             authsrv.PRESS_STOPS_BODY = saved
         return st, w, r
@@ -2663,23 +2681,31 @@ def main():
     MOVE30 = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
     STOPPED30 = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
 
+    # THE WINDUP IS STAMPED AFTER THE PRESS AND THE REPORT ARRIVES AT ITS STAMP (`frozen`).
+    # Every helper below used to read `t` BEFORE press29 and arm `lands_at = t + 0.5`, and the
+    # server reads its own clock for `now < lands_at` -- so the press and drive_heading's
+    # per-call compile of the arm (~0.27 s idle) were inside the windup, and under load the
+    # swing had "landed" before the report arrived: 30b, 30c and 30k red (2026-10-08). Now
+    # the report arrives 0 s into a 0.5 s windup whatever the machine is doing; the checks
+    # are unchanged, and a past `lands_at` still reddens all three.
     def parked30(on=True, swing=False, walk=True):
         """Press-stop a walking body (as section 29), then send its next key report."""
         t = _t27.time()
         st, _w, _r = press29()
+        t2 = _t27.time()                      # after the press: the drive's own instant
         pin = st["cast_stop_pin"][1]
         st["last_report"] = (0.0, 0.0, False, t - 0.42)      # the report the press followed
         st["plane"] = 0
         st["pathmap"] = None                  # the report arm runs meshless (clip_why no-mesh)
         if swing:
             st["attacking"] = FOE29
-            st["player_swing"] = {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}
+            st["player_swing"] = {"target": FOE29, "armed_at": t2, "lands_at": t2 + 0.5}
         saved = (authsrv.PARK_IS_WALK_START, authsrv.WALK_START_IS_MOVE)
         authsrv.PARK_IS_WALK_START = on
         authsrv.WALK_START_IS_MOVE = walk
         try:
             st2, w2 = drive_heading([1, [float(pin[0]), float(pin[1])], 0, [0.0, -766.0], 1],
-                                    state=st)
+                                    state=st, at=t2)
         finally:
             authsrv.PARK_IS_WALK_START, authsrv.WALK_START_IS_MOVE = saved
         return st2, w2, pin
@@ -2718,9 +2744,12 @@ def main():
     # RE-AIMED 2026-10-02 (MOVECODE-1z-ds.21, the review): with the last report OLDER than
     # the pin this report is a walk-start, which cancels under 1z-ds.14 at any distance, so
     # the 60 u could no longer be what decided it. Its 0 u twin must NOT cancel.
+    # `t30` is read AFTER the press for a second reason too: "the client spoke after the pin"
+    # was `t30 + 0.01` with t30 read BEFORE it, so a press slower than 10 ms made this report
+    # older than the pin -- a walk-start -- and 30d's control would have read the wrong rule.
     def midwalk30(off):
-        t30 = _t27.time()
         st30d, _w, _r = press29()
+        t30 = _t27.time()                     # after the press, so after its pin's stamp
         pin30d = st30d["cast_stop_pin"][1]
         st30d["last_report"] = (float(pin30d[0]), float(pin30d[1]), False, t30 + 0.01)
         st30d["plane"] = 0
@@ -2728,7 +2757,7 @@ def main():
         st30d["attacking"] = FOE29
         st30d["player_swing"] = {"target": FOE29, "armed_at": t30, "lands_at": t30 + 0.5}
         _st2, w30d = drive_heading([1, [float(pin30d[0]), float(pin30d[1]) - off], 0,
-                                    [0.0, -766.0], 1], state=st30d)
+                                    [0.0, -766.0], 1], state=st30d, at=t30 + 0.02)
         return ([v for op, v, _l in w30d.rows
                  if op == STOPPED30 and v[0] == authsrv.agents.GV_ATTACK_STOPPED],
                 _st2["_rec"].of("walk_start"))
@@ -2787,15 +2816,15 @@ def main():
 
     # The client's own 0x0047 is the second door: a walk-start at the stop's point moved 0 u.
     def stop30(last_stop, walk=True):
-        t = _t27.time()
         st, _w, _r = press29(kbd_moving_at=None)          # parked: no pin, no marker (29d)
+        t = _t27.time()                                   # after the press (parked30's note)
         st.update({"last_report": (0.0, 0.0, last_stop, t - 0.3), "plane": 0,
                    "pathmap": None, "attacking": FOE29,
                    "player_swing": {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}})
         saved = authsrv.WALK_START_IS_MOVE
         authsrv.WALK_START_IS_MOVE = walk
         try:
-            st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, -766.0], 1], state=st)
+            st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, -766.0], 1], state=st, at=t)
         finally:
             authsrv.WALK_START_IS_MOVE = saved
         return st2, [v for op, v, _l in w2.rows
@@ -2845,14 +2874,14 @@ def main():
     # release first, the windup's stop, then a REAL lead -- retail's census 1 (29 of 32
     # cancelled, [8, 0] + [3] + lead) -- never ANIMREF-RE 35's zero lead.
     def held30(hold):
-        t = _t27.time()
         st, _w, _r = press29(kbd_moving_at=None)          # parked: no pin, no marker
+        t = _t27.time()                                   # after the press (parked30's note)
         st.update({"last_report": (0.0, 0.0, True, t - 1.2), "plane": 0, "pathmap": None,
                    "attacking": FOE29,
                    "player_swing": {"target": FOE29, "armed_at": t, "lands_at": t + 0.5}})
         if hold:
             st.update({"action_hold": 1, "press_hold": True})
-        st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, -766.0], 1], state=st)
+        st2, w2 = drive_heading([1, [0.0, 0.0], 0, [0.0, -766.0], 1], state=st, at=t)
         seq = [("8:%d" % v[2]) if v[0] == authsrv.agents.GV_DISABLED else "3"
                for op, v, _l in w2.rows if op == STOPPED30
                and v[0] in (authsrv.agents.GV_DISABLED, authsrv.agents.GV_ATTACK_STOPPED)
@@ -2944,7 +2973,13 @@ def main():
     # 298 u/s under the owner's keys. Retail answers that report with a real lead, 23 of 25.
     def report_on(st, pin, parks=True, approach=None):
         t = _t27.time()
-        st["last_report"] = (0.0, 0.0, False, t - 0.42)
+        # The report the press followed is 0.42 s before OUR marker, read off the marker's own
+        # stamp -- the operand the arm compares (`_park[0] > _lr[3]`). It was `t - 0.42` off this
+        # line's clock, so a press that took 0.42 s to get here put the report AFTER the pin: no
+        # walk-start, 30l red, and 30p/30r's "no re-arm" green for the wrong reason. No marker
+        # (30m's and 30o's arms): this line's clock, as before.
+        _mk = st.get("cast_stop_pin")
+        st["last_report"] = (0.0, 0.0, False, (t if _mk is None else float(_mk[0])) - 0.42)
         st["plane"] = 0
         st["pathmap"] = None
         if approach is not None:
@@ -2952,8 +2987,10 @@ def main():
         saved = authsrv.PLACEMENT_PARKS
         authsrv.PLACEMENT_PARKS = parks
         try:
+            # at=t: 30p/30r's in-flight guard is `time.time() < eta` with eta = +1.0 s, and the
+            # drive's own compile sat inside it (parked30's note).
             st2, w2 = drive_heading([1, [float(pin[0]), float(pin[1])], 0, [0.0, -766.0], 1],
-                                    state=st)
+                                    state=st, at=t)
         finally:
             authsrv.PLACEMENT_PARKS = saved
         rearm = [e.get("by") for e in st2["_rec"].of("fence") if e.get("act") == "rearm"]
@@ -3315,8 +3352,11 @@ def main():
         return [(o, (l or "").split(" ")[0]) for o, v, l in rows if v and v[0] == ME34]
 
     # 34a: the hop class -- a press out of reach on the frame and the body while the key walks away.
+    # 34a, 34b and 34h press AT the report + its age (`frozen`): the kill point is 100 + 288 u/s
+    # x (the server's `now` less the stamp), and 157.6 +/- 0.6 u is 2 ms of wall clock -- a 30 ms
+    # stall between walking34 and the arm reddened both (a scratch mutant, 2026-10-08).
     st = walking34()
-    w, r, prs, _ta = press34(st)
+    w, r, prs, _ta = frozen(st["client_pos_at"] + 0.2, press34, st)
     kr = [x for x in r.of("kbd_leg")]
     kp = st.get("kbd_kill_point")
     dests = player(w.rows, DEST34)
@@ -3335,7 +3375,7 @@ def main():
           f"press {ops(prs)} all {ops(w.rows)} point {kp} rows {kr[:1]} retired {st.get('kbd_retired')}")
     # 34b: the known-bad arm.
     st = walking34()
-    w, r, prs, _ta = press34(st, on=False)
+    w, r, prs, _ta = frozen(st["client_pos_at"] + 0.2, press34, st, on=False)
     kills = player(prs, WP34)
     check(len(kills) == 1 and "KBD LEAD KILLED on press" in kills[0][1]
           and abs(kills[0][0][1][0] - 157.6) < 0.6 and len(player(w.rows, DEST34)) == 1
@@ -3412,10 +3452,13 @@ def main():
           "other player movement message (retail 30 of 46 nothing, 10 the reset alone; "
           "1z-ds.39's adjacency kept); the answered retire stays closed", f"{seq} {again}")
     # 34h: the guard reads the retire's point when the body estimate has expired (kill_fresh).
+    # Both presses run AT the report + 2.2 s (34a's note): the row rounds the model to 0.1 u, and
+    # two presses whose wall-clock lag differed by 0.17 ms straddled 733.65 -- [733.6] vs
+    # [733.7], red with nine test processes up (2026-10-08).
     gm = []
     for on in (True, False):
         st = walking34(age=2.2, dest=(1100.0, 0.0))
-        w, r, prs, _ta = press34(st, on=on, mirror=(900.0, 0.0))
+        w, r, prs, _ta = frozen(st["client_pos_at"] + 2.2, press34, st, on=on, mirror=(900.0, 0.0))
         ap = [x for x in r.of("approach") if x.get("guard")]
         gm.append((ap[0]["guard"].get("src"), ap[0]["guard"].get("model")) if ap else None)
     check(gm[0] is not None and gm[0] == gm[1] and gm[0][0] == "estimate"
@@ -3486,26 +3529,10 @@ def main():
     def snap35(st):
         return st["w0_rep"].snap
 
-    class Clock35:
-        """authsrv's `time` frozen at `t` (time() only; everything else is the real module), so a
-        press's body estimate B does not drift with the machine's load while the arm runs."""
-
-        def __init__(self, t):
-            self.t = t
-
-        def time(self):
-            return self.t
-
-        def __getattr__(self, k):
-            return getattr(_t34, k)
-
-    def frozen35(t, fn, *a, **kw):
-        saved = authsrv.time
-        authsrv.time = Clock35(t)
-        try:
-            return fn(*a, **kw)
-        finally:
-            authsrv.time = saved
+    # authsrv's clock pinned at the press, so a press's body estimate B does not drift with the
+    # machine's load while the arm runs. The class was Clock35, here; it is test_position_trust's
+    # FakeClock now, imported with `frozen`, which sections 29, 30 and 34 pin with too.
+    frozen35 = frozen
 
     class Sent35(Sent33):
         """Sent33, plus what send()'s lock does since 1z-ds.44: step the replica with the message."""

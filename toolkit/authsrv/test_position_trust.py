@@ -313,6 +313,58 @@ class FakeRec:
         return [e for e in self.events if e["kind"] == kind]
 
 
+class FakeClock:
+    """`time`, with `time()` under the test's control and nothing else moved.
+
+    SECTION 15 DID NOT NEED THIS AND SECTION 16 DOES, which is itself the
+    finding: F1's carry is a pure lookup with no clock in it, while F1b's
+    turns on `arrival <= now`. Driven on the real clock the arm's own
+    `now_z = time.time()` advances by whatever the loop happened to take --
+    and a 0.559 u first leg arrives 1 ms later, so two reports issued inside
+    that millisecond score "in flight" and the payload flips. That is a real
+    property of the policy (it is exactly the sub-frame race the offline
+    pre-screen measured) and it must be DRIVEN rather than raced: a test
+    whose expected payload depends on how fast the machine is proves
+    nothing on either outcome.
+
+    Everything except `time()` delegates to the real module, so a `sleep`
+    or a `monotonic` anywhere under `arm` still behaves.
+
+    MODULE LEVEL since 2026-10-08, out of section 16's body: the mid-leg
+    checks above it need it too (`frozen`), and test_kbdsync IMPORTS it rather
+    than keeping two copies of its own -- its section 30 went red under load
+    because a 0.5 s windup was raced on the wall clock (`frozen`'s docstring).
+    """
+
+    def __init__(self, start=1_000_000.0):
+        self.t = start
+
+    def time(self):
+        return self.t
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+def frozen(t, fn, *a, **kw):
+    """Run `fn` with authsrv's clock pinned at `t` (FakeClock), and restore it.
+
+    For a check that stamps a window off the wall clock and then runs server
+    code that judges it on its OWN `time.time()`: whatever runs between the
+    stamp and that read is inside the window, so under load the verdict is the
+    machine's speed. test_kbdsync section 30 armed a 0.5 s windup, then ran a
+    press and a drive that compiles the 0x003D arm (~0.27 s idle) before the
+    server's `now < lands_at`, and with nine lanes at 99 % CPU 30b, 30c and
+    30k went red on a diff that touched none of it (2026-10-08). Pinned, the
+    server reads the instant the check meant."""
+    saved = authsrv.time
+    authsrv.time = FakeClock(t)
+    try:
+        return fn(*a, **kw)
+    finally:
+        authsrv.time = saved
+
+
 def fresh(pos=ANCHOR, plane=0, seen=1000.0):
     return {"pos": pos, "plane": plane, "pos_seen": seen}
 
@@ -1236,7 +1288,11 @@ def main():
                                                  t0, 288.0)}
 
     st = mid_leg()
-    authsrv._press_supersedes(lambda *a, **k: None, st, 0, 10)
+    # The press lands AT 1.0 s into the leg (`frozen`): 288 +/- 2 u below is 7 ms of
+    # wall clock between mid_leg's stamp and the press's own `time.time()`, which one
+    # preemption under load spends.
+    t_leg1 = st["client_pos_at"] + 1.0
+    frozen(t_leg1, authsrv._press_supersedes, lambda *a, **k: None, st, 0, 10)
     check("client_pos" not in st and "client_plane" not in st
           and "client_pos_at" not in st,
           "a press that supersedes the click leg FORGETS the whole "
@@ -1249,7 +1305,7 @@ def main():
           f"instead would hand both wire senders our own extrapolation "
           f"stamped `now`, which passes the RESYNC_MAX_REPORT_AGE freshness "
           f"gate the report's own age exists to bound")
-    model = authsrv._click_leg_start(st, time.time(), False)
+    model = authsrv._click_leg_start(st, t_leg1, False)
     check(model is not None and abs(model[0] - 288.0) < 2.0
           and abs(model[1]) < 1e-6,
           "and the snap guard still reads the RE-PINNED point, which is the "
@@ -1317,20 +1373,28 @@ def main():
                                                  t0, 288.0),
                 "sync_from": (0.0, 0.0), "sync_to": None, "sync_at": t0}
 
-    def approach_run(st, repath=False):
-        """Drive the guard and hand back every 0x002C it emitted."""
+    def approach_run(st, repath=False, now=None):
+        """Drive the guard and hand back every 0x002C it emitted. `now`, when
+        given, is the instant the guard runs at (the server's clock pinned there
+        too, `frozen`); None is the wall clock."""
         pins = []
 
         def send(opcode, values, _label=None):
             if opcode == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION:
                 pins.append(values)
 
-        authsrv._approach_send(send, st, 0, 10, TARGET, time.time(),
-                               repath=repath)
+        if now is None:
+            authsrv._approach_send(send, st, 0, 10, TARGET, time.time(),
+                                   repath=repath)
+        else:
+            frozen(now, authsrv._approach_send, send, st, 0, 10, TARGET, now,
+                   repath=repath)
         return pins
 
     st3 = approach_mid_leg()
-    pins3 = approach_run(st3)
+    # 1.0 s into the leg exactly: the re-pin is checked to 288 +/- 2 u, 7 ms of
+    # wall clock (the press-supersede's note above).
+    pins3 = approach_run(st3, now=st3["client_pos_at"] + 1.0)
     check(len(pins3) == 1 and "client_pos" not in st3
           and "client_plane" not in st3 and "client_pos_at" not in st3,
           "the approach snap re-pin FORGETS the client-sourced triple too, "
@@ -3760,34 +3824,8 @@ def main():
     # F1b must move field 4 and NOTHING else. `drive_pc` sets ZERO_LEAD and
     # PLANE_CARRY; ARRIVAL_CARRY needs the same treatment, so it gets its own
     # driver rather than a widened one -- section 15's checks read `drive_pc`
-    # and must keep meaning what they meant.
-    class FakeClock:
-        """`time`, with `time()` under the test's control and nothing else moved.
-
-        SECTION 15 DID NOT NEED THIS AND SECTION 16 DOES, which is itself the
-        finding: F1's carry is a pure lookup with no clock in it, while F1b's
-        turns on `arrival <= now`. Driven on the real clock the arm's own
-        `now_z = time.time()` advances by whatever the loop happened to take --
-        and a 0.559 u first leg arrives 1 ms later, so two reports issued inside
-        that millisecond score "in flight" and the payload flips. That is a real
-        property of the policy (it is exactly the sub-frame race the offline
-        pre-screen measured) and it must be DRIVEN rather than raced: a test
-        whose expected payload depends on how fast the machine is proves
-        nothing on either outcome.
-
-        Everything except `time()` delegates to the real module, so a `sleep`
-        or a `monotonic` anywhere under `arm` still behaves.
-        """
-
-        def __init__(self, start=1_000_000.0):
-            self.t = start
-
-        def time(self):
-            return self.t
-
-        def __getattr__(self, name):
-            return getattr(time, name)
-
+    # and must keep meaning what they meant. Its clock is the module's
+    # FakeClock (hoisted from here on 2026-10-08; the docstring is there).
     def drive_ac(steps, carry, zero_lead=True, step_dt=1.0):
         st_ = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
                "sync_from": (1000.0, 2000.0), "sync_to": None,
