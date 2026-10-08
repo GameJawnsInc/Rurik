@@ -837,8 +837,17 @@ transfer.
 
 ### 12.6 Still open
 
-* Retail's **reply** to `0x005E`, if any. Needs a live session in which the
-  owner swaps two hero-bar slots on the secondary account, at human cadence.
+* ~~Retail's **reply** to `0x005E`, if any.~~ **OBSERVED 2026-10-08** (RIDERS-R1,
+  [studies/livekey/RIDERS.md](../livekey/RIDERS.md); live capture `20261008T132845`
+  `:65410`, Kamadan, build 38974): the owner swapped two slots on Koss's bar and swapped
+  them back. Each `0x005E` is answered at +37 / +44 ms by **`0x00D9` for the SOURCE slot**
+  (the picked-up skill's old slot, now holding the target skill), **`0x00D9` for the
+  target slot**, then **`0x0065 [hero, mask]`** — 2 of 2; and a hero's `0x005C` set is
+  answered by its `0x00D9` then `0x0065`, 17 of 17, where the player's set draws the
+  `0x00D9` alone (7 of 7 over 129 live connections). Our "send nothing on success" was
+  wrong; the server now echoes (`BAR_EDIT_RETAIL_ECHO`, `--no-bar-edit-echo` reverts).
+  The PLAYER's swap is still on no tape and echoes the two slots without the mask, by the
+  player's own set. `0x005F` (a move into an empty slot) is still on no retail tape.
 * ~~`0x0065 SKILLBAR_SLOT_FLAGS` and `0x001B` remain unmodelled (§40.6).~~ Both are
   on the wire now (DESKWORK-Q1 note, 2026-09-24): `0x001B` is PARTY_FLAG_PLACE, handled
   since 2026-08-19; `0x0065` is sent in the hero's block and, since DESKWORK-D1 step 6,

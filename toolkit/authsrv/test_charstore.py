@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=96)   # 2026-09-24 DESKWORK-D9 +5 (the carried purse: optional field, round-trip, three refusals), from the green run; 91 before
+led = checks.Ledger("charstore", floor=97)   # 2026-10-08 RIDERS +1 (the swap's --no-bar-edit-echo arm; the success check now asserts retail's echo), from the green run, bare and vaulted alike; 2026-09-24 DESKWORK-D9 +5 (the carried purse: optional field, round-trip, three refusals), from the green run; 91 before
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -547,13 +547,32 @@ try:
         led.ok(charstore.Store.open("swap@rurik.invalid", base=base)
                .character_skillbar(UUID)[0] == 256,
                "and the swapped bar is persisted")
-        led.ok(sw_sent == [],
-               "a successful swap sends NOTHING -- retail's reply is "
-               "unobserved and the client has already swapped locally")
+        U = authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL
+        led.ok(sw_sent == [(U, [P, 0, 256, 0]), (U, [P, 7, 281, 0])],
+               "a successful swap echoes both slots through 0x00D9, the SOURCE "
+               "slot first (281 was in slot 0, which now holds 256), and the "
+               "player gets no 0x0065 -- retail's shape on a hero (2 of 2, "
+               "20261008T132845) less the hero-only mask (RIDERS)",
+               f"sent {sw_sent}")
+        sw_sent.clear()
         authsrv.handle_skillbar_skill_swap([0x5E, P, 256, 0, 281, 0], sw_send,
                                            sw_state, 0, _Rec())
-        led.ok(list(authsrv.SKILLBAR) == [281, 276, 310, 284, 991, 279, 1685, 256],
-               "D2, the mirror message, restores the fixture")
+        led.ok(list(authsrv.SKILLBAR) == [281, 276, 310, 284, 991, 279, 1685, 256]
+               and sw_sent == [(U, [P, 0, 281, 0]), (U, [P, 7, 256, 0])],
+               "D2, the mirror message, restores the fixture, its echo again "
+               "source slot first", f"sent {sw_sent}")
+        sw_sent.clear()
+        authsrv.BAR_EDIT_RETAIL_ECHO = False
+        try:
+            authsrv.handle_skillbar_skill_swap([0x5E, P, 281, 0, 256, 0], sw_send,
+                                               sw_state, 0, _Rec())
+            authsrv.handle_skillbar_skill_swap([0x5E, P, 256, 0, 281, 0], sw_send,
+                                               sw_state, 0, _Rec())
+        finally:
+            authsrv.BAR_EDIT_RETAIL_ECHO = True
+        led.ok(sw_sent == [] and list(authsrv.SKILLBAR)[0] == 281,
+               "--no-bar-edit-echo: the same two swaps send NOTHING, every run "
+               "before 2026-10-08", f"sent {sw_sent}")
         # A refusal answers: both slots echoed unchanged through 0x00D9.
         authsrv.handle_skillbar_skill_swap([0x5E, P, 281, 0, 4242, 0], sw_send,
                                            sw_state, 0, _Rec())

@@ -91,10 +91,12 @@ WHAT THE TAPE SAYS (studies/cmsg/FINDINGS.md "The party family", capture
     [1, ...] add AND 0x01C3 [1, ...] kick are both CONFIRMED on the client
     (the hero pair, 2026-09-23), so the two lookups agree for party id 1 and
     it resolves for 0x01C0 too (CORROBORATED; the review's RV2-5).
-    `henchman_kick_batch` is 0x01C0 then 0x00B0 -- ROW THEN SIZE, the hero
-    kick's shape (the only OBSERVED kick; the add is
-    size-then-row). RECONSTRUCTION: no tape carries the batch. No 0x0075 /
-    0x00F8 / 0x003E / 0x0145 -- those tear down a hero's agent record and
+    `henchman_kick_batch` is 0x00B0 then 0x01C0 -- SIZE THEN ROW, the add's
+    order. OBSERVED 3 of 3 on 20261008T132845 (RIDERS, 2026-10-08), the
+    first retail henchman kick; it shipped 2026-09-24 as ROW THEN SIZE, the
+    hero kick's shape, when no tape carried one (--hench-kick-row-first
+    keeps that). The tape's batch is exactly those two -- no 0x0075 /
+    0x00F8 / 0x003E / 0x0145, which tear down a hero's agent record and
     container; the henchman's NPC keeps standing (the add created no body
     and destroyed none), and a 0x00F8 / 0x003E for a standing agent would
     sweep a body the client draws. Nothing is persisted, because the hire is
@@ -274,15 +276,21 @@ def henchman_add_batch(party_id, player_number, party_size, agent_id,
     ]
 
 
-def henchman_kick_batch(party_id, player_number, party_size, agent_id):
-    """The reply to c2s 0x00A8 HENCHMAN_KICK: [0x01C0 row-remove, 0x00B0
-    size] -- ROW THEN SIZE, the hero kick's shape (0x01C3 then 0x00B0, the one
-    kick on any tape, OBSERVED n=1 on 20260916T150306). RECONSTRUCTION: no
-    tape carries a 0x00A8 or a 0x01C0 (0 of 96 live connections), so the
-    order is modelled, not measured; the two messages are the client's own
-    table operations (the module docstring, THE KICK) and 0x00B0 is the add's
-    own size message through agents.py's tested builder. `party_size` is the
-    party AFTER the kick. Each element is (op, vals, label)."""
+def henchman_kick_batch(party_id, player_number, party_size, agent_id,
+                        size_first=True):
+    """The reply to c2s 0x00A8 HENCHMAN_KICK: [0x00B0 size, 0x01C0 row-remove]
+    -- SIZE THEN ROW, the add's own order. OBSERVED 3 of 3 on 20261008T132845
+    (:65410, Kamadan, build 38974, the RIDERS run): c2s 0x00A8 [3] / [2] /
+    [1] each answered at +34..47 ms by 0x00B0 [player, size] and then 0x01C0
+    [party, agent], one batch, nothing else of the party's in it. The two
+    words of 0x01C0 are the client's own table operation (the module
+    docstring, THE KICK); 0x00B0 is the add's size message through agents.py's
+    tested builder. `party_size` is the party AFTER the kick.
+
+    `size_first=False` (--hench-kick-row-first) is the order this shipped with
+    on 2026-09-24 -- ROW THEN SIZE, modelled on the hero kick's 0x01C3 then
+    0x00B0 when no tape carried a henchman kick; the tape refutes it. Each
+    element is (op, vals, label)."""
     if not isinstance(agent_id, int) or agent_id <= 0:
         raise ValueError(
             f"kicked agent_id {agent_id!r} must be a positive int -- it is the "
@@ -291,14 +299,14 @@ def henchman_kick_batch(party_id, player_number, party_size, agent_id):
         raise ValueError(
             f"party_id {party_id!r} must be a positive int -- 0 means 'the own "
             f"party' to the client's worker and is not the id 0x01BF declared")
-    return [
-        (PARTY_HENCHMAN_REMOVE, [int(party_id), int(agent_id)],
-         f"PARTY_HENCHMAN_REMOVE(party {party_id}, agent {agent_id}) "
-         f"[RECONSTRUCTION: the hero kick's row-then-size; on no retail tape]"),
-        (PLAYER_PARTY_SIZE,
-         agents.player_party_size(player_number, party_size),
-         f"PLAYER_PARTY_SIZE({party_size}) -- after the henchman kick"),
-    ]
+    row = (PARTY_HENCHMAN_REMOVE, [int(party_id), int(agent_id)],
+           f"PARTY_HENCHMAN_REMOVE(party {party_id}, agent {agent_id})"
+           + (" [retail's size-then-row, 3 of 3 on 20261008T132845]" if size_first
+              else " [--hench-kick-row-first: the 2026-09-24 RECONSTRUCTION]"))
+    size = (PLAYER_PARTY_SIZE,
+            agents.player_party_size(player_number, party_size),
+            f"PLAYER_PARTY_SIZE({party_size}) -- after the henchman kick")
+    return [size, row] if size_first else [row, size]
 
 
 def party_leave_batch(party_id, player_number, party_size, agent_ids):
@@ -417,21 +425,33 @@ def party_cap(map_caps, map_id, constant, per_map=True):
                    f"content/partycap.toml)")
 
 
-def party_full_reply(code):
-    """The OPT-IN reply to an add refused at the cap: ONE 0x01BC [code], the
-    party error prompt (the module docstring, THE REFUSAL AT THE CAP).
+# Retail's reply to a HENCHMAN add refused at the cap -- OBSERVED 1 of 1 on
+# 20261008T132845 (:65410, Kamadan, build 38974, the RIDERS run): the party
+# at its map's cap of 4 (0x00B0 [player, 4]), the owner clicked Add once more and
+# the client SENT 0x009F [4]; the server answered at +54 ms with exactly one
+# 0x01BC [64] and nothing else of the party's, and the screen showed the row-64
+# sentence (the merged party would be too large -- the owner's words). The button
+# was not greyed. So the refusal lives on the SERVER side of the wire, and the
+# code is the one desk-partyfull's runsheet had already tried as its first arm.
+# The HERO add refused at the cap is still on no tape.
+RETAIL_HENCH_FULL_CODE = 64
 
-    RECONSTRUCTION. No retail tape carries a refused add or any of the four
-    error carriers (0 of 96 live connections), so neither the carrier nor the
-    code is measured as a refusal; what IS measured is the mechanism -- the
-    client's worker 0x00858C00 -> 0x00858300 indexes the 81-row table (0..80)
-    at 0x00B97968 by this byte and shows the row's sentence, CONFIRMED on our
-    client for code 0 (the 2026-08-13 sweep). The table has no "party is
-    full" row; `code` is the operator's choice (--party-full-reply CODE), and
-    the runsheet reads what the screen says. `None` is the default arm:
-    nothing sent, today's silent refusal. Out of the table's range is refused
-    here rather than sent as a row the client would read past the table's
-    end. Each element is (op, vals, label)."""
+
+def party_full_reply(code):
+    """The reply to an add refused at the cap: ONE 0x01BC [code], the party
+    error prompt (the module docstring, THE REFUSAL AT THE CAP).
+
+    For a HENCHMAN add the carrier and the code are retail's since 2026-10-08:
+    RETAIL_HENCH_FULL_CODE, OBSERVED 1 of 1 (the constant's comment). For a
+    HERO add neither is measured -- no tape carries a refused hero add -- so
+    there `code` is the operator's choice (--party-full-reply CODE). The
+    mechanism is the client's either way: its worker 0x00858C00 -> 0x00858300
+    indexes the 81-row table (0..80) at 0x00B97968 by this byte and shows the
+    row's sentence (CONFIRMED on our client for code 0, the 2026-08-13 sweep;
+    row 64 on retail's 38974 client, the owner's screen). `None` sends
+    nothing, the silent refusal. Out of the table's range is refused here
+    rather than sent as a row the client would read past the table's end.
+    Each element is (op, vals, label)."""
     if code is None:
         return []
     if isinstance(code, bool) or not isinstance(code, int):
@@ -445,6 +465,8 @@ def party_full_reply(code):
     return [
         (PARTY_ERROR_PROMPT, [int(code)],
          f"PARTY_ERROR_PROMPT(code {code}) -- the add refused at the cap "
-         f"[RECONSTRUCTION, --party-full-reply: the carrier's mechanism is the "
-         f"client's, the code the operator's; on no retail tape]"),
+         + ("[retail's code for a henchman add, OBSERVED 1 of 1 on 20261008T132845]"
+            if code == RETAIL_HENCH_FULL_CODE else
+            "[--party-full-reply: the carrier's mechanism is the client's, the code "
+            "the operator's]")),
     ]

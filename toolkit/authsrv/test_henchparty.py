@@ -151,7 +151,7 @@ import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=179)   # 2026-09-25 (desk-partycap's review, RV-1): 179 bare from the green run with RURIK_VAULT at an empty directory (204 vaulted: +2 in section 5, the 248 set on 165811's mesh and the arrival control, a declared skip bare) -- +3 bare: (n) the 248 hireable set exists, section 3 the set creates and marks 34/35/36 on 248 and nothing on 148; 176 at the lane's commit (desk-partycap): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (199 vaulted: +1 hero add on 248, +6 in section 5 against the pinned client, +16 the tape and the two hero adds as before) -- +68 bare on the per-map cap ((n): the rows, the join, the provenance, the pure rule x6, 248/148/999, the flag arm, --henchman-cap 6, the zone, the hero add refused on 148) and the leave (section 1l x7, (o) x15, the locks: the arm x4, main x3, handle_party_leave x5, the HEROES_ALL arm x4, --constant-party-cap x4, party_cap x3, the caps load x3, serverargs, the allowlist x2, and +2 mutations each on HA and HD); 108 at desk-partyfull's review (124 vaulted; 107 at that lane's commit, +1 at the review: code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=189)   # 2026-10-08 (RIDERS): 189 bare from the green run with RURIK_VAULT at an empty directory (222 vaulted: +8 in section 1r, the 20261008T132845 tape, a declared skip bare) -- +10 bare: (g) the row-first arm, (m) the default pair, the hero arm's borrowed-code mutation, the kick lock's order mutation, main's two flags (lock + 2 mutations), serverargs' two flags, hench_full_reply_code's three arms; 179 at 2026-09-25 (desk-partycap's review, RV-1): 179 bare from the green run with RURIK_VAULT at an empty directory (204 vaulted: +2 in section 5, the 248 set on 165811's mesh and the arrival control, a declared skip bare) -- +3 bare: (n) the 248 hireable set exists, section 3 the set creates and marks 34/35/36 on 248 and nothing on 148; 176 at the lane's commit (desk-partycap): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (199 vaulted: +1 hero add on 248, +6 in section 5 against the pinned client, +16 the tape and the two hero adds as before) -- +68 bare on the per-map cap ((n): the rows, the join, the provenance, the pure rule x6, 248/148/999, the flag arm, --henchman-cap 6, the zone, the hero add refused on 148) and the leave (section 1l x7, (o) x15, the locks: the arm x4, main x3, handle_party_leave x5, the HEROES_ALL arm x4, --constant-party-cap x4, party_cap x3, the caps load x3, serverargs, the allowlist x2, and +2 mutations each on HA and HD); 108 at desk-partyfull's review (124 vaulted; 107 at that lane's commit, +1 at the review: code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -209,20 +209,85 @@ else:
     led.skip("§1 tape replay", f"{CAPTURE} {CONN} not in the vault")
 
 
-# -- §1k the KICK batch (bare-machine: no tape carries it) -------------------
+# -- §1r RIDERS (2026-10-08): retail's KICK and its CAP REFUSAL, off the tape --
+# 20261008T132845 :65410 (Kamadan, build 38974, the owner's live run, plan
+# live_riders_h1.txt): the first retail henchman kicks (3 of them) and the first
+# retail add refused at the cap. decode_conn reads the connection in its OWN build's
+# numbering and hands back the schema's numbers, so the comparison is (opcode, words)
+# against what the leaf builds. The OWN party is player 20 / party 36 on this tape
+# (OBSERVED: its 0x00B0 and 0x01BF rows); Kamadan carries other parties' 0x00B0 too.
+# Vault-gated; a missing capture declares a skip (8 checks, outside the floor).
+RIDERS = "20261008T132845"
+RCONN = "game-10.0.0.210_65410-to-52.3.40.244_80.jsonl"
+R_PLAYER, R_PARTY = 20, 36
+R_KICKS = [(3, 3), (2, 2), (1, 1)]          # (agent kicked, party size after) -- OBSERVED
+rcap = os.path.join(livewire.captures_root(), RIDERS)
+if os.path.exists(os.path.join(rcap, RCONN)):
+    _rc, rrows, rok = livewire.decode_conn(rcap, RCONN)
+    led.ok(rok, f"(§1r) {RIDERS} :65410 closes to its last byte in build 38974's numbering")
+
+    def own_party_reply(i, window=0.25):
+        """The OWN party's 0x00B0 / 0x01BF / 0x01C0 / 0x01BC within `window` s of c2s row i."""
+        t_c, out = rrows[i][0], []
+        for t, d, op, v in rrows[i + 1:]:
+            if t > t_c + window:
+                break
+            if d != "s2c":
+                continue
+            if ((op == 0x00B0 and v[1] == R_PLAYER) or (op in (0x01BF, 0x01C0) and v[1] == R_PARTY)
+                    or op == 0x01BC):
+                out.append((op, list(v[1:])))
+        return out
+
+    kick_rows = [i for i, (_t, d, op, _v) in enumerate(rrows) if d == "c2s" and op == 0x00A8]
+    add_rows = [i for i, (_t, d, op, _v) in enumerate(rrows) if d == "c2s" and op == 0x009F]
+    led.ok([rrows[i][3][1] for i in kick_rows] == [a for a, _s in R_KICKS],
+           "(§1r) the tape's three c2s 0x00A8 kick agents 3, 2, 1 -- one word, the agent, as ours",
+           f"{[rrows[i][3][1:] for i in kick_rows]}")
+    tape_k = [own_party_reply(i) for i in kick_rows]
+    ours_k = [[(op, vals) for op, vals, _l in henchparty.henchman_kick_batch(R_PARTY, R_PLAYER, s, a)]
+              for a, s in R_KICKS]
+    led.ok(len(tape_k) == 3 and tape_k == ours_k,
+           "(§1r) each kick is answered with exactly henchman_kick_batch's 0x00B0 [player, size] THEN "
+           "0x01C0 [party, agent] -- 3 of 3", f"tape {tape_k}")
+    old_k = [[(op, vals) for op, vals, _l in
+              henchparty.henchman_kick_batch(R_PARTY, R_PLAYER, s, a, size_first=False)] for a, s in R_KICKS]
+    led.ok(tape_k != old_k, "(§1r) KNOWN-BAD: the 2026-09-24 row-then-size does NOT match the tape")
+    led.ok(len(add_rows) == 4 and [rrows[i][3][1] for i in add_rows] == [1, 2, 3, 4],
+           "(§1r) four c2s 0x009F: three adds and the fourth at the cap -- the client SENT it",
+           f"{[rrows[i][3][1:] for i in add_rows]}")
+    tape_adds = [[op for op, _v in own_party_reply(i)] for i in add_rows[:3]]
+    led.ok(tape_adds == [[0x00B0, 0x01BF]] * 3,
+           "(§1r) the three accepted adds: 0x00B0 then 0x01BF, 3 of 3 -- the 20260819 order on build 38974",
+           f"{tape_adds}")
+    tape_cap = own_party_reply(add_rows[3])
+    ours_cap = [(op, vals) for op, vals, _l in henchparty.party_full_reply(authsrv.hench_full_reply_code())]
+    led.ok(tape_cap == [(0x01BC, [64])] and tape_cap == ours_cap,
+           "(§1r) the add at the cap is answered with exactly ONE 0x01BC [64], nothing else of the "
+           "party's -- what the default sends", f"tape {tape_cap} ours {ours_cap}")
+    led.ok(henchparty.party_full_reply(None) != tape_cap,
+           "(§1r) KNOWN-BAD: the pre-RIDERS silent refusal does NOT match the tape")
+else:
+    led.skip("§1r RIDERS tape", f"{RIDERS} {RCONN} not in the vault")
+
+
+# -- §1k the KICK batch (bare-machine; retail's order is §1r's tape) ----------
 kb = henchparty.henchman_kick_batch(1, 14, 1, 4)
-led.ok([op for op, _v, _l in kb] == [0x01C0, 0x00B0] and kb[0][1] == [1, 4] and kb[1][1] == [14, 1]
-       and "RECONSTRUCTION" in kb[0][2],
-       "(§1k) the kick batch is 0x01C0 [party 1, agent 4] THEN 0x00B0 [player 14, size 1] -- row "
-       "before size, the hero kick's shape, labelled RECONSTRUCTION (no tape carries it)",
+led.ok([op for op, _v, _l in kb] == [0x00B0, 0x01C0] and kb[0][1] == [14, 1] and kb[1][1] == [1, 4]
+       and "20261008T132845" in kb[1][2],
+       "(§1k) the kick batch is 0x00B0 [player 14, size 1] THEN 0x01C0 [party 1, agent 4] -- size "
+       "before row, retail's order (RIDERS, 3 of 3), the label naming the tape",
        f"{[(hex(o), v) for o, v, _l in kb]}")
 wire_k = encode_batch(kb)
-led.ok(len(wire_k) == 11 and wire_k[:6] == bytes.fromhex("c001" "0100" "0400")
-       and wire_k[6:] == bytes.fromhex("b000" "0e00" "01"),
-       "(§1k) ...it encodes through the codec: 0x01C0 is the schema's 6 bytes (header + two words) "
-       "and 0x00B0 its 5 (header + word + byte), 11 in all", f"{wire_k.hex()}")
-led.ok(encode_batch([kb[1], kb[0]]) != wire_k,
-       "(§1k) KNOWN-BAD: the add's shape (size before row) through the same encoder differs")
+led.ok(len(wire_k) == 11 and wire_k[:5] == bytes.fromhex("b000" "0e00" "01")
+       and wire_k[5:] == bytes.fromhex("c001" "0100" "0400"),
+       "(§1k) ...it encodes through the codec: 0x00B0 is the schema's 5 bytes (header + word + byte) "
+       "and 0x01C0 its 6 (header + two words), 11 in all", f"{wire_k.hex()}")
+kb_old = henchparty.henchman_kick_batch(1, 14, 1, 4, size_first=False)
+led.ok([op for op, _v, _l in kb_old] == [0x01C0, 0x00B0] and encode_batch(kb_old) != wire_k
+       and "--hench-kick-row-first" in kb_old[0][2],
+       "(§1k) KNOWN-BAD / the revert arm: size_first=False is the 2026-09-24 row-then-size, and it "
+       "encodes differently", f"{encode_batch(kb_old).hex()}")
 for bad_args in ((1, 14, 1, 0), (0, 14, 1, 4), (1, 14, 1, -3)):
     try:
         henchparty.henchman_kick_batch(*bad_args)
@@ -388,8 +453,9 @@ try:
     st["agents"][8] = {"name": "M"}
     sent2, send2 = fake_send()
     authsrv.handle_henchman_add([ADD, 8], send2, st, 0)
-    led.ok(sent2 == [] and 8 not in st["party_henchmen"],
-           "(d) a henchman over the cap is refused, nothing sent")
+    led.ok(sent2 == [(0x01BC, [64])] and 8 not in st["party_henchmen"],
+           "(d) a henchman over the cap is refused with retail's ONE 0x01BC [64] (RIDERS) and "
+           "nothing else", f"{[(hex(o), v) for o, v in sent2]}")
 
     # (d') the cap counts HEROES too -- one hero + two henchmen = 4, a third refused.
     authsrv.HERO_IDS = [6]
@@ -402,8 +468,9 @@ try:
            "sizes say 3, 4 (player + hero + henchmen)", f"{sizes_of(sent)}")
     sent3, send3 = fake_send()
     authsrv.handle_henchman_add([ADD, 6], send3, st, 0)
-    led.ok(sent3 == [],
-           "(d') the third henchman is refused because the hero counts against the cap")
+    led.ok(sent3 == [(0x01BC, [64])] and 6 not in st["party_henchmen"],
+           "(d') the third henchman is refused because the hero counts against the cap (retail's "
+           "0x01BC [64], nothing added)", f"{[(hex(o), v) for o, v in sent3]}")
 
     # (e) THE FIX PASS: the hero kick and add count the hired henchmen.
     #     Party = player + hero 6 + henchmen 4 and 2 (4 of 4).
@@ -461,23 +528,32 @@ try:
     led.ok(sizes_of(sf) == [2, 3], "(f) ...and 3 after the second", f"{sizes_of(sf)}")
     sf2, sendf2 = fake_send()
     authsrv.handle_henchman_add([ADD, 6], sendf2, stf, 0)
-    led.ok(sf2 == [] and authsrv.party_member_count(stf) == 4,
+    led.ok(sf2 == [(0x01BC, [64])] and authsrv.party_member_count(stf) == 4,
            "(f) ...and the third is refused: the cap counts the hero whatever the "
-           "wire size said (4 of 4)")
+           "wire size said (4 of 4)", f"{[(hex(o), v) for o, v in sf2]}")
     authsrv.PARTY_SIZE_COUNTS_HEROES = True
     authsrv.HERO_IDS = []
 
-    # (g) THE KICK (CLEANUP-3): hire 4, kick 4 -> 0x01C0 [1, 4] then 0x00B0 [14, 1];
-    #     the henchman out of the party, the NPC still standing and hireable, re-addable.
+    # (g) THE KICK (CLEANUP-3; retail's order since RIDERS): hire 4, kick 4 ->
+    #     0x00B0 [14, 1] then 0x01C0 [1, 4]; the henchman out of the party, the NPC
+    #     still standing and hireable, re-addable.
     sent, send = fake_send()
     st = seeded(HENCH)
     authsrv.handle_henchman_add([ADD, 4], send, st, 0)
     sent.clear()
     authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
-    led.ok(ops_of(sent) == [0x01C0, 0x00B0] and sent[0][1] == [1, 4] and sizes_of(sent) == [1],
-           "(g) kicking the hired henchman sends exactly 0x01C0 [party 1, agent 4] then 0x00B0 "
-           "[player 14, 1] -- row then size, the hero kick's shape (RECONSTRUCTION)",
+    led.ok(ops_of(sent) == [0x00B0, 0x01C0] and sent[1][1] == [1, 4] and sizes_of(sent) == [1],
+           "(g) kicking the hired henchman sends exactly 0x00B0 [player 14, 1] then 0x01C0 "
+           "[party 1, agent 4] -- size then row, retail's order (3 of 3 on 20261008T132845)",
            f"{[(hex(o), v) for o, v in sent]}")
+    authsrv.HENCH_KICK_SIZE_FIRST = False
+    authsrv.handle_henchman_add([ADD, 4], fake_send()[1], st, 0)
+    sk_old, send_old = fake_send()
+    authsrv.handle_henchman_kick([KICKH, 4], send_old, st, 0)
+    authsrv.HENCH_KICK_SIZE_FIRST = True
+    led.ok(ops_of(sk_old) == [0x01C0, 0x00B0],
+           "(g) --hench-kick-row-first: the same kick sends the 2026-09-24 row-then-size",
+           f"{[hex(o) for o in ops_of(sk_old)]}")
     led.ok(4 not in st["party_henchmen"] and 4 in st["agents"] and 4 in st["hireable_henchmen"]
            and 0x0021 not in ops_of(sent) and authsrv.party_member_count(st) == 1,
            "(g) ...the henchman leaves the party (count 1), the standing NPC stays in the world "
@@ -543,7 +619,7 @@ try:
     authsrv.handle_henchman_add([ADD, 4], send, st, 0)
     sent.clear()
     authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
-    led.ok(ops_of(sent) == [0x01C0, 0x00B0] and not st["party_henchmen"],
+    led.ok(ops_of(sent) == [0x00B0, 0x01C0] and not st["party_henchmen"],
            "(k) under --persist with a store attached the kick writes nothing to it (an opaque "
            "object would raise): the hire is not persisted, so neither is the kick")
     authsrv.PERSIST = False
@@ -626,10 +702,10 @@ try:
            and authsrv.party_member_count(stm) == 4,
            "(m) ARMED: the henchman add refused at the cap sends exactly ONE 0x01BC [64] and adds "
            "nothing (count stays 4)", f"sent {[(hex(o), v) for o, v in sm]}")
-    led.ok("0x01BC PARTY_ERROR_PROMPT [code 64] follows" in linem and "RECONSTRUCTION" in linem
+    led.ok("0x01BC PARTY_ERROR_PROMPT [code 64] follows" in linem and "--party-full-reply" in linem
            and "nothing sent" not in linem,
-           "(m) ARMED: the refusal line says the 0x01BC follows and labels it RECONSTRUCTION, not "
-           "'nothing sent'", linem[:160])
+           "(m) ARMED: the refusal line says the 0x01BC follows and names --party-full-reply (the "
+           "operator's code), not 'nothing sent'", linem[:160])
     # the hero add at the same cap: hero 6 kicked, party = player + 3 henchmen.
     authsrv.HERO_IDS = [6]
     sth = seeded(HENCH)
@@ -678,19 +754,39 @@ try:
            "(m) VACUITY GUARD: armed, the same add under --henchman-cap 8 goes through as 0x00B0 + "
            "0x01BF with NO 0x01BC", f"{[hex(o) for o in ops_of(sv2)]}")
     authsrv.OUTPOST_PARTY_CAP = 4
-    # THE OFF ARM (the default): the same two refusals send nothing.
+    # THE DEFAULT (RIDERS, 2026-10-08): no --party-full-reply -- the HENCHMAN cap
+    # refusal sends retail's ONE 0x01BC [64] (OBSERVED 1 of 1) and says so; the HERO cap
+    # refusal, on no tape, sends nothing.
     authsrv.PARTY_FULL_REPLY_CODE = None
     stm["hireable_henchmen"][9] = {"enc_name": "EEEE", "profession": 4, "level": 3, "name": "N"}
     stm["agents"][9] = {"name": "N"}
+    sd, sendd = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()) as _bufd:
+        authsrv.handle_henchman_add([ADD, 9], sendd, stm, 0)
+    sd_h, sendd_h = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()) as _bufdh:
+        authsrv.handle_hero_add([HADD, 6], sendd_h, sth, 0)
+    led.ok(sd == [(0x01BC, [henchparty.RETAIL_HENCH_FULL_CODE])] and henchparty.RETAIL_HENCH_FULL_CODE == 64
+           and "retail's, OBSERVED 1 of 1 on 20261008T132845" in _bufd.getvalue()
+           and 9 not in stm["party_henchmen"],
+           "(m) DEFAULT: the henchman add refused at the cap sends retail's ONE 0x01BC [64] and the "
+           "line names the tape", _bufd.getvalue().strip()[:160])
+    led.ok(sd_h == [] and "nothing sent (retail's refusal reply NOT FOUND for this add)" in _bufdh.getvalue()
+           and authsrv.hero_kicked(sth, 6),
+           "(m) DEFAULT: the hero add refused at the cap still sends nothing -- no tape carries a "
+           "refused hero add, so retail's henchman code is not borrowed for it")
+    # THE OFF ARM (--no-party-full-reply-retail): both refusals silent, every run before RIDERS.
+    authsrv.HENCH_FULL_REPLY_RETAIL = False
     so, sendo = fake_send()
     with contextlib.redirect_stdout(io.StringIO()) as _bufo:
         authsrv.handle_henchman_add([ADD, 9], sendo, stm, 0)
     so_h, sendo_h = fake_send()
     authsrv.handle_hero_add([HADD, 6], sendo_h, sth, 0)
-    led.ok(so == [] and so_h == [] and "nothing sent (retail's refusal reply NOT FOUND)" in _bufo.getvalue()
+    authsrv.HENCH_FULL_REPLY_RETAIL = True
+    led.ok(so == [] and so_h == [] and "nothing sent (retail's refusal reply NOT FOUND" in _bufo.getvalue()
            and 9 not in stm["party_henchmen"] and authsrv.hero_kicked(sth, 6),
-           "(m) OFF (the default): both cap refusals send nothing and the line says 'nothing sent "
-           "(retail's refusal reply NOT FOUND)' -- today's silent refusal is the default arm")
+           "(m) OFF (--no-party-full-reply-retail): both cap refusals send nothing and the line says "
+           "'nothing sent' -- the silent refusal of every run before 2026-10-08")
     authsrv.HERO_IDS = []
 
     # (n) THE PER-MAP CAP (desk-partycap, 2026-09-25): the served map's own AreaInfo
@@ -1191,7 +1287,8 @@ def lock_main_kick(m):
 
 KICK_REFUSAL = "why = henchparty.kick_refusal("
 KICK_LAUNCH = "launch_agent=HENCHMAN_AGENT_ID if HENCHMAN is not None else None"
-KICK_BATCH = "henchparty.henchman_kick_batch(1, PLAYER_NUMBER, size, aid)"
+KICK_BATCH = ("henchparty.henchman_kick_batch(\n"
+              "            1, PLAYER_NUMBER, size, aid, size_first=HENCH_KICK_SIZE_FIRST)")
 
 
 def lock_hench_kick(s):
@@ -1351,6 +1448,8 @@ LOCKS += [
       ("the pop made a get", _mut(HKK, "hench = party.pop(aid)", "hench = party.get(aid)")),
       ("the size taken from the count", _mut(HKK, "size = party_size_on_wire(state)",
                                               "size = party_member_count(state)")),
+      ("the order flag ignored (RIDERS)", _mut(HKK, "size_first=HENCH_KICK_SIZE_FIRST",
+                                                     "size_first=False")),
       ("a store write added", HKK.replace("hench = party.pop(aid)",
                                           "hench = party.pop(aid)\n    "
                                           "state['charstore_game'].set_hero_kicked(0, aid)", 1))]),
@@ -1400,17 +1499,29 @@ LOCKS += [
 ]
 
 
-# -- the refusal at the cap (desk-partyfull): the reply rides the CAP branch of BOTH
-# handlers, through the leaf, off PARTY_FULL_REPLY_CODE; main() wires the flag.
+# -- the refusal at the cap (desk-partyfull; RIDERS): the reply rides the CAP branch
+# of BOTH handlers, through the leaf -- the HENCHMAN add's off hench_full_reply_code()
+# (retail's 64 unless the operator names a code or --no-party-full-reply-retail), the
+# HERO add's off PARTY_FULL_REPLY_CODE alone; main() wires the flags.
 FULL_REPLY = "henchparty.party_full_reply(PARTY_FULL_REPLY_CODE)"
+HENCH_REPLY = "henchparty.party_full_reply(_code)"
+HENCH_CODE = "_code = hench_full_reply_code()"
 
 
 def lock_full_reply(s):
     at = s.find(CAP_CHECK)
     branch = s[at:at + 900] if at >= 0 else ""
     return (at >= 0 and FULL_REPLY in branch and s.count(FULL_REPLY) == 1
-            and "party_full_refusal_note()" in branch
+            and "party_full_refusal_note(PARTY_FULL_REPLY_CODE)" in branch
             and s.find(FULL_REPLY) > at)
+
+
+def lock_hench_reply(s):
+    at = s.find(CAP_CHECK)
+    branch = s[at:at + 900] if at >= 0 else ""
+    return (at >= 0 and HENCH_CODE in branch and HENCH_REPLY in branch
+            and s.count(HENCH_REPLY) == 1 and "party_full_refusal_note(_code)" in branch
+            and branch.find(HENCH_CODE) < branch.find(HENCH_REPLY) and FULL_REPLY not in s)
 
 
 def lock_main_full(m):
@@ -1418,20 +1529,29 @@ def lock_main_full(m):
             and "henchparty.party_full_reply(int(a.party_full_reply))" in m)
 
 
+def lock_main_riders(m):
+    return ("a.no_party_full_reply_retail" in m and "global HENCH_FULL_REPLY_RETAIL" in m
+            and "HENCH_FULL_REPLY_RETAIL = False" in m
+            and "a.hench_kick_row_first" in m and "global HENCH_KICK_SIZE_FIRST" in m
+            and "HENCH_KICK_SIZE_FIRST = False" in m)
+
+
 LOCKS += [
-    ("handle_henchman_add's CAP branch sends party_full_reply(PARTY_FULL_REPLY_CODE) once and "
-     "prints party_full_refusal_note()",
-     lock_full_reply, HA,
-     [("the reply dropped", _mut(HA, FULL_REPLY, "[]")),
-      ("the reply moved before the cap check", HA.replace(FULL_REPLY, "[]", 1).replace(
-          "if " + CAP_CHECK, "for op, vals, label in " + FULL_REPLY + ":\n        send(op, vals, label)\n    if " + CAP_CHECK, 1)),
-      ("the note replaced by the old constant", _mut(HA, "party_full_refusal_note()",
+    ("handle_henchman_add's CAP branch resolves hench_full_reply_code(), sends party_full_reply of it "
+     "once and prints party_full_refusal_note of it",
+     lock_hench_reply, HA,
+     [("the reply dropped", _mut(HA, HENCH_REPLY, "[]")),
+      ("the hero add's operator-only code put back (the pre-RIDERS text)",
+       _mut(HA, HENCH_REPLY, FULL_REPLY)),
+      ("the note replaced by the old constant", _mut(HA, "party_full_refusal_note(_code)",
                                                     "'nothing sent'"))]),
     ("handle_hero_add's CAP branch sends party_full_reply(PARTY_FULL_REPLY_CODE) once and "
-     "prints party_full_refusal_note()",
+     "prints party_full_refusal_note(PARTY_FULL_REPLY_CODE) -- retail's henchman code NOT borrowed",
      lock_full_reply, HD,
      [("the reply dropped", _mut(HD, FULL_REPLY, "[]")),
-      ("the note replaced by the old constant", _mut(HD, "party_full_refusal_note()",
+      ("retail's henchman code borrowed for the hero", _mut(HD, FULL_REPLY,
+                                                          "henchparty.party_full_reply(hench_full_reply_code())")),
+      ("the note replaced by the old constant", _mut(HD, "party_full_refusal_note(PARTY_FULL_REPLY_CODE)",
                                                     "'nothing sent'"))]),
     ("main() reads --party-full-reply, validates the code through the leaf and sets the global",
      lock_main_full, M,
@@ -1439,14 +1559,36 @@ LOCKS += [
                                       "pass")),
       ("the validation dropped", _mut(M, "henchparty.party_full_reply(int(a.party_full_reply))",
                                       "pass"))]),
+    ("main() reads --no-party-full-reply-retail and --hench-kick-row-first, each turning its default "
+     "off through a `global` (RIDERS)",
+     lock_main_riders, M,
+     [("the retail reply's assignment inverted", _mut(M, "HENCH_FULL_REPLY_RETAIL = False",
+                                                      "HENCH_FULL_REPLY_RETAIL = True")),
+      ("the kick order's global dropped", _mut(M, "global HENCH_KICK_SIZE_FIRST", "pass"))]),
 ]
 led.ok('"--party-full-reply"' in ARGS and ARGS.index('"--party-full-reply"') > ARGS.index('"--henchman-cap"')
        and "default=None" in ARGS[ARGS.index('"--party-full-reply"'):ARGS.index('"--party-full-reply"') + 120],
-       "LOCK: serverargs.py declares --party-full-reply beside --henchman-cap, default None (OFF)")
-led.ok(authsrv.PARTY_FULL_REPLY_CODE is None and henchparty.PARTY_ERROR_PROMPT == 0x01BC
-       and henchparty.PARTY_ERROR_CODE_MAX == 80,
-       "LOCK: the module default is OFF (None), the carrier is 0x01BC and the table's last row 80 "
-       "(81 rows; 81 is the client's no-error sentinel -- the review of 2026-09-25 corrected 82)")
+       "LOCK: serverargs.py declares --party-full-reply beside --henchman-cap, default None (no operator code)")
+led.ok('"--no-party-full-reply-retail"' in ARGS and '"--hench-kick-row-first"' in ARGS
+       and ARGS.index('"--no-party-full-reply-retail"') > ARGS.index('"--party-full-reply"'),
+       "LOCK: serverargs.py declares --no-party-full-reply-retail and --hench-kick-row-first, after "
+       "--party-full-reply (RIDERS)")
+led.ok(authsrv.PARTY_FULL_REPLY_CODE is None and authsrv.HENCH_FULL_REPLY_RETAIL is True
+       and authsrv.HENCH_KICK_SIZE_FIRST is True and henchparty.RETAIL_HENCH_FULL_CODE == 64
+       and henchparty.PARTY_ERROR_PROMPT == 0x01BC and henchparty.PARTY_ERROR_CODE_MAX == 80,
+       "LOCK: the module defaults -- no operator code, retail's henchman reply ON (code 64) and the kick "
+       "size-first; the carrier is 0x01BC and the table's last row 80 (81 rows; 81 is the client's "
+       "no-error sentinel -- the review of 2026-09-25 corrected 82)")
+_codes = [authsrv.hench_full_reply_code()]
+authsrv.PARTY_FULL_REPLY_CODE = 78
+_codes.append(authsrv.hench_full_reply_code())
+authsrv.PARTY_FULL_REPLY_CODE = None
+authsrv.HENCH_FULL_REPLY_RETAIL = False
+_codes.append(authsrv.hench_full_reply_code())
+authsrv.HENCH_FULL_REPLY_RETAIL = True
+led.ok(_codes == [64, 78, None],
+       "hench_full_reply_code(): 64 by default, the operator's 78 under --party-full-reply 78, None "
+       "under --no-party-full-reply-retail", f"{_codes}")
 for what, lock, text, muts in LOCKS:
     led.ok(bool(text) and lock(text), f"LOCK: {what}")
     for mname, mtext in muts:
