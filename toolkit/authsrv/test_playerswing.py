@@ -64,6 +64,13 @@ def _state():
     return {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
 
 
+def _armed_at(state):
+    """The armed swing's own START stamp: the instant `frozen` pins a windup door to.
+    Read with .get and falling back to the wall clock, so a server mutation that arms
+    nothing FAILS the check behind the door instead of aborting the file on None."""
+    return (state.get("player_swing") or {}).get("armed_at", _tt.time())
+
+
 def _rewind(state, seconds):
     """Move the armed swing and the start gate into the past."""
     if state.get("player_swing"):
@@ -322,6 +329,7 @@ def _rewind_casts(state, seconds):
 
 def section_press_stops_swing():
     import authsrv
+    from test_position_trust import frozen
 
     print("\n5. a skill press stops the live chain: STOPPED right after E4, "
           "and the armed swing never lands")
@@ -334,7 +342,9 @@ def section_press_stops_swing():
     saved = authsrv.skill_timing
     authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
     try:
-        _press(authsrv, send, state)
+        # The press lands AT the swing's armed_at (`frozen`): its STOPPED reads the
+        # server's own clock against lands_at, 0.775 s after the arming tick's stamp.
+        frozen(_armed_at(state), _press, authsrv, send, state)
         ops = [op for op, _, _ in sent]
         # THE ORDER IS STILL PINNED, on the arm that still produces both
         # halves. Since ANIMREF-RE 35 an auto swing sets no hold, so the
@@ -1160,8 +1170,13 @@ def section_reach_and_approach():
         # it, the latch and leg armed to the stop point, the copy walking,
         # and NO swing this tick
         st = fresh((400.0, 0.0))
+        # 9c-9e RUN AT ONE INSTANT, t_press (`frozen`), and 9f half a re-path interval
+        # after it. On the wall clock the follow leg (1.11 s), the 0.5 s re-path interval
+        # and "not again inside the interval" were each read off whatever the ticks before
+        # them cost: a 0.4 s stall per tick made the re-path due again by 9f and reddened
+        # ARRIVAL ("no further movement") on a server that was behaving.
         t_press = _t.time()
-        authsrv.attack_tick(send, st, 0)
+        frozen(t_press, authsrv.attack_tick, send, st, 0)
         f = follows(sent)
         check(f == [[1, (400.0, 0.0), 0, 0, 10]] and starts(sent) == [],
               "OUT OF REACH (400 u): one 0x002A [player, target's own point, "
@@ -1186,7 +1201,7 @@ def section_reach_and_approach():
               "and the server's own copy walks there: dest = the stop point "
               "for the world tick's integrator (retail's server owns the leg)",
               f"dest {st.get('dest')}")
-        check(authsrv._player_body_moving(st) is True,
+        check(frozen(t_press, authsrv._player_body_moving, st) is True,
               "the chain pauses while the follow walks -- 31's rule through "
               "the latch the follow armed",
               "moving")
@@ -1200,7 +1215,7 @@ def section_reach_and_approach():
         # nothing more goes out (retail: 0 of 31 re-paths on a standing
         # target)
         sent.clear()
-        authsrv.attack_tick(send, st, 0)
+        frozen(t_press, authsrv.attack_tick, send, st, 0)
         check(follows(sent) == [] and starts(sent) == [],
               "a standing target gets NO re-path and the swing still waits",
               f"follows {follows(sent)}, starts {starts(sent)}")
@@ -1210,7 +1225,7 @@ def section_reach_and_approach():
         st["agents"][10]["pos"] = (400.0, 50.0)
         st["approach"]["sent_at"] -= authsrv.FOLLOW_REPATH_INTERVAL + 0.1
         sent.clear()
-        authsrv.attack_tick(send, st, 0)
+        frozen(t_press, authsrv.attack_tick, send, st, 0)
         check(follows(sent) == [[1, (400.0, 50.0), 0, 0, 10]]
               and starts(sent) == [] and st["approach"]["told"] == (400.0, 50.0),
               "a MOVED target gets one re-path to where it is now, on the "
@@ -1219,7 +1234,7 @@ def section_reach_and_approach():
         # ... but not again before the interval has passed
         st["agents"][10]["pos"] = (400.0, 100.0)
         sent.clear()
-        authsrv.attack_tick(send, st, 0)
+        frozen(t_press, authsrv.attack_tick, send, st, 0)
         check(follows(sent) == [],
               "and not again inside the interval, however far it moved",
               f"follows {follows(sent)}")
@@ -1227,12 +1242,15 @@ def section_reach_and_approach():
         # 9f. ARRIVAL: the integrator parks the copy at the stop point and
         # the leg's eta passes -> the swing opens this tick, the follow is
         # forgotten, and no stop message was sent (retail 8/9 clean rows)
+        # The tick is half a re-path interval after 9e's re-path, so the leg's end is
+        # the only thing due -- the eta 10 ms before the tick, as it always was.
+        t9f = t_press + authsrv.FOLLOW_REPATH_INTERVAL / 2.0
         st["pos"] = st["dest"]
         st["dest"] = None
-        st["click_leg"]["eta"] = _t.time() - 0.01
+        st["click_leg"]["eta"] = t9f - 0.01
         st["approach"]["eta"] = st["click_leg"]["eta"]
         sent.clear()
-        authsrv.attack_tick(send, st, 0)
+        frozen(t9f, authsrv.attack_tick, send, st, 0)
         stopmsgs = [v for op, v, _l in sent
                     if op == authsrv.GAME_SMSG_AGENT_STOP_MOVING]
         check(len(starts(sent)) == 1 and st.get("approach") is None
@@ -1621,7 +1639,9 @@ def section_press_supersedes_and_move_ends():
     authsrv.begin_attack(send, st, 10, 0)
     authsrv.attack_tick(send, st, 0)
     sent.clear()
-    authsrv.cancel_on_move(send, st, 0)
+    # The move AT the swing's armed_at (`frozen`): "pre-landing" is cancel_on_move's own
+    # `now < lands_at`, 0.775 s after the arming tick's stamp on the wall clock.
+    frozen(_armed_at(st), authsrv.cancel_on_move, send, st, 0)
     check(st.get("attacking") is None
           and stops(sent) == [[STOPPED, PLAYER, 0]],
           "PRE-LANDING move: the swing in flight is cancelled with the stop "
@@ -3028,7 +3048,7 @@ def section_dead_press():
     # Both doors AT the swing's armed_at (`frozen`). On the wall clock an expired windup
     # made this VACUOUS: Esc sends no [3] after the landing time and the death sends one
     # for the overdue swing (19i), so "ONE [3]" held whether or not the death saw the drop.
-    t19k = st["player_swing"]["armed_at"]
+    t19k = _armed_at(st)
     frozen(t19k, authsrv.cancel_action, send, st, 0)       # Esc: its [3] goes out
     frozen(t19k, authsrv.kill_player, send, st, 0, "test")  # a bleed-out before the tick
     stops = [v for op, v, _l in sent if op == INT and v == STOP]
@@ -3044,6 +3064,7 @@ def section_windup_holds_approach():
     (batch-3 lane S's r_windup_follow.py)."""
     import time
     import authsrv
+    from test_position_trust import frozen
 
     print("\n22. 1z-ds.28: the swing finishes in place; the re-approach rides its landing")
     DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
@@ -3065,8 +3086,12 @@ def section_windup_holds_approach():
                 st["agents"][10]["health"] = 0.5
             sent.clear()
             if swing:
+                # AT the swing's armed_at (`frozen`): on the wall clock the 0.775 s windup
+                # could expire across these ticks, the swing land and the follow go out
+                # early -- 22a/22b red, and the known-bad 22c green for the wrong reason.
+                t_in = _armed_at(st)
                 for _ in range(3):                                # ticks inside the windup
-                    authsrv.attack_tick(send, st, 0)
+                    frozen(t_in, authsrv.attack_tick, send, st, 0)
                 windup = list(sent)
                 sent.clear()
                 _rewind(st, 5.0)                                  # the landing is due
@@ -3376,7 +3401,7 @@ def section_target_death_holds():
         its windup" was the death tick racing the 0.775 s windup on the wall clock: expired,
         26a/26b/26e/26g read red, and 26f went green whether or not the new press cancelled
         the release, because the release had already gone out at the death."""
-        t = st["player_swing"]["armed_at"]
+        t = _armed_at(st)
         return lambda fn, *a, **kw: frozen(t, fn, *a, **kw)
 
     def tick(st, sent, send, rec=None):
@@ -3533,6 +3558,7 @@ def section_attack_start_holds():
     hold episodes, a landing 0.9 % (batch-3 lane H, re-measured by its verifier)."""
     import time
     import authsrv
+    from test_position_trust import frozen
 
     print("\n21. 1z-ds.31: every attack start holds, to the next input")
     INT, START = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
@@ -3620,20 +3646,27 @@ def section_attack_start_holds():
           "21g. a target that left reach: the landing, then [8, me, 0] directly ahead of the "
           "re-approach's 0x002A (1z-ds.28; retail '[1], [8, 0], 0x002A' 12 of 13, release "
           "before the 0x002A 39 of 39)", f"{sh21g}")
+    # The arrival tick AT half a re-path interval after 21g's re-approach (`frozen`), its
+    # leg ended 10 ms before, as 9f does: on the wall clock a tick more than 0.5 s after
+    # that 0x002A re-pathed toward the moved target instead of opening the start.
+    t21h = st["approach"]["sent_at"] + authsrv.FOLLOW_REPATH_INTERVAL / 2.0
     st["agents"][10]["pos"] = (200.0, 0.0)
     st["pos"] = st["dest"]
     st["dest"] = None
-    st["click_leg"]["eta"] = time.time() - 0.01
+    st["click_leg"]["eta"] = t21h - 0.01
     st["approach"]["eta"] = st["click_leg"]["eta"]
-    st["player_last_swing"] = time.time() - 10.0
+    st["player_last_swing"] = t21h - 10.0
     sent.clear()
-    authsrv.attack_tick(send, st, 0)
+    frozen(t21h, authsrv.attack_tick, send, st, 0)
     check(shape(sent) == ["4", "8:1"],
           "21h. that re-approach's own start re-raises it in its batch (retail CONT re-raises "
           "16 of 16)", f"{shape(sent)}")
     st["agents"][10]["dead"] = True
     sent.clear()
-    authsrv.attack_tick(send, st, 0)
+    # The death tick AT 21h's swing's armed_at (`frozen`): "mid-windup" is the tick's own
+    # `now < lands_at`, 0.775 s after 21h's start on the wall clock -- past it the cell is
+    # next-start, not in-flight.
+    frozen(_armed_at(st), authsrv.attack_tick, send, st, 0)
     check(shape(sent) == [] and st.get("action_hold") == 1
           and (st.get("target_death_release") or {}).get("cell") == "in-flight",
           "21i. the target's death mid-windup releases NOTHING on the target-gone tick: the "
