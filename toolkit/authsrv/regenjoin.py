@@ -38,11 +38,24 @@ registered form beside the corrected one rather than rewriting it):
 WHAT THE CORPUS SAID (`score`; numbers in the study, never typed here):
   * P2 as registered is REFUTED IN PART: a natural first step also follows,
     by 5.00 s, the wearer's OWN attack (the swing's start, its hit, a ranged
-    launch 0x00A4) and its own offensive skill COMPLETION, and a skill another
-    agent aims AT the wearer (its activation, then its landing). P2(c) as
-    registered -- any own activation -- is refuted outright: a self heal
-    (Healing Signet) never resets the ramp. `ANCHOR_CLASSES` is the corrected
-    set; `first_steps` scores both.
+    launch 0x00A4), a FOE's activation aimed AT the wearer (landed or not:
+    20260824T074002 hostile 29, 2 of 2), and any skill's LANDING on it (four
+    friendly Windborne Speed landings). P2(c) as registered -- any own
+    activation -- is refuted outright: a self heal (Healing Signet) never
+    resets the ramp. `ANCHOR_CLASSES` is the corrected set; `first_steps`
+    scores both. Two members are carried WITHOUT a binding witness, and
+    `score`'s binding census says so: OWN_CAST (the wearer's offensive skill
+    completion -- RECONSTRUCTION by analogy with the swing; its one candidate,
+    20260917T224104 hostile 117, is CONTESTED, and its [58] shares a batch with
+    its own 0x00A4). And a FRIENDLY activation aimed at the wearer is NOT an
+    anchor (FRIEND_ACT, reported only): the zero rides it, but on
+    20260928T103123 :50061 an ally's interrupted cast at the observer left the
+    timer where it was (n=1) -- a case this reader cannot score, because a
+    natural run starts from a zero word and that ramp was already counting.
+    Before the review split it out (2026-10-07, EV-2) a friendly activation
+    was TARGETED; the split moves no number (P2 19 of 19, 21 of 22, the
+    binding census unchanged), because every friendly witness binds on its
+    LANDING, which comes later.
   * The natural ramp CAPS AT +7 (`cap_witnesses`): with health still below
     the maximum (no [32] for seconds after), no word ever carries an 8th step.
   * Property 32 (GV_MAX_HP_REACHED, 0x009F [32, agent, 0]) ends a positive
@@ -203,9 +216,12 @@ def timeline(seq, build=None):
       DEALT      a damage word the agent CAUSED (reported, not an anchor: a
                  projectile's lands a flight after the release that anchors)
       OWN_CAST   the agent's completion [58|46] of an activation it AIMED AT A
-                 FOE (a different allegiance token, neither 'nonc')
-      TARGETED   another agent's activation naming the agent, and that skill's
-                 landing ([20, agent, caster])
+                 FOE (a different allegiance token, neither 'nonc') --
+                 carried, binds no on-time step (RECONSTRUCTION)
+      TARGETED   a FOE's activation naming the agent, and any skill's landing
+                 on it ([20, agent, caster])
+      FRIEND_ACT a NON-foe's activation naming the agent (reported, not an
+                 anchor: an interrupted one kept the timer, :50061)
       SELF_CAST  the agent's completion of a skill aimed at itself or an ally
                  (scored as NOT an anchor -- P2(c)'s refutation)
     """
@@ -256,7 +272,8 @@ def timeline(seq, build=None):
             caster, target = v[2], v[3]
             aimed[caster] = target
             if target != caster:
-                out["anchors"][target].append((t, "TARGETED"))
+                out["anchors"][target].append(
+                    (t, "TARGETED" if foes(caster, target) else "FRIEND_ACT"))
         elif op == OP_INT and v[1] in PROP_ACTIVATIONS:
             aimed[v[2]] = v[2]                      # untargeted: self
         elif op == OP_INT_T and v[1] == PROP_EFFECT_ON_TARGET and v[2] != v[3]:
@@ -360,11 +377,14 @@ def negative_ends(tl, agent):
 
 
 # The anchor sets the study compares. REGISTERED is P2 as written before the
-# run; ANCHOR_CLASSES is the corpus's own; ACTIVATIONS adds P2(c)'s refuted
-# reading (any own activation, self casts included).
+# run; ANCHOR_CLASSES is the corpus's own (OWN_CAST carried by analogy, binding
+# nothing); ACTIVATIONS adds P2(c)'s refuted reading (any own activation, self
+# casts included) and keeps the friendly activations it scored before the
+# TARGETED split, so its numbers did not move with it.
 REGISTERED = ("LOSS", "NEGEND")
 ANCHOR_CLASSES = ("LOSS", "NEGEND", "OWN_START", "OWN_HIT", "OWN_CAST", "TARGETED")
-ACTIVATIONS = ANCHOR_CLASSES + ("SELF_CAST",)
+OBSERVED_CLASSES = ("LOSS", "NEGEND", "OWN_START", "OWN_HIT", "TARGETED")
+ACTIVATIONS = ANCHOR_CLASSES + ("SELF_CAST", "FRIEND_ACT")
 
 
 def first_steps(tl, classes=ANCHOR_CLASSES, delay=NATURAL_DELAY):

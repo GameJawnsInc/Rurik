@@ -10007,7 +10007,9 @@ OBSERVED (`first_steps`, `step_intervals`, `cap_witnesses`):
   and 21 of 22 hostile ones, the steps **2.00 +- 0.10 s** apart (45 / 60), on 16 captures.
   The binding anchor of each on-time first step: observer LOSS 4, NEGEND 8, OWN_HIT 2,
   OWN_START 1, TARGETED 4; hostile LOSS 10, NEGEND 8, OWN_HIT 1, TARGETED 2.
-- **The anchors** (each binds at least one on-time step; `regenjoin.ANCHOR_CLASSES`):
+- **The anchors** (`regenjoin.ANCHOR_CLASSES`; each OBSERVED class below binds at least one
+  on-time step -- OWN_CAST, the last, binds none and is carried as RECONSTRUCTION, which
+  test_regenjoin §2 now asserts both ways):
   - LOSS: a damage word ([16|17] < 0) or a negative 55 on the agent.
   - NEGEND: the end of a window in which the agent's net word was negative -- degeneration is a
     continuous loss and the timer runs from its last instant (16 cases, 64.4).
@@ -10017,16 +10019,39 @@ OBSERVED (`first_steps`, `step_intervals`, `cap_witnesses`):
     -4.994; :54071 player 11 at -5.000), or its ranged LAUNCH 0x00A4 -- **not the hit's
     arrival**: hostile 54 on 20260914T005758 ramped 5.001 s after its 0x00A4 and 4.396 s after
     its own [17] landed. (`DEALT`, the damage word's cause, is reported and is not an anchor.)
-  - TARGETED: another agent's activation aimed at the agent (0x00A0 [60|50|48, caster,
-    agent]) and that skill's landing ([20, agent, caster]). The reset word rides the
-    activation: hostile 29 on 20260824T074002, twice, under the player's skill 105; the
-    observer on 20260917T090355 three times and 20260916T213125 once, under an Isle NPC's
-    Windborne Speed 160 -- **a FRIENDLY cast resets it** (n = 4, one skill, one NPC kind), and
-    the step comes 5.0 s after the LANDING, not the activation (5.75).
+  - TARGETED -- **SKILLS-RG7, three shapes, not one** (re-cut the same day by the lane's
+    evidence review, EV-2, and re-read raw by the fixer; `regenjoin.timeline` now classes them):
+    - (a) **a FOE's activation aimed at the agent** (0x00A0 [60|50|48, caster, agent]) anchors
+      from the ACTIVATION, landed or not: hostile 29 on 20260824T074002 :55771, twice under
+      the observer's skill 105 at 80.524 and 88.399, the [44] zero riding each activation,
+      each cast STOPPED ([59, 25, 0] and 0x00E2 at 81.660 and 88.946; no [20], no 0x0042 on
+      29), and each step 5.004 / 5.001 s after the activation -- 3.87 / 4.45 s after the stop.
+      OBSERVED, n = 2, on a hostile target.
+    - (b) **any skill's LANDING on the agent** ([20, agent, caster]) anchors: the observer
+      under an Isle NPC's Windborne Speed 160, 20260917T090355 three times (398.877, 412.877,
+      426.879) and 20260916T213125 once (502.521) -- a FRIENDLY cast -- each step 4.992 to
+      5.000 s after the [20], 0.75 s after the activation. OBSERVED, n = 4, one skill, one NPC
+      kind.
+    - (c) **a FRIENDLY activation is NOT an anchor** (`FRIEND_ACT`, reported, 473 on the
+      corpus): the zero rides it where the ramp was up (090355 at 412.126 and 426.129: +5 ->
+      0), but on 20260928T103123 :50061 ally 8's Word of Healing 282 at the observer (204.514)
+      was interrupted ([59] and [35] at 205.163) and the step still came at 206.197, 5.000 s
+      after hex 31's [20] at 201.197. OBSERVED, n = 1, at natural level 0 -- so whether an
+      interrupted friendly cast HOLDS a running ramp, and gives it back, is unobserved.
+      regenjoin cannot score this case: a natural run starts from a zero word, and that ramp
+      was already counting.
+    The split moves no number -- P2 19 of 19 and 21 of 22, the binding census {LOSS 14, NEGEND
+    16, OWN_HIT 3, OWN_START 1, TARGETED 6} unchanged -- because every friendly witness binds on
+    its LANDING, 0.75 s after the activation. Before it, an activation of any allegiance was
+    TARGETED, and the server polled "a body casting at the player" every tick, which anchored
+    on the cast's LAST tick: 1.1 s late on hostile 29's shape and 4.0 s late on :50061's (the
+    evidence review's simulation through the real natural_tick).
   - OWN_CAST (RECONSTRUCTION): the agent's completion [58|46] of an activation aimed at a foe.
-    It binds no on-time step: its one witness (224104 agent 117, a life-steal's [58] at
-    -5.000 s) is the CONTESTED case below, where NEGEND is later. Carried by analogy with the
-    attack (OWN_START / OWN_HIT) because nothing on the corpus refutes it.
+    It binds no on-time step: its one candidate (224104 agent 117, a life-steal's [58] at
+    408.526, -5.000 s) is the CONTESTED case below, where NEGEND is later -- and that [58]
+    shares its batch with 117's own 0x00A4 launch [117, ..., 403], so even that instant is an
+    OWN_HIT. Carried by analogy with the attack (OWN_START / OWN_HIT) because nothing on the
+    corpus refutes it.
 - **Not anchors, each refuted by a case**: the agent's own self or ally skill (Healing Signet
   completions inside running ramps, 20260917T090355; Resurrection Signet at an ally,
   :54071); a condition or hex landing with no caster activation (124314: Blind at -0.204 s
@@ -10065,7 +10090,11 @@ and the corpus says which one rules the natural term:
   5.00 +- 0.02 s after a negative window ends -- the degeneration's last instant is a loss.
 
 So the server's net is: effects = conditions (raw) + hex degeneration - regeneration rows;
-natural added only while effects <= 0; clamp once.
+natural added only while effects <= 0; clamp once. The boundary is RECONSTRUCTION: no window on
+the corpus has degenerating and regenerating episodes live together summing to EXACTLY 0 (the
+evidence review's EV-7; the one ramp under live degeneration, :50061, had the effects at +3),
+so "effects at 0 let the ramp run" is a choice. Runsheet arm (2a) -- 446 at rank 0 (+3) under
+a Bleeding (-3) -- is exactly that window, and is named there as the thing it tests.
 
 ### 64.5 SKILLS-RG5 — property 32 ends a positive rate on a full agent
 
@@ -10093,19 +10122,50 @@ after it.
   a dead agent, bodies included). Off: the old cap-then-add degeneration-only server.
 - **NATURAL_REGEN** (`--no-natural-regen`), THE PLAYER ONLY: 0 until 5.0 s after the last
   reset, then +1 per 2.0 s to 7 while health is below the maximum, stepped by `natural_tick`
-  (from degen_tick, before it spends). Resets: a growing DEFICIT (max - health) between world
-  ticks -- every damage site and degeneration with no hook, and a Deep Wound's equal drop of
-  maximum and health is not one (isle 8.4, RECONSTRUCTION for a hurt player); the player's
-  swing start (attack_tick), strike (hit_enemy, not a projectile's arrival), ranged release
-  (launch_player_projectile), and cast completion at a hostile (cast_tick); any body's cast
-  aimed at the player, polled while it is in flight (activation through landing). **A hero's
-  heal at the player therefore resets the player's ramp** -- RECONSTRUCTION by retail's rule,
-  whose only witness is an NPC's friendly enchantment. DIVERGENCE: retail's reset zero rides
-  the event's batch; ours goes out on the next world tick -- for a killing blow on a running
-  ramp, after the death batch (strip_effects' own push_regen at a death is the precedent).
-  OBSERVED: of 28 observer deaths, the one entered on a positive rate (20260929T100038 at
-  572.17, +0.0135) carries the [44] zero IN its death batch, and so do the two entered under
-  degeneration; the other 25 entered at a zero rate (or after a [32]).
+  (from degen_tick, before it spends). The cap +7 is OBSERVED on hostiles and RECONSTRUCTION
+  for the player by the shared law (no observer run is a cap witness; the one that reaches 7,
+  20260821T152147 agent 25, is cut by a loss 0.78 s later -- the review's EV-6). **The resets,
+  as fixed by the review (2026-10-07):**
+  - a health LOSS: the player's health FALLING between world ticks by more than its maximum
+    fell (`natural_tick` keeps the last tick's health and maximum). Every damage site and
+    degeneration count with no hook at the ~10 damage sites, so a degeneration's END is the
+    anchor (NEGEND, 16 of 40 binders; test_healthregen ticks a Bleeding at TICK_SECONDS over a
+    +7 ramp to prove it, the review's CD-2). Not a loss: a Deep Wound's equal drop of maximum
+    and health (isle 8.4, RECONSTRUCTION for a hurt player) and a maximum's RISE -- a morale
+    boost, whose 42 delta the client adds to the bar itself. The first cut read a growing
+    DEFICIT (max - health), and a morale rise grew it: a +7 ramp went to 0 on a 75-XP tick
+    (the review's EV-4).
+  - the player's own swing start (attack_tick), STRIKE (hit_enemy under `(swing or
+    skill_strike) and not projectile` -- a swing or an attack skill; NOT a projectile's
+    arrival and, since the review's EV-3, not the later damage the player causes through the
+    same door: an area's ticks, a hex's end payoff, a spell's exact word, which the first cut
+    reset on every tick of a player area for its whole duration), ranged release
+    (launch_player_projectile), and cast completion at a hostile (cast_tick, RECONSTRUCTION).
+  - a FOE's activation aimed at the player (enemy_attack_tick, from the activation, landed or
+    not: 64.3 TARGETED (a), OBSERVED on a hostile target, the player by the shared law).
+  - a cast's LANDING on the player (land_skill, any caster: 64.3 (b), OBSERVED for a friendly
+    enchantment; a hostile landing that deals nothing is RECONSTRUCTION, as are the completion
+    standing in for a projectile spell's arrival and a chain-gated body skill that lands on
+    nobody).
+  - and a FRIENDLY body's cast in flight at the player HOLDS the level at 0 without touching the
+    anchor (64.3 (c)): an interrupted one gives the ramp back. A hostile's in-flight cast holds
+    nothing. The first cut polled ANY body's cast at the player and re-anchored on every tick
+    of it, so its timer ran from the cast's last tick (EV-2).
+  **A hero's heal at the player therefore holds the player's ramp from its activation and
+  restarts it at its landing** -- OBSERVED for an NPC's friendly enchantment, RECONSTRUCTION
+  for a hero's heal. DIVERGENCE: retail's reset zero rides the event's batch; ours goes out
+  on the next world tick. AT A DEATH the natural level reads 0 on a corpse (the review's
+  EV-5: the first cut's strip sent the remaining POSITIVE rate inside the death batch, a 446
+  + natural death read +3 pips there), so the strip -- or, with no effect to strip, kill_player's
+  own push_regen in the same slot -- sends the [44] zero IN the death batch. OBSERVED: of 28
+  observer deaths, the one entered on a positive rate (20260929T100038 at 572.17, +0.0135)
+  carries the [44] zero in its death batch, and so do the two entered under degeneration; the
+  other 25 entered at a zero rate (or after a [32]). Its slot among the strips, and the clock
+  restarting at the death (a resurrection waits 5.0 s), are RECONSTRUCTION.
+- **The rowless reader** (the review's EV-8): `regen_pips` counts a `Health regeneration` row
+  whose skill has no client record as 0, said once; `hex_pips` RAISES on a rowless hex as it
+  did at 642d8957, under both arms -- the first cut widened the catch for both, so
+  `--no-health-regen` did not restore the old raise.
 - **MAX_HP_REACHED** (`--no-max-hp-reached`): a positive rate that ends on a full agent goes out
   as [32, agent, 0] instead of the [44] zero; below the maximum, the [44] zero (a [32] would
   set a hurt client's bar full). Retail also sends [32] when a HEAL fills a regenerating bar
@@ -10144,7 +10204,8 @@ after it.
    the energy regeneration / degeneration rows (ENERGY_REGEN 9, ENERGY_DEGEN 2) are the other
    pool's.
 5. The two CONTESTED anchors (64.3's 117, 64.4's :50061 timing) want a tape where a busy agent's
-   degeneration ends.
+   degeneration ends; and SKILLS-RG7 (c)'s unobserved half -- an INTERRUPTED friendly cast over
+   a RUNNING ramp: does the ramp come back (ours: yes, the hold leaves the anchor) or restart?
 6. WIKI owed (not read this arc, the browser pane forbidden): GWW "Health regeneration" (the
    natural rule, its cap, what interrupts it), and the 288 / 446 / 31 skill pages.
 

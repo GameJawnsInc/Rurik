@@ -17536,30 +17536,51 @@ def hex_target_dead(state, agent_id):
 #   * NATURAL_REGEN -- the PLAYER's natural ramp: 0 until NATURAL_DELAY after
 #     the last reset, then +1 pip every NATURAL_STEP up to NATURAL_CAP while
 #     health is below the maximum. OBSERVED: P2 19 of 19 observer first steps
-#     at 5.00 +- 0.10 s, P3 45 of 45 observer steps at 2.00 +- 0.10 s, and the
-#     cap +7 (five hostile runs stop at 7 with health still below the maximum;
-#     nothing on the corpus reaches 8). The natural term is ZERO while the
-#     effects alone are a loss (P5: 6 of 6 degeneration landings on a running
-#     ramp read the effects alone; 0 natural steps above a negative word) and it
-#     RUNS while they are not (:50061, natural +1, +2 under hex 31 with the
-#     effects at +3) -- "zero while any degeneration is live" is refuted, n=1.
-#     THE RESETS, each OBSERVED binding at least one on-time first step: a
-#     health LOSS -- read as the deficit (max - health) GROWING between world
-#     ticks, so damage at every site and degeneration while it lasts count with
-#     no hook at the damage sites, and a Deep Wound, which drops the maximum and
-#     the health together, does not (studies/isle 8.4 saw no fresh ramp from
-#     one); the player's own swing start ([4]), melee strike and ranged release
-#     (0x00A4 -- NOT the arrow's arrival: a hostile's ramp ran 4.40 s from its
-#     hit and 5.00 from its launch, 20260914T005758); its own cast's completion
-#     at a foe (not at itself or an ally: Healing Signet never reset a ramp);
-#     and any body's cast AIMED AT the player, activation through landing
-#     (retail's four witnesses are an Isle NPC's Windborne Speed -- a FRIENDLY
-#     cast; that a hero's heal resets the player's ramp too is RECONSTRUCTION by
-#     that rule). Retail sends the reset's zero in the event's own batch; ours
-#     goes out on the next world tick (natural_tick), a divergence of one tick.
-#     Heroes', henchmen's and hostiles' ramps are NOT shipped (combat balance;
-#     regenjoin measures them -- hostiles ramp on the same 5.0 / 2.0 law).
-#     --no-natural-regen reverts.
+#     at 5.00 +- 0.10 s, P3 45 of 45 observer steps at 2.00 +- 0.10 s. The cap
+#     +7 is OBSERVED on HOSTILES (five runs stop at 7 with health still below
+#     the maximum; nothing on the corpus reaches 8) and RECONSTRUCTION for the
+#     player by the shared law: no observer run is a cap witness (the one that
+#     reaches 7, 20260821T152147, is cut by a loss 0.78 s later). The natural
+#     term is ZERO while the effects alone are a loss (P5: 6 of 6 degeneration
+#     landings on a running ramp read the effects alone; 0 natural steps above
+#     a negative word) and it RUNS while they are a gain (:50061, natural +1,
+#     +2 under hex 31 with the effects at +3) -- "zero while any degeneration
+#     is live" is refuted, n=1. Effects summing to EXACTLY 0 count as not a
+#     loss: RECONSTRUCTION, no such window is on the corpus.
+#     THE RESETS, OBSERVED, each binding at least one on-time first step:
+#       - a health LOSS: the player's health FALLING between world ticks by
+#         more than its maximum fell. Damage at every site and degeneration
+#         while it lasts count with no hook at the ~10 damage sites -- the
+#         degeneration's end is the NEGEND class, 16 of the 40 on-time
+#         binders. A maximum's RISE (a morale boost) is not a loss; the
+#         client adds the 42 delta to the bar itself (held_max_moved).
+#       - the player's own swing start ([4]) and strike: a swing's or an
+#         attack skill's, never a later area tick or hex payoff it causes;
+#         a ranged release is the 0x00A4, NOT the arrow's arrival (a hostile's
+#         ramp ran 4.40 s from its hit and 5.00 from its launch,
+#         20260914T005758).
+#       - a FOE's activation aimed at the player: 20260824T074002 hostile 29,
+#         2 of 2, stepped 5.00 s after the observer's activation of a cast
+#         that never landed (OBSERVED on a hostile target; the player by the
+#         shared law). The zero rides the activation.
+#       - a cast LANDING on the player: four FRIENDLY Windborne Speed landings
+#         (20260916T213125, 20260917T090355), each step 5.00 s after the [20].
+#     A FRIENDLY body's cast in flight at the player HOLDS the level at 0
+#     without restarting the timer: the zero rides a friendly activation (2 of
+#     2 with a ramp up, 090355), and an INTERRUPTED one left the observer's
+#     timer where it was (20260928T103123 :50061, n=1, at level 0).
+#     RECONSTRUCTION, binding no step: the player's own cast completing at a
+#     foe (by analogy with the swing); a hostile landing that deals nothing
+#     (one CONTESTED witness, hex 31 on :50061); the hold lasting the whole
+#     flight and the level resuming after an interrupt; a Deep Wound being no
+#     loss for a HURT player (studies/isle 8.4 saw a full one); and the clock
+#     restarting at a death. Retail sends the reset's zero in the event's own
+#     batch; ours goes out on the next world tick (natural_tick), a divergence
+#     of one tick. A DEAD player's natural level reads 0, so the death's strip
+#     sends the [44] zero inside the death batch (retail 20260929T100038
+#     572.167, n=1). Heroes', henchmen's and hostiles' ramps are NOT shipped
+#     (combat balance; regenjoin measures them -- hostiles ramp on the same
+#     5.0 / 2.0 law). --no-natural-regen reverts.
 #   * MAX_HP_REACHED -- a POSITIVE rate that ends on a FULL agent ends with
 #     0x009F [32, agent, 0] instead of the [44] zero. OBSERVED: 113 of 113 [32]s
 #     on the corpus follow a positive word; 6 of 6 regen closes at full carry one
@@ -17573,7 +17594,7 @@ NATURAL_REGEN = True
 MAX_HP_REACHED = True
 NATURAL_DELAY = 5.0          # s, regenjoin P2
 NATURAL_STEP = 2.0           # s, regenjoin P3
-NATURAL_CAP = 7              # pips, regenjoin's cap witnesses (NOT the net clamp of 10)
+NATURAL_CAP = 7              # pips: OBSERVED on hostiles (regenjoin's cap witnesses), RECONSTRUCTION for the player; NOT the net clamp of 10
 
 
 def net_pips(state, agent_id, live=None):
@@ -17596,14 +17617,22 @@ def net_pips(state, agent_id, live=None):
         return min(pips, effects.MAX_PIPS)
     pips -= regen_pips(state, agent_id)
     if pips <= 0:
-        pips -= natural_level(state, agent_id)     # zero while the effects are a loss (P5)
+        # zero while the effects are a loss (P5, OBSERVED); effects at EXACTLY 0
+        # count as no loss -- RECONSTRUCTION, no such window on the corpus
+        pips -= natural_level(state, agent_id)
     return max(-effects.MAX_PIPS, min(effects.MAX_PIPS, pips))
 
 
 def natural_level(state, agent_id):
     """The agent's natural-regeneration pips as natural_tick last set them:
-    the PLAYER's only, and 0 with either flag off."""
+    the PLAYER's only, 0 with either flag off, and 0 on a corpse -- so the
+    strip at a death sends the [44] zero inside the death batch rather than a
+    positive rate from a level natural_tick has not cleared yet (retail's
+    20260929T100038 572.167: the death entered on a positive rate carries the
+    zero in its batch, n=1)."""
     if not (HEALTH_REGEN and NATURAL_REGEN) or agent_id != PLAYER_AGENT_ID:
+        return 0
+    if state.get("player_dead"):
         return 0
     row = (state.get("natural_regen") or {}).get(agent_id)
     return int(row["level"]) if row else 0
@@ -17616,7 +17645,7 @@ def natural_reset(state, agent_id, why, now=None):
     if not (HEALTH_REGEN and NATURAL_REGEN) or agent_id != PLAYER_AGENT_ID:
         return
     row = state.setdefault("natural_regen", {}).setdefault(
-        agent_id, {"anchor": 0.0, "level": 0, "deficit": None})
+        agent_id, {"anchor": 0.0, "level": 0, "health": None, "max": None})
     row["anchor"] = time.time() if now is None else now
     row["why"] = why
 
@@ -17626,50 +17655,59 @@ def natural_tick(send, state, conn_id, now=None):
 
     The level is a pure function of the time since the last reset (0 before
     NATURAL_DELAY, then 1 + one per NATURAL_STEP, capped at NATURAL_CAP) and
-    is 0 at full health, while dead, and before the pools exist. A reset is a
-    growing deficit since the last tick (every loss, degeneration included), a
-    body casting AT the player, or a call to natural_reset from the player's
-    own attack and cast sites. A changed level goes out through push_regen,
-    which rides its send-on-change -- and ends a positive rate at full health
-    with property 32 (MAX_HP_REACHED)."""
+    is 0 at full health, while dead, before the pools exist, and while a
+    FRIENDLY body's cast at the player is in flight (a hold: the anchor is
+    untouched). A reset is a health LOSS since the last tick -- the health
+    falling by more than the maximum fell, so every damage site and
+    degeneration count and a Deep Wound or a morale rise does not -- or a call
+    to natural_reset (the player's own swing, strike, ranged release and cast
+    at a foe; a foe's activation at the player; a cast landing on it). A
+    changed level goes out through push_regen, which rides its send-on-change
+    -- and ends a positive rate at full health with property 32
+    (MAX_HP_REACHED). The banner above HEALTH_REGEN labels each rule."""
     if not (HEALTH_REGEN and NATURAL_REGEN) or "player_health" not in state:
         return None
     now = time.time() if now is None else now
     book = state.setdefault("natural_regen", {})
-    row = book.setdefault(PLAYER_AGENT_ID, {"anchor": now, "level": 0, "deficit": None})
+    row = book.setdefault(PLAYER_AGENT_ID, {"anchor": now, "level": 0, "health": None, "max": None})
     maximum = player_max_health(state)
     health = float(state["player_health"])
-    deficit = maximum - health
     if state.get("player_dead"):
-        # No natural term on a corpse. A killing blow on a running ramp is a
-        # reset retail sends with the hit (below the maximum: a [44] zero); ours
-        # lands here a tick later, after the death batch, so the zero goes out
-        # then -- strip_effects' own push_regen at a death is the precedent.
+        # No natural term on a corpse (natural_level reads 0, so the death's
+        # strip already sent the zero in the death batch); the clock restarts
+        # at every dead tick, so a resurrection waits NATURAL_DELAY --
+        # RECONSTRUCTION, no resurrection on the corpus is followed by a ramp
+        # we could time. A level still up here is cleared and pushed (a
+        # no-op on the wire when the strip already sent the zero).
         was = row["level"]
-        row.update(anchor=now, level=0, deficit=deficit)
+        row.update(anchor=now, level=0, health=health, max=maximum)
         if was:
             push_regen(send, state, PLAYER_AGENT_ID, conn_id)
         return None
-    if row["deficit"] is not None and deficit > row["deficit"] + 1e-6:
+    if (row.get("health") is not None
+            and row["health"] - health > max(0.0, row["max"] - maximum) + 1e-6):
         row["anchor"], row["why"] = now, "health loss"
-    row["deficit"] = deficit
+    row["health"], row["max"] = health, maximum
+    held = None
     for aid, body in (state.get("agents") or {}).items():
         if (isinstance(body, dict) and not body.get("dead")
                 and body.get("casting") is not None
-                and body.get("cast_target") == PLAYER_AGENT_ID):
-            row["anchor"], row["why"] = now, f"agent {aid}'s cast at the player"
+                and body.get("cast_target") == PLAYER_AGENT_ID
+                and body.get("allegiance") != agents.ALLEGIANCE_HOSTILE):
+            held = aid
             break
     level = 0
-    if health < maximum - 1e-6:
+    if health < maximum - 1e-6 and held is None:
         elapsed = now - row["anchor"]
         if elapsed >= NATURAL_DELAY:
             level = min(NATURAL_CAP, 1 + int((elapsed - NATURAL_DELAY) / NATURAL_STEP))
     if level == row["level"]:
         return None
     was, row["level"] = row["level"], level
+    why = (f"held by agent {held}'s cast in flight at the player" if held is not None
+           else f"{row.get('why', 'start')} {now - row['anchor']:.1f} s ago")
     print(f"[c{conn_id}] natural regeneration {was} -> {level} pip(s) on the player "
-          f"({row.get('why', 'start')} {now - row['anchor']:.1f} s ago) [SKILLS-RG]",
-          flush=True)
+          f"({why}) [SKILLS-RG]", flush=True)
     push_regen(send, state, PLAYER_AGENT_ID, conn_id)
     return level
 
@@ -23725,9 +23763,15 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         return
     if swing:
         leader_engaged(state, target_id, now, "swing")    # SLICE-H4
-    if not projectile:
-        # SKILLS-RG: the player's own strike resets its natural ramp; an
-        # arrow's ARRIVAL does not (the release did, launch_player_projectile).
+    if (swing or skill_strike) and not projectile:
+        # SKILLS-RG: the player's own STRIKE -- a swing or an attack skill's --
+        # resets its natural ramp (retail's OWN_HIT, [1|2|47]). An arrow's
+        # ARRIVAL does not (the release did, launch_player_projectile), and
+        # neither does damage the player causes LATER through this door -- an
+        # area's tick, a hex's end payoff, a spell's exact word: retail's one
+        # caused-damage witness ramped 4.40 s after its own hit landed
+        # (20260914T005758 hostile 54, regenjoin's DEALT); a spell's completion
+        # resets in cast_tick.
         natural_reset(state, PLAYER_AGENT_ID, "its own strike", now)
 
     # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
@@ -27469,8 +27513,11 @@ def cast_tick(send, state, conn_id):
                       f"E5, no E6 [SLICE-F52 52.8]", flush=True)
             cast["e5_sent"] = True
             # SKILLS-RG: a cast COMPLETING at a foe resets the player's natural
-            # ramp (retail's hostile 117: 5.000 s from its [58]); one at itself or
-            # an ally does not (Healing Signet never reset a ramp on the corpus).
+            # ramp -- RECONSTRUCTION by analogy with the swing (regenjoin's
+            # OWN_CAST binds no on-time first step; its one candidate,
+            # 20260917T224104 hostile 117, is CONTESTED and its [58] shares a
+            # batch with its own 0x00A4 launch). One at itself or an ally does
+            # not: OBSERVED, Healing Signet never reset a ramp on the corpus.
             if ((state.get("agents", {}).get(cast.get("target")) or {}).get("allegiance")
                     == agents.ALLEGIANCE_HOSTILE):
                 natural_reset(state, PLAYER_AGENT_ID, "its own cast at a foe", now)
@@ -29346,6 +29393,13 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
         _done["between"] = True
         action_hold(send, state, 1, f"the player died ({why})")
         strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
+        if HEALTH_REGEN:
+            # SKILLS-RG: a death on a NATURAL-only positive rate has no strip to
+            # carry its [44] zero; this sends it in the same slot (send-on-change:
+            # nothing when the strip already did). Retail's one death entered on
+            # a positive rate carries the zero in its batch (20260929T100038
+            # 572.167); its slot among the strips is RECONSTRUCTION.
+            push_regen(send, state, PLAYER_AGENT_ID, conn_id)
         if STATUS_WORD:
             _after = agent_status_word(state, PLAYER_AGENT_ID)
             if _after != _word:
@@ -29755,7 +29809,7 @@ def degen_tick(send, state, conn_id):
     now = time.time()
     last = state.get("degen_at")
     state["degen_at"] = now
-    # SKILLS-RG: the player's natural ramp first -- its resets read the deficit
+    # SKILLS-RG: the player's natural ramp first -- its loss test reads the health
     # BEFORE this tick spends, so the previous tick's degeneration is a loss.
     natural_tick(send, state, conn_id, now)
     natural = natural_level(state, PLAYER_AGENT_ID) > 0
@@ -30486,7 +30540,7 @@ from episodemods import (attack_interval_factor, move_speed_percent,  # noqa: F4
                          move_speed_factor,   # push_speed / speed_tick (SLICE-F48)
                          move_speed_terms,    # agent_status_word's snare bit (weapons 43)
                          hex_pips, blocks_adrenaline, signet_activation_factor,
-                         regen_pips,          # net_pips' `Health regeneration` rows (SKILLS-RG); test_mechanics reads authsrv.regen_pips
+                         regen_pips,          # net_pips' `Health regeneration` rows (SKILLS-RG); test_healthregen reads authsrv.regen_pips
                          is_signet)           # net_pips / adrenaline_blocked / signet_activation (43, B2); test_mechanics 35-37 read them as authsrv.*
 
 
@@ -31928,6 +31982,12 @@ def enemy_attack_tick(send, state, conn_id):
             activation = signet_activation(state, agent_id, skill_id, activation)
             activation = dazed_activation(state, agent_id, skill_id, activation)   # B4: a spell x2
             agent["cast_target"] = cast_target
+            if cast_target == PLAYER_AGENT_ID:
+                # SKILLS-RG: a FOE's activation aimed at the player restarts its
+                # natural ramp from the ACTIVATION, landed or not (20260824T074002
+                # hostile 29, 2 of 2: 5.00 s after a cast that never landed).
+                natural_reset(state, PLAYER_AGENT_ID,
+                              f"agent {agent_id}'s activation at it", now)
             if cast_target == _tid:
                 agent["target_locked"] = True     # SLICE-H3: the bout opened
             # THE ENEMY PAYS, AND NOTHING GOES ON THE WIRE FOR IT. Property 62
@@ -39249,6 +39309,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
         if _inst and slot is not None and slot < len(skills):
             hero_skill_e3(send, agent_id, agent, skill_id)
         return
+    if agent.get("cast_target") == PLAYER_AGENT_ID and agent_id != PLAYER_AGENT_ID:
+        # SKILLS-RG: a body's cast LANDING on the player restarts its natural
+        # ramp -- OBSERVED for a friendly enchantment (four Windborne Speed
+        # landings, each step 5.00 s after the [20]); a hostile landing that
+        # deals nothing is RECONSTRUCTION (hex 31 on :50061, CONTESTED), and so
+        # are the completion standing in for a projectile spell's arrival and
+        # a chain-gated body skill that lands on nobody below.
+        natural_reset(state, PLAYER_AGENT_ID,
+                      f"agent {agent_id}'s skill {skill_id} landing on it")
     _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})
     # SLICE-H8: the caster's OWN rank in this skill's attribute when its row
     # carries `attributes`, else _rank -- and its own strike level

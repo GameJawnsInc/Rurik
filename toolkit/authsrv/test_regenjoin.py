@@ -35,8 +35,10 @@ HAVE_CAPTURES = os.path.isdir(vaultpath.vault_path("captures", "live"))
 # Floors from the green runs of 2026-10-07: bare (RURIK_VAULT at an empty directory
 # AND at a nonexistent path, sections 0 and 2 declared skips) 21; with the vault 50
 # (section 0: 7, section 2: 22). Decided on the DIRECTORIES, never on what loaded.
-FLOOR_BARE = 21
-FLOOR_VAULT = FLOOR_BARE + (7 if HAVE_CONTENT else 0) + (22 if HAVE_CAPTURES else 0)
+# The review fix (same day): +1 bare (1c', the TARGETED / FRIEND_ACT split) and +1 in
+# section 2 (OWN_CAST binds nothing, EV-1): 22 bare, 52 with the vault, from the green runs.
+FLOOR_BARE = 22
+FLOOR_VAULT = FLOOR_BARE + (7 if HAVE_CONTENT else 0) + (23 if HAVE_CAPTURES else 0)
 LEDGER = checks.Ledger("retail's health regeneration", floor=FLOOR_VAULT)
 check = checks.adopt(LEDGER)
 
@@ -121,6 +123,22 @@ def section_arithmetic():
           "steps 2.0 s apart; KNOWN-BAD ARM, a 1 s step: neither interval is on time")
     check(regenjoin.full_census(tl0) == [("player", 1, False)],
           "the [32] follows a positive word, no regen close in its batch")
+    # 1c'. the TARGETED split (the review's EV-2): a FOE's activation at the player and any
+    # landing on it are TARGETED; a FRIENDLY ('nonc') activation is FRIEND_ACT, no anchor
+    npc = (0, 1.0, 0x0020, [0x0020, 87, 0x20000000, 0, 0, (0.0, 0.0), 0, 0, 0, 0.0, 0, 0,
+                            int.from_bytes(b"nonc", "big")])
+    seqt = seq[:5] + [npc,
+                      (0, 30.0, OP_A0, [OP_A0, 60, 117, 25, 31]),      # the hostile's activation
+                      (0, 40.0, OP_A0, [OP_A0, 60, 87, 25, 160]),      # the NPC's activation
+                      (0, 40.8, OP_A0, [OP_A0, 20, 25, 87, 284])]      # and its landing
+    tlt = regenjoin.timeline(seqt)
+    check(sorted(tlt["anchors"][25]) == [(10.0, "LOSS"), (30.0, "TARGETED"), (40.0, "FRIEND_ACT"),
+                                         (40.8, "TARGETED")]
+          and "FRIEND_ACT" not in regenjoin.ANCHOR_CLASSES and "FRIEND_ACT" in regenjoin.ACTIVATIONS,
+          "a FOE's activation at the player is TARGETED, a FRIENDLY one is FRIEND_ACT (not an "
+          "anchor: :50061's interrupted ally cast kept the timer), and the friendly LANDING is "
+          "TARGETED; P2(c)'s ACTIVATIONS keeps FRIEND_ACT so its numbers did not move",
+          f"{sorted(tlt['anchors'][25])}")
     # 1d. the cap reader: a ramp that stops at 7 below the maximum is a witness, one that
     # stops because the [32] arrives is not
     ramp = [word(30.0, 117, 0)] + [word(35.0 + 2 * k, 117, k + 1) for k in range(7)]
@@ -241,8 +259,14 @@ def section_corpus():
     check(pc["early"] >= 1, "P2(c) AS REGISTERED (any own activation anchors) is refuted: a "
           "self skill would put a first step early", f"{pc}")
     bound = sc["p2_binding_class"]
-    check(all(bound.get(c, 0) >= 1 for c in ("LOSS", "NEGEND", "OWN_HIT", "OWN_START", "TARGETED")),
-          "every anchor class binds at least one on-time first step", f"{bound}")
+    check(all(bound.get(c, 0) >= 1 for c in regenjoin.OBSERVED_CLASSES)
+          and set(regenjoin.OBSERVED_CLASSES) | {"OWN_CAST"} == set(regenjoin.ANCHOR_CLASSES),
+          "every OBSERVED anchor class binds at least one on-time first step (LOSS, NEGEND, "
+          "OWN_START, OWN_HIT, TARGETED -- OWN_CAST is the one carried member left out)", f"{bound}")
+    check(bound.get("OWN_CAST", 0) == 0,
+          "OWN_CAST (the wearer's own cast completing at a foe) binds NO on-time first step: it is "
+          "carried by analogy with the swing, RECONSTRUCTION -- the label the server's cast_tick "
+          "reset wears (the review's EV-1)", f"{bound}")
     bad = regenjoin.score(rows, delay=3.0)
     check(bad["p2_anchors_player"]["on_time"] == 0 and bad["p2_anchors_hostile"]["on_time"] == 0,
           "KNOWN-BAD ARM, a 3 s delay: no first step is on time", f"{bad['p2_anchors_player']}")

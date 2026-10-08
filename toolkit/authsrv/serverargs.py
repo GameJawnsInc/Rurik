@@ -3149,15 +3149,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "sent, nothing raises health over time, and the "
                          "conditions are capped at 10 BEFORE the hex rows are "
                          "added (cap-then-add). Wrong on retail's apply words: "
-                         "446 +3, 814 +5 and 288 +8 arrive as nothing, and 288 on "
+                         "446 +3 and 288 +8 arrive as nothing (814's +5 is "
+                         "unmodelled either way: it has no row), and 288 on "
                          "20260928T103123 :50061 read -13 + 8 = -5, which a "
-                         "server that cannot regenerate never sends.")
+                         "server that cannot regenerate never sends. A hex row "
+                         "with no client record raises under both arms, as it "
+                         "always did.")
     ap.add_argument("--no-natural-regen", action="store_true",
                     help="SKILLS-RG REVERT: the player gets NO natural health "
                          "regeneration -- its health never recovers except by a "
                          "heal. Retail ramps +1 pip every 2.0 s from 5.0 s after "
-                         "the last reset to +7 (regenjoin.py: 19 of 19 observer "
-                         "first steps, 45 of 45 steps). The A/B arm for any probe "
+                         "the last reset (regenjoin.py: 19 of 19 observer first "
+                         "steps, 45 of 45 steps) to +7 (the hostiles' cap, the "
+                         "player's by the same law). The A/B arm for any probe "
                          "that scores an exact health delta.")
     ap.add_argument("--no-max-hp-reached", action="store_true",
                     help="SKILLS-RG REVERT: a positive regeneration rate that ends "

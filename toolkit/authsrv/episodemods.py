@@ -441,12 +441,16 @@ def is_signet(skill_id):
     return int(row.get("type_code") or 0) == SIGNET_TYPE_CODE
 
 
-def _rate_pips(state, agent_id, means, field):
+def _rate_pips(state, agent_id, means, field, rowless_counts_nothing=False):
     """The pips the agent's open episodes name under `means` in either slot,
     one per skill, uncapped: a row's explicit `<field>0/15` endpoints when it
     carries them (interpolated by the client's formula at the episode's rank),
-    else the slot through skill_scale_value. A slot that reader refuses and no
-    explicit endpoints count nothing, said once per skill."""
+    else the slot through skill_scale_value. A slot that reader refuses
+    (ValueError) and no explicit endpoints count nothing, said once per skill.
+    A skill with NO client record raises, as hex_pips always has, unless
+    `rowless_counts_nothing` -- regen_pips' choice (SKILLS-RG, the review's
+    EV-8): the new reader degrades to the degeneration-only server for that
+    skill, logged once, and hex_pips keeps 642d8957's raise under both arms."""
     table = state.get("effects")
     if not table:
         return 0.0
@@ -467,6 +471,8 @@ def _rate_pips(state, agent_id, means, field):
                 total += skill_scale_value(ep["skill"], ep.get("rank", 0), which)
             except Exception as ex:                        # noqa: BLE001 -- a refused slot OR no skills row
                 if not isinstance(ex, ValueError):
+                    if not rowless_counts_nothing:
+                        raise
                     ex = f"no client record to read ({type(ex).__name__})"
                 if (means, ep["skill"]) not in _HEX_DEGEN_UNREADABLE:
                     _HEX_DEGEN_UNREADABLE.add((means, ep["skill"]))
@@ -496,7 +502,8 @@ def regen_pips(state, agent_id):
     """Regeneration pips the agent's open episodes name (`Health regeneration`
     in either slot, or a row's explicit `health_regeneration0/15`), one per
     skill, uncapped. 0.0 with none."""
-    return _rate_pips(state, agent_id, REGEN_MEANS, "health_regeneration")
+    return _rate_pips(state, agent_id, REGEN_MEANS, "health_regeneration",
+                      rowless_counts_nothing=True)
 
 
 def blocks_adrenaline(state, agent_id):
