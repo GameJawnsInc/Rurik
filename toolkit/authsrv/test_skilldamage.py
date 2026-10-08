@@ -81,9 +81,13 @@ check = LEDGER.ok
 # 2026-10-01, 55 rows MEASURED from its emit and identical by value to 38888's. Section
 # 14 FAILS on any other build rather than passing a table nobody measured.
 # 2026-10-07, SKILLS-LW (studies/skills 67): + the 60 hit-gated rows on every build, MEASURED
-# from each build's own emit (skilldesc.py --exe X --dat Y --emit-labels): 38797 116 = 56 + 60,
-# 38888 115, 38974 115 = 55 + 60. Red against a vault file emitted before SKILLS-LW until the
-# merge installs the new emit -- the count is the file's, and the file is regenerated.
+# per build: 38888 115 and 38974 115 = 55 + 60 from the CLI emit (skilldesc.py --exe X --dat Y
+# --emit-labels); 38797 116 = 56 + 60 IN-PROCESS (skilldesc.label_rows over 38797's own corpus),
+# because the CLI emit refuses the pinned 38797 exe while the vault's skills table is 38974
+# ("REFUSED: the exe is build 38797 but the loaded skills table is [38888, 38974]" -- the
+# round-2 review's VF-6; the first wording cited a method that cannot reproduce the 116). Red
+# against a vault file emitted before SKILLS-LW until the merge installs the new emit -- the
+# count is the file's, and the file is regenerated.
 LABEL_ROWS_BY_BUILD = {38797: 116, 38888: 115, 38974: 115}
 
 

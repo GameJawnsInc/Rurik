@@ -10233,7 +10233,15 @@ python toolkit/authsrv/test_skilldamage.py       # §14's count is red against a
 
 The lane's emit is staged in its scratch directory and is byte-identical to a fresh emit from
 its own header's exe and dat (`test_skilldesc` §3 run against it through
-`RURIK_SKILL_LABELS`; `test_skilldamage` green on a shadow vault carrying it). **OWED: the
+`RURIK_SKILL_LABELS`; `test_skilldamage` green on a shadow vault carrying it). **The specs
+say `persist = false`** (the round-2 review, VF-2): a sandbox run passes `--persist` by
+default, and under it the character store's bar, secondary and ranks WIN over the spec's
+(`player_bar_at_load`, `player_secondary`) -- the owner's store holds a Warrior bar,
+secondary 1 and ranks, so the presses below would never have reached the bar and the
+rank-0 numbers would not hold. Without `--persist` our server reads no store row (every
+`charstore_game` attach is `PERSIST`-gated; read, not run), so the spec's bar, pair and
+empty ranks answer. The dry compile still prints its `STORE:` lines; they do not apply to
+such a run (`sandbox.store_warnings` reads no `persist` key). **OWED: the
 client confirmation** (prediction first; ranks are the spec's): **(1)** a Ranger with a bow
 presses 391 at a foe -- a landed arrow: the weapon's word and the foe Bleeding (its status
 word), the gamesrv log reading `resolves through a LABEL-tier row (HIT_GATED)` (391's
@@ -10273,7 +10281,12 @@ line with a token 391 does not carry; corrected by the fix pass, review EV-6.)
   the projectile's arrival for its condition too; a BODY's chain-gated attacks (776 777 976
   986 1022 2135 land with no lead, §67.4) beside the hand rows' 775 780 781; §67.3's unmarked
   residue (888 889 1022's stance end, 1696's cost, 1547's misnamed mark); `authsrv`'s
-  `--no-label-knockdowns` banner naming 355 (§67.2); a server flag for this set alone.
+  `--no-label-knockdowns` banner naming 355 (§67.2); a server flag for this set alone; the
+  seven rows §67.2 refuses, each waiting on what its reason names -- 778 1636 a judged target
+  requirement, 866 the limit, 995 1037 1514 1728 the early end; the 60's falls left marked
+  -- 296 777 2135 behind a predicate (the knock-down sentence guard), 163 358 844 timed --
+  beside the older 192 and 3425. (The first open list dropped both groups when it retired
+  "the 210"; the round-2 review, VF-4.)
 
 ### 67.7 The record (no code): step 5's blocker, the 141 INDETERMINATE, families 3–14
 
@@ -10295,8 +10308,13 @@ nothing for any source to supply a number to; 15 (14) hold a flat field the text
 not hand: 162 242 309 354 357 396 403); 5 carry non-flat fields with no slot; the hidden
 progressions are 242 1137 1643 1645. Step 5 as a bulk route is moot; it is per-skill
 mechanics, with 13 rows readable from the client today; the dataset, if ever wanted for the
-rest, waits on the owner. The proposed rewording is in the `PLAN.md` §8 change this lane
-returns.
+rest, waits on the owner. **A rewording of deskwork step 5 is proposed, not applied** (other
+desk lanes edit that file; the orchestrator's call), and it keeps BOTH conditions: per skill
+rather than bulk, with these counts; the dataset (licence recorded) still owing the owner's
+go-ahead and its §6.1 row before any use; the browser crawl and Final Thrust's precedent
+kept. The first proposal, returned with this lane's first report, ended on the §6.1 row
+alone and would have deleted the go-ahead condition from the deskwork plan (the round-2
+review, VF-3); it is withdrawn.
 
 **The 141 INDETERMINATE** (§54.3): 141 slots on 131 skills on 38797 -- bonus 74, duration 44,
 scale 23 (145 on 135 on 38974); hand rows 108 200 204 carry one. `bufflog.py --census`
