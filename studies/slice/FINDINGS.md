@@ -3652,11 +3652,15 @@ Windborne + Deep Freeze: **97.92** (was 130.23, × 0.4522). Labels:
   "Fall Back!" = 89.1 %), still CONTESTED by the bundle row (48.3);
 * Crippled's × 0.5 still multiplies on top of an override (0.17) — **UNVERIFIED**, no tape
   holds both; chosen because it leaves Crippled's own rule (21 of 21) untouched;
-* 493's apply carries no `0x00F1` on three agents — **OBSERVED**; so the 0x400 "snared" bit
-  (`SNARE_STATUS_BIT`, Teinai's 0xC00) is not every snare's — whether it is the hex's alone
-  is **UNVERIFIED**, and nothing was changed for it.
+* 493's apply (454.171, the observer) and its first renewal (456.168, agents 8 and 10)
+  carry no `0x00F1`, and no `0x00F1` on those three agents sets 0x400 in the 69 s episode
+  (7: 0x80 then 0 at 464.822 / 479.832; 8: the same at 488.432 / 503.442; 10: none) —
+  **OBSERVED**; so the 0x400 "snared" bit (`SNARE_STATUS_BIT`, Teinai's 0xC00) is not
+  every snare's — whether it is the hex's alone is **UNVERIFIED**, and nothing was changed
+  for it.
 
-**Open, one line each in `PLAN.md` §8:** (i) under-cap snare × boost has no tape — a live R0b
+**Open — `PLAN.md` §8 carries these in two lines, after the lane's own status (SHIPPED ON,
+UNRUN: 48.7.1's two runsheets):** (i) under-cap snare × boost has no tape — a live R0b
 run (the lane's runsheet: Windborne Speed 160 + Armor of Earth 165, whose own snare is 50 → 14
 by Earth Magic rank, in both orders) settles it with one observer; (ii) Crippled over an
 override; (iii) **the label census misses literal-number snares** — re-derived with

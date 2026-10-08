@@ -16,7 +16,9 @@ shown to go red on the wire a wrong rule would have produced, not only green on 
 one retail did. Its `review()` half (2026-10-07) pins what the lane's review found:
 P7 scoped to the x0.25 class (a x0.17 / x0.10 word is not a miss), P8b's control a
 word that moves WITH the boost (a foe's onset is not one), P7j's join to 493, and
-`--json` writing the JSON alone to stdout.
+`--json` writing the JSON alone to stdout. The verification after it added two: P8b's
+direction and new-word floor (an ally Crippled at an apply, a foe's onset at an end),
+and P7a's scope (493 over Crippled is out of it, not a miss).
 """
 import contextlib
 import io
@@ -35,8 +37,8 @@ import vaultpath        # noqa: E402
 
 # Per machine, decided on the live-captures DIRECTORY, never on what loaded.
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
-FLOOR_BARE = 9     # 2026-10-07 (SLICE-F48b review): MEASURED -- section 4 alone (the synthetic tapes: 5 + the review's 4), RURIK_VAULT at a nonexistent path; sections 1-3 one declared skip
-FLOOR_VAULT = 32   # 2026-10-07 (SLICE-F48b review): MEASURED -- 12 (2026-09-16, P1-P6 and the controls) + the gapped connection's audit + P7, P7a, P7j, P8, P8b, P8c, P9, P10, P10m, P10a + section 4's 9
+FLOOR_BARE = 11    # 2026-10-07 (SLICE-F48b verification): MEASURED -- section 4 alone (the synthetic tapes: 5 + the review's 4 + the verification's 2), RURIK_VAULT at a nonexistent path; sections 1-3 one declared skip
+FLOOR_VAULT = 34   # 2026-10-07 (SLICE-F48b verification): MEASURED -- 12 (2026-09-16, P1-P6 and the controls) + the gapped connection's audit + P7, P7a, P7j, P8, P8b, P8c, P9, P10, P10m, P10a + section 4's 11
 LEDGER = checks.Ledger("speed words on retail's wire",
                        floor=FLOOR_VAULT if HAVE_LIVE else FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -228,7 +230,8 @@ def _score(msgs):
 
 def review():
     """2026-10-07 review (RV-2, RV-3, RV-6, RV-1): four ways the reader overstated or broke,
-    each pinned on a synthetic tape so the old shape goes red."""
+    each pinned on a synthetic tape so the old shape goes red -- and the verification's two
+    (VF-1, VF-5): conjuncts of those fixes that no check could see."""
     f, a, rm = speedwords.OP_SPEED, speedwords.OP_APPLY, speedwords.OP_REMOVE
     rn = speedwords.OP_RENEW
 
@@ -265,6 +268,26 @@ def review():
           "(1 / 3: the end's 399 -> 300 counts; the 288 -> 72 onset, the 72 -> 288 restore "
           "and a wordless end do not)",
           str(s["P8b control: the same batch words another agent"][:2]))
+    # VF-1 (the verification after the review): `moved()` has three conjuncts and the tape
+    # above reddens only the previous-word floor -- a moved() with no direction, or with no
+    # floor on the NEW word, left this file green. So: an apply whose only companion is an
+    # ally Crippled 300 -> 150 (a move, at or above x0.5 both sides, but DOWN at an apply);
+    # that boost's end, whose only companion is a foe's own 288 -> 72 onset (down, as an
+    # end's would be, but to UNDER x0.5); and a positive, an apply whose ally goes 300 -> 399.
+    # No direction scored this (2, 1); no new-word floor (2, 1); a moved() never true (0, 3).
+    s = _score([w(1.0, 7, 288.0), w(1.0, 3, 288.0), w(1.0, 9, 300.0), w(1.0, 10, 300.0),
+                (5.0, a, [66, 7, 493, 0, 63, 5.0]), w(5.0, 7, 72.0),
+                (10.0, a, [66, 7, 364, 1, 56, 6.0]), w(10.0, 9, 150.0),
+                (16.0, rm, [68, 7, 56]), w(16.0, 3, 72.0),
+                (20.0, a, [66, 7, 160, 1, 57, 6.0]), w(20.0, 10, 399.0),
+                (30.0, rm, [68, 7, 63]), w(30.0, 7, 288.0), w(31.0, 9, 300.0),
+                w(32.0, 3, 288.0), w(33.0, 10, 300.0)])
+    check(s["P8 boost under an over-cap snare is silent"][:2] == (3, 0)
+          and s["P8b control: the same batch words another agent"][:2] == (1, 2),
+          "P8b: the companion must move the boost's WAY and stay at or above x0.5 (1 / 2: an "
+          "ally's 300 -> 399 at an apply counts; an ally Crippled 300 -> 150 at an apply and a "
+          "foe's 288 -> 72 onset at an end do not)",
+          str(s["P8b control: the same batch words another agent"][:2]))
     # RV-1: P7j joins a x0.25 word to 493 through its apply or a 0x0043 renewal of the
     # buff THAT apply opened -- not another skill's buff, not after the buff's 0x0044.
     s = _score([w(1.0, 7, 288.0), w(1.0, 8, 300.0), w(1.0, 9, 300.0), w(1.0, 10, 300.0),
@@ -279,6 +302,20 @@ def review():
           "P7j: 493's apply and its OWN buff's renewal join (2); another buff's renewal and "
           "a renewal after the 0x0044 do not (2)",
           str(s["P7j x0.25 words batch-joined to 493 (a census)"][:2]))
+    # VF-5 (the verification): P7a is scoped to an agent with NO slow open -- the review
+    # claimed it and nothing pinned it. 493 on an agent already Crippled (144 on 288) joined
+    # by 36.0 (x0.125, what 493 over Crippled would read) refutes nothing and is out of
+    # scope; 493 on an unslowed base-300 agent joined by 75.0 is in, and a hit. Unscoped this
+    # read (1, 1); scoped strictly ABOVE base (an agent at exactly its base dropped) (0, 0).
+    s = _score([w(1.0, 7, 288.0), w(1.0, 8, 300.0), w(2.0, 7, 144.0),
+                (5.0, a, [66, 7, 493, 0, 63, 5.0]), w(5.0, 7, 36.0),
+                (6.0, a, [66, 8, 493, 0, 64, 5.0]), w(6.0, 8, 75.0),
+                (30.0, rm, [68, 7, 63]), w(30.0, 7, 144.0),
+                (31.0, rm, [68, 8, 64]), w(31.0, 8, 300.0), w(40.0, 7, 288.0)])
+    check(s["P7a 493's own apply joined at x0.25"][:2] == (1, 0),
+          "P7a: 493's apply counts only on an agent with no slow open (1 / 0: the 75.0 on an "
+          "unslowed 300 is a hit; the 36.0 over Crippled is out of scope, not a miss)",
+          str(s["P7a 493's own apply joined at x0.25"][:2]))
     # RV-2: `--json` writes the JSON alone to stdout. The census prints capgaps' SET ASIDE
     # line (here through the real capgaps.set_aside); until the review it landed ahead of
     # the '[' and json.loads refused the stream.

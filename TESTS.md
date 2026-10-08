@@ -4779,7 +4779,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   witnesses reddens rather than letting `push_speed`'s numbers drift from retail's. Two
   controls: no uncapped double boost (× 1.66 / × 1.77) anywhere, and every 160/364 apply not
   over a snare reads × 1.33 or × 1.34 and nothing else. Reads the vault; skips loudly without it.
-  **SLICE-F48b (2026-10-07, floors 32 vault / 9 bare, per machine on the live-captures
+  **SLICE-F48b (2026-10-07, floors 34 vault / 11 bare, per machine on the live-captures
   DIRECTORY).** An over-cap snare over a boost, on retail's wire (831 words, 26 captures):
   P7 every word in the × 0.25 CLASS (within 0.02 of it) is base × 0.25 EXACTLY (14 / 0; P7a
   skill 493's own apply on an agent with no slow open, 1 / 0); P7j an exposure floor on the
@@ -4800,8 +4800,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   snared foe's onset or restore in a boost's batch is NOT P8b's control (1 / 3 on a tape the
   old any-word predicate scored 3 / 1); P7j joins through 493's own buff's renewal but not
   another buff's nor one after its `0x0044`; and `--json` writes the JSON alone to stdout
-  with capgaps' SET ASIDE line on stderr (it had been printed ahead of the `[`). Every new
-  corpus check, and each of the review's four, was driven red in a scratch arm.
+  with capgaps' SET ASIDE line on stderr (it had been printed ahead of the `[`). The
+  verification after the review added two, for conjuncts nothing could redden: P8b's
+  companion must move the boost's WAY and stay at or above × 0.5 (1 / 2: an ally Crippled
+  300 → 150 at an apply and a foe's 288 → 72 onset at an end are not it; a `moved()` with
+  no direction or no new-word floor scored 2 / 1), and P7a counts 493 only on an agent
+  with no slow open (493 over Crippled, 36.0, is out of scope: unscoped 1 / 1, scoped
+  strictly above base 0 / 0). Every new corpus check, and each of the review's four and
+  the verification's two, was driven red in a scratch arm.
   **SLICE-B7c (2026-09-12).** `toolkit/authsrv/test_mechanics.py` §28 (floor 162 → 174,
   with B7a's four): a PARTY body casts a heal at the player. Eight checks, four of them
   arms: the policy picks the hurt player (who is not a row in `agents`, which is B7a's

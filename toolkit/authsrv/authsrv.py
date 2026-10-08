@@ -17399,8 +17399,9 @@ CONDITION_EFFECT_WORDS = True
 # effects.py's census knew the bit only from the Isle's 999 and left it
 # unmapped. Crippled (0x0A, 2/2) is not a snare here, as in move_speed_terms.
 # NOT every snare's, it seems: skill 493 (a type-5 75% snare, SLICE-F48b) sent
-# NO 0x00F1 at its apply on the observer or on two bodies (20260928T103123
-# :50295, 454.171 / 456.168) -- whether 0x400 is the hex's alone is UNVERIFIED.
+# NO 0x00F1 with its apply (the observer, 454.171) or its first renewal (two
+# bodies, 456.168; 20260928T103123 :50295), and no 0x00F1 on those three sets
+# 0x400 in the 69 s episode -- whether 0x400 is the hex's alone is UNVERIFIED.
 # --no-snare-status-bit reverts.
 SNARE_STATUS_BIT = True
 # THE FOUR HEXES THAT NEED A MECHANISM (B2, 2026-09-27) -- Suffering 108,
