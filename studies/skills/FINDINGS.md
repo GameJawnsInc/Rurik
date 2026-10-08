@@ -9956,16 +9956,21 @@ section records what changes HERE.
 not installed.** DESKWORK-D4 (ii), "the 210 conditional SERVED rows". Build 38797 is the
 pinned client, the vault's overlay and skills table are build 38974
 (`vault/client/2026-09-30_8e50edfb8351`); every count below names its build. Locks:
-`toolkit/clientscan/test_skilldesc.py` §1b + §3 (102 bare + 1 skip; 189 with the vault and
-the staged emit), `toolkit/authsrv/test_labelconsumers.py` §9 + §5d (74 bare + 5 skips; 82 +
+`toolkit/clientscan/test_skilldesc.py` §1b + §3 (105 bare + 1 skip; 194 with the vault and
+the staged emit, since the fix pass), `toolkit/authsrv/test_labelconsumers.py` §9 + §5d (74 bare + 5 skips; 82 +
 1 skip on the vault's 55-row overlay; 83 with the emit), `toolkit/authsrv/test_skilldamage.py`
 §14 (`LABEL_ROWS_BY_BUILD` 38797 116, 38888 115, 38974 115), `toolkit/test_content.py` (58).
 `SKILLS-LW<n>` = a finding of this section; convention:
-[studies/idents/CONVENTION.md](../idents/CONVENTION.md). Reverts: `--no-skill-labels` (the
-server, the whole tier) and `skilldesc.py --emit-labels --no-hit-gated` (the emitter, this
-set alone: the plain rows come out byte-identical). A server-side switch for this set
-alone would be an `authsrv` flag dropping rows that carry either mark (the two marks name
-the set exactly, §67.3) -- not built, because this lane edits no server line.
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md). **The revert is `--no-skill-labels`**
+(the server, the whole tier). `skilldesc.py --emit-labels --no-hit-gated` is a DIAGNOSTIC
+emit of the plain set alone -- its rows equal the pre-SKILLS-LW overlay's, its header names
+SKILLS-LW -- and **not** a revert: the suite pins the full set, so an overlay written that way
+reddens `test_skilldesc` §3's on-disk check and `test_skilldamage` §14's count (the fix pass,
+review EV-7; `test_skilldesc` §3 now drives the flag through `main()`, review CD-4).
+`--no-label-knockdowns` also drops 355's fall, the one new `knocks_down` (§67.2). A
+server-side switch for this set alone would be an `authsrv` flag dropping rows that carry
+either mark (the two marks name the set exactly, §67.3) -- not built, because this lane
+edits no server line.
 
 **The policy, stated once.** `plain_served` is the owner's option-1 definition ("the owner's
 131 stay 131", §55.1) and is not moved: `COMPOUND_FLAGS`, `plain_served` and its 131 / 129
@@ -9986,7 +9991,9 @@ P2 build 38974 differs (the vault header's "129 plain") -- HELD, and the triage'
 non-attack, 0–5 rows -- HELD (4, all spells). P6 the knock-down guard bites on 296 777 2135
 and not on 171 237 358 -- HELD, with 163 added (a qualified fall the existing rules missed)
 and 358's reason being the OLDER timed-record rule. P7 17 of the 68 unmarked -- the measured
-number is **19 of the 60** (18 on 38974), and 0 after the two marks.
+number is **19 of the 60** (18 on 38974), and 0 after the two marks; **17 (16 on 38974)
+since the fix pass**, whose `CLAUSE_REMOVAL` widening marks 1753 and 2146 (§67.2) -- the
+triage's 17 on 38797 by a different route, not its list.
 
 **Provenance, stated once.** The reading is our own patterns over the normalised template,
 kept as ids, enums and sentence indices; no clause leaves the parse (the 60.8 #4 rule:
@@ -10030,7 +10037,7 @@ sentence carries "when" or "instead" -- 884 (a damage only on foes ALREADY burni
 predicate: had it shipped, every foe would take it), 1340, 1395 -- and 1403. On 38974 1374
 is RECOGNISED (not served) and 1696's template was re-balanced into NUMBER_UNGATED.
 
-### 67.2 SKILLS-LW2 — the gate: four new exclusions, the knock-down sentence guard, two flag widenings
+### 67.2 SKILLS-LW2 — the gate: four new exclusions, the knock-down sentence guard, three flag widenings
 
 The set (`hit_gated_served`, 112 on 38797, 111 on 38974) goes through the SAME step-4 gate as
 the plain set, then through four new rules placed after every older one, so a row two rules
@@ -10057,12 +10064,27 @@ allies; 2135: the foe is crippled) or on a STATE of the foe in an unconditional 
 on an attack, so it ships `knocks_down = true` and the attack path fells on a landed strike
 only. `KD_SENTENCE_GUARD = False` is the known-bad arm: the emitter then writes
 `knocks_down` on exactly 296 777 2135, and the checker names each (`test_skilldesc` §3).
+The guard's THIRD clause (a fall behind a bare landing on a NON-attack) is reached by no
+corpus row on either build -- a hit-only spell is `HIT_NOT_EVALUATED` first -- so its only
+witness is an invented NUMBER_UNGATED Spell in §1b, with a forced arm the checker names;
+deleting the clause reddens both (the fix pass, review CD-1). **`--no-label-knockdowns`
+drops 355's fall too**: it ignores `knocks_down` on every label row, six on the staged 38974
+overlay (187 231 294 355 784 1086). Its help in `serverargs.py` names the six since the fix
+pass (review CD-3); `authsrv`'s startup banner for the flag still lists the five, owed to the
+next lane that edits `authsrv.py` (this lane edits no server line).
 
-**Two flag widenings, each a row the gate would otherwise over- or under-mark:**
+**Three flag widenings, each a row the gate would otherwise over- or under-mark:**
 `UNMODELLED_CLASS` learns "demonic" (1814's recipient is a demon of one faction; the
 server cannot tell one foe from another, as with fleshiness, §55.2) and `CLAUSE_RANGE` learns
 "melee range" (2210, a spear attack at melee reach -- the server throws at the spear's).
-Neither phrase occurs on a plain row (measured: 2 and 1 corpus rows, 0 plain).
+Neither phrase occurs on a plain row (measured: 2 and 1 corpus rows, 0 plain). **The fix
+pass's third (review EV-4):** `CLAUSE_REMOVAL` reads ONE qualifier word between the count
+and the noun -- the caster losing or removing its own enchantment of one profession, a COST
+the row drops. MEASURED on 38797 and 38974 alike (against a scratch copy with the old
+pattern): 15 corpus rows gain exactly that flag (27 1337 1487 1489 1490 1529 1530 1536 1537
+1542 1543 1753 1767 2014 2146), no tier moves, the plain list is unchanged, and the only label
+rows that change are 1753 and 2146, which now carry `CLAUSE_REMOVAL`. Two qualifier words
+stay unread (§1b pins both edges).
 
 **THE FUNNEL, 38797:** 112 hit-gated (89 not hand) → HAND_ROW 23 → the older rules 18
 (DURATION_ONLY 9: 88 225 235 264 265 377 456 893 1344; UNMODELLED_CLASS 4: 120 915 1234
@@ -10075,7 +10097,8 @@ none this lane does not.
 ### 67.3 SKILLS-LW3 — what ships: 60 rows, every one marked
 
 **By type:** 43 attacks (Warrior 19, Ranger 8 -- the bow set 391 393 400 402 404 409 and
-1466 1469 --, Assassin 7, Dervish 7, Paragon 2; by campaign core 6, Prophecies 7, Factions
+1466 1469 --, Assassin 7, Paragon 7, Dervish 2 -- profession 9 is the Paragon and 10 the
+Dervish, `PARTY_MELEE_PROFESSIONS`; the first record had the two swapped, review CD-2; by campaign core 6, Prophecies 7, Factions
 11, Nightfall 15, Eye of the North 4), 11 Spells, 4 Stances, 1 Enchantment (1755), 1 Signet
 (296). **Means:** `+ Damage` 36, conditions 18 (Bleeding 3, Burning 3, Deep Wound 3,
 Weakness 3, Crippled 2, Blind, Dazed, Disease, Poison), elemental damage 10, the two speeds
@@ -10084,14 +10107,23 @@ Weakness 3, Crippled 2, Blind, Dazed, Disease, Poison), elemental damage 10, the
 
 **The marks** (in `DETAILS`, `OVERLAY_VOCABULARY` and `content.LABEL_DETAILS_KNOWN` --
 an older tree DROPS the rows that carry them, §59.7's guard):
-- `HIT_GATED` **42** -- the numbers sit behind a bare landing on an attack: the machinery
-  mark, like `AREA_BURST`. Every shipped attack but 1753 (whose number has no hit clause).
+- `HIT_GATED` **42** (41 on 38974, where 1696 reads NUMBER_UNGATED) -- the numbers sit
+  behind a bare landing on an attack: the machinery mark, like `AREA_BURST`. Every shipped
+  attack but 1753 (whose number has no hit clause).
 - `CONDITIONAL_DROPPED` **35** (36 on 38974) -- the generic mark the brief asked for: a
-  sentence with conditional wording and no number, whatever it does, the row does not.
-  Under-application by construction, because the two over-applying directions (a limit, an
-  early end) are excluded above. 17 rows carry both.
+  sentence with conditional wording and no number, whatever it does, the row does not. **The
+  server does LESS than the text, and that is not always weaker** (the fix pass, review EV-2;
+  the first record said "under-application by construction", which was wrong): a dropped
+  benefit under-applies, but a dropped COST leaves the server's skill the stronger. Two of the
+  60 drop a cost -- **976** (an added recharge on a miss: the server recharges at the base
+  time) and **1413** (the adrenaline lost when the stance ends: the server leaves it) -- and
+  they ship marked, 831's and 1118's precedent (RECONSTRUCTION: our reading of the dropped
+  sentences, ids only here; every other dropped sentence of the 60 reads as a benefit). The
+  two directions that would over-apply the row's OWN number -- a limit, an early end -- are
+  excluded above. 17 rows carry both marks.
 
-**Why two and not one.** 19 of the 60 (18 on 38974) carry NO mark of the older vocabulary,
+**Why two and not one.** 19 of the 60 (18 on 38974) carried NO mark of the older vocabulary
+(17 and 16 since the fix pass's `CLAUSE_REMOVAL`, `test_skilldesc` §3 pins the 38797 list),
 and 10 of those (9 on 38974) -- 336 360 383 391 404 1144 1466 1546 1600 and, on 38797, 1696
 -- have no dropped conditional sentence at all: the only condition is the landing the server
 honours. A generic
@@ -10105,18 +10137,33 @@ the sentences, and a conditional row with no mark at all.
 **The older marks on the 60:** `CLAUSE_UNBLOCKABLE` 14, `CLAUSE_KNOCKDOWN` 7 (163 296 358
 777 844 1133 2135; 1133's is the caster's own fall), `DURATION_UNMODELLED` 7, `AREA_ONE_TARGET`
 6, `CLAUSE_INTERRUPT` 5, `CONDITION_UNNUMBERED` 5, `AREA_CASTER` 3, `LITERAL_DROPPED` 3,
-`CLAUSE_RANGE` 2, `CLAUSE_REMOVAL` 2, and one each of `CLAUSE_SHADOW_STEP`,
-`CLAUSE_MOVE_SPEED`, `SECOND_CONDITION_DROPPED` (1415's second condition),
-`CONDITION_BIT_CLEAR_REFUSED` + `INDETERMINATE_SLOT`, `KNOCKDOWN_APPLIED` (355).
+`CLAUSE_RANGE` 2, `CLAUSE_REMOVAL` 4 (2202 2238, and 1753 2146 since the fix pass), and one
+each of `CLAUSE_SHADOW_STEP`, `CLAUSE_MOVE_SPEED`, `SECOND_CONDITION_DROPPED` (1415's second
+condition), `CONDITION_BIT_CLEAR_REFUSED` + `INDETERMINATE_SLOT`, `KNOCKDOWN_APPLIED` (355).
+(38797; on 38974 `AREA_ONE_TARGET` 7 and `CONDITION_UNNUMBERED` 6, 1696's re-balanced row.)
 
-**The standing weakness, measured on this set (§55.3's, unchanged in kind).** A clause with
-no slot, no conditional word and no pattern is still invisible: on the 60 that is **1547**'s
-faster spear (a projectile speed) and, on 38797, **1696**'s two unconditional clauses -- the
-caster loses all adrenaline and energy, and the strike is always critical -- neither marked
-by any token today (on 38974 1696's re-balanced template drops its always-critical into a
-conditional sentence and carries `CONDITIONAL_DROPPED`). A dropped cost is the precedent's
-shape (831's double damage taken, 1118's disable, both shipped marked); these two are the
-unmarked residue, named here so a reader of the overlay is not told they act.
+**The standing weakness, measured on this set (§55.3's, unchanged in kind; the list
+corrected by the fix pass, review EV-4).** A clause with no slot, no conditional word and no
+pattern is still invisible. The first record named only 1547 and 1696 and was wrong on one
+and short on the rest. On the 60, read locally over the owner's templates (ids only here):
+- **888, 889, 1022** end the TARGET's stance on the hit. No flag reads it, and the server has
+  no stance-ending field; each carries `HIT_GATED` and `CLAUSE_UNBLOCKABLE`, nothing for this.
+- **1696**, on 38797: two unconditional clauses -- the caster loses all adrenaline and energy
+  (a cost), and the strike is always critical -- under `HIT_GATED` alone. On 38974 its
+  re-balanced template moves the always-critical into a conditional sentence
+  (`CONDITIONAL_DROPPED`), but the cost is still unmarked and its unblockable clause is worded
+  in a form `CLAUSE_UNBLOCKABLE` does not match.
+- **1547** is marked, but MISNAMED: `CLAUSE_MOVE_SPEED` matched its projectile's flight speed,
+  not a movement speed. Not unmarked; the token says the wrong thing.
+- **1753, 2146** -- each loses or removes the caster's own enchantment of one profession (a
+  cost), which `CLAUSE_REMOVAL` missed for the word between the count and the noun. Fixed: the
+  pattern reads one qualifier word (§67.2) and both carry `CLAUSE_REMOVAL`.
+
+A dropped cost is the precedent's shape (831's double damage taken, 1118's disable, both
+shipped marked); 888 889 1022 and 1696 are the unmarked residue, named here so a reader of
+the overlay is not told those clauses act. A `CLAUSE_*` token for a stance ended on the target
+or an own-resource cost would mark them; not built (each is a new vocabulary word, and
+`content.LABEL_DETAILS_KNOWN` would have to learn it first).
 
 ### 67.4 SKILLS-LW4 — no new consumer: the rows ride the attack path every hand attack row rides
 
@@ -10135,16 +10182,34 @@ at 7 so a word is 7 + the row's bonus and nothing else:
 | 1022's (+20, after a lead) | daggers | 7 + 20 | 0, none | 0, none | -- |
 | 382's, a HAND row | a sword | 7, Bleeding | 0, none | 0, none | Bleeding |
 
-…and 1022's shape with no lead FAILS (`[38, foe, me, 2]`, nothing -- the chain is still
-`combo_req`'s), and with the label rows taken out (`World.drop_tier`'s shape) the same
+…and 1022's shape with no lead FAILS (`[38, foe, me, 2]`, nothing -- for the PLAYER the
+chain is still `combo_req`'s), and with the label rows taken out (`World.drop_tier`'s shape) the same
 landed strikes are 7 and nothing while the hand row still Bleeds. A runtime mutation making
 `attack_condition_lands` answer yes reddens the block / miss check; one making `skill_damage`
 ignore label rows reddens the landed one. §5d checks the LOADED overlay: every `HIT_GATED`
 row is an attack by `_is_attack_skill` (41 on the 38974 emit) and 355 is the one whose
 knock-down `skill_knocks_down` reads.
 
-**Labels per claim.** The numbers are OBSERVED (the client's own record, build-stable: not
-one served number moved across 38797 / 38888 / 38974, PLAN-LOG 2026-10-01). "No hit, no
+**A BODY's chain is not judged, and this set widens that gap** (the fix pass, review EV-5).
+The no-lead FAIL above is the player's press. A body's attack skill -- a hero's, a
+henchman's, an operator-authored hostile's -- lands through `land_skill`'s attack arm, which
+never reads `skill_chain_fields` (`authsrv`'s `_na_body_req` is 0 for an attack skill; the
+NONATTACK_CHAIN_GATE banner records the pre-existing case, the hand rows 775 780 781). Six of
+the 60 carry `combo_req` -- **776 777 976 986 1022 2135** -- so a body lands their bonus with
+no lead or off-hand: the documented gap goes from 3 hand rows to 9 rows. RECONSTRUCTION (the
+code path; no body press of any of the six is on tape). Accepted here as the hand rows'
+existing behaviour rather than held off bodies, because a body-side guard is an `authsrv`
+edit; it is owed beside "a BODY's own chain" in `PLAN.md` §8.
+
+**Labels per claim.** The numbers are OBSERVED **per build**, from each build's own record;
+the server serves the skills table it loads (38974 in the vault). 38888 → 38974 moved none of
+the 60's (that is the pair PLAN-LOG 2026-10-01 diffed). **38797 → 38888 moved four served
+numbers of the 60**: 296's scale 26..56 → 30..60, 336's 10..40 → 15..45, 1466's Burning
+1..7 → 2..8, 2202's heal 20..80 → 30..90 -- and 393's bit-clear bonus 1..12 → 4..14 (refused,
+not served), and the `aoe_range` of 571 and 1696, 0 → 2400 and 240. The first record called
+the numbers "build-stable across 38797 / 38888 / 38974", citing an entry that compared 38888
+with 38974 only; the fix pass re-derived all three builds' emits and corrected it (review
+EV-1). "No hit, no
 condition" is OBSERVED for the player's melee attack skill under Blind, n = 1 with a 3-of-3
 same-tape control (RANGERPRE-S22, `test_condhit` §1, 20260917T224104 :62557), and WIKI for
 the block and the arrow (GWW "Hit" rev 2721374, the citation `authsrv`'s banner carries). The
@@ -10162,7 +10227,7 @@ the 60. Every dropped clause's direction is our reading (RECONSTRUCTION).
 
 ```
 python toolkit/clientscan/skilldesc.py --exe vault/client/2026-09-30_8e50edfb8351/Gw.exe --dat vault/client/2026-09-30_8e50edfb8351/Gw.dat --emit-labels   # AT THE MERGE, on main: 115 rows
-python toolkit/clientscan/test_skilldesc.py      # 189 with the vault; the on-disk arm is the BYTES fault until that emit lands
+python toolkit/clientscan/test_skilldesc.py      # 194 with the vault; the on-disk arm is the BYTES fault until that emit lands
 python toolkit/authsrv/test_skilldamage.py       # §14's count is red against a pre-SKILLS-LW file (55) until then
 ```
 
@@ -10171,13 +10236,20 @@ its own header's exe and dat (`test_skilldesc` §3 run against it through
 `RURIK_SKILL_LABELS`; `test_skilldamage` green on a shadow vault carrying it). **OWED: the
 client confirmation** (prediction first; ranks are the spec's): **(1)** a Ranger with a bow
 presses 391 at a foe -- a landed arrow: the weapon's word and the foe Bleeding (its status
-word), the gamesrv log naming `HIT_GATED`; a blocked or missed arrow (an attacking foe that
-blocks, or the player Blinded): the fail word and no Bleeding. **(2)** 400 at a foe: the
-word is the weapon's plus 3..10 by rank, on a landed arrow only. **(3)** an Assassin with
-daggers presses 782 (a lead), 780 (an off-hand), then 777 at the same foe -- 777's +damage
-on a landed strike and the foe does NOT fall, wherever its allies stand (the fall is dropped,
-`CLAUSE_KNOCKDOWN`); 777 pressed cold, `[38, foe, me, 2]` and nothing. **(4)** the same presses under
-`gamesrv_args = ["--no-skill-labels"]`: the weapon's word alone, no Bleeding, no bonus.
+word), the gamesrv log reading `resolves through a LABEL-tier row (HIT_GATED)` (391's
+`tier_detail` is that one token); a blocked, dodged or missed arrow (an attacking foe that
+blocks, a foe crossing the arrow's line, or the player Blinded): the fail word and no
+Bleeding. **(2)** 400 at a foe: the word is the weapon's plus 3..10 by rank, on a landed
+arrow only. **(3)** an Assassin with daggers presses 782 (a lead), 780 (an off-hand), then 777
+at the same foe -- 777 is a DUAL attack (its combo 3; the bonus rides the second strike's
+cast too), so **two** words, each the daggers' roll + its bonus on a landed strike, and the foe
+does NOT fall, wherever its allies stand (the fall is dropped, `CLAUSE_KNOCKDOWN`); 777
+pressed cold, `[38, foe, me, 2]` and nothing. **(4)** the same presses under `gamesrv_args =
+["--no-skill-labels"]`: 391 and 400 deal the weapon's word alone (no Bleeding, no +3); in the
+daggers arm **only 777's bonus disappears** -- 782 and 780 are HAND rows
+(`content/world.toml`), so 782 still Bleeds and 780 still adds its bonus. (The first runsheet
+said "no Bleeding, no bonus" for the daggers too, predicted one 777 strike, and quoted a log
+line with a token 391 does not carry; corrected by the fix pass, review EV-6.)
 
 ### 67.6 What this refutes or changes, and what is next
 
@@ -10186,13 +10258,22 @@ on a landed strike and the foe does NOT fall, wherever its allies stand (the fal
 - **Changed: the label tier is 116 / 115 rows** (plain 56 / 55 + hit-gated 60) and acting
   attack skills on the label tier go from 7 to 50 (38797).
 - **Refuted, small: the triage's numbers** -- 68 → 60, 45 attacks → 43, 116 / 93 → 112 /
-  89, 73 through the gate → 72 (71 with "demonic"), "17 unmarked" → 19, "69 NO_SLOT on
-  38974" → 67, "74 / 46 / 23" INDETERMINATE → 74 / 44 / 23, and its claim that the counts are
-  identical on both builds. Its DIRECTION held: families, a parallel set, the two guards.
+  89, 73 through the gate → 72 (71 with "demonic"), "17 unmarked" → 19 (17 after the fix
+  pass, a different list), "69 NO_SLOT on 38974" → 67, "74 / 46 / 23" INDETERMINATE → 74 /
+  44 / 23, and its claim that the counts are identical on both builds. Its DIRECTION held:
+  families, a parallel set, the two guards.
+- **Refuted, by the fix pass's review, in this section's own first record:** "build-stable"
+  numbers (four served numbers move 38797 → 38888, §67.4); "under-application by
+  construction" (976 and 1413 drop a cost, §67.3); the go-ahead for step 5's dataset "given"
+  (it is owed, §67.7); the unmarked residue as "1547 and 1696" (§67.3); the professions'
+  Paragon / Dervish counts swapped; `--no-hit-gated` as a "revert" (a diagnostic emit); the
+  runsheet's daggers control and 777's one strike (§67.5).
 - **Open, next lane:** families 5 and 6 of §67.7 through the existing consumers (§67.7);
-  the four spells refused `HIT_NOT_EVALUATED` wait on a spell's landing reading the
-  projectile's arrival for its condition too; 1547's and 1696's unmarked clauses; a server
-  flag for this set alone.
+  the `HIT_NOT_EVALUATED` spells (4 on 38797, 3 on 38974) wait on a spell's landing reading
+  the projectile's arrival for its condition too; a BODY's chain-gated attacks (776 777 976
+  986 1022 2135 land with no lead, §67.4) beside the hand rows' 775 780 781; §67.3's unmarked
+  residue (888 889 1022's stance end, 1696's cost, 1547's misnamed mark); `authsrv`'s
+  `--no-label-knockdowns` banner naming 355 (§67.2); a server flag for this set alone.
 
 ### 67.7 The record (no code): step 5's blocker, the 141 INDETERMINATE, families 3–14
 
@@ -10200,18 +10281,22 @@ on a landed strike and the foe does NOT fall, wherever its allies stand (the fal
 dataset (after its licence is settled and the owner's go-ahead) or the browser crawl". **The
 licence half is stale:** it was read from primary sources and recorded 2026-09-22 (`PLAN.md`
 §1's gw-skilldata row, line 35, and §54.8: the repository is MIT, the DATA carries the source
-wikis' GFDL / CC BY-NC-SA). **The go-ahead half is the second gate, not a pending ruling:**
-the owner's 2026-09-22 answer "take D4 as written" (deskwork §8 Q3) covered the label tier;
-no `PLAN.md` §7 question names the dataset, and using it would owe its §6.1 row first.
-**The real blocker is the rows' shape** (MEASURED, 38797; 38974 in brackets): 68 (67) no-slot
+wikis' GFDL / CC BY-NC-SA) -- but recording a licence is not the owner's go-ahead. **The
+go-ahead half is OWED, never asked** (the fix pass, review EV-3; the first record called it
+given): deskwork §8 Q3, answered yes on 2026-09-22 by taking D4 as written, asked whether D4
+may serve skills from the archive's OWN description templates as a label tier -- not about
+the dataset -- and taking step 5 "as written" takes its condition with it rather than
+discharging it. No `PLAN.md` §7 question names the dataset. Using it owes the owner's
+go-ahead and its §6.1 row first. **The practical blocker is the rows' shape** (MEASURED, 38797; 38974 in brackets): 68 (67) no-slot
 rows, 4 (3) of them hand rows; **40 (40) carry all-zero scale, bonus and duration fields** --
 nothing for any source to supply a number to; 15 (14) hold a flat field the text PRINTS
 (`literal_check` LITERAL_MATCH: 13 not hand -- 58 65 147 203 250 295 308 315 329 344 415
 1588 1816 -- decidable from the client alone); 8 hold flat fields the text never prints (7
 not hand: 162 242 309 354 357 396 403); 5 carry non-flat fields with no slot; the hidden
 progressions are 242 1137 1643 1645. Step 5 as a bulk route is moot; it is per-skill
-mechanics, with 13 rows readable from the client today. The proposed rewording is in the
-`PLAN.md` §8 change this lane returns.
+mechanics, with 13 rows readable from the client today; the dataset, if ever wanted for the
+rest, waits on the owner. The proposed rewording is in the `PLAN.md` §8 change this lane
+returns.
 
 **The 141 INDETERMINATE** (§54.3): 141 slots on 131 skills on 38797 -- bonus 74, duration 44,
 scale 23 (145 on 135 on 38974); hand rows 108 200 204 carry one. `bufflog.py --census`

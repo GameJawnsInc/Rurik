@@ -437,8 +437,11 @@ FLAG_PATTERNS = (
     (FLAG_CLAUSE_DOUBLE_DAMAGE, r"\bdouble damage\b"),
     (FLAG_CLAUSE_DISABLE, r"\bdisabled\b"),
     # SKILLS-LU: "relieved of <condition>" is a cure too (2221, 943), and "you
-    # and all adjacent foes" (840) puts the caster in the class beside a target
-    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (condition|hex|enchantment)"
+    # and all adjacent foes" (840) puts the caster in the class beside a target.
+    # SKILLS-LW fix pass: ONE qualifier word may sit before the noun ("lose 1
+    # <profession> enchantment" -- the caster's own, a COST: 1753 2146 among the
+    # shipped rows; 15 corpus rows gain the flag, no tier moves, no plain row)
+    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (?:[a-z]+ )?(condition|hex|enchantment)"
                           r"|\brelieved of\b"),
     (FLAG_CLAUSE_ALSO_CASTER, r"\byou and (target|that|all)\b"),
     (FLAG_CLAUSE_CAST_SPEED, r"\bcasts? (spells? )?[^.]{0,24}?\b(slower|faster)\b"),
@@ -1533,7 +1536,7 @@ DETAIL_CONDITION_FLAT_CONSTANT = "CONDITION_FLAT_CONSTANT" # a bit-clear EQUAL c
 # SKILLS-LW (2026-10-07, skills 67): the hit-gated set's two marks -- between them on
 # every row of the set and on no plain row, so they also NAME the set
 DETAIL_HIT_GATED = "HIT_GATED"                 # the numbers sit behind a bare "if it hits" on an ATTACK: they land on a landed strike only (hit_enemy's verdict, attack_condition_lands, the landed knock-down) -- the machinery, like AREA_BURST
-DETAIL_CONDITIONAL_DROPPED = "CONDITIONAL_DROPPED"   # a sentence with conditional wording and no number: whatever it does, the row does not (under-applied; a limiting or early-ending one is excluded instead)
+DETAIL_CONDITIONAL_DROPPED = "CONDITIONAL_DROPPED"   # a sentence with conditional wording and no number: whatever it does, the row does not -- the server does LESS than the text says, which may be a benefit dropped or a COST dropped (976's added recharge on a miss, 1413's adrenaline lost at the stance's end: the server's skill is then the stronger, 831 / 1118's precedent); a limiting or early-ending one is excluded instead
 DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
            DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION, DETAIL_DURATION_UNMODELLED,
            DETAIL_CONDITION_UNNUMBERED, DETAIL_LITERAL_DROPPED, DETAIL_CHAIN_STEP_NOT_ADVANCED,
@@ -1923,7 +1926,8 @@ def label_rows(report, records, hand_ids, hit_gated=True):
     `tier_detail`) and its `verified` list; `emit_labels` writes it.
     SKILLS-LW: the candidates are the plain set PLUS `hit_gated_served` (the
     returned list stays the plain one, the owner's definition); `hit_gated=False`
-    is the emitter's revert to the plain set alone (`--no-hit-gated`).
+    is the plain set alone (`--no-hit-gated`, a diagnostic emit -- the revert is
+    the server's --no-skill-labels, since the suite pins the full set).
     """
     plain = plain_served(report)
     sc = {s[0] for s in report["self_conflicts"]}
@@ -2280,10 +2284,13 @@ def main(argv=None):
                          "whose bytes match no pristine build (no honest `build` stamp), "
                          "a shifted mapping, and a row set its own checker faults.")
     ap.add_argument("--no-hit-gated", action="store_true",
-                    help="with --emit-labels: the plain SERVED set alone, as before SKILLS-LW "
-                         "(2026-10-07) -- leaves out the hit-gated rows (HIT_GATED / "
-                         "CONDITIONAL_DROPPED). The emit-side revert of that set; the server's "
-                         "--no-skill-labels still drops the whole tier")
+                    help="with --emit-labels: a DIAGNOSTIC emit of the plain SERVED set "
+                         "alone, as before SKILLS-LW (2026-10-07) -- leaves out the hit-gated "
+                         "rows (HIT_GATED / CONDITIONAL_DROPPED); its rows equal the pre-SKILLS-LW "
+                         "overlay's, its header names SKILLS-LW. NOT a revert: the suite pins "
+                         "the full set (test_skilldesc 3's on-disk check, test_skilldamage 14's "
+                         "count), so an overlay written this way reddens both. The revert is the "
+                         "server's --no-skill-labels (the whole tier)")
     a = ap.parse_args(argv)
 
     records, texts, ix, exe, why = load_corpus(a.exe, a.dat)

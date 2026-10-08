@@ -79,7 +79,7 @@ TEMPLATES_SHA256_BY_BUILD = {
     38974: "79cc05468b03e598f5f5d945ed7b635d5dda3eec30209dba51518d10919c81d1",
 }
 
-LEDGER = checks.Ledger("skill description templates", floor=102)   # 102 bare since SKILLS-LW (2026-10-07: +11 in section 1b, the hit-gated reader and gate on invented phrases; MEASURED with RURIK_VAULT at an empty directory and at a nonexistent one, 102 + 1 skip; 189 with the vault and the 115-row emit -- +20, nine of them in section 3); 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults); 169 since the pair binding (+2: the pinned build's registered templates digest is its own; a MIXED exe/archive pair is the PAIR fault, both vaults)
+LEDGER = checks.Ledger("skill description templates", floor=105)   # 105 bare since SKILLS-LW's fix pass (2026-10-07: +3 in section 1b -- the knock-down guard's third clause on a NUMBER_UNGATED Spell and its forced checker arm, review CD-1; CLAUSE_REMOVAL's one qualifier word, review EV-4; MEASURED with RURIK_VAULT at an empty directory and at a nonexistent one, 105 + 1 skip; 194 with the vault and the 115-row emit -- +5, the two --no-hit-gated CLI checks in section 3, review CD-4); 102 bare since SKILLS-LW (2026-10-07:+11 in section 1b, the hit-gated reader and gate on invented phrases; MEASURED with RURIK_VAULT at an empty directory and at a nonexistent one, 102 + 1 skip; 189 with the vault and the 115-row emit -- +20, nine of them in section 3); 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit; 166 with the vault since the 38888 regen (2026-09-28: the on-disk check reads its exe + dat from the file's own header, +3 known-bad header arms), on the 38797 vault and on the 38888 one alike; 167 since the review (+1: a fresh emit of the OTHER build over the bulk table is the SKILLS TABLE fault, both vaults); 169 since the pair binding (+2: the pinned build's registered templates digest is its own; a MIXED exe/archive pair is the PAIR fault, both vaults)
 check = checks.adopt(LEDGER)
 
 
@@ -796,6 +796,7 @@ lw_tpl = {
                 "If you sneeze, it strikes farther.",
     "kd_hit": "If the copper lance lands, you deal +%str1% damage and the foe is knocked down. "
               "If you have 9 copper or more, this knockdown lasts 3 seconds.",
+    "kd_ung": "The foe takes %str1% damage. If the copper bolt lands, the foe is knocked down.",
     "plain": "The foe takes %str1% damage.",
 }
 lw = {k: CRd(LT.normalise(t)) for k, t in lw_tpl.items()}
@@ -886,6 +887,32 @@ check(all(kd_off[n][2].get("knocks_down") is True for n in kd_off)
       "KNOWN-BAD ARM (KD_SENTENCE_GUARD = False): with the guard off the emitter writes knocks_down "
       "on both shapes, and the checker (guard on) names each -- a conditional knock-down, a "
       "qualified one", (f_kd, {n: kd_off[n][2] for n in kd_off}))
+# SKILLS-LW fix pass (2026-10-07, review CD-1): the guard's THIRD clause -- a fall behind a
+# bare landing on a NON-attack. A hit-only spell never reaches it (HIT_NOT_EVALUATED refuses
+# the row first, kd_h_spell above), so its only witness is a NUMBER_UNGATED Spell: the number
+# unconditional, the fall in a number-free sentence behind "if the copper bolt lands". No
+# corpus row on 38797 or 38974 takes this path today, which is why the corpus arms in
+# section 3 could not see the clause deleted; these two can.
+kd_u_row = lwrow(70, "kd_ung", 5, [(1, Label.COLD_DAMAGE, "", AP, 10, 40)],
+                 ["IF", "TARGET_FOE", "CLAUSE_KNOCKDOWN"])
+kd_u = G(kd_u_row, srec(5), set())
+check(lw["kd_ung"]["gate_family"] == LT.FAMILY_NUMBER_UNGATED
+      and lw["kd_ung"]["knockdown_gate"] == LT.GATE_HIT and lw["kd_ung"]["dropped_conditional"] == [1]
+      and kd_u[0] is None and "knocks_down" not in kd_u[2] and "CLAUSE_KNOCKDOWN" in kd_u[1]
+      and LT.DETAIL_KNOCKDOWN_APPLIED not in kd_u[1] and LT.DETAIL_CONDITIONAL_DROPPED in kd_u[1],
+      "SKILLS-LW's knock-down guard, its third clause: a NUMBER_UNGATED Spell whose number-free "
+      "sentence fells 'if the copper bolt lands' ships its damage and keeps CLAUSE_KNOCKDOWN, no "
+      "knocks_down field -- a spell's land reads no strike verdict, so the server would fell every "
+      "foe it lands on", (kd_u[0], kd_u[1], kd_u[2]))
+kd_u_forced = {70: {"fields": dict(kd_u[2], knocks_down=True), "type_code": 5, "tier": "label",
+                    "tier_detail": [d for d in kd_u[1] if d != "CLAUSE_KNOCKDOWN"]
+                                   + [LT.DETAIL_KNOCKDOWN_APPLIED],
+                    "verified": [{"slot": 1}]}}
+f_kd_u = LT.check_label_rows(kd_u_forced, {"rows": {70: kd_u_row}, "self_conflicts": []}, set(),
+                             {70: srec(5)})
+check(any("hit-conditioned knock-down on a non-attack" in x for x in f_kd_u),
+      "KNOWN-BAD ARM: the same Spell forced to carry knocks_down + KNOCKDOWN_APPLIED is named by "
+      "the checker -- a hit-conditioned knock-down on a non-attack", f_kd_u)
 rep_lw = {"rows": {60: hit_atk, 61: ung, 69: dict(lwrow(69, "gated", 14, [PD], ["IF", "TARGET_FOE"])),
                    1: fire},
           "self_conflicts": []}
@@ -936,6 +963,14 @@ check({LT.DETAIL_HIT_GATED, LT.DETAIL_CONDITIONAL_DROPPED} <= set(LT.DETAILS) & 
       "the two marks are in DETAILS, content's known set and the overlay vocabulary; the four "
       "exclusions are in the enum; a 'demonic' recipient is an unmodelled class and 'melee range' "
       "a range clause (1814, 2210)")
+# SKILLS-LW fix pass (review EV-4): a removal may carry ONE qualifier word before its noun --
+# the caster losing its own enchantment of one profession, a COST the row drops (1753 2146
+# among the shipped rows); two qualifiers stay unread (the conservative edge)
+check("CLAUSE_REMOVAL" in rf("you lose 1 copper enchantment") and "CLAUSE_REMOVAL" in rf("remove one copper hex")
+      and "CLAUSE_REMOVAL" in rf("remove one condition") and "CLAUSE_REMOVAL" in rf("you lose all enchantments")
+      and "CLAUSE_REMOVAL" not in rf("you lose 1 old copper enchantment"),
+      "CLAUSE_REMOVAL reads 'lose 1 <qualifier> enchantment' (one word between the count and the "
+      "noun) as well as the bare forms, and not two words")
 
 # ---------------------------------------------------------------- section 2
 print("\n== 2. the corpus (pinned exe + Gw.dat) ==")
@@ -1421,24 +1456,29 @@ if records is not None:
     prof = collections.Counter(int(records[s]["profession"]) for s in att)
     check(t_new == {14: 43, 5: 11, 3: 4, 6: 1, 7: 1} and prof == {1: 19, 2: 8, 7: 7, 9: 7, 10: 2}
           and {391, 393, 400, 402, 404, 409} <= set(att) and {336, 355, 360} <= set(att),
-          "the 60 by type: 43 attacks (Warrior 19, Ranger 8, Assassin 7, Dervish 7, Paragon 2 -- the "
+          "the 60 by type: 43 attacks (Warrior 19, Ranger 8, Assassin 7, Paragon 7, Dervish 2 -- the "
           "Ranger bow set 391 393 400 402 404 409 among them), 11 Spells, 4 Stances, 1 Enchantment "
           "(1755), 1 Signet (296)", (dict(t_new), dict(prof)))
     hg = [s for s in new if skilldesc.DETAIL_HIT_GATED in lrows_all[s]["tier_detail"]]
     cdr = [s for s in new if skilldesc.DETAIL_CONDITIONAL_DROPPED in lrows_all[s]["tier_detail"]]
     pre = [s for s in new if not (set(lrows_all[s]["tier_detail"]) & set(skilldesc.DETAILS))
            - {skilldesc.DETAIL_HIT_GATED, skilldesc.DETAIL_CONDITIONAL_DROPPED}]
+    # RE-PINNED 2026-10-07 (SKILLS-LW fix pass, review EV-4): CLAUSE_REMOVAL now reads one
+    # qualifier word, so 1753 and 2146 (the caster's own enchantment lost / removed -- a
+    # cost) carry it and leave the no-older-mark list: 19 -> 17
     check(all(set(lrows_all[s]["tier_detail"]) & set(skilldesc.DETAILS) for s in new)
           and len(hg) == 42 and hg == [s for s in att if s != 1753]
           and len(cdr) == 35 and len(set(hg) & set(cdr)) == 17
           and pre == [336, 360, 383, 391, 402, 404, 904, 976, 1068, 1144, 1413, 1466, 1474, 1546,
-                      1600, 1696, 1753, 2015, 2146]
+                      1600, 1696, 2015]
+          and all("CLAUSE_REMOVAL" in (lrows_all.get(s) or {}).get("tier_detail", ()) for s in (1753, 2146))
           and not any(set(lrows[s]["tier_detail"]) & {skilldesc.DETAIL_HIT_GATED,
                                                       skilldesc.DETAIL_CONDITIONAL_DROPPED} for s in lrows),
           "EVERY one of the 60 carries a mark: HIT_GATED on the 42 hit-only attacks (every attack "
           "but 1753, whose number has no hit clause), CONDITIONAL_DROPPED on the 35 with a number-free "
-          "conditional sentence (17 carry both); 19 would carry NO mark without the two (the "
-          "triage's 17), and no plain row carries either", (len(hg), len(cdr), pre))
+          "conditional sentence (17 carry both); 17 would carry NO mark without the two (19 before "
+          "CLAUSE_REMOVAL read 1753's and 2146's own-enchantment loss), and no plain row carries "
+          "either", (len(hg), len(cdr), pre))
     kd_new = sorted(s for s in new if lrows_all[s]["fields"].get("knocks_down"))
     ckd_new = sorted(s for s in new if "CLAUSE_KNOCKDOWN" in lrows_all[s]["tier_detail"])
     check(kd_new == [355] and ckd_new == [163, 296, 358, 777, 844, 1133, 2135]
@@ -1474,7 +1514,7 @@ if records is not None:
     kd_off = sorted(s for s in lrows_off if lrows_off[s]["fields"].get("knocks_down")
                     and not lrows_all[s]["fields"].get("knocks_down"))
     f_off = {s: skilldesc.check_label_rows({s: lrows_off[s]}, rep, hand_ids, records) for s in kd_off}
-    check(kd_off == [296, 777, 2135] and lrows_off[355] == lrows_all[355]
+    check(kd_off == [296, 777, 2135] and 355 in lrows_all and lrows_off.get(355) == lrows_all[355]
           and all(f and any("conditional knock-down" in x for x in f) for f in f_off.values()),
           "KNOWN-BAD ARM (KD_SENTENCE_GUARD = False): the emitter writes knocks_down on exactly 296 777 "
           "2135 (a Signet felling any foe, an Assassin's fall regardless of allies, a fall on any foe "
@@ -1483,6 +1523,11 @@ if records is not None:
     strip = {}
     for sid, mark, want in ((391, "HIT_GATED", "HIT_GATED mark"), (402, "CONDITIONAL_DROPPED", "CONDITIONAL_DROPPED mark"),
                             (1068, "CONDITIONAL_DROPPED", "no mark")):
+        if sid not in lrows_all:
+            # review CD-7: a reader mutation that stops shipping the witness is a NAMED
+            # failure of the check below, never a KeyError past the ledger
+            strip[sid] = (False, [f"{sid} is not shipped -- no row to strip"], want)
+            continue
         r = dict(lrows_all[sid], tier_detail=[d for d in lrows_all[sid]["tier_detail"] if d != mark])
         strip[sid] = (mark in lrows_all[sid]["tier_detail"],
                       skilldesc.check_label_rows({sid: r}, rep, hand_ids, records), want)
@@ -1756,6 +1801,44 @@ if records is not None:
                   f"regenerated, not hand-edited; a mismatch means `python toolkit/clientscan/"
                   f"skilldesc.py --exe <exe> --dat <dat> --emit-labels` is owed (at the merge, "
                   f"into the vault)", faults)
+            # SKILLS-LW fix pass (review CD-4): the emitter's --no-hit-gated flag, driven
+            # through main() -- the CLI path, not label_rows -- with the header's own exe +
+            # dat. It writes the plain set alone: exactly the full emit's rows that carry
+            # neither SKILLS-LW mark (the two marks name the set), each row equal to its
+            # full-emit row, and a header with no hit-gated count. KNOWN-BAD ARM: the same
+            # call WITHOUT the flag writes the full set, byte-identical to the in-process
+            # fresh emit -- so a main() that ignored the flag reddens the first check. A
+            # DIAGNOSTIC emit, not a revert: the suite pins the full set. Two pipelines.
+            if all(k in hdr for k in HEADER_KEYS) and not any(
+                    f.startswith(("HEADER:", "FILES:", "NOT PRISTINE:", "SKILLS TABLE:")) for f in faults):
+                import contextlib
+                import io
+                pf, pn = os.path.join(tmp, "cli_full.toml"), os.path.join(tmp, "cli_nohit.toml")
+                base = ["--exe", hdr["exe"], "--dat", hdr["dat"], "--emit-labels"]
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc_f = skilldesc.main(base + [pf])
+                    rc_n = skilldesc.main(base + [pn, "--no-hit-gated"])
+                bf = open(pf, "rb").read() if rc_f == 0 and os.path.isfile(pf) else b""
+                bn = open(pn, "rb").read() if rc_n == 0 and os.path.isfile(pn) else b""
+                tf = tomllib.loads(bf.decode("utf-8")).get("skill_effect", {}) if bf else {}
+                tn = tomllib.loads(bn.decode("utf-8")).get("skill_effect", {}) if bn else {}
+                lw_marks = {skilldesc.DETAIL_HIT_GATED, skilldesc.DETAIL_CONDITIONAL_DROPPED}
+                plain_ids = {s for s, r in tf.items() if not set(r.get("tier_detail") or ()) & lw_marks}
+                check(rc_n == 0 and tn and set(tn) == plain_ids and all(tn[s] == tf[s] for s in tn)
+                      and len(tn) < len(tf) and b"hit-gated SERVED" not in bn,
+                      f"the emitter's --no-hit-gated (main(), build {hdr.get('build')}'s own exe + "
+                      f"dat) writes the plain set alone: {len(tn)} rows, exactly the full emit's rows "
+                      f"carrying neither HIT_GATED nor CONDITIONAL_DROPPED, each row unchanged, and "
+                      f"no hit-gated count in its header",
+                      (rc_n, len(tn), len(plain_ids), sorted(set(tn) ^ plain_ids)[:8]))
+                check(rc_f == 0 and bf == fresh_emit(hdr["exe"], hdr["dat"])[1] and len(tf) > len(tn),
+                      f"KNOWN-BAD ARM: the same main() call WITHOUT --no-hit-gated writes the full set "
+                      f"({len(tf)} rows), byte-identical to the in-process fresh emit of that exe + dat",
+                      (rc_f, len(tf), len(tn)))
+            else:
+                LEDGER.skip("the --no-hit-gated CLI emit (2 checks)",
+                            f"the on-disk header names no usable exe + dat of the bulk table's build "
+                            f"({[f.split(':')[0] for f in faults]}) -- the fault above names it")
             # KNOWN-BAD ARMS on the header, each named: all read the cache above (no reload)
             if faults == [] and all(k in hdr for k in HEADER_KEYS):
                 txt = blob.decode("utf-8")
