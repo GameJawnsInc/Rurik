@@ -62,6 +62,13 @@ def _press(authsrv, send, state, skill=42, copy=7, target=0):
                                authsrv.GAME_CMSG_USE_SKILL)
 
 
+def _armed_at(state):
+    """The armed swing's own START stamp: the instant `frozen` pins a windup door to.
+    Read with .get and falling back to the wall clock, so a server mutation that arms
+    nothing FAILS the check behind the door instead of aborting the file on None."""
+    return (state.get("player_swing") or {}).get("armed_at", _time.time())
+
+
 def _rewind(state, seconds):
     for cast in state.get("pending_casts", ()):
         for k in ("e5_at", "e3_at", "e6_at", "begin_at"):
@@ -568,7 +575,7 @@ def section_landing_split():
         sw["lands_at"] -= offset_from_start
         state["player_last_swing"] -= offset_from_start
         sent.clear()
-        frozen(sw["armed_at"], authsrv.cancel_on_move, send, state, 0)
+        frozen(_armed_at(state), authsrv.cancel_on_move, send, state, 0)
         stops = [v for op, v, _l in sent
                  if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                  and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
@@ -747,7 +754,7 @@ def section_cancel_action_door():
     sent.clear()
     # Esc AT the swing's armed_at (`frozen`), mid-windup as the corpus instants were: the
     # door's [3] reads its own clock against lands_at, 0.775 s after the stamp.
-    frozen(state["player_swing"]["armed_at"], authsrv.cancel_action, send, state, 0)
+    frozen(_armed_at(state), authsrv.cancel_action, send, state, 0)
     pair = [(op, v) for op, v, _ in sent]
     # THE ORDER IS STILL THE POINT and it is still pinned -- what changed
     # is that the second half only exists when something SET the hold. An
@@ -882,7 +889,7 @@ def section_skill_stop_windup():
             # exemption works, because a between-swing instant sends no [3] either.
             target = 10 if attack else 0
             if phase == "windup":
-                frozen(sw["armed_at"], _press, authsrv, send, state, skill=42, copy=7,
+                frozen(_armed_at(state), _press, authsrv, send, state, skill=42, copy=7,
                        target=target)
             else:
                 _press(authsrv, send, state, skill=42, copy=7, target=target)
@@ -949,7 +956,7 @@ def section_skill_stop_windup():
     # press_in above: on the wall clock their [3]s were the 0.775 s windup outlasting
     # the doors, and an expired one reds all three on the machine's speed.
     def mid(st):
-        t = st["player_swing"]["armed_at"]
+        t = _armed_at(st)
         return lambda fn, *a, **kw: frozen(t, fn, *a, **kw)
 
     HOLD = authsrv.agents.GV_DISABLED
