@@ -4842,26 +4842,36 @@ def section_areas_over_time():
               "never previous + period (a re-based schedule would put k = 2 at +2.3 and serve "
               "nothing at +2.0)", str((late1, late2)))
         # (g) the last_hit arm: the player's own single-target spell right after a tick
+        # The tick, the pre-D6 call, the press and its E5 all run AT one instant t30g
+        # (`frozen`, test_position_trust). hit_enemy's swing gate is its own clock against
+        # the tick's last_hit stamp, ATTACK_INTERVAL (1.75 s) wide: past it the pre-D6 hit
+        # landed and this went red on the machine's speed. The Flare's E5 only tests "a
+        # spell is not a swing" inside that interval, so it runs there too, and the stamp's
+        # own age is read at the same instant rather than after the press and the E5.
+        from test_position_trust import frozen                   # noqa: PLC0415
         st, sent, send = player_cast(197)
         sent.clear()
-        _aot_advance(st, send, 1.0)                              # k = 1 stamps FOE's last_hit
+        t30g = time.time()
+        frozen(t30g, _aot_advance, st, send, 1.0)                # k = 1 stamps FOE's last_hit
         stamped = st["agents"][FOE]["last_hit"]
         hp = st["agents"][FOE]["health"]
         sent.clear()
-        bad = authsrv.hit_enemy(send, st, FOE, 1, exact=60.0, swing=False, label="pre-D6 arm")
+        bad = frozen(t30g, authsrv.hit_enemy, send, st, FOE, 1, exact=60.0, swing=False,
+                     label="pre-D6 arm")
         bad_sent = list(sent)
         sent.clear()
         for cast in list(st["pending_casts"]):
             st["pending_casts"].remove(cast)
         authsrv.skill_projectile = lambda sid: 343 if sid == 186 else None    # Flare with no flight
-        authsrv.handle_skill_press([0, 194, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        frozen(t30g, authsrv.handle_skill_press, [0, 194, 0, FOE], send, st, 1,
+               authsrv.GAME_CMSG_USE_SKILL)
         sent.clear()
         for cast in st["pending_casts"]:
             for kk in ("begin_at", "e5_at", "e3_at", "e6_at"):
                 cast[kk] -= 30.0
-        authsrv.cast_tick(send, st, 1)
+        frozen(t30g, authsrv.cast_tick, send, st, 1)
         authsrv.skill_projectile = lambda sid: 343 if sid in (186, 194) else None
-        check(stamped > 0.0 and time.time() - stamped < authsrv.ATTACK_INTERVAL
+        check(stamped > 0.0 and t30g - stamped < authsrv.ATTACK_INTERVAL
               and bad is None and words(bad_sent) == [] and hp == 9000.0 - 60.0
               and [v[1:3] for v in words(sent)] == [[FOE, PLAYER]]
               and st["agents"][FOE]["health"] == 9000.0 - 120.0,
