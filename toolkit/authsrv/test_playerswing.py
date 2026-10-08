@@ -4016,11 +4016,14 @@ def section_press_stop_hold():
         saved = authsrv.PRESS_STOP_ON_BODY
         authsrv.PRESS_STOP_ON_BODY = on_body
         try:
-            authsrv.begin_attack(send_p, stp, 10, 0)
+            # The press and its tick AT the report's `age` (`frozen`): both reckon the body
+            # on the server's own clock, and 9l-h's -- 107 u in at 0.6 s, walking through
+            # the target -- leaves the 128 u reach 0.82 s after this stamp on the wall clock.
+            frozen(t, authsrv.begin_attack, send_p, stp, 10, 0)
             batch = [("8:%d" % v[2]) if op == INT and v[0] == GV8 else op
                      for op, v, _l in sent_p]
             sent_p.clear()
-            authsrv.attack_tick(send_p, stp, 0)
+            frozen(t, authsrv.attack_tick, send_p, stp, 0)
         finally:
             authsrv.PRESS_STOP_ON_BODY = saved
         tick = [op for op, _v, _l in sent_p]
