@@ -2916,27 +2916,38 @@ named where they fall.
 #### CASTAI-RM1 — retail's AI removals go only at a carrier, at any health
 
 OBSERVED (castethogram's rows; the status bit read strictly before the announce in stream
-order, ZF22):
+order, ZF22) for the casts, the carrier bit and the self-form. The TARGET HEALTH columns are
+castethogram's RECONSTRUCTION (`health_at`: the 16 / 17 / 55 deltas integrated from a
+full-health create, clamped at 1.0) — 84 of the 92 275 readings, 10 of the 14 277s and 9
+of the 10 301s carry no anchoring health word ("create-full (no 34)"), every 1.000 among
+them:
 
-| Skill | AI casts | at a body with the bit | self-form | target health min / median / max | ≥ 0.9 |
+| Skill | AI casts | at a body with the bit | self-form | target health min / median / max (RECONSTRUCTION) | ≥ 0.9 |
 |---|---|---|---|---|---|
 | 275 Mend Condition (byte 4) | 92 (the Smiting Monks) | 92 (condition 0x02) | 0 | 0.035 / 0.563 / 1.000 | 2 |
 | 277 Mend Ailment (byte 3) | 14 (the Elementalists) | 14 (condition) | 3 | 0.068 / 0.485 / 0.857 | 0 |
-| 301 Remove Hex (byte 3) | 10 (Elementalists 7, the henchman Healer 3) | 10 (hexed 0x800) | 3 | 0.239 / 0.906 / 1.000 | 5 |
+| 301 Remove Hex (byte 3) | 10 (Elementalists 7, the henchman Healer 3) | 10 (hexed 0x800) | 3 | 0.239 / 0.812 / 1.000 | 5 |
 
 **106 of 106 cures and 10 of 10 hex removals at a carrier, 0 at a clean body.** An 11th
 Remove Hex, the Healer's self-form cast on the gapped `:65009` prefix, scores the same under
 `zaishenrun --prefix` (Z1.P2: 4 of 4 hexed). 276 itself has **0** retail casts — that it
 rides the same rule is RECONSTRUCTION by class. The caster is a legal target for byte 3 (6
 self-form casts, one of them the Healer's 301 stopped by a `[59]`) and never for byte 4 (0 of
-92). **There is no health floor**: retail cured a monk at 1.000 and Remove Hexed four bodies
-at 0.906–1.000 (the henchman Healer's three at 0.997–1.000). **Triage correction:** "5
+92). **There is no health floor**, on the reconstructed health: retail cured a monk read at
+1.000 and Remove Hexed four bodies read at 0.906–1.000 (the henchman Healer's three at
+0.9965–1.000), none of those readings anchored by a health word — so "no floor" rests on
+the reconstruction and on the WIKI line below (cleansing even conditions about to wear
+off), not on a measured 100 %. (A first cut of this table gave 301's median as 0.906, the
+upper of the two middle values; the review's EV-3 re-derived 0.812.) **Triage correction:** "5
 self-form 277s" is zaishenrun Z3.P3's 5 self-form casts, which are 3 Mend Ailments and 2
 Remove Hexes; the conclusion (byte 3 admits the caster) stands. Tier: the Zaishen teams are
-CASTAI-W2's hero tier and the Healer is a henchman — the same AI class as our party bodies
-(WIKI, *Hero behavior* rev 2741080: heroes and henchmen share the AI and cleanse conditions
-and hexes on allies); for a normal-mode MONSTER this is RECONSTRUCTION, as §17 says of the
-live-effect gate.
+CASTAI-W2's hero tier and the Healer is a henchman. WIKI (*Hero behavior* rev 2741080, the
+vault's `castai-2026-09-27` extraction): "NPCs will try to cleanse allies of conditions",
+even ones about to wear off, and they cast hex removal "indiscriminately". The page says
+NPCs; it does **not** say henchmen share the heroes' AI (the review's EV-6 — the first cut
+attributed that to it), so that the henchman Healer is the AI class our party bodies model
+is RECONSTRUCTION, and for a normal-mode MONSTER the whole rule is RECONSTRUCTION, as §17
+says of the live-effect gate.
 
 #### CASTAI-RM2 — the hex-removal wire
 
@@ -2944,10 +2955,12 @@ OBSERVED, every live 301 off the gapped connection (a `livewire.decode_conn` sca
 announces — the 10 AI casts above and 4 human ones on `20260817T231139` — 13 completed with
 `[58, caster, 0]` and 1 stopped by `[59]`. **11 of the 13 completion batches carry `[7, T,
 1]` `[7, T, class]` (class 9 on the Healer's two targets, 12 elsewhere) and an `0x00F1` with
-0x800 clear** — the target's last hex gone. The other 2 are the late removers at 459.68: a
-301 completed 0.75 s earlier at 458.93 had already cleaned their target, and they send their
+0x800 clear** — the target's last hex gone. The other 2 are the late removers announced at
+459.68 while their target was still hexed: a 301 announced at 458.93 and completed at 459.95
+— 0.73 s before theirs completed at 460.68 — had already cleaned it, and they send their
 `[58]` and visual and nothing else — they land on nothing, as `remove_hexes` returns `[]`
-for a bare wearer. An `0x00A0`-form completion carries `[20, T, caster, 537]` (Smite Hex
+for a bare wearer. (The first cut wrote "completed 0.75 s earlier at 458.93", the announce
+for the completion; the review's EV-7, re-read with `livewire.decode_conn`.) An `0x00A0`-form completion carries `[20, T, caster, 537]` (Smite Hex
 302's is 536); 537 has no `skill_visual` row and was left out (cosmetic). **A removed
 Incendiary Bonds fires nothing**: 0 payoff, 4 of 4 (studies/skills 61.1 — those are the 4
 human casts above; WIKI *Incendiary Bonds* rev 2733032). **How many per cast is not on the
@@ -2970,11 +2983,22 @@ there is still one `live_effect_hold` call per loop — the hold order stays tar
 live-effect → reach → pay. It is **the class `PLAN.md` §7 Q19 names** ("can this body
 legally and usefully cast the slot it picked"), extended to removals, shipped under the
 derived + flagged + tested rule. Remove Hex 301 works: `skill_effect.301 removes_hexes = 1`
-(a capture row), `remove_hexes` beside `remove_conditions` (newest first; the existing
-0x0044 / aura-off / `push_status` close; no end burst), a `resolve_heal` branch riding the
-cure rule's flag. `toolkit/authsrv/test_castgate.py` §7 (bare-machine, carried rows) and §8
-(vault: the retail casts replayed through `removal_target` — 0 of 116 held, retail's own
-target named every time; a known-bad 0.9 floor refuses 2 of 92 275s and 5 of 10 301s).
+(an INVENTED row — the count is chosen, the capture shows only that a hex goes; it said
+`capture` until the review's EV-5), `remove_hexes` beside `remove_conditions` (newest
+first; the existing 0x0044 / aura-off / `push_status` / speed / attributes / regen close;
+no end burst), a `resolve_heal` branch that reads `removes_hexes` only with BOTH the cure
+rule and `REMOVAL_NEEDS_AFFLICTION` on — so the one flag reverts the whole lane, aim and
+removal (the first cut rode the cure rule alone, and the revert then aimed a hero's 301 the
+old way AND removed the hex: the review's EV-2). `toolkit/authsrv/test_castgate.py` §7
+(bare-machine, carried rows; every driven tick under a `len(bar) + 1` pick bound, so a
+spin is a FAIL by name; both loops' self cures; a removed Suffering's [44] back to 0; the
+revert reproducing `642d8957`'s bytes for the 276 fights AND for a 301 at a hexed player and
+a self-hexed hostile's 301) and §8 (vault: the retail casts replayed through
+`removal_target` — 0 of 116 held, retail's own target named every time; the known-bad arm
+asks the server's own pre-gate rule, `hostile_heal_target` with the gate off, and it misses
+exactly the casts at a target at or above 0.9 — 2 of 92 275s, 5 of 10 301s, 0 of 14 277s).
+Sections 2-5 now drive the Hatcher's bar in the shipping configuration, the removal gate on
+(276 held at the clean squad, every other slot firing).
 
 #### CASTAI-RM4 — the pick among several carriers is ours
 

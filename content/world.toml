@@ -601,8 +601,10 @@ remove_conditions already honours). ~~RECONSTRUCTION on the wire: no retail cast
 has been captured (46.3 stands)~~ -- STALE since the Zaishen tapes, refreshed 2026-10-07
 (CASTAI-RM1, studies/monsterai 18.5): OBSERVED, 92 retail AI casts of 275 on
 20260929T100038 (the Smiting Monks), every one 0x00A0 [60] at ANOTHER monk carrying the
-condition bit 0x02, 0 at a clean one, 0 self-targets (byte 4 agrees), target health
-0.035 / median 0.563 / 1.000. The completion batch's cure wire is on tape for the first
+condition bit 0x02, 0 at a clean one, 0 self-targets (byte 4 agrees); target health
+0.035 / median 0.563 / 1.000 is castethogram's RECONSTRUCTION (84 of the 92 readings,
+both 1.000s among them, unanchored by any health word). The completion batch's cure wire
+is on tape for the first
 time and is NOT yet joined against remove_conditions' batch (named, not done). The
 numbers are the client's own row. studies/skills 58."""
 
@@ -614,16 +616,20 @@ numbers are the client's own row. studies/skills 58."""
 [skill_effect.301]
 removes_hexes = 1
 [skill_effect.301.provenance]
-source = "capture"
-capture = "20260928T103123"
-origin = "live"
-mode = "base"
+source = "invented"
+note = """Ours: the row's one value, the COUNT 1, is chosen rather than observed (see
+`verified` -- the wire shows THAT a Remove Hex removes a hex, never how many). Until
+the pass-9 review of 2026-10-07 this row said source = "capture" over a value its own text
+called RECONSTRUCTION; the capture evidence is in `verified`, and the GWW "Remove Hex"
+read that would make it a wiki row is owed."""
 verified = """OBSERVED, CASTAI-RM2 (a livewire scan of every live 301, the gapped :65009 set
 aside by capgaps): 14 announces of 301 (10 AI -- the Zaishen Elementalists x7 and the
 henchman Healer x3 -- and 4 human on 20260817T231139), 13 completed with [58, caster, 0].
 11 of the 13 completion batches carry [7, T, 1] [7, T, class] and an 0x00F1 with 0x800
-clear -- the target's last hex gone; the other 2 (459.68, two late casters) found their
-target already cleaned by a 301 completed 0.75 s before and sent neither. A removed
+clear -- the target's last hex gone; the other 2 (two late casters on 20260928T103123,
+announced at 459.68 while their target was still hexed, completed at 460.68) found it
+already cleaned by a 301 announced at 458.93 and completed at 459.95, 0.73 s before
+theirs, and sent neither. A removed
 Incendiary Bonds hex fired NO payoff, 4 of 4 (studies/skills 61.1). Every AI 301 went at
 a hexed body (10 of 10, castethogram hexed_bit). The COUNT, 1: the client record (type 5,
 target byte 3, args 0 -- no count slot, toolkit/clientscan/skilldesc.py --row 301 flags

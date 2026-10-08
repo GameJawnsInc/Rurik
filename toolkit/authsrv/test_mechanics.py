@@ -1921,12 +1921,20 @@ try:
     authsrv.NPC_FOLLOW = False
     authsrv.CONDITION_HEAL_RULE = True
     st = world(1)
+    # RE-AIMED 2026-10-07 (the CASTAI-RM review, CD-3): the lone hostile BLEEDS. Since
+    # CASTAI-RM a clean lone hostile's 276 is held by the removal gate before the byte-4
+    # question is asked (nobody carries a condition), so this passed for a reason its
+    # label does not give. With the CASTER the only carrier, the hold is byte 4's own:
+    # removal_target never offers the caster for an other-ally skill. (The HEAL path's
+    # byte-4 rule is held by test_agentlife SLICE-B3 (3), on Heal Other 286.)
+    st["effects"].apply(10, BLEED, 0, 30.0, time.time(), type_code=8)
     sent = tick(st)
     started = [v for op, v, _l in sent if op == INT_T
                and v[0] == agents.GV_ATTACK_STARTED]
     check(not casts(sent) and len(started) == 1 and st["agents"][10].get(
               "skill_ready") == [0.0],
-          "alone: no cast of 276 goes out, the slot STAYS ready (not "
+          "alone, and BLEEDING: no cast of 276 goes out -- byte 4 never names "
+          "the caster, even as the only carrier -- the slot STAYS ready (not "
           "consumed), and the hostile swings instead",
           f"casts={casts(sent)} started={started} ready="
           f"{st['agents'][10]['skill_ready']}")
@@ -2145,11 +2153,16 @@ try:
     # RE-AIMED 2026-10-07 (CASTAI-RM, studies/monsterai 18.5): the checks below
     # measure a party heal DRIVEN BY HEALTH (a hurt player draws the cast, a whole
     # one does not), and 276 is a REMOVAL slot now -- it needs an afflicted target,
-    # so a hurt CLEAN player draws no 276 at all, by design. Their bar is Orison of
-    # Healing (281, target byte 3), the slice monk's own heal; the landing check at
-    # the end keeps 276 and a bleeding player, the cure it exists for.
-    ORISON = 281
-    bar = ((ORISON, 1.0, 2.0),)
+    # so a hurt CLEAN player draws no 276 at all, by design. Their bar is Heal Other
+    # (286): target byte 4 like 276, a heal and not a removal, so it walks exactly
+    # the branch 276 walked here before -- ally_cast_tick's `target = _heal_t`, the
+    # hurt-most OTHER ally -- and RECORD carries its row (the vault's, held by
+    # section 42). The first re-aim named Orison 281 "target byte 3", but RECORD has
+    # no 281 row, so it ran as a rowless id through the same fall-through: the
+    # review's CD-2. The landing check at the end keeps 276 and a bleeding player,
+    # the cure it exists for.
+    HEAL_OTHER = 286
+    bar = ((HEAL_OTHER, 0.75, 3.0),)
     rc_bar = ((RC, 0.75, 2.0),)
     authsrv.HERO_SKILLS = bar
 

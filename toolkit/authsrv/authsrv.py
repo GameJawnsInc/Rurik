@@ -29836,9 +29836,14 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
     heal_if_removed = (bool(erow.get("heal_if_removed"))
                        if CONDITION_HEAL_RULE else False)
     # CASTAI-RM: Remove Hex's shape -- a HEX removal, no heal (`removes_hexes`, a count
-    # or "all", newest first: remove_hexes). Rides the cure rule's flag: under
-    # --no-condition-heal-rule nothing is removed, as before.
-    removes_hexes = erow.get("removes_hexes") if CONDITION_HEAL_RULE else None
+    # or "all", newest first: remove_hexes). Rides BOTH flags: under
+    # --no-condition-heal-rule nothing is removed, as before; and under
+    # --no-removal-needs-affliction nothing is either, because that flag is the lane's
+    # whole revert -- 301 had no effect row before 2026-10-07, so its cast removed
+    # nothing anywhere (the review's EV-2: riding the cure rule alone left the revert
+    # aiming 301 the old way AND removing the hex, a world no build ever ran).
+    removes_hexes = (erow.get("removes_hexes")
+                     if CONDITION_HEAL_RULE and REMOVAL_NEEDS_AFFLICTION else None)
     if not healed and not removes and not removes_hexes:
         return None
     if CONDITION_HEAL_RULE:
@@ -31213,18 +31218,26 @@ HOSTILE_ALLY_SKILL_SELF = True
 # OBSERVED, retail (castethogram --json over the Zaishen tapes; CASTAI-RM1): 106 of 106
 # AI condition cures at a body carrying the condition bit (275 x92 on 20260929T100038, 277
 # x14 on 20260928T103123) and 10 of 10 AI Remove Hex at a hexed body (Zaishen x7, the
-# henchman Healer x3 -- the same AI class as our party bodies; an 11th, on the gapped
-# :65009 prefix, scores the same under zaishenrun --prefix), 0 at a clean one. NO HEALTH
-# FLOOR: 275's targets at 0.035 / median 0.563 / max 1.000 (2 of 92 at >= 0.9), 301's at
-# 0.239 / 0.906 / 1.000 (5 of 10). The caster IS a candidate for the byte-3 kind (277,
-# 301: 6 self-form casts) and never for byte 4 (275: 0 of 92). WIKI (GWW "Hero behavior"
-# rev 2741080): heroes and henchmen cleanse conditions and hexes on allies. Retail's
-# Zaishen tier is CASTAI-W2's hero tier; for a normal-mode monster this is RECONSTRUCTION.
-# WHICH of several carriers: the lowest health fraction, then the lowest id --
-# RECONSTRUCTION (no tape shows a choice among several afflicted allies).
-# --no-removal-needs-affliction reverts: the heal target (the hurt-most under HERO_HEAL_AT)
-# for 275-277 and the caster for a hostile's 301 -- the cast at a clean hurt ally that
-# heals nothing, and no cure for an afflicted ally at full health.
+# henchman Healer x3; an 11th, on the gapped :65009 prefix, scores the same under
+# zaishenrun --prefix), 0 at a clean one -- the carrier counts are the status bit read off
+# the wire. NO HEALTH FLOOR, on castethogram's health RECONSTRUCTION (health_at integrates
+# the 16 / 17 / 55 deltas from a full-health create; 84 of the 92 275 readings and 9 of the
+# 10 301 readings have no anchoring word, the 1.000s among them): 275's targets at 0.035 /
+# median 0.563 / max 1.000 (2 of 92 at >= 0.9), 301's at 0.239 / 0.812 / 1.000 (5 of 10).
+# The caster IS a candidate for the byte-3 kind (277, 301: 6 self-form casts) and never
+# for byte 4 (275: 0 of 92). WIKI (GWW "Hero behavior" rev 2741080, the vault's
+# castai-2026-09-27 extraction): "NPCs will try to cleanse allies of conditions", even ones
+# about to wear off, and cast hex removal "indiscriminately" -- the page says NPCs and does
+# not say henchmen share the heroes' AI, so that the henchman Healer is the AI class our
+# party bodies model is RECONSTRUCTION. Retail's Zaishen tier is CASTAI-W2's hero tier; for
+# a normal-mode monster this is RECONSTRUCTION. WHICH of several carriers: the lowest
+# health fraction, then the lowest id -- RECONSTRUCTION (no tape shows a choice among
+# several afflicted allies).
+# --no-removal-needs-affliction reverts the WHOLE of CASTAI-RM: the heal target (the
+# hurt-most under HERO_HEAL_AT) for 275-277 and the caster for a hostile's 301 -- the cast
+# at a clean hurt ally that heals nothing, and no cure for an afflicted ally at full
+# health -- AND Remove Hex's removal (resolve_heal reads `removes_hexes` only with this
+# on), so a 301 removes nothing anywhere, as before 2026-10-07 when it had no row.
 REMOVAL_NEEDS_AFFLICTION = True
 
 
@@ -49317,7 +49330,8 @@ def main():
         print("[enemy] --no-removal-needs-affliction: a removal slot (275 / 276 / 277, 301) "
               "aims where it did before 2026-10-07 -- the hurt-most ally under HERO_HEAL_AT "
               "for a cure (cast at a clean ally, healing nothing; an afflicted ally at full "
-              "health never cured), a hostile's 301 at itself; retail cured only carriers, "
+              "health never cured), a hostile's 301 at itself -- and Remove Hex 301 "
+              "removes nothing, as when it had no row; retail cured only carriers, "
               "106 of 106 and 10 of 10 (CASTAI-RM1).", flush=True)
     if a.self_cast_names_target:
         global SELF_CAST_FORM
@@ -50678,7 +50692,8 @@ def main():
         global CONDITION_HEAL_RULE
         CONDITION_HEAL_RULE = False
         print("NO CONDITION-HEAL RULE: Restore Condition is a flat self-heal "
-              "again (--no-condition-heal-rule, the known-bad arm).",
+              "again (--no-condition-heal-rule, the known-bad arm); no cure removes a "
+              "condition and Remove Hex 301 removes no hex (CASTAI-RM).",
               flush=True)
     if a.no_casting_armour:
         global CASTING_ARMOUR

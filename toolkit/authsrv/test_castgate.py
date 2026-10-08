@@ -24,18 +24,19 @@ WHAT IT IS REALLY CHECKING. Two things shipped together, each behind its own rev
   1  the leaf predicate (episodemods.live_effect_class / carries_live_effect) on
      literal inputs -- every edge the docstring states; runs on a bare machine.
   2  (a) the Hatcher's bar (ENEMY_SKILL_BAR, {276, 253, 312, 289}) over a 120 s fight
-     through the real ticks on a fake clock: never two live 253 episodes on the player,
-     253 re-cast after every close, every slot fires, and after each close the gate's
-     first look at 253 HOLDS it for one AI beat (LIVE_EFFECT_REARM, 0.25 s) and the
-     first look past the beat lets it through and it is cast THAT tick; (a') a lone-253
-     caster re-casts exactly 0.25 s (5 ticks) after each close -- never inside retail's
-     0.228 s minimum (n=95) -- and its known-bad arm, --live-effect-rearm 0, re-casts on
-     the close's own tick (gap 0, the slice as first shipped); the recharge never
-     charged by a hold.
-  3  (b) the KNOWN-BAD arm: --no-skip-live-effect gives the pre-CASTAI server's slot
-     sequence exactly (the literal below was recorded by driving THIS fixture through
-     a `git show 19213513:toolkit/authsrv/authsrv.py` export) and the stacked episodes
-     come back.
+     through the real ticks on a fake clock, in the SHIPPING configuration (the removal
+     gate ON, as every gate here is): never two live 253 episodes on the player, 253
+     re-cast after every close, 276 never cast at the clean squad and every OTHER slot
+     fires, and after each close the gate's first look at 253 HOLDS it for one AI beat
+     (LIVE_EFFECT_REARM, 0.25 s) and the first look past the beat lets it through and it
+     is cast THAT tick; (a') a lone-253 caster re-casts exactly 0.25 s (5 ticks) after
+     each close -- never inside retail's 0.228 s minimum (n=95) -- and its known-bad arm,
+     --live-effect-rearm 0, re-casts on the close's own tick (gap 0, the slice as first
+     shipped); the recharge never charged by a hold.
+  3  (b) the KNOWN-BAD arm: --no-skip-live-effect with --no-removal-needs-affliction (the
+     pre-CASTAI server had neither gate) gives that server's slot sequence exactly (the
+     literal below was recorded by driving THIS fixture through a `git show
+     19213513:toolkit/authsrv/authsrv.py` export) and the stacked episodes come back.
   4  (c) a stance is refreshed while live, a hostile's and a hero's; (d) a
      self-enchantment is held while the CASTER carries it, and not while only the
      player does; (e) a party body through ally_cast_tick holds the same way and its
@@ -60,28 +61,35 @@ WHAT IT IS REALLY CHECKING. Two things shipped together, each behind its own rev
      CARRIED rows (RM_RECORD), so it runs on a bare machine: (a) the predicates
      (episodemods.removal_class / carries_removable) on literal inputs and on the shipped
      hand rows; (b) removal_target's candidates and order; (c) a hostile and a hero with
-     [276, 281] and a hurt CLEAN ally cast only 281 (276 held, uncharged, one look a tick);
-     (d) Bleeding planted: 276 lands, removes it, heals once -- and at 100 % health too;
-     (e) two allies, the afflicted one named over the hurt-most clean one; (f) 277 cures
-     its own caster, 276 never; (g) a hero cures the bleeding player at full health;
+     [276, 281] and a hurt CLEAN ally cast only 281 (276 held, uncharged, one look a tick
+     -- every driven tick runs pick_skill under a counter that raises past len(bar) + 1,
+     so a hold that forgot `_held` is a FAIL by name, not a hang); (d) Bleeding planted:
+     276 lands, removes it, heals once -- and at 100 % health too; (e) two allies, the
+     afflicted one named over the hurt-most clean one; (f) 277 cures its own caster, 276
+     never -- in the hostile loop AND the party loop (a hero's 277 on its own Bleeding,
+     a hero's 301 on its own hex); (g) a hero cures the bleeding player at full health;
      (h) 301 held with no hex, the NEWEST of two removed, the [7]s and the 0x800 clear only
      with the last, an Incendiary Bonds removed fires no end burst (a control shows the
-     expiry path does); (i) KNOWN-BAD ARM: the flag off reproduces 642d8957's bytes
-     (RM_HEAD); (j) source checks.
+     expiry path does), a removed Suffering (a hex with pips) sends its [44] back to 0;
+     (i) KNOWN-BAD ARM: the flag off reproduces 642d8957's bytes (RM_HEAD) -- the 276
+     fights, and a hero's 301 at a hexed player and a self-hexed hostile's 301, which
+     remove nothing there; (j) source checks.
   8  (vault-only) (a) the carried rows against the vault's own; (b) the RETAIL removal
      casts (castethogram over the two Zaishen tapes) replayed through removal_target:
-     it holds 0 of 116 and names retail's target each time; KNOWN-BAD ARM, a 0.9 health
-     floor, refuses 2 of 92 275s and 5 of 10 301s.
+     it holds 0 of 116 and names retail's target each time; KNOWN-BAD ARM, the pre-gate
+     heal rule (hostile_heal_target, real server code) over the same casts, refuses
+     every one at a target at 0.9 or above: 2 of 92 275s and 5 of 10 301s.
 
 Sections 2-5's driven halves need the vault's skills table. They declare a skip ONLY when
 the vault is absent (vaultpath resolves no content/skills.toml); a present vault missing
-a row, or with 253 not at 18 s, is a FAIL. The floor is the BARE-MACHINE green run's (see
-the ledger line).
+a row, or with 253 not at 18 s, is a FAIL. The floor is per machine, decided on the
+vault's content DIRECTORY (see the ledger line).
 """
 import ast
 import contextlib
 import io
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -107,7 +115,20 @@ import vaultpath                                               # noqa: E402
 # rows_problem). RE-MEASURED 2026-10-07 after CASTAI-RM (section 7 runs on its CARRIED
 # rows, so it is bare-machine; section 8 is vault-only): 88 bare (36 + 52), 138 with the
 # vault (+ section 8's 1 row check and 4 replay checks).
-LEDGER = checks.Ledger("cast gate (CASTAI)", floor=88)
+# 2026-10-07 (the CASTAI-RM review, CD-7): TWO floors, decided on the vault's content
+# DIRECTORY -- test_mechanics' and test_agentlife's FLOOR_VAULT / FLOOR_BARE pattern --
+# and never on what loaded, so a vault run that silently loses its vault-only checks is
+# red (one floor of 88 let a vault run with sections 2-5 and 8 gone print ALL PASSED).
+# MEASURED after the review's fixes, each from its green run: 146 with the vault, 95
+# bare with RURIK_VAULT at a nonexistent path (4 declared skips: sections 2-4, section
+# 5's driven half, 8 (a), 8 (b)). The +8 / +7 over 138 / 88: section 7 (f)'s two party-loop
+# self cures, (h)'s removed Suffering [44], (i)'s two 301 reverts with their gate-ON
+# contrasts (+4), and -- vault only -- section 2's "the removal gate holds 276" check.
+HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
+FLOOR_VAULT = 146
+FLOOR_BARE = 95
+LEDGER = checks.Ledger("cast gate (CASTAI)",
+                       floor=FLOOR_VAULT if HAVE_VAULT_CONTENT else FLOOR_BARE)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -161,18 +182,19 @@ def arm(A=authsrv, clock=None, **flags):
     """Set the named module flags (and a fake clock) for the block, then restore."""
     saved = {k: getattr(A, k) for k in FLAGS if hasattr(A, k)}
     saved_time = A.time
-    # REMOVAL_NEEDS_AFFLICTION defaults OFF in this fixture, and that is a re-aim, not a
-    # weakening (CASTAI-RM, 2026-10-07): sections 2-5 measure the LIVE-EFFECT gate and the
-    # self-cast form, and their Hatcher bar's 276 at a clean hurt ally is part of the
-    # recorded HEAD_SEQUENCE (19213513's bytes). With the removal gate on, that 276 is
-    # held (nobody carries a condition) and the sequence they compare is a different
-    # one. Sections 7-8 measure the removal gate and arm it ON explicitly (their own
-    # known-bad arm turns it off again).
+    # REMOVAL_NEEDS_AFFLICTION defaults ON in this fixture, as it ships (CASTAI-RM,
+    # 2026-10-07). The first cut defaulted it OFF for every section so that sections 2-5's
+    # Hatcher bar kept casting 276 at its clean hurt ally -- which left the bar every
+    # standing hostile carries driven only in a configuration no run ships (the review's
+    # CD-4: the removal hold, its re-pick and the live-effect hold on 253 / 289 together
+    # were never exercised). Now sections 2-5 run the shipping combination; the one place
+    # that needs the pre-CASTAI server, section 3's HEAD_SEQUENCE, turns it off by name,
+    # and section 7's known-bad arms do the same.
     base = {"SKIP_LIVE_EFFECT": True, "SELF_CAST_FORM": True, "CAST_FORM": "follows-target",
             "ENERGY": False, "NPC_FOLLOW": False, "CASTER_OPENING": True,
             "CONDITION_HEAL_RULE": True, "EFFECTS": True, "INSTANT_ANNOUNCE": True,
             "LIVE_EFFECT_REARM": BEAT, "HOSTILE_ALLY_SKILL_SELF": True,
-            "REMOVAL_NEEDS_AFFLICTION": False}
+            "REMOVAL_NEEDS_AFFLICTION": True}
     base.update(flags)
     for k, v in base.items():
         setattr(A, k, v)
@@ -367,12 +389,13 @@ def section_predicate():
 
 
 # ---------------------------------------------------------------------------------
-def _hatcher_fight(skip, secs=120.0):
-    with arm(clock=Clock(T0), SKIP_LIVE_EFFECT=skip):
+def _hatcher_fight(skip, secs=120.0, removal=True):
+    with arm(clock=Clock(T0), SKIP_LIVE_EFFECT=skip, REMOVAL_NEEDS_AFFLICTION=removal):
         st = hatcher_world(authsrv)
-        with recording_consults() as seen:
+        with recording_consults() as seen, recording_removals() as rm_seen:
             rec = fight(authsrv, st, secs)
     rec["consults"] = seen
+    rec["removals"] = rm_seen
     return rec
 
 
@@ -406,10 +429,27 @@ def section_hatcher():
           "every re-cast of 253 starts AFTER the previous episode's close -- one close "
           "between each pair of casts", f"casts {n253} closes {closes}")
     fired = {s for _i, s in hat}
-    check(fired == {RESTORE, SCOURGE, HOLY, VITAL},
-          "every other slot still fires -- the hold steps the cursor past 253 rather "
-          "than stalling the bar (DESKWORK-D8 step 4's lesson)",
+    # RE-AIMED 2026-10-07 (CASTAI-RM; the review's CD-4): this ran with the removal gate
+    # OFF and asked for all four slots. In the shipping configuration the squad is clean,
+    # so 276 is never cast -- the removal gate holds it -- and the property this check
+    # exists for is unchanged: the holds (276's AND 253's) step the cursor past rather
+    # than stalling the bar, so every OTHER slot fires.
+    check(fired == {SCOURGE, HOLY, VITAL},
+          "276 is never cast at the clean squad, and every OTHER slot fires -- the holds "
+          "step the cursor past 276 and 253 rather than stalling the bar (DESKWORK-D8 "
+          "step 4's lesson)",
           f"{sorted(fired)} counts {[sum(1 for _i, s in hat if s == k) for k in (RESTORE, SCOURGE, HOLY, VITAL)]}")
+    rm_looks = [(cid, kind, klass, out) for _t, cid, kind, klass, out in rec["removals"]
+                if cid == HOSTILE]
+    rm_lines = [ln for ln in rec["log"].splitlines() if "[CASTAI-RM]" in ln]
+    check(len(rm_looks) >= 10 and all(o is None and k == "other_ally" and c == "condition"
+                                       for _a, k, c, o in rm_looks)
+          and rm_lines and all("holds skill 276" in ln for ln in rm_lines)
+          and len(rm_lines) <= int(120.0 / 5.0) + 1,
+          "  and it IS the removal gate that holds it: every look at 276 asks removal_target "
+          "for an other-ally condition carrier and gets None, the line at most once per 5 s",
+          f"{len(rm_looks)} looks, answers {sorted({o for *_x, o in rm_looks}, key=str)}, "
+          f"{len(rm_lines)} lines")
     # AFTER A CLOSE: THE FIRST LOOK HOLDS FOR ONE BEAT, THE FIRST LOOK PAST IT CASTS.
     looks = [(t, held) for t, a, s, held in rec["consults"] if a == HOSTILE and s == SCOURGE]
     good, detail = True, []
@@ -487,11 +527,14 @@ def section_hatcher():
 # ---------------------------------------------------------------------------------
 def section_known_bad():
     print("== 3. (b) the KNOWN-BAD arm: --no-skip-live-effect is the pre-CASTAI server ==")
-    rec = _hatcher_fight(False)
+    # Both CASTAI gates off, by name: 19213513 had neither the live-effect gate nor the
+    # removal gate (CASTAI-RM, 2026-10-07), and its sequence casts 276 at the clean ally.
+    rec = _hatcher_fight(False, removal=False)
     hat = [(i, s) for i, a, s in rec["casts"] if a == HOSTILE]
     check(hat[:len(HEAD_SEQUENCE)] == HEAD_SEQUENCE,
           "the first 24 casts (tick, skill) equal 19213513's own -- round robin's sequence "
-          "exactly as before", f"{hat[:len(HEAD_SEQUENCE)]}")
+          "exactly as before (--no-skip-live-effect --no-removal-needs-affliction)",
+          f"{hat[:len(HEAD_SEQUENCE)]}")
     check(rec["live"][(P, SCOURGE)] >= 2,
           "and the stacked episodes come back: overlapping 253s on the player",
           f"max live {rec['live'][(P, SCOURGE)]}")
@@ -841,7 +884,14 @@ def _calls(fn, name):
 
 
 def _flips(main_fn, attr, glob):
-    """True when main() holds `if a.<attr>:` whose body sets `<glob> = False`."""
+    """True when main() holds `if a.<attr>:` whose body sets `<glob> = False`, AND main()
+    declares `global <glob>`. Without the global the assignment binds a LOCAL: the flag
+    parses and never reaches the module bool -- the house rule's named defect, and the
+    one this check could not see until the CASTAI-RM review (CD-1: the global line
+    deleted, every caller stayed green). Python applies a `global` to the whole function,
+    so it is looked for anywhere in main(), not only in the If's body."""
+    if not any(isinstance(n, ast.Global) and glob in n.names for n in ast.walk(main_fn)):
+        return False
     for n in ast.walk(main_fn):
         if (isinstance(n, ast.If) and isinstance(n.test, ast.Attribute)
                 and n.test.attr == attr):
@@ -910,6 +960,7 @@ def section_source():
 # it removes, at any health, and is HELD when nobody does (REMOVAL_NEEDS_AFFLICTION,
 # --no-removal-needs-affliction).
 MEND_COND, MEND_AIL, REMOVE_HEX, ORISON, INC_BONDS, EMPATHY = 275, 277, 301, 281, 179, 26
+SUFFERING = 108                      # a hex with health-degeneration pips (skill_effect.108)
 ALLY2, HERO2 = 12, 201
 # The rows sections 7's driven halves read, CARRIED so a bare machine runs them: the
 # vault's LOADED skills rows (toolkit/clientscan/skilltable.py at build 38974), in
@@ -925,6 +976,7 @@ RM_COLUMNS = ("activation", "aftercast", "recharge", "energy", "adrenaline",
 RM_BUILD = 38974
 RM_RECORD = {
     "26": (2.0, 0.75, 10, 10, 0, 0, 2, 5, 4, 5, 0, 0, 0, 0.0, 7, 5, 15, 10, 55, 1, 15, 2077, 2077, False, False),        # Empathy (a Mesmer hex)
+    "108": (1.0, 0.75, 10, 15, 0, 0, 7, 4, 4, 16, 0, 0, 0, 240.0, 1, 6, 30, 0, 3, 0, 0, 2077, 2077, False, False),      # Suffering (a hex with pips)
     "179": (1.0, 0.75, 7, 10, 0, 0, 10, 6, 4, 5, 0, 0, 0, 240.0, 6, 3, 3, 20, 80, 1, 3, 2077, 2077, False, False),      # Incendiary Bonds
     "275": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 5, 70, 0, 0, 2077, 2077, False, False),         # Mend Condition
     "276": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 10, 70, 0, 0, 2077, 2077, False, False),        # Restore Condition
@@ -972,6 +1024,38 @@ def recording_removals(A=authsrv):
         A.removal_target = real
 
 
+class _Unbounded(Exception):
+    """A tick that consulted pick_skill past len(bar) + 1 times for one body."""
+
+
+@contextlib.contextmanager
+def bounded_picks(A=authsrv):
+    """Run pick_skill through a counter that RAISES past len(bar) + 1 picks for one body
+    in one tick (the review's CD-5; test_agentlife's RV-2 pattern, DESKWORK-D8). A tick
+    makes at most that many -- the first pick, then one re-pick per hold, each hold adding
+    a slot `_held` did not have -- so a hold that forgot `_held.add(slot)` re-picks the
+    same slot forever, and run_suite runs a test with NO timeout: the review's mutant hung
+    section 7 for 400 s with no verdict. Raised, it is caught by rm_run and read by the
+    checks as a FAIL by name. pick_skill itself is untouched (test_heroskilltoggle's lock);
+    this wraps the module attribute the loops look up per call."""
+    real = A.pick_skill
+    count = {}
+
+    def bounded(agent, now):
+        key = (id(agent), A.time.time())
+        count[key] = count.get(key, 0) + 1
+        n = len(agent.get("skills") or ())
+        if count[key] > n + 1:
+            raise _Unbounded(f"{count[key]} picks in one tick on a bar of {n} "
+                             f"(slots {[s[0] for s in agent.get('skills') or ()]})")
+        return real(agent, now)
+    A.pick_skill = bounded
+    try:
+        yield
+    finally:
+        A.pick_skill = real
+
+
 def rm_world(bar, who, ally_health=100.0, player_health=1e9):
     """A caster with `bar` and a HURT CLEAN ally: for a hostile (10) a fellow hostile at
     `ally_health` of 500 (11); for a hero (200) the player at `player_health`."""
@@ -989,18 +1073,27 @@ def rm_world(bar, who, ally_health=100.0, player_health=1e9):
 
 def rm_run(bar, who, secs=2.0, gate=True, setup=None, player_health=1e9, ally_health=100.0):
     """Drive the real ticks for `secs` with the removal gate `gate`. The hostile runs
-    enemy_attack_tick, the hero ally_cast_tick; effect_tick first, as the world tick does."""
+    enemy_attack_tick, the hero ally_cast_tick; effect_tick first, as the world tick does.
+    Every tick runs under bounded_picks: an overrun ends the run and is returned as
+    rec["overrun"] (None on a healthy run), with no sends -- so every check reading the
+    run goes red, and the spin check says why."""
     loop = "enemy_attack_tick" if who == HOSTILE else "ally_cast_tick"
+    overrun = None
     with rm_carried(), arm(clock=Clock(T0), REMOVAL_NEEDS_AFFLICTION=gate):
         st = rm_world(bar, who, ally_health=ally_health, player_health=player_health)
         if setup is not None:
             setup(st)
-        with recording_removals() as seen:
-            rec = fight(authsrv, st, secs, ticks=("effect_tick", loop), watch=(),
-                        keep_health=False)
+        with recording_removals() as seen, bounded_picks():
+            try:
+                rec = fight(authsrv, st, secs, ticks=("effect_tick", loop), watch=(),
+                            keep_health=False)
+            except _Unbounded as exc:
+                overrun = f"{exc}"
+                rec = {"casts": [], "live": {}, "closes": {}, "early": {}, "sends": [],
+                       "log": ""}
         rec["want_heal"] = {sid: authsrv.skill_heal(sid, authsrv.agent_skill_rank(
             st["agents"][who], sid)) for sid in (RESTORE, MEND_AIL, MEND_COND, ORISON)}
-    rec["st"], rec["seen"] = st, seen
+    rec["st"], rec["seen"], rec["overrun"] = st, seen, overrun
     rec["ann"] = _announces(rec["sends"])
     return rec
 
@@ -1131,9 +1224,12 @@ def section_rm_driven():
           f"{rec['st']['agents'][HOSTILE]['skill_ready']}")
     check((INT_T, [60, HOSTILE, ALLY, ORISON]) in rec["ann"],
           "  and 281 goes at the hurt ally (the heal rule, unchanged)", f"{rec['ann'][:3]}")
-    check(per_tick and max(per_tick.values()) == 1 and len(per_tick) >= 30,
-          "  276 is consulted ONCE a tick -- the search ends on the held slot (no spin)",
-          f"{len(per_tick)} ticks, max {max(per_tick.values()) if per_tick else None}")
+    check(rec["overrun"] is None and per_tick and max(per_tick.values()) == 1
+          and len(per_tick) >= 30,
+          "  276 is consulted ONCE a tick -- the search ends on the held slot (no spin: "
+          "pick_skill ran under its len(bar) + 1 bound and never overran it)",
+          f"overrun {rec['overrun']}; {len(per_tick)} ticks, "
+          f"max {max(per_tick.values()) if per_tick else None}")
     check(hold and all("holds skill 276" in ln and "nobody carries a condition" in ln
                        for ln in hold) and len(hold) == 1,
           "  its line names the skill and 'nobody carries a condition', once per 5 s",
@@ -1142,11 +1238,12 @@ def section_rm_driven():
     ph = float(agents.PLAYER_HEALTH)
     rec = rm_run(bar, HERO, secs=3.0, player_health=0.4 * ph)
     fired = [s for _i, a, s in rec["casts"] if a == HERO]
-    check(RESTORE not in fired and fired.count(ORISON) >= 1
+    check(rec["overrun"] is None and RESTORE not in fired and fired.count(ORISON) >= 1
           and (INT_T, [60, HERO, P, ORISON]) in rec["ann"]
           and rec["st"]["agents"][HERO]["skill_ready"][0] == 0.0,
           "a HERO with [276, 281] and the hurt clean player casts only 281 at the player -- "
-          "276 held, uncharged", f"casts {fired} ann {rec['ann'][:2]}")
+          "276 held, uncharged, inside the pick bound",
+          f"overrun {rec['overrun']}; casts {fired} ann {rec['ann'][:2]}")
     check(any("party agent 200 holds skill 276" in ln and "[CASTAI-RM]" in ln
               for ln in rec["log"].splitlines()),
           "  its line names the party agent")
@@ -1184,7 +1281,8 @@ def section_rm_driven():
           "  KNOWN-BAD, --no-removal-needs-affliction: 276 goes at the hurt-most CLEAN ally "
           "11 and the bleeding one keeps its Bleeding", f"{off['ann'][:1]}")
 
-    print("== 7. (f) the caster: byte 3 (277) may cure itself, byte 4 (276) may not ==")
+    print("== 7. (f) the caster: byte 3 (277, 301) may cure itself -- a hostile and a hero "
+          "-- byte 4 (276) may not ==")
     rec = rm_run(((MEND_AIL, 0.75, 5.0),), HOSTILE, secs=1.0, setup=_bleed(HOSTILE))
     check(rec["ann"][:1] == [(INT, [60, HOSTILE, MEND_AIL])] and not _conds(rec["st"], HOSTILE),
           "277 with only the CASTER bleeding lands on the caster: 0x009F [60, 10, 277] and the "
@@ -1193,6 +1291,25 @@ def section_rm_driven():
     check(not rec["ann"] and _conds(rec["st"], HOSTILE) == [BLEEDING],
           "276 with only the CASTER bleeding is HELD -- byte 4 never self-targets",
           f"{rec['ann']}")
+    # ... and the PARTY loop's own byte-3 candidacy (the review's CD-6: only the hostile
+    # loop's was driven, and a party loop passing "other_ally" to removal_target stayed
+    # green). The player is whole and clean, so the hero itself is the only carrier.
+    rec = rm_run(((MEND_AIL, 0.75, 5.0),), HERO, secs=1.0, player_health=ph,
+                 setup=_bleed(HERO))
+    check(rec["ann"][:1] == [(INT, [60, HERO, MEND_AIL])] and not _conds(rec["st"], HERO),
+          "a HERO's 277 with only ITSELF bleeding (the player whole) cures itself through "
+          "ally_cast_tick: 0x009F [60, 200, 277] and the Bleeding gone",
+          f"{rec['ann'][:1]} {_conds(rec['st'], HERO)}")
+
+    def hexed_hero(st):
+        st["effects"].apply(HERO, EMPATHY, 12, 30.0, T0 - 1.0, type_code=4, caster=HOSTILE)
+    rec = rm_run(((REMOVE_HEX, 1.0, 8.0),), HERO, secs=1.5, player_health=ph,
+                 setup=hexed_hero)
+    check(rec["ann"][:1] == [(INT, [60, HERO, REMOVE_HEX])]
+          and not rec["st"]["effects"].on_agent(HERO),
+          "a HERO's 301 with only ITSELF hexed removes its own hex through ally_cast_tick: "
+          "0x009F [60, 200, 301] and the Empathy gone",
+          f"{rec['ann'][:1]} left {[ep['skill'] for ep in rec['st']['effects'].on_agent(HERO)]}")
 
     print("== 7. (g) a hero cures the bleeding player at full health ==")
     rec = rm_run(bar, HERO, secs=1.0, player_health=ph, setup=_bleed(P))
@@ -1300,6 +1417,38 @@ def section_rm_hex():
           and ctl is not None,
           "  CONTROL: the same hex left to expire DOES reach the end burst (the spy sees the "
           "path)", f"{bursts}")
+    # A hex WITH PIPS removed (the review's CD-6): remove_hexes' push_speed / push_attributes
+    # / push_regen after the close had no check that could fail -- deleting all three left
+    # section 7 green. Suffering 108 (skill_effect.108: health degeneration 0..3) put on the
+    # hostile through the real apply_effect moves its [44] below zero; the 301 that removes
+    # it must send the [44] back to 0 (REGEN_ZERO_POSITIVE's +0.0).
+    regen = authsrv.agents.GV_CHANGE_HEALTH_REGEN
+    with rm_carried(), arm(clock=Clock(T0), REMOVAL_NEEDS_AFFLICTION=True):
+        st = world(authsrv)
+        st["agents"][HOSTILE] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE)
+        st["agents"][ALLY] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE, pos=(120.0, 40.0))
+        st["agents"][HERO] = body(authsrv, (), agents.ALLEGIANCE_PLAYER, pos=(150.0, 0.0))
+        put, took = [], []
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.apply_effect(lambda op, vals, why="", quiet=False: put.append((op, list(vals))),
+                                 st, HERO, SUFFERING, 12, HOSTILE, 0)
+            authsrv.push_regen(lambda op, vals, why="", quiet=False: put.append((op, list(vals))),
+                               st, HOSTILE, 0)
+            hexed_now = [ep["skill"] for ep in st["effects"].on_agent(HOSTILE)]
+            got = authsrv.resolve_heal(lambda op, vals, why="", quiet=False:
+                                       took.append((op, list(vals))),
+                                       st, REMOVE_HEX, 0, ALLY, HOSTILE, 0)
+    # the word carries the rate as f32 BITS (authsrv._fraction): decoded here
+    f32 = (lambda bits: struct.unpack("<f", struct.pack("<I", int(bits)))[0])
+    rate_on = [f32(v[2]) for op, v in put if op == FLT and v[:2] == [regen, HOSTILE]]
+    rate_off = [v[2] for op, v in took if op == FLT and v[:2] == [regen, HOSTILE]]
+    check(hexed_now == [SUFFERING] and rate_on and rate_on[-1] < 0
+          and got and got.get("hexes_removed") == 1 and rate_off == [0]
+          and not st["effects"].on_agent(HOSTILE),
+          "a removed Suffering (108, a hex with pips) sends the wearer's [44] back to 0 -- "
+          "remove_hexes re-sends the regen word after the close, as remove_conditions does",
+          f"hexed {hexed_now} [44] at the apply {rate_on} at the removal (bits) {rate_off} "
+          f"out {got}")
     with arm(REMOVAL_NEEDS_AFFLICTION=True, CONDITION_HEAL_RULE=False):
         with rm_carried():
             st = world(authsrv)
@@ -1333,6 +1482,40 @@ def section_rm_known_bad():
         check(on[k] != want and not any(v[:1] == [60] and v[-1] == RESTORE
                                          for _i, _op, v in on[k]),
               f"  and the gate ON sends no 276 announce at all ({k})")
+    # REMOVE HEX UNDER THE REVERT (the review's EV-2). The flag is the lane's whole revert,
+    # so a 301 must remove NOTHING under it -- at 642d8957 it had no effect row. The first
+    # cut read `removes_hexes` under the cure rule's flag alone, so the revert aimed a
+    # hero's 301 the old way (the hurt-most, here the hexed player) AND removed the hex,
+    # and a self-hexed hostile's 301 at itself removed its own: a world no build ran.
+    bar = ((REMOVE_HEX, 1.0, 8.0),)
+    arms = {"hero": dict(who=HERO, wearer=P, player_health=0.4 * ph,
+                         setup=lambda st: st["effects"].apply(
+                             P, EMPATHY, 12, 30.0, T0 - 1.0, type_code=4, caster=HOSTILE)),
+            "hostile": dict(who=HOSTILE, wearer=HOSTILE, player_health=1e9,
+                            setup=lambda st: st["effects"].apply(
+                                HOSTILE, EMPATHY, 12, 30.0, T0 - 1.0, type_code=4,
+                                caster=HERO))}
+    for k, a in arms.items():
+        res = {}
+        for gate in (False, True):
+            r = rm_run(bar, a["who"], secs=1.5, gate=gate, setup=a["setup"],
+                       player_health=a["player_health"])
+            res[gate] = (r["sends"],
+                         [ep["skill"] for ep in r["st"]["effects"].on_agent(a["wearer"])])
+        want = RM_HEAD_301[k]
+        check(res[False][0] == want and res[False][1] == [EMPATHY],
+              f"the {k}'s 301 at a hexed {'player' if k == 'hero' else 'self'}, gate OFF: "
+              f"every send equals 642d8957's own ({len(want)} sends) and the Empathy STAYS -- "
+              f"the revert removes nothing, as 642d8957 did",
+              f"left {res[False][1]}; first diff at "
+              f"{next((i for i, (x, y) in enumerate(zip(res[False][0], want)) if x != y), min(len(res[False][0]), len(want)))}"
+              f" of {len(res[False][0])} / {len(want)}")
+        check(res[True][1] == [] and (k != "hero" or any(
+                  op == authsrv.GAME_SMSG_EFFECT_REMOVE and v[0] == P
+                  for _i, op, v in res[True][0])),
+              f"  and the gate ON removes it ({k}: the Empathy gone"
+              f"{', its 0x0044 shown to the player' if k == 'hero' else ''})",
+              f"left {res[True][1]}")
 
 
 def section_rm_source():
@@ -1438,31 +1621,43 @@ def section_rm_replay():
     for r in ai:
         by[r["skill"]] = by.get(r["skill"], 0) + 1
 
-    def replay(r, health_cap=None):
-        """The gate's answer for this retail cast: the caster and its target as bodies,
-        the target carrying what the TAPE says it carried (cond_bit / hexed_bit), its
-        health the reconstruction's -- None means the gate would have HELD the cast."""
+    def replay(r, aim="gate"):
+        """Who the server would aim this retail cast at: the caster and its target as
+        bodies, the target carrying what the TAPE says it carried (cond_bit / hexed_bit),
+        its health the reconstruction's; a self-form cast's caster at that health. `aim`
+        "gate" asks removal_target (the shipped step: None means the gate would HOLD
+        it); "heal" asks hostile_heal_target -- the PRE-GATE rule, 642d8957's own aim for
+        275-277 in both AI loops and for a party body's 301 (a hostile's 301 went at
+        itself, which would miss every retail cast at another body)."""
         sid, caster, tgt = r["skill"], r["caster"], r["target"]
         kind = authsrv.skill_target_kind(sid)
-        klass = authsrv.removal_slot_class(sid)
+        klass = episodemods.removal_class(authsrv.skill_effect_row(sid))
+        h = float(r["h_target"])
         st = world(authsrv)
-        st["agents"][caster] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE)
+        st["agents"][caster] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE,
+                                    **({"health": 1000.0 * h, "max_health": 1000.0}
+                                       if tgt == caster else {}))
         if tgt != caster:
             st["agents"][tgt] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE,
-                                     health=1000.0 * float(r["h_target"]), max_health=1000.0)
+                                     health=1000.0 * h, max_health=1000.0)
         bit = r.get("cond_bit") if klass == "condition" else r.get("hexed_bit")
         if bit:
             if klass == "condition":
                 st["effects"].apply(tgt, BLEEDING, 0, 30.0, T0, type_code=8, caster=99)
             else:
                 st["effects"].apply(tgt, EMPATHY, 12, 30.0, T0, type_code=4, caster=99)
-        if health_cap is not None and float(r["h_target"]) >= health_cap:
-            return None                           # the known-bad arm's extra floor
-        return authsrv.removal_target(st, caster, kind, klass)
+        if aim == "heal":
+            return authsrv.hostile_heal_target(st, caster, kind)
+        return authsrv.removal_target(st, caster, kind, authsrv.removal_slot_class(sid))
 
     with arm(REMOVAL_NEEDS_AFFLICTION=True):
         held = [r for r in ai if replay(r) != r["target"]]
-        capped = [r for r in ai if replay(r, health_cap=0.9) != r["target"]]
+    # RE-AIMED 2026-10-07 (the review's EV-8): the known-bad arm used to be a 0.9 floor
+    # the TEST applied before calling removal_target -- a recount of the tape's health
+    # column that no server code could redden. It now asks the server's own pre-gate
+    # rule, with the gate off.
+    with arm(REMOVAL_NEEDS_AFFLICTION=False):
+        missed = [r for r in ai if replay(r, aim="heal") != r["target"]]
     n_cure = by.get(MEND_COND, 0) + by.get(MEND_AIL, 0)
     check(by.get(MEND_COND, 0) >= 92 and by.get(MEND_AIL, 0) >= 14
           and by.get(REMOVE_HEX, 0) >= 10 and by.get(RESTORE, 0) == 0,
@@ -1474,14 +1669,20 @@ def section_rm_replay():
           f"the gate HOLDS 0 of the {len(ai)} retail removal casts and names retail's own "
           f"target every time ({n_cure} cures, {by.get(REMOVE_HEX, 0)} Remove Hex; {n_self} "
           f"of them self-form, all byte 3)", f"{[(r['capture'], r['t'], r['skill'], r['caster'], r['target']) for r in held][:5]}")
-    by_cap = {}
-    for r in capped:
-        by_cap[r["skill"]] = by_cap.get(r["skill"], 0) + 1
-    check(by_cap.get(MEND_COND, 0) == 2 and by_cap.get(REMOVE_HEX, 0) == 5
-          and by_cap.get(MEND_AIL, 0) == 0,
-          "KNOWN-BAD ARM, a gate that ALSO demands health under 0.9 (the heal rule's floor): "
-          "it refuses 2 of the 92 275s and 5 of the 10 Remove Hexes (0.906-1.000; the "
-          "henchman Healer's 3 among them) -- the replay can go red", f"{by_cap}")
+    by_bad = {}
+    for r in missed:
+        by_bad[r["skill"]] = by_bad.get(r["skill"], 0) + 1
+    high = {}
+    for r in ai:
+        if float(r["h_target"]) >= authsrv.HERO_HEAL_AT:
+            high[r["skill"]] = high.get(r["skill"], 0) + 1
+    check(by_bad.get(MEND_COND, 0) == 2 and by_bad.get(REMOVE_HEX, 0) == 5
+          and by_bad.get(MEND_AIL, 0) == 0 and by_bad == high,
+          "KNOWN-BAD ARM, the pre-gate heal rule (hostile_heal_target, gate OFF -- server "
+          "code): it misses exactly the retail casts at a target at or above HERO_HEAL_AT, "
+          "2 of the 92 275s and 5 of the 10 Remove Hexes (the henchman Healer's 3 among "
+          "them), 0 of 14 277s -- the replay can go red",
+          f"missed {by_bad} at >= {authsrv.HERO_HEAL_AT}: {high}")
 
 
 HEAD_SEQUENCE = [
@@ -1499,6 +1700,24 @@ HEAD_SEQUENCE = [
 # impl-desk-removal/rm_head_literal.py; the worktree's code with the gate off gave the
 # same bytes). Tick 0: 276 announced at the CLEAN hurt ally (the hostile's 11, the hero's
 # player 1); tick 15 its 58 and visual -- and no heal: it removed nothing.
+# Remove Hex under the revert (section 7 (i), the review's EV-2): rm_run's [301] fights,
+# 1.5 s, gate OFF -- a hero with the player at 0.4 carrying Empathy, and a hostile carrying
+# Empathy itself -- recorded 2026-10-07 through `git show 642d8957:toolkit/authsrv/
+# authsrv.py` (the scratch driver impl-desk-removal/fix/fx_head301.py). 642d8957 had no
+# skill_effect.301 row, so neither cast removed anything.
+RM_HEAD_301 = {
+    'hero': [            # the hero's 301 at the hurt, hexed player: announced, completed, nothing
+        (0, 0x002E, [200, 0, 1074137746]),
+        (0, 0x00A0, [60, 200, 1, 301]),
+        (20, 0x009F, [58, 200, 0]),
+    ],
+    'hostile': [         # a self-hexed hostile's 301 at itself (CASTAI-R2's byte-3 rule)
+        (0, 0x002E, [10, 0, 1074137746]),
+        (0, 0x009F, [60, 10, 301]),
+        (20, 0x009F, [58, 10, 0]),
+    ],
+}
+
 RM_HEAD = {
     'hostile': [
         (0, 0x002E, [10, 0, 1074137746]),
