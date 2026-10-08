@@ -25,7 +25,9 @@ completion however many live episodes of it the caster holds (a refresh, two hex
 the newest fires; 3e, 4d, 5e); the dead-target exit's payoff (4e); the Deep Wound cut
 through heal_agent (4f); the rounding the server chose (4g); the player's PAID cost (5f);
 the bearer's book A/B (2c); the kill stopping a second payoff in the hook (5d); and the
-reader's three-valued Deep Wound verdict on its own, bare (11a).
+reader's three-valued Deep Wound verdict on its own, bare (11a). ROUND 2 (VF-1) added 3f:
+two DIFFERENT trigger skills, neither lethal, both fire on one completion (a hook that
+stopped after its first payoff passed everything else).
 KNOWN-BAD ARMS, each shown to redden its check: the payoff emitted AFTER the [58] (the
 order check), the Backfire episode on the HEXER (nothing may fire), a fixed heal and the
 word-after-58 model on the corpus (trigjoin's own arms).
@@ -55,8 +57,8 @@ import vaultpath    # noqa: E402
 
 # Floors from a real green run, decided on the vault's DIRECTORIES (test_mechanics'
 # pattern): FLOOR_BARE with RURIK_VAULT at an empty directory, FLOOR_VAULT with the vault.
-FLOOR_BARE = 30     # 2026-10-07 (the fix pass: +3e 4d 4e 4f 4g 5e 5f 11a; was 22): MEASURED 30 checks, 0 failed, 2 declared skips (sections 9 and 10, 7 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path
-FLOOR_VAULT = 37    # 2026-10-07 (the fix pass; was 29): MEASURED 37 checks, 0 failed, with the vault (its content and its live captures)
+FLOOR_BARE = 31     # 2026-10-07 (round 2: +3f; the fix pass +3e 4d 4e 4f 4g 5e 5f 11a; 22 -> 30 -> 31): MEASURED 31 checks, 0 failed, 2 declared skips (sections 9 and 10, 7 checks) with RURIK_VAULT at an empty directory and again at a nonexistent path
+FLOOR_VAULT = 38    # 2026-10-07 (round 2: +3f; 29 -> 37 -> 38): MEASURED 38 checks, 0 failed, with the vault (its content and its live captures)
 HAVE_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
 LEDGER = checks.Ledger("trigger-on-cast payoffs (SKILLS-CT)",
@@ -314,6 +316,39 @@ try:
           "3e. two hexers' Backfires on one monk: ONE [55, monk, hexer, -f] ahead of its [58], "
           "the NEWER episode's (agent 10 at rank 12, 119) -- not one per episode, not the older "
           "hexer's 56", (pun, fin))
+    # TWO DIFFERENT trigger skills on one completion, NEITHER lethal (round 2's VF-1): the
+    # rule is once per trigger SKILL, so the monk under the player's Backfire that also wears
+    # its own 180 draws BOTH payoffs -- a hook that stopped after the first payoff passed every
+    # other check here (5d's Backfire kills, where stopping is right). The order across the two
+    # skills (ascending buff: the Backfire was opened first) is RECONSTRUCTION -- no tape holds
+    # a bearer under both. The book A/B: the same completion with the hook off ends 56 - 23 =
+    # 33 higher (Orison's own heal rides both arms, uncapped from 150 / 300).
+    books = {}
+    for on in (True, False):
+        authsrv.HEX_CAST_TRIGGERS = on
+        try:
+            st = fresh_state()
+            monk = body(st, 12, [(ORISON, 1.0, 2)], 0, 12, health=150.0, maximum=300.0)
+            episode(st, 12, BACKFIRE, 3, caster=PLAYER, seconds=10.0, applied=time.time() - 2.0)
+            episode(st, 12, AURA, 13, caster=12, applied=time.time() - 1.0)
+            sent, send = collector()
+            authsrv.land_skill(send, st, 12, monk, 0)
+        finally:
+            authsrv.HEX_CAST_TRIGGERS = True
+        books[on] = (st["agents"][12]["health"], monk["dead"], sent)
+    sent = books[True][2]
+    fin = finished_at(sent, 12)
+    pay = [(i, v[2], dec(v[3])) for i, (op, v, _l) in enumerate(sent)
+           if op == FLOAT_T and v[0] == AI55 and v[1] == 12 and (fin and i < fin[0])]
+    check(len(fin) == 1 and not books[True][1]
+          and [(i, cause) for i, cause, _f in pay] == [(fin[0] - 2, PLAYER), (fin[0] - 1, 12)]
+          and abs(pay[0][2] - f32(-56 / 300.0)) < 1e-7 and abs(pay[1][2] - f32(23 / 300.0)) < 1e-7
+          and abs((books[False][0] - books[True][0]) - 33.0) < 1e-9,
+          "3f. a monk under a NON-lethal Backfire that also wears its own 180 completes Orison: "
+          "BOTH payoffs, one per trigger skill -- [55, monk, hexer, -56 / 300] then [55, monk, "
+          "monk, +23 / 300] -- the last two messages before its [58], and its book 33 lower than "
+          "the same completion with the hook off (the cross-skill order RECONSTRUCTION)",
+          (pay, fin, books[True][0], books[False][0]))
 
     # ------------------------------------------------------------------ 4
     print("== 4. nothing fires: an attack skill, a signet, a stripped / expired / re-cast "

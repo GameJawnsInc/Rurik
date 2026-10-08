@@ -28320,7 +28320,9 @@ def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
     OBSERVED, the fix pass's RV-1). The NEWEST live episode is the one that
     fires (its rank, its caster) -- the one a re-cast leaves: RECONSTRUCTION,
     no tape holds two episodes of one trigger skill at different ranks or
-    from two casters.
+    from two casters. Two DIFFERENT trigger skills on one caster both fire,
+    ascending buff id: RECONSTRUCTION, no tape holds a bearer under both
+    (test_trigcast 3f, round 2's VF-1).
 
       * CAST_TRIGGER_HEAL (Aura of Restoration 180) -- the BEARER is healed for
         `paid` x the episode's scale % / 100, whole points: OBSERVED (trigjoin
@@ -28351,7 +28353,13 @@ def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
     calls this too): OBSERVED 3 of 3 -- the live 180 completions whose
     0x00A0 target was alive at the announce and carried the death bit
     before the bearer's [58] (20260817T231139 :54071 b10 764.549 and b14
-    769.736, :50286 b10 376.744) each carry the word (the fix pass's RV-2).
+    769.736, :50286 b10 376.744) each carry the word (the fix pass's RV-2) --
+    Random Arenas characters, one a foe of the observer (:54071 b10, the
+    0x0020 allegiance token), two its teammates. A HOSTILE whose FIGHT target
+    dies mid-cast never reaches that exit: enemy_attack_tick's corpse branch
+    (SLICE-H3) clears the armed cast first -- no [58], no payoff, where that
+    foe-side witness completed with both. A gap outside these call sites,
+    recorded in studies/skills 69.8 (round 2's VF-2).
     Returns the number of payoffs fired;
     a caller whose caster died of one aborts the rest of its completion batch
     (land_swing's rule for on_attack_triggers)."""
@@ -39164,11 +39172,17 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # between. A foe-target cast has always been dropped for this (the tick's
     # own `target_dead` branch, before it reaches here); an ALLY-target one
     # never passes through that branch, because its target is not the fight's.
+    # (That branch keys on the FIGHT target, so it drops ANY armed cast when
+    # the fight target dies -- a heal on a living fellow hostile too -- with
+    # no [58]; studies/skills 69.8 records it as owed, round 2's VF-2.)
     # The cast ENDS -- the caster is released and its recharge stands, it did
-    # cast -- and nothing lands. What retail puts on the wire for a spell
-    # whose target dies under it is NOT OBSERVED for an NPC; the close we
-    # already send for every finished cast is the one message sent.
-    # RECONSTRUCTION. A resurrection is the exception by construction: it
+    # cast -- and nothing lands. The close we already send for every finished
+    # cast is the one message sent, APART FROM the on-cast payoff ahead of it
+    # (SKILLS-CT: retail's word rides this [58] on 3 of 3 live 180
+    # completions whose target died mid-cast -- Random Arenas characters,
+    # 20260817T231139, not NPCs; studies/skills 69.6). That [58] close is
+    # OBSERVED for those player characters and RECONSTRUCTION for an NPC
+    # caster (NOT OBSERVED). A resurrection is the exception by construction: it
     # returned above, and a corpse is exactly what it wants. AN AREA OVER TIME
     # is the other (studies/weapons 42, WIKI "Area of effect" rev 2685457: it
     # "doesn't fail" when the target dies before the completion) -- it passes

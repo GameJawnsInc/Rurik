@@ -10076,8 +10076,9 @@ nothing of it lands (RECONSTRUCTION).
 ### 69.6 SKILLS-CT6 — what ships, and what is decided rather than measured
 
 * `on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None)` — each trigger
-  SKILL live ON the caster (its row says `triggers_on_cast`) fires ONCE, ascending buff id;
-  returns the count fired. Where the caster holds two live episodes of one trigger skill (a
+  SKILL live ON the caster (its row says `triggers_on_cast`) fires ONCE, ascending buff id
+  (two different trigger skills both fire — test_trigcast §3f; their order across skills is
+  RECONSTRUCTION, no tape holds a bearer under both); returns the count fired. Where the caster holds two live episodes of one trigger skill (a
   re-cast stacks one: `EffectTable.apply` allocates a new id, retail's own allocator) the
   NEWEST fires — once per completion is OBSERVED (11 of 11 after a refresh, §69.3);
   which of two differing episodes fires is RECONSTRUCTION (no tape holds two at different
@@ -10092,9 +10093,17 @@ nothing of it lands (RECONSTRUCTION).
   live 180 completions whose 0x00A0 target was alive at the announce and carried the death
   bit before the bearer's [58] (20260817T231139 :54071 b10 186 → 12, dies 764.549, [58]
   764.549; b14 186 → 10, 769.218 / 769.736; :50286 b10 186 → 4, 376.285 / 376.744) each
-  carry the word. The first cut labelled this exit "UNWITNESSED; the quieter reading" and
-  sent none (the review's RV-2); the player's path has no dead-target exit ahead of its
-  hook, so the two paths now agree. The chain-gated and resurrection exits fire nothing
+  carry the word. All three are Random Arenas characters (player characters, not NPCs):
+  :54071 b10 is a FOE of the observer by the 0x0020 allegiance token, b14 and :50286 b10
+  its teammates (round 2, `hexjoin.Conn.foe`). The first cut labelled this exit
+  "UNWITNESSED; the quieter reading" and sent none (the review's RV-2); the player's path
+  has no dead-target exit ahead of its hook, so the two paths now agree. **Which bodies
+  reach that exit:** a party body (`ally_cast_tick` → `land_skill`) and a hostile's
+  ally-target cast whose ally died. **A HOSTILE whose FIGHT target dies mid-cast never
+  does** — `enemy_attack_tick`'s corpse branch (SLICE-H3) clears the armed cast first and
+  sends nothing, no [58] and no payoff (measured through the real tick, round 2's VF-2;
+  it drops a heal aimed at a living fellow hostile the same way), where the foe-side
+  witness above completed with both. Outside this lane's call sites: §69.8. The chain-gated and resurrection exits fire nothing
   (UNWITNESSED; the player's failed chain step and its resurrection fire none either).
 * **The player** (`cast_tick`): behind the E5, right ahead of the [58] — RECONSTRUCTION
   (the body's slot). A failed chain step fires nothing: the E5 block's `_na_fail` is
@@ -10145,6 +10154,12 @@ sites, the scale slot. Wrong on specifics, each re-derived here:
 * **The HIT-seam self-gain vocabulary** — ~12 enchantments plus 123, 2013, 1759: the next
   lane. It reuses `hit_enemy` / `land_swing` and this section's row-field reader.
 * **HEAL-INT's truncation after the Deep Wound cut** (§69.4): one witness says round.
+* **A hostile's armed cast dropped when its FIGHT target dies** (round 2's VF-2, §69.6):
+  `enemy_attack_tick`'s corpse branch clears it before `land_skill` — no [58], no payoff,
+  and an ally-target heal is dropped too — where retail completes it with both (1 of the 3
+  dead-target witnesses is a foe of the observer, an RA opponent). Pre-existing (SLICE-H3)
+  and outside this lane's trigger call sites; a later, flag-gated lane owes the fix (the
+  close a hostile sends there, and whether an NPC's matches the RA opponent's, unmeasured).
 
 ### 69.9 The runsheet (owed; the owner's, after landing)
 
@@ -10221,3 +10236,16 @@ each was real. What it moved, labelled:
 * **Labels** (RV-6): the rounding is UNDISCRIMINATED (§69.2); 14 of 17 bearers fit (555,
   13) alone, not "every Elementalist bearer". **Runsheet** (RV-7): case 3. **`trigjoin
   --json`** (RV-8) writes the dump alone to stdout.
+
+**Round 2 (the verifier's three residuals, 2026-10-07), each re-measured first:**
+* **VF-1** — no check had two DIFFERENT trigger skills fire on one non-lethal completion;
+  a hook that stopped after its first payoff passed the whole test (bare, 30 checks).
+  test_trigcast §3f: a monk under the player's non-lethal Backfire that also wears its own
+  180 completes Orison — [55, monk, 1, −56 / 300] then [55, monk, monk, +23 / 300], the
+  last two messages before its [58], its book 33 lower than the hook-off arm. That mutant,
+  the descending order and one-payoff-per-completion each redden it. The cross-skill order
+  is RECONSTRUCTION.
+* **VF-2** — the hostile tick's corpse branch (§69.6, §69.8): recorded, not changed here.
+  The three dead-target witnesses are RA characters, one a foe of the observer.
+* **VF-3** — the dead-target exit's comment said the [58] is "the one message sent" and
+  retail NOT OBSERVED; it now names the payoff ahead of it and the 3-of-3 RA witness.
