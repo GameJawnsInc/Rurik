@@ -28,6 +28,12 @@ move back.
 
 ---
 
+### RIDERS-R5, corrected -- 2026-10-08 -- **The entry below ("RIDERS / CASTAI-H1") misread the weapon-set step: it took the tape's `0x0032 [1]` / `[0]` pair for the energy-weapon switch and wrote that "R5 saw no `0x0032` for the held-set and empty-set presses and no 41 / 43 on the switch". The owner then said there was no staff to switch to, and the load's own `0x0147 [90, n, 0, 0]` shows sets 1-3 empty: the `[1]` WAS the empty-set press.** Corrected reading ([studies/livekey/RIDERS.md](studies/livekey/RIDERS.md) R5):
+
+- **Same-set press**: no `0x0032` leaves retail's client (the owner confirms the press). Nothing to model.
+- **Empty-set press: a real switch on retail.** `0x0148 [90, 1]` + the bow's `0x014B` into the backpack's first free cell at +46 ms, barehanded; back with `0x014B` into equipped slot 0. W9's "answered by nothing" is REFUTED for the empty set. **Ours refuses it, nothing sent** -- a divergence, opened in `PLAN.md` §8 as WEAPONS-W9, the empty set, and NOT shipped: the server would need a barehanded swing model nothing measured gives. `select_weapon_set`'s log line now says so (text only).
+- **The 41 / 43 question was not exercised** (no staff), so it stays INFERRED rather than failing.
+
 ### RIDERS / CASTAI-H1 -- 2026-10-08 -- **One owner-driven live session on the secondary account (`20261008T132845`, build 38974, plan `live_riders_h1.txt` sealed before launch, zero gaps) answered three party and hero-bar replies retail had never been seen to send, scored CASTAI-H1, and gave build 38974 its first live tape. Three server replies follow retail now, each behind a revert flag: a successful bar SWAP echoes both slots and a hero's edit sends the mask (`--no-bar-edit-echo`), the henchman KICK sends size before row (`--hench-kick-row-first`), and a henchman add at the cap draws retail's ONE `0x01BC [64]` (`--no-party-full-reply-retail`). A defect in our own health reader turned up first and is fixed: `castethogram` ignored property 32.** Record: [studies/livekey/RIDERS.md](studies/livekey/RIDERS.md); H1: [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §18.6.
 
 - **The session.** Kamadan (map 449, `:65410`) then the Plains of Jarin (map 430, `:51409`); the healer was Koss, a Warrior hero given a Monk secondary and four heals (no Monk hero unlocked), in Avoid Combat. Three keys tapped on the 38974 cave's first live run.

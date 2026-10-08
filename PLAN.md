@@ -2082,7 +2082,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   item**; and **the owed runs**, their steps in the plan: RUN-WEAPONS-1B (five bows, staff,
   wand — 1200 / 1600 / 2800 u/s predicted; the dodge's two numbers on the Orb block; the
   staff's `570` halving; Strength's 1 % a rank; retail's reply to a same-set and to an
-  empty-set press (none left retail's client on 2026-10-08, RIDERS-R5), and whether a switch that moves maximum energy re-sends 41 / 43),
+  empty-set press (RIDERS-R5, 2026-10-08: a same-set press never leaves retail's client; an EMPTY set is a real switch on retail, barehanded, which ours refuses -- see the line below), and whether a switch that moves maximum energy re-sends 41 / 43),
   RUN-WEAPONS-2 (every range is WIKI or reconstructed and 1A's spear PARKED at 0.75 × the
   wiki's number, §25.4 — the run must separate park from range) and RUN-WEAPONS-3 (the unmet
   divisor against the strike-level drop, Q10).
@@ -2244,8 +2244,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   rest held); H1 SCORED 2026-10-08 (P1 null below its floor, P2 failed, P3-P4 held, §18.6);
   a full Z3 unrun. Plans: `vault/plans/castai_*.txt`.
 * **RIDERS's residue** ([studies/livekey/RIDERS.md](studies/livekey/RIDERS.md) §5): `0x005F`
-  from a bar drag, the hero add at the cap, the Leave with henchmen, the switched set's item
-  (no 41 / 43), the owner's word on the same-set / empty-set presses, a hero's `0x0041` / `0x000F`.
+  from a bar drag, the hero add at the cap, the Leave with henchmen, an energy switch's 41 / 43
+  (no staff on the account), a hero's `0x0041` / `0x000F`.
+* **WEAPONS-W9, the empty set**: retail switches to it -- `0x0148` and the lead's `0x014B` into the
+  backpack's first free cell, barehanded (RIDERS-R5, n = 1, a town); ours refuses it with nothing
+  sent. Owed: a barehanded swing model (interval, damage, range) derived before the switch ships.
 * **296 map rows are limited by information, not effort**: one live capture on a
   known-named zone yields one exact `(map id, file id)` pair
   ([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md)).

@@ -3627,9 +3627,14 @@ def select_weapon_set(send, state, k, conn_id):
               flush=True)
         return []
     if k != 0 and not WEAPON_SETS[k]:
-        print(f"[c{conn_id}] weapon set {k} is EMPTY -- nothing sent (retail's "
-              f"reply to an empty set is NOT OBSERVED; fill it with --weapon-set "
-              f"{k}=ITEM) [WEAPONS-W9]", flush=True)
+        # DIVERGENCE, OBSERVED 2026-10-08 (RIDERS-R5, 20261008T132845 :65410, in
+        # a town): retail SWITCHES to an empty set -- 0x0148 [stream, k] and the
+        # lead's 0x014B into the backpack's first free cell, the character
+        # barehanded; switching back returns it to equipped slot 0. Not followed
+        # here: the server's swing model has no barehanded weapon to switch to.
+        print(f"[c{conn_id}] weapon set {k} is EMPTY -- nothing sent; retail switches "
+              f"to it barehanded (RIDERS-R5), which this server does not model; fill "
+              f"it with --weapon-set {k}=ITEM [WEAPONS-W9]", flush=True)
         return []
     old_lead, old_off = weapon_set_items(old)
     new_lead, new_off = weapon_set_items(k)
