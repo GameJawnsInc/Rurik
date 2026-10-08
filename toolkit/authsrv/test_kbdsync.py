@@ -3276,39 +3276,17 @@ def main():
     # follow RETIRES the keyboard lead (consumed, the point stamped, no 0x0029); the safety net
     # sends today's kill a tick late when nothing answered the press.
     print("\n34. 1z-ds.42: a press the follow answers retires the keyboard lead (PRESS_FOLLOW_RETIRES_LEAD)")
-    import ast as _ast34
     import time as _t34
     WP34 = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
     DEST34 = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
     PIN34 = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
     ME34 = authsrv.PLAYER_AGENT_ID
 
-    def press_arm34():
-        """The SHIPPED 0x0026 arm (`elif opcode in (GAME_CMSG_ATTACK_AGENT, ...)`) as a callable --
-        receive_arm's method for an `in` test. Fails loudly rather than hand back an empty body."""
-        tree = _ast34.parse(SRC)
-        node = None
-        for n in _ast34.walk(tree):
-            if (isinstance(n, _ast34.If) and isinstance(n.test, _ast34.Compare)
-                    and isinstance(n.test.left, _ast34.Name) and n.test.left.id == "opcode"
-                    and len(n.test.ops) == 1 and isinstance(n.test.ops[0], _ast34.In)
-                    and isinstance(n.test.comparators[0], _ast34.Tuple)
-                    and any(isinstance(e, _ast34.Name) and e.id == "GAME_CMSG_ATTACK_AGENT"
-                            for e in n.test.comparators[0].elts)):
-                node = n
-        assert node is not None, "no 0x0026 arm in authsrv.py"
-        args = _ast34.arguments(posonlyargs=[], args=[_ast34.arg(p) for p in
-                                                      ("values", "state", "rec", "send", "conn_id")],
-                                vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
-        fn = _ast34.FunctionDef(name="_arm26", args=args, body=node.body, decorator_list=[],
-                                returns=None, type_params=[])
-        mod = _ast34.Module(body=[fn], type_ignores=[])
-        _ast34.fix_missing_locations(mod)
-        ns = {}
-        exec(compile(mod, authsrv.__file__, "exec"), authsrv.__dict__, ns)   # noqa: S102
-        return ns["_arm26"]
-
-    ARM26 = press_arm34()
+    # The SHIPPED 0x0026 arm (`elif opcode in (GAME_CMSG_ATTACK_AGENT, ...)`) as a callable, off
+    # the tree receive_arm parsed at import: press_arm34 parsed its own copy here until 2026-10-08,
+    # a second full parse of authsrv.py (~7-13 s). Fails loudly rather than hand back an empty body.
+    ARM26 = receive_arm("GAME_CMSG_ATTACK_AGENT", ("values", "state", "rec", "send", "conn_id"),
+                        op="in")
     # a tree without the settle (the base) runs every check and reddens, rather than crash
     _settle34 = getattr(authsrv, "_kbd_retire_settle", lambda *a, **k: False)
 
