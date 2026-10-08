@@ -9961,7 +9961,7 @@ before the run, its "AS RUN" block beside them). The server change is `authsrv.N
 |---|---|---|
 | SKILLS-AC1 | the floor: no next start under 0.70 s after a 0.75 completion (P1), the mass at the end (P2), the aftercast-0 control (P3) | OBSERVED |
 | SKILLS-AC2 | the survey's n = 872 reproduced exactly, then corrected to 1,477 (the un-targeted `[60]`) | OBSERVED |
-| SKILLS-AC3 | an instant skill is NOT held: 3 of 7 instants after a 0.75 completion fall inside the window | OBSERVED, n = 3; CONTESTED with WIKI |
+| SKILLS-AC3 | an instant skill is NOT held: 2 of 7 instants after a 0.75 completion fall strictly inside the window, a third in the `[58]`'s own batch | OBSERVED for a stance, n = 2; CONTESTED with WIKI; shouts and type 16 RECONSTRUCTION |
 | SKILLS-AC4 | a body's E3 against its E5 for an aftercast spell (P5) | UNDECIDABLE on the corpus; the survey's witness refuted as evidence |
 | SKILLS-AC5 | the server: a completed cast stamps `aftercast_until`, and the three body ticks hold the next cast or swing | the rule CORROBORATED; the pieces labelled below |
 | SKILLS-AC6 | what this lane did not do, one line each | open |
@@ -9978,8 +9978,10 @@ The completed skill's aftercast is read off the table on the connection's OWN bu
 client's VERSION frame names the build, and `skilltable.py` reads the vault's exe of it at
 `+0x40`. Gapped connections are set aside by name: the one is `20260928T103123 :65009`.
 
-**OBSERVED, 2026-10-07, 127 connections on six builds (38519, 38797, 38833, 38849, 38888,
-38974):**
+**OBSERVED, 2026-10-07, 127 connections on four builds (38797 × 12, 38833 × 37, 38849 ×
+12, 38888 × 66), each scored on its own build's table.** (Corrected after review the same
+day: this line said "six builds", which are the exe tables the vault holds — 38519 and
+38974 have no live connection. The reader now prints both lists.)
 
 - **P1 HOLDS.** 1,477 completions of table-aftercast-0.75 spells. The next start is
   **never under 0.70 s**: min 0.704, p5 0.741, p10 0.748, median 1.135. A cast, a swing
@@ -9989,13 +9991,22 @@ client's VERSION frame names the build, and `skilltable.py` reads the vault's ex
   ready act AT the end of the aftercast. An AI that is merely slow would not pile up there.
 - **P3 HOLDS.** The aftercast-0 control re-starts under 0.70 s **49 of 95** times, down to
   0.000. It spans five skills: 2 (Resurrection Signet), the Ranger preparations 432 / 433 /
-  435 (activation 2.0) and 769. So the floor is the table's `+0x40` and not a general pause
-  between a body's actions. CORROBORATED by the observer's own E5 → E3, which sits on the
-  same column (castmech §9: 1, 105, 153, 814, 858 at 0.732–0.765).
+  435 (activation 2.0) and 769. **By skill** (under 0.70 / n): the signet 2 32 / 42, 433
+  15 / 40, 435 2 / 3, 432 0 / 4 — and the one SPELL, 769 (type 5), 0 / 6, never sooner
+  than 1.75 s. So what the tape shows is that the floor is **not a general pause after
+  every action**: every sub-0.70 re-start is a signet or a preparation. It does **not**
+  separate "the `+0x40` column decides" from "a spell pauses whatever the column says" for
+  an aftercast-0 SPELL, where the server applies no hold: that rule is WIKI (castmech §9's
+  exception list, the shadow steps, which include 769) and RECONSTRUCTION on tape — 769's
+  n = 6 at ≥ 1.75 s fits both readings. (Corrected after review the same day: this
+  bullet said "so the floor is the table's `+0x40`".) The column for the 0.75 class is
+  CORROBORATED by the observer's own E5 → E3, which sits on it (castmech §9: 1, 105, 153,
+  814, 858 at 0.732–0.765).
 - **P4 HOLDS. Our server is the known-bad arm, from a real capture.** On
   `authsrv-20260928T002701-c1` the Hatcher chains 253 → 289 at **0.025 s** (n = 13, 2 under
-  0.70). On `authsrv-20261001T100807-c1` the heroes 200 / 201 swing **0.000 s** after their
-  281 lands (90 of 90).
+  0.70). On `authsrv-20261001T100807-c1` the heroes 200 / 201 swing after their 281 lands
+  **90 of 90 under 0.70 s**: 44 in the `[58]`'s own batch (within 0.002 s), the rest
+  0.08–0.562, mode ≈ 0.48. (Corrected after review: this said "0.000 s, 90 of 90".)
 - Other aftercast classes (0.25, 1.0, 1.5, 0.6 and so on in the table): **no completion of
   one is on any tape** (0 rows). They are RECONSTRUCTION wherever the server applies them.
 
@@ -10022,20 +10033,29 @@ Registered before the run (P6): no instant's `[48]` falls inside a 0.75 aftercas
 WIKI (GWW "Aftercast delay", castmech §6) says the caster "cannot ... activate other
 skills".
 
-**REFUTED.** 7 instants sit between a 0.75 completion and the next start, and **3 of the 7
-are inside the window: 0.000, 0.499 and 0.501 s.** All three are stance 11 (type 3, table
-aftercast 0), by agent 4 on `20260928T103123` (:50061, :58544). OBSERVED, n = 3, one
-stance, one body.
+**REFUTED.** 7 instants sit between a 0.75 completion and the next start, and **2 of the 7
+are strictly inside the window: 0.499 and 0.501 s**, both on `20260928T103123` :58544 (the
+`[58]` closing 146 at t = 599.619 then `[48, 4, 11]` at 600.119; the `[58]` closing 135 at
+616.617 then `[48, 4, 11]` at 617.116). Both are stance 11 (type 3, table aftercast 0), by
+agent 4. OBSERVED, **n = 2, one stance, one body, one session.**
+
+A third row, 0.000 on :50061 (t = 173.496), is a `[48]` in the `[58]`'s **own batch**, and
+batch order is not evidence: on the same connection at t = 160.980 the batch carries
+`[48, 4, 11]` **before** `[58, 4, 0]`. The reader now prints it apart (`p6_split`,
+"co-batched") and scores nothing on it. (Corrected after review the same day: this
+section said "3 of 7 … OBSERVED, n = 3".)
 
 So the hold is a CLOCK gate on the PICKED slot, which an instant passes. It is not a stop
 ahead of `pick_skill`. This is the one place the server departs from the brief's
-"before pick_skill" placement, and the wire is why.
+"before pick_skill" placement, and the wire is why. **The server lets every
+`INSTANT_TYPE_CODES` type through (3, 15, 16); only the stance is witnessed, so a SHOUT
+or a type-16 skill inside the window is RECONSTRUCTION**, labelled at the authsrv site.
 
 ### 65.4 SKILLS-AC4 — the hero's E3 is not on tape for an aftercast spell
 
 The survey cited "retail's hero E5 → E3 is 0.000 (322 11/11, 346 17/17, 348 7/7 on
 `20260914T005758`)" as the reason the hero's E3 must stay at its E5. **All three are table
-aftercast 0 on all six builds**: 322 is an attack (type 14), 346 a stance (3) and 348 a
+aftercast 0 in all six of the vault's tables**: 322 is an attack (type 14), 346 a stance (3) and 348 a
 shout (15). Their 0.000 cannot tell "the E3 rides the E5" from "the E3 waits the aftercast".
 
 No non-observer agent completes an aftercast > 0 skill with an E5 / E3 on any tape, so P5
@@ -10059,9 +10079,19 @@ a spell, not OBSERVED.
     unchanged around it;
   - in `enemy_attack_tick` again, **ahead of the plain swing's interval gate**;
   - in `ally_cast_tick`, right after the slot unpacks, which also covers the resurrection
-    pick;
+    pick, and **ahead of the swing clock and the energy debit** — below the debit a held
+    hero would pay on every tick it waits, HEROENERGY's defect class (locked by
+    test_npcaftercast §3 since the review pass);
   - in `ally_attack_tick`, after the cast-in-flight check.
 - A clock hold keeps the round-robin cursor where it is, so `pick_skill` is untouched (Q19).
+  It does **not** keep the slot: `last_slot` is not written, and the next tick re-picks
+  from the cursor, so a slot that comes ready earlier in the scan takes the turn. On the
+  Hatcher's bar 253 is held at ticks 416–419, 312 is picked at 420 and cast at 425, and
+  253 waits for the cursor (515). That is the round robin's fixture behaviour (Q19), not
+  the gate's; test_castgate pins the whole default-arm cadence (`ON_SEQUENCE`).
+- **An attack skill is held** (the predicate exempts instants only): OBSERVED, P1's 17
+  attack-skill next starts floor at 0.735. Driven for a hostile and a hero since the
+  review pass.
 
 **RECONSTRUCTION, each said at its site:**
 
@@ -10100,6 +10130,14 @@ a spell, not OBSERVED.
   `INSTANT_LEAVES_BODY`) and confirmed on the client by ds.34 (`456e5d30`).
 - **A hero's E4** was closed by PENDSKILL (`f56a13d9`; its client run is `01351dcd`).
 - **A hero's debit** was closed by HEROENERGY (`050f8b4d`, `[62]` behind the E4).
+- **"The `[62]` energy word (read, own-party-scoped, not shipped)"** is stale for the same
+  reason (added after review the same day): HEROENERGY ships `[62, hero, −cost/max]`
+  behind a paid hero cast's E4 (`HERO_SPEND_WORD`, PLAN-LOG 2026-10-01), and its client run
+  saw 64 of 64 hero Orisons carry it. **What stays open is narrower:** the hero's attack
+  skill 322's `[62]` is NOT in its E4's batch 10 of 11 on `20260914T005758` (agent 30;
+  OBSERVED, re-derived from this tree with `deepwoundjoin.sequence`: 1 of 11 in the E4's
+  batch, the other ten in a later one; DESKWORK-D5 step 3(c), PLAN-LOG 2026-09-22), which
+  "behind the E4" does not reproduce.
 - **The zero-recharge E5** was closed by SLICE-F52 52.8 (`a6a3d34b`, merged in
   `4804b835`).
 - **Still open, and NOT on the line:** a HERO's adrenaline debit. `ally_cast_tick` skips
