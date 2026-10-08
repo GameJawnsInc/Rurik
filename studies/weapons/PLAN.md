@@ -3210,7 +3210,7 @@ template text in the repo):
   A condition on a FOE still sends no `[6]` id (Burning, Cracked Armor -- §8.1's known gap).
 
 **WEAPONS-C11 -- the area OUTLIVES its caster's DEFEAT MARK: OBSERVED, n = 1; a caster
-killed in play: no witness (its one candidate is inconclusive).** Re-derived with
+killed in play: no witness (every candidate is inconclusive).** Re-derived with
 `aotjoin.py --rows --stamp 20260928T103123 --stamp 20260929T100038` and a raw read of the
 connection through `deepwoundjoin.sequence`. Cast #17, `20260929T100038` :51199: agent 10
 (the Zaishen Mage) announces Fire Storm at 562.188 on agent 3, completes at +2.011
@@ -3256,10 +3256,11 @@ zaishenrun and CASTAI-ZF25 already read both as match 4's end.) **The tally of c
 deaths with the area live: 1 positive -- past a defeat mark, not a kill -- and 3
 inconclusive of 4** -- §41's two (20260817T231139 #10 +4.676, #13 +6.92, both areas
 empty), and #8 on `20260928T103123` :58544: agent 9 dead at +8.05 and nobody struck after
-k = 4. That one is the corpus's only caster KILLED IN PLAY: its dead bit rises alone, 29 s
-before the connection ends, at a reconstructed 0.0326 of its health (castethogram's
-`death_checks`, the instrument zaishenrun's marks read; RECONSTRUCTION) -- and it is
-inconclusive. The server already KEPT the area (§42's RECONSTRUCTION, locked in
+k = 4. That one is the Zaishen tapes' only caster KILLED IN PLAY: its dead bit rises
+alone, 29 s before the connection ends, at a reconstructed 0.0326 of its health
+(castethogram's `death_checks`, the instrument zaishenrun's marks read; RECONSTRUCTION)
+-- and it is inconclusive, as are §41's two PvP deaths (not read for a defeat mark here;
+both areas empty). The server already KEPT the area (§42's RECONSTRUCTION, locked in
 test_weapons 30 (e)); that reading is OBSERVED n = 1 only past a defeat mark, and stays
 RECONSTRUCTION for a caster killed in play. Still RECONSTRUCTION: a dead caster's ticks
 at its snapshotted strike level (the takers' armour is unknown: §41's are PvP players,
@@ -3324,8 +3325,8 @@ with its caster.
 
 **Left (OUT of this lane, carried on `PLAN.md` §8.1 and here):** Maelstrom 215, Chaos Storm
 77, Searing Heat 196's end rider, 844 / 1083 / 1372's clauses (WEAPONS-C12); a caster
-KILLED IN PLAY with its area live and struck after (WEAPONS-C11: no witness; the one
-candidate, :58544, is inconclusive); bodies'
+KILLED IN PLAY with its area live and struck after (WEAPONS-C11: no witness; :58544's
+and §41's two are inconclusive); bodies'
 adjacent damage and Cyclone Axe (no witness anywhere in the corpus); the `+0x80` and
 visual-column leads (UNVERIFIED); the wiki reads; and a client run of the new rows (the
 owner's, after landing -- the runsheet is in the lane's report).

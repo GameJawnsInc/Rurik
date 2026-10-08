@@ -2910,8 +2910,8 @@ each tick on the tape (every non-observer position is a lead). Whether the caste
 area was INCONCLUSIVE here (2 casts, both areas empty); 2026-10-07 (weapons 45) the area OUTLIVES \
 its caster's DEFEAT MARK, OBSERVED n = 1 on 20260929T100038 :51199 -- a clean tick at completion + \
 9.989, 1.5 s after the caster's dead bit, which is the lost match's mark on every surviving party \
-body (CASTAI-ZF25), not a kill in play; a caster killed in play has no witness (the one candidate, \
-:58544, struck nobody after) -- and the server keeps the area, as it did."""
+body (CASTAI-ZF25), not a kill in play; a caster killed in play has no witness (the Zaishen tapes' \
+one, :58544, and the two here struck nobody after) -- and the server keeps the area, as it did."""
 
 [skill_effect.192]
 scale_means = "Fire damage"
