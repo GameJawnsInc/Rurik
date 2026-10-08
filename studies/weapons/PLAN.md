@@ -1692,14 +1692,20 @@ whether retail re-sends 41 / 43 on a switch that moves the MAXIMUM ENERGY -- sti
 item was in any 1A set. RUN-W9-2 itself is closed.
 
 **2026-10-08, a live pass (RIDERS-R5, [studies/livekey/RIDERS.md](../livekey/RIDERS.md)).** In
-Kamadan on `20261008T132845` `:65410` the owner's step asked for the held set's key, an empty set's
-key and a switch into an energy weapon's set. Between that step's mark (245.4 s) and the first switch
-(267.0 s) **no `0x0032` left the client at all**: if both presses happened, retail's CLIENT refuses
-the same-set and the empty-set press locally and the server is never asked -- which would make the
-open "reply" question moot rather than answered. Owed: the owner's word that the two presses were
-made. The switch `0x0032 [1]` and back `[0]` were answered at +46 / +33 ms by `0x0148 [90, n]` and one
-`0x014B` for item 10573, with **no 41 / 43** -- so either that set moved no maximum energy or the
-re-send does not happen; the item's modifiers are not read here, so it stays INFERRED.
+Kamadan on `20261008T132845` `:65410`, with the bow (item 10573) in set 0 and sets 1-3 declared
+empty at load (`0x0147 [90, n, 0, 0]`):
+- **The same-set press never leaves retail's client** -- no `0x0032` follows it (the owner confirms
+  the press). There is no server reply to model; ours, which also sends nothing, is not wrong.
+- **The empty-set press is a real switch on retail, and the "smaller claim" is REFUTED for it.** The
+  client SENT `0x0032 [1]`; retail answered at +46 ms with `0x0148 [90, 1]` and `0x014B [90, 10573,
+  894, 3]` -- the bow from the equipped bag into the backpack's first free cell, the character
+  barehanded -- and `0x0032 [0]` returned it (`0x014B [90, 10573, 889, 0]`, +33 ms). No `0x006F`
+  (a town). **Ours refuses the empty set with nothing sent** (`select_weapon_set`), and the client
+  is left showing its own switch. Following retail needs a barehanded swing model, which nothing
+  measured gives -- owed, not shipped.
+- **The 41 / 43 on a moved maximum stays INFERRED**: the account holds no staff, so no energy
+  switch was made. (This note first read the `[1]` / `[0]` pair as that switch and the two presses
+  as client-local; corrected the same day.)
 
 ## 29. WEAPONS-W9, the desk close -- 2026-09-19: what the client does with `0x0152`, and the item family's first field
 
