@@ -10133,11 +10133,27 @@ a spell, not OBSERVED.
 - **"The `[62]` energy word (read, own-party-scoped, not shipped)"** is stale for the same
   reason (added after review the same day): HEROENERGY ships `[62, hero, −cost/max]`
   behind a paid hero cast's E4 (`HERO_SPEND_WORD`, PLAN-LOG 2026-10-01), and its client run
-  saw 64 of 64 hero Orisons carry it. **What stays open is narrower:** the hero's attack
-  skill 322's `[62]` is NOT in its E4's batch 10 of 11 on `20260914T005758` (agent 30;
-  OBSERVED, re-derived from this tree with `deepwoundjoin.sequence`: 1 of 11 in the E4's
-  batch, the other ten in a later one; DESKWORK-D5 step 3(c), PLAN-LOG 2026-09-22), which
-  "behind the E4" does not reproduce.
+  saw 64 of 64 hero Orisons carry it. **What stays open is narrower, and it is the E4, not
+  the word** (corrected 2026-10-08 by the lane's second review; the first draft named the
+  `[62]`). On `20260914T005758`, OBSERVED with `deepwoundjoin.sequence`, batches by equal
+  time:
+  - all 28 of agent 30's `[62]` words sit in a cast's own batch: 17 with a 346 E4, and 11
+    with the hero's attack skill 322's `0x00A0 [50]` start, one of those also holding its E4;
+    none stands alone;
+  - so 322's `[62]` rides its own `[50]` 11 of 11. That is the START word, not the strike,
+    and it is where `ally_cast_tick` already sends ours;
+  - **what differs is the E4.** Retail opens it 0.393–8.479 s ahead of the `[50]` in 10 of
+    11 (median 2.549; 0.000 once). Ours opens it in the `[50]`'s tick. In 6 of the 10 the
+    hero sends `0x002A` in between, so it moves after the E4. That it is walking into reach
+    is RECONSTRUCTION. The other 4 show nothing naming the hero; the swing clock is one
+    UNVERIFIED reading.
+
+  The same misreading sits upstream of this line, and both places now carry the dated
+  correction: `authsrv.py`'s HEROENERGY comment ("none in its stamp … the strike,
+  probably") and studies/slice SLICE-F54 54.1. The "5 of 11 within 1.5 s" there is this
+  E4-to-`[50]` lead: re-derived, it is 4 of 11 within 1.5 s and 5 within 2.0 s. PLAN-LOG
+  2026-09-22's step 3(c) says "a batch of its own 10 of 11". Those are the same 10 rows, and
+  the batch is the `[50]`'s.
 - **The zero-recharge E5** was closed by SLICE-F52 52.8 (`a6a3d34b`, merged in
   `4804b835`).
 - **Still open, and NOT on the line:** a HERO's adrenaline debit. `ally_cast_tick` skips

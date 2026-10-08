@@ -6769,6 +6769,11 @@ HERO_WIRE_POOLS = True         # False (--hero-silent-pools): the pre-JARIN sile
 #     ATTACK skill retail's [62] came later (5 of 11 within 1.5 s of the E4,
 #     none in its stamp) -- the strike, probably; ours debits at the start and
 #     says so there: RECONSTRUCTION for that one class.
+#     CORRECTED 2026-10-08 (studies/skills §65.7, SKILLS-AC7): the [62] rides
+#     322's own [50] START word 11 of 11 (1 of them in the E4's stamp too), so
+#     ours, sent in the [50]'s tick, is retail's placement -- OBSERVED. What
+#     differs is the E4: retail opens it 0.393-8.479 s ahead of the [50] 10 of
+#     11, ours in its tick. "5 of 11 within 1.5 s" is that lead (4 within 1.5 s).
 #   * THE RATE. The hero's [43] was the PLAYER's float scaled to the hero's
 #     maximum (2 pips on a Warrior player), and its server pool was the HOSTILE
 #     default (ENEMY_ENERGY 30, ENEMY_ENERGY_PIPS 5) -- three numbers. Now the

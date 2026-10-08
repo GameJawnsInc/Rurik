@@ -4171,8 +4171,18 @@ On `20260914T005758` Koss's skill 346 (5 energy, instant) is E4, `0x00A2 [62, Ko
 E5, `[48]`, `[21]`, …, E3 in one stamp. f = −0.25 at his maximum 20, and −0.2941 at 17
 after a death: −cost / current maximum, `pools.spend_fraction`'s rule for the player. That
 holds on 17 of 17 E4s. His attack skill 322 (5 energy) has no `[62]` in its E4's stamp, and
-one within 1.5 s on 5 of 11; retail probably pays an attack skill at the strike. No
-henchman in the corpus sends an E4 or a `[62]`. The hostile site's "722 casts by other
+one within 1.5 s on 5 of 11; retail probably pays an attack skill at the strike.
+**Corrected 2026-10-08** (studies/skills §65.7, SKILLS-AC7, re-derived with
+`deepwoundjoin.sequence`):
+- 322's `[62]` rides its own `0x00A0 [50]` START word 11 of 11, so it is not paid at the
+  strike;
+- one of the 11 is in the E4's stamp, with the `[50]`;
+- the delay after the E4 is the E4-to-`[50]` lead, 0.393–8.479 s on the other ten: 4 of 11
+  within 1.5 s and 5 within 2.0 s;
+- ours sends the `[62]` in the `[50]`'s tick, so the word is placed as retail's. What still
+  differs is that ours opens the E4 in that tick too.
+
+No henchman in the corpus sends an E4 or a `[62]`. The hostile site's "722 casts by other
 agents, not one spend" stays true of non-hero agents.
 
 **Ours:** `ally_cast_tick` debited the pool and sent nothing, so the panel sat at its
