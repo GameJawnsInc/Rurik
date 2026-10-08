@@ -2129,7 +2129,8 @@ def _sections(carry):
     # 2026-10-07 (CHAN55, studies/skills 68): the client's own templates DO discriminate --
     # 102 / 133 are SHADOW, 143 a steal slot, 2809's parent untyped DAMAGE -- so the rule is
     # "armour-ignoring, non-attack" and not "holy" (4 of the 7 are not holy). The server
-    # now sends it (authsrv.spell_damage_prop); test_chan55 section 6 holds the census exact.
+    # now sends it (authsrv.spell_damage_prop); test_chan55 section 8b holds the census exact
+    # (and 8c the client's templates).
     nw_z2, nw_pin, nw_all = collections.Counter(), collections.Counter(), collections.Counter()
     for stamp, _conn, d in named_census:
         for k, n in d.items():

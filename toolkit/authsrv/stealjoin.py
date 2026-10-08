@@ -12,7 +12,11 @@ batch (healjoin.batches) is searched for the first [55, obs, obs, +h] and the fi
 [55, X, obs, -d] (X != obs) after it. A row records both fractions, each multiplied by
 its agent's LAST property-42 maximum on the wire before the word (None when the wire
 never declared one), whether a [10] or a 16 / 17 from the observer sits between the E5
-and the damage word, and what lies between the heal and the word.
+and the damage word, and what lies between the heal and the word. Ahead of the heal it
+also records the observer's own [42, obs, max] values (`self_max`) beside the last one
+declared BEFORE the E5 (`self_max_prior`) -- equal values are a re-declared, UNCHANGED
+maximum -- and the recipient visuals the observer cast, 0x00A0 [20, X, obs, v]
+(`visual`, the v's).
 
 HOSTILE. For every 0x009F [10, observer, S] followed in its batch by [55, obs, C, -d]
 (the named word, spellhitjoin.named_words' rule), the batch BEFORE the [10] is searched
@@ -44,10 +48,12 @@ import tape             # noqa: E402
 import vaultpath        # noqa: E402
 
 OP_INT = 0x009F           # [prop, agent, value]
+OP_INT_TARGET = 0x00A0    # [prop, target, cause, value]
 OP_FLOAT_TARGET = 0x00A3  # [prop, target, cause, f32]
 OP_RECHARGE = 0x00E5      # [agent, skill, copy, seconds]: the skill completed
 OP_GAIN = 0x00CF          # [agent, units]
 PROP_SKILL_DAMAGE = 10
+PROP_EFFECT_ON_TARGET = 20
 PROP_MAX = 42
 PROP_55 = 55
 PROP_DAMAGE = (16, 17)
@@ -116,7 +122,14 @@ def own_steals(seq, obs, heal_first=True):
                 "damage_16": [w[1] for _i, _t, o, w in upto
                               if o == OP_FLOAT_TARGET and w[1] in PROP_DAMAGE and w[3] == obs],
                 "between": [(o, w[1]) for _i, _t, o, w
-                            in rest[min(heal[0], word[0]) + 1:max(heal[0], word[0])]]})
+                            in rest[min(heal[0], word[0]) + 1:max(heal[0], word[0])]],
+                "self_max": [w[3] for _i, _t, o, w in rest[:heal[0]]
+                             if o == OP_INT and len(w) > 3 and w[1] == PROP_MAX
+                             and w[2] == obs],
+                "self_max_prior": _max_before(maxima, obs, i),
+                "visual": [w[4] for _i, _t, o, w in rest[:heal[0]]
+                           if o == OP_INT_TARGET and len(w) > 4
+                           and w[1] == PROP_EFFECT_ON_TARGET and w[3] == obs]})
     return rows, completions
 
 
@@ -197,7 +210,12 @@ def main():
         print(f"  {r['capture']} {r['connection'].split('->')[0]} t={r['t']:.3f} skill {r['skill']}"
               f" foe {r['foe']}: +{r['heal_frac']:.5f} ({r['heal_pts']}) then "
               f"{r['dmg_frac']:.5f} ({r['dmg_pts']}); [10] {r['named']}, 16/17 {r['damage_16']},"
-              f" between {r['between']}")
+              f" between {r['between']}; [42, me] ahead {r['self_max']} (prior "
+              f"{r['self_max_prior']}), visual {r['visual']}")
+    ahead = [r for r in own if r["self_max"]]
+    print(f"[42, me] between the E5 and the heal: {len(ahead)} of {len(own)}; a MOVED "
+          f"maximum (value != the last [42, me] before the E5): "
+          f"{sum(1 for r in ahead if r['self_max'][-1] != r['self_max_prior'])}")
     steals = [r for r in hostile if r["steal"]]
     print(f"HOSTILE named 55 words at the observer: {len(hostile)}; steal-shaped "
           f"{len(steals)} {dict(collections.Counter(r['skill'] for r in steals))}")

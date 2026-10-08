@@ -3243,9 +3243,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "lands only on a target activating a spell as the strike "
                          "lands (WIKI; OBSERVED on 20260928T103123's henchman, 2 of 2).")
     ap.add_argument("--no-armour-ignoring-on-55", action="store_true",
-                    help="CHAN55 REVERT (studies/skills 68): every skill's damage word "
-                         "rides property 16, as this server sent until 2026-10-07 -- "
-                         "Holy Strike 312 and Banish 252 on 16. WRONG on retail's "
+                    help="CHAN55 REVERT (studies/skills 68): the damage words the "
+                         "channel rule routes -- Holy Strike 312, Banish 252, the label "
+                         "tier's holy rows -- ride property 16, as this server sent "
+                         "until 2026-10-07 (a steal keeps 55: --no-life-steal is its "
+                         "revert; Empathy-style armour-ignoring words stay on 55 as "
+                         "they always were). WRONG on retail's "
                          "evidence: the words [10, obs, S] names split with no overlap, "
                          "55 (negative) for exactly the armour-ignoring non-attack skills "
                          "102 133 143 251 272 302 2809 (94 words) and 16 / 17 for 20 "

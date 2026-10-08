@@ -1807,6 +1807,20 @@ extractor = "toolkit/clientscan/skilltable.py"
 build = 38797
 verified = "s_skill row 312, +0x7c = 556; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
 
+# CHAN55 (studies/skills 68.3): Vampiric Gaze's recipient visual, which the steal's own
+# batch carries ahead of the heal. `since = "CHAN55"` marks it as the lane's, as the
+# SKILLS-IA rows below are marked: send_skill_visual sends nothing for it under
+# --no-life-steal, so that arm is the pre-lane server's bytes (no row). A marker, not a
+# fact about the client -- the value is the table's.
+[skill_visual.153]
+recipient = 276
+since = "CHAN55"
+[skill_visual.153.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 153, +0x7c = 276 (+0x78 = 2077, none); extracted 2026-10-07 from the pinned 38797 snapshot, the wire's own [20, foe, me, 276] in 13 of 13 of the observer's 153 completion batches (stealjoin.py `visual`)."
+
 [skill_visual.316]
 caster = 562
 [skill_visual.316.provenance]

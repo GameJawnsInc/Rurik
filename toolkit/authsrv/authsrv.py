@@ -4561,31 +4561,40 @@ def _is_attack_skill(skill_id):
 # banner) -- and NOT "holy": a holy key fails on 4 of the 7 (102, 133, 143, 2809).
 # Keyed on the LOADED ROW, never on a label string's words: a standalone damage label
 # outside ARMOUR_RESPECTING_MEANS ("Holy damage", "Armor-ignoring damage"), or a
-# SCALE_MEANS_STEAL row, on a skill whose type is not ATTACK_TYPE_CODE. RECONSTRUCTION for the player's own holy cast and
-# a hero's (no tape holds either); the corpus's own-cast witness of the channel is the
-# steal 153, 13 of 13 on 55 (studies/skills 68). An unknown type (no skills row) keeps
+# SCALE_MEANS_STEAL row, on a skill whose type is not ATTACK_TYPE_CODE. RECONSTRUCTION
+# for the player's own holy cast and a hero's (no tape holds either); the corpus's
+# own-cast witness of the channel is the steal 153, 13 of 13 on 55 (studies/skills 68). An unknown type (no skills row) keeps
 # 16: the rule cannot say "not an attack" without it. AN AREA'S TICKS TAKE THE SAME RULE
 # (_area_strike, both casters): retail's PERIODIC damage splits by type exactly as a
-# cast's does -- Balthazar's Aura 272's pulses 64 of 64 on 55, Zealot's Fire 271's 115 of
-# 115 on 16, each named by [10] -- so a holy area over time on 55 is RECONSTRUCTION by
+# cast's does -- Balthazar's Aura 272's pulses 64 of 64 on 55, Fire Storm 197's ticks 12
+# of 12 on 16, each named by [10] -- so a holy area over time on 55 is RECONSTRUCTION by
 # that split (no area-over-time spell of an armour-ignoring type is on any tape).
+# (Zealot's Fire 271's 115 on 16 is NOT a tick: it is a payoff riding an ally-targeted
+# cast's completion batch -- spellhitjoin's PAYOFF rule, CASTAI-ZF30.)
 # NOT ROUTED, on purpose: hex_end_burst's player half (Incendiary Bonds 179, fire --
 # 16 OBSERVED, 5 of 5 named) and a blocked attack skill's punishment (an ATTACK's,
 # the rule's own exclusion) keep hit_enemy's 16.
-# --no-armour-ignoring-on-55 reverts: every skill's damage word on 16, as this server
-# sent until 2026-10-07 (Holy Strike, Banish).
+# --no-armour-ignoring-on-55 reverts THE WORDS THIS RULE ROUTES -- Holy Strike 312,
+# Banish 252, the label tier's holy rows -- back to 16, as this server sent until
+# 2026-10-07. It does not touch a STEAL (its channel is OBSERVED, 13 of 13 own and 3 of
+# 3 hostile, and its own revert is --no-life-steal), nor armour_ignoring_damage's words
+# (Empathy and its kind), which rode 55 before this lane and still do.
 ARMOUR_IGNORING_ON_55 = True
 
 
 def spell_damage_prop(skill_id):
     """The property a SKILL's damage word rides: GV_ARMOR_IGNORING (55) when the
-    loaded skill_effect row is armour-ignoring damage on a non-attack skill (the
-    banner above), PROP_DAMAGE (16) otherwise -- and always 16 under
-    --no-armour-ignoring-on-55, for no skill, or for a skill with no skills row."""
-    if not ARMOUR_IGNORING_ON_55 or not skill_id:
+    loaded skill_effect row is armour-ignoring damage, or a steal, on a non-attack
+    skill (the banner above), PROP_DAMAGE (16) otherwise -- 16 for no skill or for a
+    skill with no skills row, and 16 for every non-steal row under
+    --no-armour-ignoring-on-55 (a steal keeps 55: --no-life-steal is its revert)."""
+    if not skill_id:
         return agents.PROP_DAMAGE
     means = skill_effect_row(skill_id).get("scale_means")
-    ignoring = means in SCALE_MEANS_STEAL or (                 # a steal: 13 of 13 on 55
+    steal = means in SCALE_MEANS_STEAL                         # 13 of 13 own on 55
+    if not steal and not ARMOUR_IGNORING_ON_55:
+        return agents.PROP_DAMAGE
+    ignoring = steal or (
         SCALE_MEANS_DAMAGE.get(means) == "standalone"
         and means not in ARMOUR_RESPECTING_MEANS)
     if not ignoring:
@@ -28128,6 +28137,11 @@ def send_skill_visual(send, state, caster_id, skill_id, target_id, conn_id):
         # they send nothing. (The review's EV-1 / CD-1: the first cut sent
         # the [21] under both arms and called the arm "today's bytes".)
         return
+    if not LIFE_STEAL and row.get("since") == "CHAN55":
+        # The same exactness for --no-life-steal: Vampiric Gaze 153's [20, foe, me,
+        # 276] (13 of 13 own completions) came in with CHAN55, and that arm is "a
+        # steal row resolves to nothing", the server before 2026-10-07 -- no row.
+        return
     caster_vis = row.get("caster")
     if caster_vis is not None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -28269,8 +28283,9 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     damage is certain to land, in retail's slot: at the PLAYER after the gain and
     ahead of [10, player, skill] (143 at the observer, 3 of 3: 0x00CF, the
     caster's [55, c, c, +h], [10], the word); at a BODY ahead of its maximum and
-    word (the own steal's order, heal then [42, foe] then the word, 13 of 13 --
-    RECONSTRUCTION for a body victim of a body). Never called when nothing lands.
+    word (the own steal's order: the heal then the word 13 of 13, the foe's
+    first-word [42] between them on 2 of 13 -- RECONSTRUCTION for a body victim of
+    a body). Never called when nothing lands.
 
     THE MAXIMUM (property 42) IS DECLARED ONLY WHEN IT MOVED (DESKWORK-D5 3(a)):
     the PLAYER branch goes through `declare_player_max`, which sends the 42 only
@@ -28384,19 +28399,29 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
 # 2026-03-02, heal_agent's own citation) -- the reduction "does not affect life
 # stealing". The heal rides AHEAD of the damage word in both directions on tape; a heal
 # sent after the word is the known-bad order. NOT MODELLED, named here: a cap at the
-# target's remaining health (the 13 own steals all stole the full amount on foes whose
-# health is unknown; retail's damage words carry the raw overkill, _damage_fraction's
-# census) -- UNVERIFIED, a runsheet item; taker modifiers (Frenzy, a conversion) are not
-# applied to a steal -- RECONSTRUCTION (skill_steal).
+# target's remaining health (the 13 own steals all stole the full amount; 11 of them on
+# foes whose health is unknown, and the other 2 -- agent 40 on 20260807T143055 :64103,
+# reconstructed from its create at 88 and 37 left -- were never near it; retail's
+# damage words carry the raw overkill, _damage_fraction's census) -- UNVERIFIED, a
+# runsheet item; taker modifiers (Frenzy, a conversion) are not applied to a steal --
+# RECONSTRUCTION (skill_steal).
 
 
 def player_life_steal(send, state, conn_id, skill_id, target, amount):
     """The player's own steal on a hostile: hit_enemy's exact word on 55 (its
-    spell_skill names the steal row) with the heal in before_damage -- E5, the
-    caster's [42, me, max] when it moved (OBSERVED ahead of the heal on 4 of 13; the
-    "only when moved" half is declare_player_max's rule, RECONSTRUCTION here), the
-    heal, the foe's first-word [42], the word: retail's 593.854 batch on :58544. No
-    [10] and no gain (the caster's own cast). Returns hit_enemy's verdict."""
+    spell_skill names the steal row) with the heal in before_damage. Behind cast_tick's
+    E5, 58 and the visual [20, foe, me, 276] (skill_visual.153; 13 of 13 own
+    completions): the caster's [42, me, max] when it MOVED, the heal, the foe's
+    first-word [42], the word. No [10] and no gain (the caster's own cast). Returns
+    hit_enemy's verdict.
+
+    THE [42, me] IS CONTESTED. Retail sends it between the E5 and the heal on 7 of the
+    13 own steals (238.151, 465.746, 593.854, 437.052, 527.415, 561.348, 129.665) and
+    every one of the 7 re-declares an UNCHANGED maximum (the last [42, me] before the
+    E5 carries the same value); the other 6 have none, and no trigger is derived
+    (stealjoin.py's `self_max`). declare_player_max's "only when it moved" rule is
+    kept, so in a session -- the maximum seeded at the create -- ours sends none of
+    the 7: a named divergence, studies/skills 68.4."""
     amount = _whole_points(float(amount))
 
     def _heal():
@@ -50774,10 +50799,11 @@ def main():
     if a.no_armour_ignoring_on_55:
         global ARMOUR_IGNORING_ON_55
         ARMOUR_IGNORING_ON_55 = False
-        print("NO ARMOUR-IGNORING ON 55: every skill's damage word rides property 16, "
-              "Holy Strike and Banish included, as until 2026-10-07 (retail: an "
-              "armour-ignoring non-attack skill's word rides 55, negative -- 94 words, "
-              "7 skills, no overlap; CHAN55).", flush=True)
+        print("NO ARMOUR-IGNORING ON 55: the damage words spell_damage_prop routes -- "
+              "Holy Strike 312, Banish 252, the label tier's holy rows -- ride property "
+              "16, as until 2026-10-07 (retail: an armour-ignoring non-attack skill's "
+              "word rides 55, negative -- 94 words, 7 skills, no overlap; CHAN55). A "
+              "steal keeps 55 (--no-life-steal is its revert).", flush=True)
 
     if a.no_life_steal:
         global LIFE_STEAL

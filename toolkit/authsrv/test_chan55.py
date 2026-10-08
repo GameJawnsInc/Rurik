@@ -12,8 +12,9 @@ the named skills split with NO overlap: property 55 with a NEGATIVE fraction for
 (102, 133), a life-steal slot (143), HOLY (251, 272, 302) and untyped DAMAGE (2809, the
 PvP split of 219); the 16 / 17 side FIRE, LIGHTNING, and ATTACK skills (type 14, 399's
 untyped DAMAGE among them). So the rule is "armour-ignoring damage on a non-attack", and a
-rule keyed on "holy" fails on 4 of the 7. Section 6 re-derives every number from the
-bytes; this server sent every skill's word on 16 until today (Holy Strike 312, Banish 252).
+rule keyed on "holy" fails on 4 of the 7. Section 8b re-derives every census number from
+the bytes and 8c the templates; this server sent every skill's word on 16 until today
+(Holy Strike 312, Banish 252).
 
 Section 1 is the helper on the rows; 2 a hostile's Holy Strike and Banish onto the player
 through the real land_skill (the gain, [10, player, skill], the 55 word, no 16); 3 the
@@ -23,7 +24,8 @@ Holy Strike (one word, one death, one kill); 6 the bodies (a party Banish onto a
 through hurt_agent_row, its kill paying; a hostile's onto a party body), the player's own
 Holy Strike and Banish through handle_skill_press + cast_tick (55, the first-word [42]
 rule intact), and an area's tick on the same rule; 7 the flag, main()'s wiring and the
-call sites in the source; 8 the live corpus.
+call sites in the source; 8 the live corpus. Sections 9-11 are LIFE STEAL (SKILLS-CH3):
+9 the server's three doors, 10 the flag and the rows, 11 stealjoin over the corpus.
 
 THE BARE MACHINE. Sections 1-7 run on RECORD below plus the tracked skills rows (they
 REPLACE the vault's skills table for those sections, so a vault run takes the bare path);
@@ -58,13 +60,14 @@ HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE_CORPUS = os.path.isdir(vaultpath.vault_path("captures", "live"))
 HAVE_CLIENT = os.path.isdir(vaultpath.vault_path("client"))
 # THE FLOOR IS PER MACHINE, decided on DIRECTORIES and never on what loaded. Each number is
-# a green run's count, MEASURED 2026-10-07 in the desk-chan55 tree: 36 with RURIK_VAULT at an
+# a green run's count, MEASURED 2026-10-07 in the desk-chan55 tree: 39 with RURIK_VAULT at an
 # empty directory and at a nonexistent path alike (sections 1-7, 9, 10; 8a-8c and 11
-# declared skips); 44 on the owner's vault -- 8a's 1 (vault/content), 8b's 3 + 11's 3
-# (vault/captures/live), 8c's 1 (vault/client), each section's own count on that run.
-# (Commit 1 of the lane, the channel alone: 25 bare, 30 vault.)
-FLOOR_BARE = 36
-FLOOR_8A, FLOOR_8B, FLOOR_8C = 1, 6, 1
+# declared skips); 49 on the owner's vault -- 8a's 1 (vault/content), 8b's 3 + 11's 4
+# (vault/captures/live), 8c's 2 (vault/client), each section's own count on that run.
+# (Commit 1 of the lane, the channel alone: 25 bare, 30 vault; commit 2: 36 / 44; the
+# review fixes -- 9c2, 9i, 10d bare; 11d, 8c2 on the vault -- 39 / 49.)
+FLOOR_BARE = 39
+FLOOR_8A, FLOOR_8B, FLOOR_8C = 1, 7, 2
 LEDGER = checks.Ledger("armour-ignoring damage rides property 55", floor=(
     FLOOR_BARE + FLOOR_8A * HAVE_VAULT_CONTENT + FLOOR_8B * HAVE_LIVE_CORPUS
     + FLOOR_8C * HAVE_CLIENT))
@@ -74,11 +77,12 @@ PLAYER = authsrv.PLAYER_AGENT_ID
 HOSTILE, ALLY = agents.ALLEGIANCE_HOSTILE, agents.ALLEGIANCE_PLAYER
 FLOAT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
 INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
 GAIN = authsrv.AGENT_ADRENALINE_GAIN
 STATUS = authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
 KILL_REWARD = authsrv.GAME_SMSG_AGENT_KILL_REWARD
 P55, P16, P17 = agents.GV_ARMOR_IGNORING, agents.PROP_DAMAGE, agents.GV_CRITICAL
-P10, P42 = agents.GV_SKILL_DAMAGE, agents.PROP_HEALTH_MAX
+P10, P42, P20 = agents.GV_SKILL_DAMAGE, agents.PROP_HEALTH_MAX, agents.GV_EFFECT_ON_TARGET
 HOLY_STRIKE, BANISH, FLARE, ORB, DSHOT, STEAL = 312, 252, 194, 229, 399, 153
 HATCHER, MONK, FOE = 10, 200, 11
 
@@ -179,6 +183,15 @@ def flags(**kw):
                 setattr(authsrv, k, v)
 
 
+def visual_row(sid):
+    """The loaded skill_visual row as a dict, or {} when there is none (so a missing row
+    reds the check that reads it by name rather than raising out of its section)."""
+    try:
+        return dict(agents.WORLD.get("skill_visual", str(sid)))
+    except Exception:                                          # noqa: BLE001
+        return {}
+
+
 def prop_of(sid):
     """spell_damage_prop, or None on a server without it (a tree before CHAN55)."""
     fn = getattr(authsrv, "spell_damage_prop", None)
@@ -245,15 +258,17 @@ def body(name, allegiance, pos, health=100.0, max_health=100.0, **extra):
 
 
 def body_cast(sid, caster_allegiance=HOSTILE, cast_target=None, player_health=None,
-              foe_health=100.0, monk_health=100.0):
+              foe_health=100.0, monk_health=100.0, hatcher_health=100.0, deep_wound=None):
     """A body's skill `sid` landing through the REAL land_skill: the Hatcher (hostile, 10)
-    or the Monk (party, 200) casting at `cast_target` (None: the player). Returns
-    (state, sent)."""
+    or the Monk (party, 200) casting at `cast_target` (None: the player). `deep_wound`
+    is state's {agent: ...} set (heal_agent reads membership). Returns (state, sent)."""
     st = {"agents": {}, "pos": (0.0, 0.0)}
     if player_health is not None:
         st["player_health"] = player_health
+    if deep_wound is not None:
+        st["deep_wound"] = dict(deep_wound)
     caster_id = HATCHER if caster_allegiance == HOSTILE else MONK
-    st["agents"][HATCHER] = body("hatcher", HOSTILE, (60.0, 0.0))
+    st["agents"][HATCHER] = body("hatcher", HOSTILE, (60.0, 0.0), health=hatcher_health)
     st["agents"][MONK] = body("monk", ALLY, (0.0, 60.0), health=monk_health, party_slot=0)
     st["agents"][FOE] = body("foe", HOSTILE, (60.0, 60.0), health=foe_health)
     caster = st["agents"][caster_id]
@@ -398,22 +413,25 @@ def section_lethal():
 
 def player_cast(sid, st):
     """The player presses `sid` at FOE and the cast completes (handle_skill_press, every
-    timer moved 30 s back, cast_tick). skill_cost is stubbed for the press only -- the
-    channel, not the price; the gain's bar gate reads the real costs elsewhere."""
+    timer moved 30 s back, cast_tick). skill_cost is stubbed for the PRESS ONLY -- the
+    channel, not the price -- and put back BEFORE cast_tick, so the gain's bar gate
+    (bar_holds_adrenal, which reads skill_cost) sees the default bar's real adrenal costs
+    there: a stub left in place through cast_tick read the bar DARK, and 9b's "no gain"
+    could not fail (the review's CD-2; an injected gain stayed green)."""
     sent, send = recorder()
     st["cast_busy_until"] = 0.0
     saved_cost = authsrv.skill_cost
     authsrv.skill_cost = lambda _sid: (0, 0)
     try:
         authsrv.handle_skill_press([0, sid, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
-        sent.clear()
-        for cast in st.get("pending_casts") or ():
-            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
-                if k in cast and cast[k] is not None:
-                    cast[k] -= 30.0
-        authsrv.cast_tick(send, st, 1)
     finally:
         authsrv.skill_cost = saved_cost
+    sent.clear()
+    for cast in st.get("pending_casts") or ():
+        for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+            if k in cast and cast[k] is not None:
+                cast[k] -= 30.0
+    authsrv.cast_tick(send, st, 1)
     for cast in list(st.get("pending_casts") or ()):
         st["pending_casts"].remove(cast)
     return sent
@@ -484,7 +502,7 @@ def section_bodies_and_own():
         check(w55 == want and w16 == [],
               f"6e. an area's tick ({caster_kind} caster) takes the cast's rule: a holy row's "
               f"ticks ride 55 (retail's periodic damage splits by type: 272's pulses 64/64 on "
-              f"55, 271's 115/115 on 16)", (w55, w16))
+              f"55, Fire Storm 197's ticks 12/12 on 16)", (w55, w16))
 
 
 def section_source():
@@ -663,6 +681,13 @@ def section_client_labels():
     check(diff == {} and 2809 not in records,
           "8c. CENSUS_LABELS is the client's own parse, skill for skill (type and label set); "
           "2809 is outside the player corpus (a PvP split, read through 219)", diff)
+    rec = records.get(STEAL) or {}
+    row_vis = visual_row(STEAL)
+    check(rec.get("visual_recipient") == row_vis.get("recipient") == 276
+          and rec.get("visual_caster") == 2077 and "caster" not in row_vis,
+          "8c2. skill_visual.153 is the client's own row: +0x7c (the recipient) 276, +0x78 "
+          "the 2077 no-visual default, so the content row carries no caster",
+          ({k: rec.get(k) for k in ("visual_caster", "visual_recipient")}, dict(row_vis)))
 
 def section_steal_server():
     print("\n9. LIFE STEAL on the server (SKILLS-CH3): Vampiric Gaze 153 both directions")
@@ -687,19 +712,25 @@ def section_steal_server():
     e5 = next((i for i, (op, v) in enumerate(sent) if op == authsrv.GAME_SMSG_SKILL_RECHARGE
                and v[1] == STEAL), None)
     shape = [(op, v[0], v[1], v[2]) for op, v in sent[(e5 or 0):]
-             if (op == FLOAT_T and v[0] in (P55, P16, P17)) or (op == INT and v[0] in (P42, P10))]
-    want = [(INT, P42, PLAYER, int(pool)), (FLOAT_T, P55, PLAYER, PLAYER),
-            (INT, P42, FOE, 480), (FLOAT_T, P55, FOE, PLAYER)]
+             if (op == FLOAT_T and v[0] in (P55, P16, P17)) or (op == INT and v[0] in (P42, P10))
+             or (op == INT_T and v[0] == P20)]
+    want = [(INT_T, P20, FOE, PLAYER), (INT, P42, PLAYER, int(pool)),
+            (FLOAT_T, P55, PLAYER, PLAYER), (INT, P42, FOE, 480), (FLOAT_T, P55, FOE, PLAYER)]
+    vis = [v for op, v in sent if op == INT_T and v[0] == P20]
     hl, wd = heals(sent), words(sent, P55, P16, P17)
-    check(e5 is not None and shape == want and hl == [(PLAYER, PLAYER, f32r(18.0 / pool))]
+    check(e5 is not None and shape == want and vis == [[P20, FOE, PLAYER, 276]]
+          and hl == [(PLAYER, PLAYER, f32r(18.0 / pool))]
           and wd == [(P55, FOE, PLAYER, f32r(-18.0 / 480.0))]
           and not any(op == GAIN for op, _v in sent)
           and st["player_health"] == pool - 32.0 and st["agents"][FOE]["health"] == 282.0,
           "9b. the player's OWN 153 through handle_skill_press + cast_tick, behind its E5: "
-          "[42, me, max] (declared: never told), the heal [55, me, me, +18/max], the foe's "
-          "first-word [42, foe, 480], the word [55, foe, me, -18/480] -- retail's own-cast "
-          "batch (:58544 593.854) -- no [10], no 16 / 17, no gain; the player +18, the foe -18",
-          (e5, shape, hl, wd, st["player_health"], st["agents"][FOE]["health"]))
+          "the visual [20, foe, me, 276] (skill_visual.153; retail 13 of 13), [42, me, max] "
+          "(the FIXTURE's never-told maximum -- declare_player_max's moved-only rule; retail "
+          "re-declares an UNCHANGED one on 7 of 13, CONTESTED, studies/skills 68.4), the heal "
+          "[55, me, me, +18/max], the foe's first-word [42, foe, 480], the word [55, foe, me, "
+          "-18/480] -- the order of retail's :58544 593.854 batch -- no [10], no 16 / 17, no "
+          "gain (the bar's real adrenal costs gate it); the player +18, the foe -18",
+          (e5, shape, vis, hl, wd, st["player_health"], st["agents"][FOE]["health"]))
     # (c) Deep Wound does not cut a steal's heal (WIKI, GWW "Deep Wound" rev. 2026-03-02)
     st = {"agents": {FOE: body("foe", HOSTILE, (60.0, 0.0), health=300.0, max_health=480.0)},
           "pos": (0.0, 0.0), "deep_wound": {PLAYER: 20.0}}
@@ -711,6 +742,16 @@ def section_steal_server():
           and st["player_health"] == pool - 32.0,
           "9c. under a Deep Wound the steal's heal is NOT cut: +18 lands whole (healing=False; "
           "a heal would be cut to 14)", (heals(sent), pool, st["player_health"]))
+    # (c2) the BODY door's heal, the same rule (the review's CD-3): a Deep-Wounded Hatcher
+    # at 50 steals 18 from the player through land_skill -> body_life_steal
+    st, sent = body_cast(STEAL, hatcher_health=50.0, deep_wound={HATCHER: 20.0})
+    pool = authsrv.player_max_health(st)
+    check(heals(sent) == [(HATCHER, HATCHER, f32r(0.18))]
+          and st["agents"][HATCHER]["health"] == 68.0
+          and words(sent, P55, P16, P17) == [(P55, PLAYER, HATCHER, f32r(-18.0 / pool))],
+          "9c2. and through the BODY door: a Deep-Wounded hostile's 153 at the player heals "
+          "the caster the whole 18 (50 -> 68, +0.18; healing=True would send +0.14 and leave "
+          "it at 64)", (heals(sent), st["agents"][HATCHER]["health"], words(sent, P55)))
     # (d) a hostile's 153 at the PLAYER through the real land_skill: retail's 143 tail
     st, sent = body_cast(STEAL)
     pool = authsrv.player_max_health(st)
@@ -779,11 +820,35 @@ def section_steal_server():
         authsrv.player_pools(st)
         own = player_cast(STEAL, st)
         _, hostile = body_cast(STEAL)
+    vis_off = [v for op, v in own + hostile
+               if (op == INT_T and v[0] == P20 and v[3] == 276)
+               or (op == INT and v[0] == agents.GV_EFFECT_ON_AGENT and v[2] == 276)]
     check(heals(own) == [] and words(own, P55, P16, P17) == [] and heals(hostile) == []
-          and words(hostile, P55, P16, P17) == [] and st["agents"][FOE]["health"] == 300.0,
+          and words(hostile, P55, P16, P17) == [] and st["agents"][FOE]["health"] == 300.0
+          and vis_off == [],
           "9h. --no-life-steal: the own 153 and a hostile's resolve to NOTHING -- no heal, no "
-          "word (every session before 2026-10-07; retail moves the amount 13 of 13 and 3 of 3)",
-          (heals(own), words(own, P55), heals(hostile), words(hostile, P55)))
+          "word, and no 276 visual (skill_visual.153 is marked since = CHAN55; every session "
+          "before 2026-10-07 had no row; retail moves the amount 13 of 13 and 3 of 3)",
+          (heals(own), words(own, P55), heals(hostile), words(hostile, P55), vis_off))
+    # (i) the CHANNEL flag does not split the steal (the review's EV-4): under
+    # --no-armour-ignoring-on-55 the own steal's word and a hostile's both keep 55 --
+    # the steal's channel is OBSERVED and its revert is --no-life-steal -- while the
+    # holy words the rule routes go back to 16
+    with flags(ARMOUR_IGNORING_ON_55=False):
+        st = {"agents": {FOE: body("foe", HOSTILE, (60.0, 0.0), health=300.0,
+                                   max_health=480.0)}, "pos": (0.0, 0.0)}
+        authsrv.player_pools(st)
+        own = player_cast(STEAL, st)
+        sth, hostile = body_cast(STEAL)
+        props = (prop_of(STEAL), prop_of(HOLY_STRIKE))
+    pool = authsrv.player_max_health(sth)
+    check(words(own, P55, P16, P17) == [(P55, FOE, PLAYER, f32r(-18.0 / 480.0))]
+          and words(hostile, P55, P16, P17) == [(P55, PLAYER, HATCHER, f32r(-18.0 / pool))]
+          and props == (P55, P16),
+          "9i. --no-armour-ignoring-on-55 leaves the steal on 55 at BOTH doors (the own "
+          "cast's hit_enemy word and a hostile's armour_ignoring_damage word) and moves Holy "
+          "Strike to 16 -- one flag never splits the steal's channel",
+          (words(own, P55, P16, P17), words(hostile, P55, P16, P17), props))
 
 
 def section_steal_source():
@@ -824,13 +889,23 @@ def section_steal_source():
     check(len(wiring) == 1 and flipped == {True: False, False: True},
           "10b. main()'s `if a.no_life_steal:` block, lifted and RUN, flips the module bool",
           (len(wiring), flipped))
-    row = agents.content.load(vault_dir="", extra_dirs=[]).rows("skill_effect").get("153") or {}
+    bare = agents.content.load(vault_dir="", extra_dirs=[])
+    row = bare.rows("skill_effect").get("153") or {}
     prov = getattr(row, "provenance", None) or {}
     check(row.get("scale_means") == "Life stealing" and prov.get("source") == "capture"
           and prov.get("origin") == "live" and prov.get("capture") == "20260929T100038",
           "10c. content/world.toml (tracked, a bare load) carries skill_effect.153 as a "
           "capture row (live, 20260929T100038) labelled \"Life stealing\"",
           (dict(row), {k: prov.get(k) for k in ("source", "origin", "capture")}))
+    vis = bare.rows("skill_visual").get("153") or {}
+    vprov = getattr(vis, "provenance", None) or {}
+    check(vis.get("recipient") == 276 and "caster" not in vis and vis.get("since") == "CHAN55"
+          and vprov.get("source") == "client-table" and vprov.get("build") == 38797
+          and vprov.get("extractor") == "toolkit/clientscan/skilltable.py",
+          "10d. and skill_visual.153: recipient 276, no caster visual, a client-table row "
+          "(skilltable.py, build 38797) marked since = CHAN55 -- the [20] retail's own steal "
+          "batch carries 13 of 13 (the review's EV-2: the first cut had no row)",
+          (dict(vis), {k: vprov.get(k) for k in ("source", "build", "extractor")}))
 
 
 def section_steal_corpus():
@@ -871,6 +946,22 @@ def section_steal_corpus():
           "143 x 3, each the four consecutive messages gain, the caster's heal, [10], the word, "
           "heal fraction == word fraction (41 of 480; the caster's maximum is not on the wire)",
           [(r["skill"], r["order"], r["heal_frac"], r["dmg_frac"]) for r in steals])
+    # (d) what rides AHEAD of the heal (the review's EV-1 and EV-2): the observer's own
+    # [42, me] on 7 of 13, every one an UNCHANGED maximum re-declared -- so
+    # declare_player_max's moved-only rule (0 of 13 in a seeded session) is CONTESTED --
+    # and the recipient visual on 13 of 13, the tracked skill_visual.153's value
+    ahead = [r for r in own if r["self_max"]]
+    moved = [r for r in ahead if r["self_max"][-1] != r["self_max_prior"]]
+    row_vis = visual_row(STEAL).get("recipient")
+    check(len(ahead) == 7 and moved == [] and row_vis == 276
+          and all(r["visual"] == [row_vis] for r in own)
+          and sum(1 for r in own if r["between"]) == 2,
+          "11d. ahead of the heal: [42, me] on 7 of the 13, and 0 of the 7 a MOVED maximum "
+          "(each equals the last [42, me] before the E5 -- a re-declare our moved-only rule "
+          "never sends, CONTESTED); the visual [20, foe, me, 276] on 13 of 13, skill_visual.153's "
+          "value; the foe's [42] between the heal and the word on 2 of 13",
+          ([(round(r["t"], 3), r["self_max"], r["self_max_prior"]) for r in ahead],
+           sorted({tuple(r["visual"]) for r in own}), row_vis))
 
 
 def guarded(section):
