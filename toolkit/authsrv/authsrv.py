@@ -6561,17 +6561,25 @@ def npc_recharge_anchor(activation):
 # the fixture Hatcher re-cast 0.025 s after its [58] (our own recorder capture
 # authsrv-20260928T002701-c1, n = 13, min 0.025). OBSERVED, retail: after a [58] of a
 # table-aftercast-0.75 spell, no other agent starts anything sooner than 0.704 s --
-# 1,477 of 1,477 over 127 connections on six builds (median 1.135; 35.7 % within
-# [0.70, 0.80)), a cast 1,108, a swing 352 and an attack skill 17 alike -- while the
-# table-aftercast-0 control (2, the preparations 432 / 433 / 435, 769) re-starts under
-# 0.70 s 49 of 95 times, down to 0.000: the floor is the table's +0x40, not a general
-# pause (CORROBORATED: the observer's own E5 -> E3 is the same column, castmech 9).
+# 1,477 of 1,477 over 127 connections on four builds (38797 / 38833 / 38849 / 38888,
+# each scored on its own build's table; median 1.135; 35.7 % within [0.70, 0.80)), a
+# cast 1,108, a swing 352 and an attack skill 17 alike -- while the table-aftercast-0
+# control re-starts under 0.70 s 49 of 95 times, down to 0.000. Those 49 are a signet
+# (2, 32 of 42) and the preparations 433 / 435 (15 of 40, 2 of 3), so what the tape
+# shows is that the floor is not a general pause after every action; for an
+# aftercast-0 SPELL the column rule is WIKI (castmech 9's exception list) and
+# RECONSTRUCTION on tape -- the one such spell on tape, 769, never re-starts sooner
+# than 1.75 s (n = 6), which separates nothing (studies/skills 65.1). CORROBORATED:
+# the observer's own E5 -> E3 is the same column (castmech 9).
 # So land_skill stamps `aftercast_until` (the landing + the aftercast) and the three
-# body ticks hold the next cast or swing until it passes. OBSERVED the other way, n = 3:
-# an INSTANT skill is not held -- a stance's [48] fell inside the window 3 of 7 times
-# (0.000 / 0.499 / 0.501), against the wiki's "cannot ... activate other skills" -- so
-# the hold is a CLOCK gate on the PICKED slot (npc_aftercast_holds), never a stop ahead
-# of pick_skill. RECONSTRUCTION, each said at its site: a party body takes the
+# body ticks hold the next cast or swing until it passes. OBSERVED the other way, n = 2:
+# a STANCE is not held -- stance 11's [48] fell strictly inside the window at 0.499
+# and 0.501 s (agent 4, one session; a third sits in the [58]'s own batch, whose order
+# flips on the same connection, so it is no evidence), against the wiki's "cannot ...
+# activate other skills" -- so the hold is a CLOCK gate on the PICKED slot
+# (npc_aftercast_holds), never a stop ahead of pick_skill. Letting a SHOUT or a type-16
+# skill through too is RECONSTRUCTION (INSTANT_TYPE_CODES, from one stance).
+# RECONSTRUCTION, each said at its site: a party body takes the
 # hostile's rule (no hero completes an aftercast > 0 skill on tape); an interrupt, a
 # cancel, a scatter cancel and a RESSIG stop are not completions and stamp nothing; an
 # attack skill and an instant stamp nothing (the wiki's two classes; the 17 ranged
@@ -6597,7 +6605,9 @@ def npc_aftercast(skill_id):
 def npc_aftercast_holds(agent, skill_id, now):
     """True while `agent` is inside its last completed cast's aftercast and the
     action it would take is not an instant skill (`skill_id` None: a plain
-    swing). A CLOCK hold -- the caller keeps the round-robin cursor where it is."""
+    swing). A CLOCK hold -- the caller does not write `last_slot`, and the next
+    tick re-picks from that cursor, so a slot that comes ready earlier in the
+    scan may take the turn."""
     if not NPC_AFTERCAST or now >= agent.get("aftercast_until", 0.0):
         return False
     return not (skill_id and _is_instant_skill(skill_id))
@@ -31714,11 +31724,14 @@ def enemy_attack_tick(send, state, conn_id):
                     slot = None if (_next is None or _next in _held) else _next
                     continue
             # NPC_AFTERCAST (a CLOCK gate, SKILLS-AC): the body's last completed cast
-            # still holds it -- the cursor stays and the slot is retried next tick,
-            # the pay gate's shape. AFTER the world gates (RV-1: a slot that cannot
-            # be cast from here is never waited on) and BEFORE the pay gate, because
-            # the aftercast is the BODY's clock, not the slot's price. An instant
-            # skill passes it (retail: 3 of 7 inside the window).
+            # still holds it -- the cursor stays (last_slot is not written); the next
+            # tick re-picks from it, so a slot that comes ready earlier in the scan
+            # takes the turn -- the pay gate's shape. AFTER the world gates (RV-1: a
+            # slot that cannot be cast from here is never waited on) and BEFORE the
+            # pay gate, because the aftercast is the BODY's clock, not the slot's
+            # price. An instant skill passes it (retail: a stance strictly inside the
+            # window, n = 2; shouts and type 16 RECONSTRUCTION); an attack skill is
+            # held (retail: 17 attack-skill starts, min 0.735).
             if npc_aftercast_holds(agent, _sid, now):
                 slot = None
                 break
@@ -32106,6 +32119,9 @@ def ally_cast_tick(send, state, conn_id):
             if slot is None:
                 continue
         skill_id, activation, recharge = skills[slot]
+        # NPC_AFTERCAST ahead of the swing clock and the energy debit below, so a body
+        # held by its aftercast is never charged for a tick it waits (HEROENERGY's
+        # defect class; test_npcaftercast section 3 locks the order).
         if npc_aftercast_holds(agent, skill_id, now):
             continue            # NPC_AFTERCAST: a CLOCK hold, the hostile's gate (RECONSTRUCTION)
         # B2: a signet under Rust (x2); the recharge anchor takes it too.

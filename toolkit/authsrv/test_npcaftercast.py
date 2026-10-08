@@ -14,7 +14,7 @@ apart.
   1  the READER's pure half on literal wire (bare machine): a targeted and an
      un-targeted start, a recycled id, a stopped cast that is not a completion, an
      instant inside the window that is not a start, the P1 / P2 / P3 arithmetic at its
-     edges, the E5 -> E3 join.
+     edges, P6's strict / own-batch split, the E5 -> E3 join.
   2  the SERVER on carried rows (both machines -- the rows are the vault's own,
      section 4 holds them to it): (a) a hostile with two ready 0.75-aftercast spells
      (253 then 289): the second [60] announces at or after the first [58] + 0.75, inside
@@ -25,14 +25,18 @@ apart.
      -- and its E3 rides its E5 in the same tick, unmoved; (e) the controls: an
      interrupted cast stamps nothing; an instant stance (1037, whose TABLE says 0.75)
      and an attack skill (397, whose table says 1.0) stamp nothing; an aftercast-0
-     spell (433) gates nothing; an instant goes INSIDE the window (retail 3 of 7); a
-     party body's swing (ally_attack_tick) waits too; a RESSIG [59] stop stamps nothing
-     (a planted row, the real one's aftercast being 0); (f) a harness-free replay of (a)'s and (c)'s output through npcaftercast: P1
-     HOLDS on the default arm and FAILS on the known-bad one.
+     skill (the preparation 433) gates nothing; an instant goes INSIDE the window, a
+     hostile's and a hero's (retail: stance 11 strictly inside, n = 2); an attack
+     skill is HELD, a hostile's and a hero's (retail: 17, min 0.735); a party body's
+     swing (ally_attack_tick) waits too; a RESSIG [59] stop stamps nothing (a planted
+     row, the real one's aftercast being 0); (f) a harness-free replay of (a)'s and
+     (c)'s output through npcaftercast: P1 HOLDS on the default arm and FAILS on the
+     known-bad one.
   3  source checks: the flag in serverargs and flipped in main(), ON at import, the
      parsed attribute; the hold called from the three ticks and never from pick_skill;
      in the hostile loop after the reach gate and before the pay gate (world gates
-     before clock gates, RV-1), and ahead of the plain swing's interval gate; the
+     before clock gates, RV-1), and ahead of the plain swing's interval gate; in
+     ally_cast_tick ahead of the energy block (a held body is never charged); the
      stamp once, in land_skill.
   4  the vault (skips only on an absent vault DIRECTORY): the carried rows against the
      vault's own, column for column; the reader over the live corpus -- P1, P2, P3 hold,
@@ -41,6 +45,7 @@ apart.
 import ast
 import contextlib
 import io
+import json
 import os
 import sys
 
@@ -59,19 +64,21 @@ import npcaftercast                                            # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floors from the green runs of 2026-10-07, decided on the vault's DIRECTORIES and never
-# on what loaded (test_agentlife's rule): FLOOR_BARE = 38, MEASURED with RURIK_VAULT at an
+# on what loaded (test_agentlife's rule): FLOOR_BARE = 42, MEASURED with RURIK_VAULT at an
 # empty directory AND at a nonexistent path (sections 1-3; section 4 declares its two
-# skips); + 1 with vault/content (the carried rows against the vault's own); + 7 with
-# vault/captures/live (the reader over the corpus); + 1 with OUR capture for P4 = 47,
-# MEASURED with the vault.
+# skips); + 1 with vault/content (the carried rows against the vault's own); + 8 with
+# vault/captures/live (the reader over the corpus, --json's stdout among them); + 1 with
+# OUR capture for P4 = 52, MEASURED with the vault. (38 / 47 until the review pass the
+# same day added P6's split, the hero's instant, the attack-skill hold, the party hold's
+# place ahead of the debit and --json's one-document stdout.)
 OURS_P4 = os.path.join(vaultpath.vault_path("captures"), "gamesrv",
                        "authsrv-20260928T002701-c1.jsonl")
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
-FLOOR_BARE = 38
+FLOOR_BARE = 42
 LEDGER = checks.Ledger("NPC aftercast",
                        floor=FLOOR_BARE + (1 if HAVE_VAULT_CONTENT else 0)
-                       + ((7 + (1 if os.path.isfile(OURS_P4) else 0)) if HAVE_LIVE else 0))
+                       + ((8 + (1 if os.path.isfile(OURS_P4) else 0)) if HAVE_LIVE else 0))
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -327,6 +334,10 @@ def section_reader():
     check(npcaftercast.score(edge[:1], tab)["p1"]
           and not npcaftercast.score(edge, tab)["p1"],
           "P1's edge: a gap of exactly 0.70 holds, 0.699 fails")
+    check(npcaftercast.p6_split([0.501, 0.0, 0.9, 0.499, 0.70]) == ([0.499, 0.501], 1),
+          "P6's split: an instant STRICTLY inside (0, 0.70) scores, one in the [58]'s own "
+          "batch (0.000) is counted apart, 0.70 and past it are outside",
+          f"{npcaftercast.p6_split([0.501, 0.0, 0.9, 0.499, 0.70])}")
     check(not npcaftercast.score(rows[:2], tab)["p3"]
           and not npcaftercast.score([dict(rows[0], gap=0.85)] * 4, tab)["p2"]
           and npcaftercast.score([dict(rows[0], gap=0.79)] + [dict(rows[0], gap=0.85)] * 2,
@@ -487,8 +498,9 @@ def section_controls():
             sends, _log = fight(authsrv, st, 3.0)
         g = gaps_after(sends, HOSTILE)
         check(g and g[0][2] == "S60" and g[0][1] - g[0][0] == 1,
-              "an AFTERCAST-0 spell (the preparation 433) gates nothing: 253 starts the "
-              "tick after its [58] (retail's control: 49 of 95 under 0.70 s)", f"{g[:2]}")
+              "an AFTERCAST-0 skill (the preparation 433) gates nothing: 253 starts the "
+              "tick after its [58] (retail's control: 49 of 95 under 0.70 s, every one a "
+              "signet or a preparation)", f"{g[:2]}")
         # an instant goes INSIDE the window: 253 lands, the stance 1037 next tick
         with arm(authsrv):
             st = world(authsrv)
@@ -503,8 +515,74 @@ def section_controls():
         check(c and inst and c[0] < inst[0] < c[0] + int(round(AFTERCAST / TICK))
               and until is not None and abs(until - (T0 + c[0] * TICK + AFTERCAST)) < 1e-6,
               "an INSTANT is not held: the stance's [48] lands INSIDE 253's window (retail: "
-              "3 of 7, stance 11) and leaves 253's stamp where it was",
+              "stance 11 strictly inside, n = 2) and leaves 253's stamp where it was",
               f"58 at {c[:1]}, [48] at {inst[:1]}, until-T0 {until and round(until - T0, 3)}")
+        # ... and through the PARTY's call site (ally_cast_tick passes the picked slot):
+        # a hurt hero's 281 lands, then its stance 1037 goes inside the window. Added
+        # after review (CD-2): the hostile check above proves the shared predicate, but
+        # a party call site that held an instant (a whole-body stop) stayed green.
+        # RECONSTRUCTION: party bodies take the hostile's rule.
+        with arm(authsrv):
+            st = world(authsrv, player_health=40.0)
+            ag = body(authsrv, ((ORISON, 1.0, 2.0), (DARK_ESCAPE, 0.0, 30.0)),
+                      agents.ALLEGIANCE_PLAYER, pos=(50.0, 0.0), hero=3, health=40.0,
+                      attacks_back=False, party_slot=0, npc={"profession": 3, "level": 5})
+            st["agents"][HERO] = ag
+            sends, _log = fight(authsrv, st, 3.0, keep_health=40.0)
+            until = ag.get("aftercast_until")
+        c = completions(sends, HERO)
+        inst = [i for i, k, sid in starts(sends, HERO) if k == "I48" and sid == DARK_ESCAPE]
+        check(c and inst and c[0] < inst[0] < c[0] + int(round(AFTERCAST / TICK))
+              and until is not None and abs(until - (T0 + c[0] * TICK + AFTERCAST)) < 1e-6,
+              "  and a HERO's instant too (ally_cast_tick): its stance's [48] lands inside "
+              "its 281's window, the stamp unmoved (RECONSTRUCTION, the hostile's rule)",
+              f"58 at {c[:1]}, [48] at {inst[:1]}, until-T0 {until and round(until - T0, 3)}")
+        # an ATTACK SKILL IS held -- the OBSERVED arm (P1's 17 attack-skill next starts,
+        # min 0.735): 253 lands, the bow attack 397 is ready, the swing clock never binds
+        # (attack_speed 0.2). Added after review (CD-1): letting attack skills through
+        # the window, as instants are, left every test green. Hostile and party sites.
+        ac_ticks = int(round(AFTERCAST / TICK))
+        atk = {}
+        real_pft = authsrv.party_fight_target
+        authsrv.party_fight_target = lambda state, aid, agent, now: FOE
+        try:
+            for ac in (True, False):
+                with arm(authsrv, aftercast=ac):
+                    st = world(authsrv)
+                    st["agents"][HOSTILE] = body(
+                        authsrv, ((SCOURGE, 1.0, 5.0), (SAVAGE, 0.5, 1.0)),
+                        agents.ALLEGIANCE_HOSTILE, attack_speed=0.2)
+                    sends, _log = fight(authsrv, st, 3.0)
+                c = completions(sends, HOSTILE)
+                s50 = [i for i, k, sid in starts(sends, HOSTILE) if k == "S50" and sid == SAVAGE]
+                with arm(authsrv, aftercast=ac):
+                    st = world(authsrv, player_health=40.0)
+                    st["agents"][FOE] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE,
+                                             pos=(60.0, 0.0), attacks_back=False)
+                    st["agents"][HERO] = body(
+                        authsrv, ((ORISON, 1.0, 2.0), (SAVAGE, 0.5, 1.0)),
+                        agents.ALLEGIANCE_PLAYER, pos=(50.0, 0.0), hero=3, attack_speed=0.2,
+                        attacks_back=False, party_slot=0, npc={"profession": 2, "level": 5})
+                    sends, _log = fight(authsrv, st, 3.0, keep_health=40.0,
+                                        ticks=("effect_tick", "ally_cast_tick"))
+                hc = completions(sends, HERO)
+                h50 = [i for i, k, sid in starts(sends, HERO) if k == "S50" and sid == SAVAGE]
+                atk[ac] = ((c[:1], s50[:1]), (hc[:1], h50[:1]))
+        finally:
+            authsrv.party_fight_target = real_pft
+
+        def _gap(pair):
+            (cc, ss) = pair
+            return ss[0] - cc[0] if cc and ss else None
+        on_g = [_gap(p) for p in atk[True]]
+        off_g = [_gap(p) for p in atk[False]]
+        check(all(g is not None and ac_ticks <= g <= ac_ticks + 2 for g in on_g)
+              and off_g == [1, 1],
+              "an ATTACK SKILL waits the aftercast (retail: 17 attack-skill starts, min "
+              "0.735): the bow attack 397's [50] opens at the 253 / 281 [58] + 0.75 s, inside "
+              "two ticks, for a hostile AND a hero; --no-npc-aftercast opens it the tick after",
+              f"default (hostile, hero) gaps {on_g}, off {off_g} (0.75 s = {ac_ticks} ticks); "
+              f"{atk}")
         # the PARTY's swing (ally_attack_tick) waits its aftercast too. The fight target
         # is STUBBED -- this is about when the swing opens, not whom it picks
         # (party_fight_target's rule is SLICE-H4's and has its own tests).
@@ -533,8 +611,9 @@ def section_controls():
         check(c_on and s_on and s_on[0] - c_on[0] >= int(round(AFTERCAST / TICK))
               and c_off and s_off and s_off[0] == c_off[0],
               "a party body's SWING waits its spell's aftercast (ally_attack_tick); the "
-              "known-bad arm swings in the [58]'s own tick -- the 0.000 of our capture "
-              "authsrv-20261001T100807-c1 (heroes 200 / 201, 90 of 90)",
+              "known-bad arm swings in the [58]'s own tick -- our capture "
+              "authsrv-20261001T100807-c1 (heroes 200 / 201: 90 of 90 under 0.70 s, 44 in "
+              "the [58]'s own batch, max 0.562)",
               f"default 58 {c_on} swing {s_on}; off 58 {c_off} swing {s_off}")
         # a RESSIG stop ([59]: the raise's target already stands) is no completion. Skill
         # 2's real aftercast is 0, so the take-back is unobservable on every real row; a
@@ -669,6 +748,19 @@ def section_source():
           "(a CLOCK gate after the WORLD gates, RV-1), and ahead of the plain swing's "
           "interval gate", f"reach {i_reach} hold {i_ac} pay {i_pay}; swing hold {i_sw_ac} "
           f"interval {i_sw}")
+    # The PARTY's hold ahead of the energy block (added after review, CD-3): below the
+    # debit a held hero is charged on every tick it waits out the aftercast --
+    # HEROENERGY's own defect class (its swing-clock gate sat after the debit until
+    # 2026-10-01), and every driven fixture here runs with ENERGY off.
+    seg = ast.get_source_segment(src, _func(tree, "ally_cast_tick"))
+    i_unpack = seg.find("skill_id, activation, recharge = skills[slot]")
+    i_hold = seg.find("npc_aftercast_holds(agent, skill_id, now)")
+    i_cost = seg.find("cost, units = skill_cost(skill_id)")
+    i_spend = seg.find("pool.spend(cost)")
+    check(0 <= i_unpack < i_hold < i_cost < i_spend,
+          "in ally_cast_tick the hold sits after the slot unpacks and AHEAD of the energy "
+          "block (skill_cost .. pool.spend): a body held by its aftercast pays nothing",
+          f"unpack {i_unpack} hold {i_hold} cost {i_cost} spend {i_spend}")
 
 
 # ---------------------------------------------------------------------------------
@@ -697,14 +789,25 @@ def section_vault():
     try:
         vaultpath.require_dir("captures", "live", why="npcaftercast reads live captures")
     except SystemExit as exc:
-        LEDGER.skip("the reader over the live corpus (8 checks)", str(exc).splitlines()[0])
+        LEDGER.skip("the reader over the live corpus (9 checks)", str(exc).splitlines()[0])
         return
-    out = io.StringIO()
+    out, err = io.StringIO(), io.StringIO()
     ours = OURS_P4
     argv = ["--json"] + (["--ours", ours] if os.path.isfile(ours) else [])
-    with contextlib.redirect_stdout(out):
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         res = npcaftercast.main(argv)
     r = res["retail"]
+    # --json's stdout is ONE JSON document (added after review, EV-7: capgaps' SET ASIDE
+    # line used to lead it, and json.load refused the file); the census's lines go to
+    # stderr.
+    try:
+        doc = json.loads(out.getvalue())
+    except ValueError as exc:
+        doc = exc
+    check(isinstance(doc, dict) and doc.get("connections") == res["connections"]
+          and "SET ASIDE" in err.getvalue(),
+          "--json's stdout parses as one JSON document; the SET ASIDE line went to stderr",
+          f"{type(doc).__name__}: {str(doc)[:120]} | stdout starts {out.getvalue()[:60]!r}")
     # floors, never exact counts: a new capture adds rows (counts redden on good news)
     check(r["n"] >= 1477 and r["min"] is not None and r["min"] >= 0.70 and r["p1"],
           "P1: >= 1,477 completions of a table-aftercast-0.75 spell, the next start never "
@@ -726,10 +829,17 @@ def section_vault():
           "P5 UNDECIDABLE: the survey's 35 hero E5 -> E3 rows are all table-aftercast-0 "
           "skills, none scoreable", f"{res['p5']} scored {res['e3_scored']} of "
           f"{res['e3_rows']}: {res['e3_by_skill']}")
-    check(len(res["p6_refuted_by"]) >= 3 and min(res["p6_refuted_by"]) == 0.0,
-          "P6 REFUTED: an instant's [48] falls inside the window (2026-10-07: 0.000 / "
-          "0.499 / 0.501) -- why the gate lets an instant through",
-          f"{res['p6_refuted_by']}")
+    # Re-aimed after review (EV-3): a [48] in the [58]'s OWN batch (gap 0.000) is no
+    # evidence of order -- the same connection carries [48] before [58] in one batch and
+    # after it in another -- so P6 scores only instants STRICTLY inside the window and
+    # prints the co-batched one apart. The check holds the split: an instrument that
+    # counted the 0.000 again would put it back in `p6_refuted_by` and redden here.
+    check(len(res["p6_refuted_by"]) >= 2 and min(res["p6_refuted_by"]) > 0.0
+          and res["p6_cobatched"] >= 1,
+          "P6 REFUTED: an instant's [48] falls STRICTLY inside the window (2026-10-07: "
+          "0.499 / 0.501, stance 11, n = 2), the [58]'s own-batch one printed apart (1) "
+          "-- why the gate lets an instant through",
+          f"strict {res['p6_refuted_by']} co-batched {res['p6_cobatched']}")
     if "ours" in res:
         o = res["ours"]
         check(not o["p1"] and o["min"] is not None and o["min"] < TICK,

@@ -52,13 +52,16 @@ the expectations; this re-derives them):
       a body's E3 is NOT the aftercast's end (the player's is). Survey: 322 11/11,
       346 17/17, 348 7/7 on 20260914T005758 (346 and 348 are instant / attack: only
       a SPELL row with a table aftercast > 0 can tell the two readings apart, and
-      the scored set is those).
+      the scored set is those). [Corrected 2026-10-07, the registered text left as
+      written: 346 is a stance and 348 a shout, both instants; the attack is 322.]
 
   P6  AN INSTANT IN THE WINDOW (registered in the implementer's notes before the run,
       not in the survey): no instant skill's [48] falls inside a 0.75 aftercast either
       -- the WIKI ("Aftercast delay") says the caster "cannot ... activate other skills".
 
-AS RUN, 2026-10-07 (127 connections on six builds; :65009 set aside by name):
+AS RUN, 2026-10-07 (127 connections on FOUR builds -- 38797 x 12, 38833 x 37, 38849 x 12,
+38888 x 66, each scored on its own build's table; the vault holds six exe tables, 38519
+and 38974 with no live connection; :65009 set aside by name):
   P1 HOLDS -- n = 1,477, min 0.704, p5 0.741, p10 0.748, median 1.135, 0 below 0.70;
      by the next start: a cast 1,108 (min 0.704), a swing 352 (0.704), an attack skill 17
      (0.735). THE SURVEY'S n = 872 IS REPRODUCED EXACTLY by reading only `0x00A0` starts and
@@ -70,15 +73,22 @@ AS RUN, 2026-10-07 (127 connections on six builds; :65009 set aside by name):
   P2 HOLDS -- 527 of 1,477 = 35.7 % (the survey's 41 % is its 355 of 872).
   P3 HOLDS -- 49 of 95 under 0.70 over FIVE aftercast-0 skills (2; the Ranger preparations
      432 / 433 / 435, activation 2.0, which re-start at 0.000 several times; 769), not the
-     survey's one.
+     survey's one. By skill (under 0.70 / n): the signet 2 32 / 42, 433 15 / 40, 435 2 / 3,
+     432 0 / 4, and the one SPELL, 769 (type 5), 0 / 6 with min 1.75 -- so P3 shows the
+     floor is not a general pause after every action, and does NOT separate "the column
+     decides" from "spells pause" for an aftercast-0 spell (WIKI there, castmech 9).
   P4 HOLDS -- ours FAILS P1: n = 13, min 0.025, 2 below 0.70.
   P5 UNDECIDABLE -- 0 scoreable rows. The survey's 322 / 346 / 348 are an attack (type 14),
-     a stance (3) and a shout (15), every one table aftercast 0 on all six builds, so their
+     a stance (3) and a shout (15), every one table aftercast 0 on all six tables, so their
      0.000 cannot tell "the E3 rides the E5" from "the E3 waits the aftercast"; no
      non-observer agent completes an aftercast > 0 skill with an E5 / E3 on any tape.
-  P6 REFUTED -- 3 of the 7 instants between a 0.75 completion and the next start sit INSIDE
-     the window: 0.000, 0.499, 0.501 (stance 11, agent 4, 20260928T103123 :50061 and
-     :58544). n = 3, one skill: OBSERVED and CONTESTED with the wiki's wording.
+  P6 REFUTED -- of the 7 instants between a 0.75 completion and the next start, 2 sit
+     STRICTLY inside the window: 0.499 and 0.501 (stance 11, agent 4, 20260928T103123
+     :58544). A third, at 0.000 (:50061), is in the [58]'s own batch, and batch order is
+     not evidence -- on the same connection at t = 160.980 the [48] precedes the [58] --
+     so it is printed apart ("co-batched") and scores nothing (corrected after review the
+     same day; it had been counted, "3 of 7"). n = 2, one stance, one body: OBSERVED and
+     CONTESTED with the wiki's wording; shouts and type 16 are not witnessed.
 
 What this cannot separate: an aftercast from the AI's own wait (the floor bounds
 both -- which is why P2 and P3 exist); the 0.75 class from any other non-zero value
@@ -96,6 +106,7 @@ Standard library only; the vault through `vaultpath`; tapes framed whole
 """
 import argparse
 import collections
+import contextlib
 import json
 import os
 import statistics
@@ -275,6 +286,8 @@ def score(rows, table=None):
         "control_n": len(ctrl), "control_under": sum(1 for g in ctrl if g < FLOOR_S),
         "control_min": ctrl[0] if ctrl else None,
         "control_skills": sorted({sk for (a, sk) in per_skill if a == 0.0}),
+        "control_by_skill": {sk: (sum(1 for g in gs if g < FLOOR_S), len(gs), min(gs))
+                             for (a, sk), gs in sorted(per_skill.items()) if a == 0.0},
         "p3": bool(ctrl) and _share(ctrl, 0.0, FLOOR_S) >= CONTROL_SHARE,
         "by_next": {NEXT_KIND.get(k, k): (len(v), min(v)) for k, v in sorted(kinds.items())},
         "instants": (len(instants), min(instants) if instants else None),
@@ -283,6 +296,15 @@ def score(rows, table=None):
                           if a not in (AFTERCAST, 0.0)},
         "untabled": untabled,
     }
+
+
+def p6_split(instant_gaps):
+    """(the gaps STRICTLY inside (0, FLOOR_S), sorted; the count in the [58]'s own
+    batch, gap 0.000). P6 scores only the first: batch order is not evidence -- the
+    same connection carries [48] before [58] in one batch and after it in another
+    (20260928T103123 :50061, t = 160.980 and 173.496)."""
+    return (sorted(g for g in instant_gaps if 0.0 < g < FLOOR_S),
+            sum(1 for g in instant_gaps if g == 0.0))
 
 
 def score_e3(e3_rows, table=None):
@@ -397,29 +419,36 @@ def main(argv=None):
     ap.add_argument("--ours", help="one of our recorder captures (authsrv-*-c1.jsonl)")
     ap.add_argument("--ours-build", type=int, default=None,
                     help="the table build to score --ours on (default: the newest in the vault)")
-    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--json", action="store_true",
+                    help="stdout carries ONLY the JSON document; the census's own lines "
+                         "(capgaps' SET ASIDE) go to stderr")
     args = ap.parse_args(argv)
-    c = census()
-    sc = score(pooled(c["conns"]))
-    e3n, e3z, e3by, e3all = score_e3([(a, sk, dt, cc["table"]) for cc in c["conns"]
-                                      for a, sk, dt in cc["e3"]])
-    p5 = ("UNDECIDABLE" if e3n == 0 else "HOLDS" if e3z == e3n else "FAILS")
-    inst_in = sorted(g for g in sc["instant_gaps"] if g < FLOOR_S)
-    res = {"retail": sc, "connections": len(c["conns"]), "excluded": c["excluded"],
-           "set_aside": c["set_aside"], "tables": c["exe_builds"],
-           "p5": p5, "p6_refuted_by": inst_in, "e3_scored": e3n, "e3_zero": e3z, "e3_by_skill": e3by,
-           "e3_rows": e3all}
-    if args.ours:
-        import rechargeprobe    # noqa: E402
-        exe_by_build = rechargeprobe._exe_tables()
-        build = args.ours_build or max(exe_by_build)
-        label, orows, oe3, otab = ours(args.ours, build, exe_by_build)
-        res["ours"] = dict(score(orows, otab), label=label, build=build)
-        res["ours_e3"] = score_e3(oe3, otab)
+    with (contextlib.redirect_stdout(sys.stderr) if args.json
+          else contextlib.nullcontext()):
+        c = census()
+        sc = score(pooled(c["conns"]))
+        e3n, e3z, e3by, e3all = score_e3([(a, sk, dt, cc["table"]) for cc in c["conns"]
+                                          for a, sk, dt in cc["e3"]])
+        p5 = ("UNDECIDABLE" if e3n == 0 else "HOLDS" if e3z == e3n else "FAILS")
+        inst_in, inst_co = p6_split(sc["instant_gaps"])
+        res = {"retail": sc, "connections": len(c["conns"]), "excluded": c["excluded"],
+               "set_aside": c["set_aside"], "tables": c["exe_builds"],
+               "builds": dict(sorted(collections.Counter(
+                   cc["build"] for cc in c["conns"]).items())),
+               "p5": p5, "p6_refuted_by": inst_in, "p6_cobatched": inst_co,
+               "e3_scored": e3n, "e3_zero": e3z, "e3_by_skill": e3by, "e3_rows": e3all}
+        if args.ours:
+            import rechargeprobe    # noqa: E402
+            exe_by_build = rechargeprobe._exe_tables()
+            build = args.ours_build or max(exe_by_build)
+            label, orows, oe3, otab = ours(args.ours, build, exe_by_build)
+            res["ours"] = dict(score(orows, otab), label=label, build=build)
+            res["ours_e3"] = score_e3(oe3, otab)
     if args.json:
         print(json.dumps(res, indent=1, default=str))
         return res
-    print(f"connections {res['connections']} (tables {res['tables']}); excluded "
+    print(f"connections {res['connections']} on builds {res['builds']} (each on its own "
+          f"build's table; the vault's tables {res['tables']}); excluded "
           f"{len(c['excluded'])} {c['excluded'] or ''}; set aside "
           f"{[(r['capture'], r['connection']) for r in c['set_aside']] or 'none'}")
     print(f"completed spells followed by a start: {sum(len(cc['rows']) for cc in c['conns'])}"
@@ -431,13 +460,15 @@ def main(argv=None):
     print(f"P3 CONTROL (aftercast 0: >= {CONTROL_SHARE:.0%} under {FLOOR_S}): "
           f"{sc['control_under']} of {sc['control_n']} (min {sc['control_min']}; skills "
           f"{sc['control_skills']}) -> {'HOLDS' if sc['p3'] else 'FAILS'}")
+    print(f"   the control by skill (under {FLOOR_S}, n, min): {sc['control_by_skill']}")
     print(f"   by next start (n, min): {sc['by_next']}")
     print(f"   an instant [48] between the 58 and the next start (n, min): {sc['instants']}")
     print(f"   other aftercast classes (n, min; printed, not scored): {sc['other_classes']}")
     print(f"P5 E3 RIDES E5 (non-observer spell rows, table aftercast > 0): {e3z} of {e3n} at "
           f"0.000 -> {p5}; every E5/E3 pair by skill (n, dts): {e3by}")
-    print(f"P6 NO INSTANT INSIDE THE WINDOW: {len(inst_in)} of {sc['instants'][0]} under "
-          f"{FLOOR_S} {inst_in} -> {'REFUTED' if inst_in else 'HOLDS'}")
+    print(f"P6 NO INSTANT INSIDE THE WINDOW: {len(inst_in)} of {sc['instants'][0]} strictly "
+          f"inside (0, {FLOOR_S}) {inst_in}; {inst_co} in the [58]'s own batch (printed, "
+          f"not scored) -> {'REFUTED' if inst_in else 'HOLDS'}")
     if args.ours:
         o = res["ours"]
         print(f"OURS {o['label']} on build {o['build']}: P1 {_fmt(o)} -> "

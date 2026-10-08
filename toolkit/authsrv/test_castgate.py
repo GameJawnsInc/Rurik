@@ -83,8 +83,9 @@ import vaultpath                                               # noqa: E402
 # Floor from the BARE-MACHINE green run (RURIK_VAULT=C:/nonexistent-vault), 2026-09-28,
 # re-measured after CASTAI-R2: 36 -- section 1's predicate (20), section 5's rowless form
 # (5, the legacy property-61 check added) and section 6's source checks (11: the re-arm's
-# default and flag, and CASTAI-R2's flag). 81 with the vault; 82 since 2026-10-07 (section
-# 2's after-close check runs on both NPC_AFTERCAST arms). A driven section skips ONLY
+# default and flag, and CASTAI-R2's flag). 81 with the vault; 83 since 2026-10-07 (section
+# 2's after-close check runs on both NPC_AFTERCAST arms, and ON_SEQUENCE pins the default
+# arm's cadence). A driven section skips ONLY
 # when the vault is absent; a present vault missing a row is a FAIL (vault_skills /
 # rows_problem).
 LEDGER = checks.Ledger("cast gate (CASTAI)", floor=36)
@@ -116,6 +117,14 @@ BEAT = 0.25                          # authsrv.LIVE_EFFECT_REARM's default, as a
 # castai-impl/head_literal.py). The gate-off arm must reproduce it byte for byte:
 # round robin's own sequence, with the 253s every ~6.3 s that stack on the player.
 HEAD_SEQUENCE = None                 # filled in below from the recorded literal
+# THE DEFAULT ARM'S LITERAL (added 2026-10-07 after review, EV-6): the first 24 (tick,
+# skill) casts of `_hatcher_fight(True)` with NPC_AFTERCAST on, recorded from a green run
+# of the desk-aftercast lane (scratch impl-desk-aftercast/fix/record_on_sequence.py; two
+# runs identical, 79 casts in 120 s). Section 2's after-close check proves the gate's own
+# four facts but cannot say WHEN 253 comes back once its aftercast cover ends -- a 253
+# held 2 s past every aftercast, or released a tick late, left this file green -- so the
+# cadence is pinned whole, the way section 3 pins the known-bad arm.
+ON_SEQUENCE = None                   # filled in below from the recorded literal
 
 
 class Clock:
@@ -420,15 +429,26 @@ def section_hatcher():
     # check is run twice: on the default arm, the gate's own four facts on every close
     # AND the cast on the go tick wherever no aftercast covers it, the cover itself
     # named per close; and VERBATIM on --no-npc-aftercast, where all five go ticks cast.
+    # What the default arm does NOT claim (corrected after review, EV-6 / CD-5): that
+    # 253 is cast when its cover ends. The aftercast hold leaves last_slot alone and the
+    # next tick re-picks from the cursor, so a slot ready earlier in the scan takes the
+    # turn (traced: 253 held 416-419, 312 picked at 420 and cast at 425, 253 at 515) --
+    # round robin's business, pinned whole by ON_SEQUENCE just below.
     looks = [(t, held) for t, a, s, held in rec["consults"] if a == HOSTILE and s == SCOURGE]
     good, detail = _after_close(rec, n253, closes, looks, aftercast_aware=True)
     check(good and detail,
           "after each close the gate's FIRST look at 253 HOLDS it (the re-arm), every look "
           "inside the next 0.25 s holds, and the first look past the beat lets it through "
-          "-- no 253 inside the beat -- and 253 is cast on that very tick unless the "
-          "body's aftercast covers it (NPC_AFTERCAST's clock gate; named per close)",
+          "-- no 253 inside the beat -- and the go tick either casts 253 or sits inside the "
+          "body's aftercast (NPC_AFTERCAST's clock gate; the cover named per close)",
           f"(close, first look, go tick, held first?, held inside?, held at go?, cast?, "
           f"covered by the [58] at tick) {detail}")
+    check(hat[:len(ON_SEQUENCE)] == ON_SEQUENCE,
+          "and the default arm's first 24 casts (tick, skill) equal the cadence recorded "
+          "with the aftercast on (ON_SEQUENCE: each cast starts the previous one's "
+          "activation + its 0.75 s aftercast after it; 253 back when round robin's "
+          "cursor comes round)",
+          f"{hat[:len(ON_SEQUENCE)]}")
     rec_pre = _hatcher_fight(True, aftercast=False)
     n253_pre = [i for i, a, s in rec_pre["casts"] if a == HOSTILE and s == SCOURGE]
     closes_pre = rec_pre["closes"].get((P, SCOURGE), [])
@@ -918,6 +938,14 @@ HEAD_SEQUENCE = [
     (141, 253), (164, 289), (180, 276), (220, 312), (236, 289), (252, 276), (268, 253),
     (291, 289), (307, 276), (347, 289), (363, 276), (388, 253), (409, 312), (425, 289),
     (441, 276), (481, 289), (497, 276),
+]
+ON_SEQUENCE = [
+    # (tick index, skill) -- the desk-aftercast lane, fight(Hatcher bar), the live-effect
+    # gate AND NPC_AFTERCAST on. See the banner.
+    (0, 276), (30, 253), (65, 312), (95, 289), (125, 276), (155, 289), (185, 276),
+    (215, 289), (245, 312), (275, 289), (305, 276), (335, 289), (365, 276), (395, 289),
+    (425, 312), (455, 289), (485, 276), (515, 253), (550, 289), (580, 276), (610, 312),
+    (640, 289), (670, 276), (700, 289),
 ]
 
 

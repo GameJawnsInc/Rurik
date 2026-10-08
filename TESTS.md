@@ -15712,7 +15712,17 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   go tick on the default arm is covered, the Hatcher's 30-tick cycle puts a [58] on each
   close) and names the cover per close, and runs VERBATIM on --no-npc-aftercast, where all
   five go ticks cast (+1); §3's 19213513 literal is the pre-CASTAI server, so its arm sets
-  both reverts. `arm()` carries NPC_AFTERCAST. 82 checks with the vault.** **2026-09-27, CASTAI -- the first cast-policy slice,
+  both reverts. `arm()` carries NPC_AFTERCAST. 82 checks with the vault.** **2026-10-07,
+  the review pass (EV-6): the default arm's CADENCE pinned whole -- `ON_SEQUENCE`, the
+  first 24 (tick, skill) casts of `_hatcher_fight(True)` recorded from a green lane run
+  (two runs identical, 79 casts in 120 s), checked like §3's HEAD_SEQUENCE (+1, 83 with
+  the vault; 36 bare, unchanged). §2's after-close check could not say when 253 comes back
+  once its aftercast cover ends, and it is NOT at the cover's end: the hold leaves
+  last_slot alone, the next tick re-picks from the cursor, and 312 takes the turn (253
+  held 416-419, 312 cast at 425, 253 at 515), so its label now claims only that the go tick
+  casts 253 or sits inside the aftercast. PROVEN RED by three scratch mutants that left the
+  file green before: 253 held 2 s past every aftercast, the hold released one tick late,
+  two ticks late -- 1 red each.** **2026-09-27, CASTAI -- the first cast-policy slice,
   DESKWORK-D8 step 6; owner's ruling PLAN.md sec.7 Q19: round robin stays the selector,
   and ONE gate ships.** Two changes, each behind its own revert. THE LIVE-EFFECT GATE
   (`SKIP_LIVE_EFFECT`, `--no-skip-live-effect`): a hostile (enemy_attack_tick) or a party
@@ -15803,11 +15813,16 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   same tick, unmoved; (e) the controls -- an interrupted cast stamps nothing (the next spell
   the very next tick), `npc_aftercast` gives 0 for the stance 1037 (table 0.75), the bow
   attack 397 (table 1.0), the preparation 433 and Flail 10, and 0 for all under the flag;
-  397 and 1037 cast and landed through the real tick stamp nothing; an aftercast-0 spell
-  gates nothing (253 the tick after 433's [58]); an INSTANT goes inside the window (1037's
-  [48] two ticks after 253's [58], the stamp unmoved -- retail 3 of 7); a party body's
+  397 and 1037 cast and landed through the real tick stamp nothing; an aftercast-0 skill
+  (the preparation 433) gates nothing (253 the tick after 433's [58]); an INSTANT goes
+  inside the window (1037's [48] two ticks after 253's [58], the stamp unmoved -- retail:
+  stance 11 strictly inside, n = 2), and a HERO's too, through ally_cast_tick (1037's [48]
+  inside its 281's window); an ATTACK SKILL is held (retail: 17, min 0.735): the bow attack
+  397's [50] opens at the 253 / 281 [58] + 15 ticks, inside 17, for a hostile and a hero
+  (fight target stubbed), and the tick after on --no-npc-aftercast; a party body's
   SWING (ally_attack_tick, its fight target stubbed) opens 15 ticks after its 281's [58],
-  and in the [58]'s own tick on the known-bad arm (our capture 20261001T100807's 0.000);
+  and in the [58]'s own tick on the known-bad arm (our capture 20261001T100807: 90 of 90
+  under 0.70 s, 44 in the [58]'s own batch, max 0.562);
   a RESSIG [59] stop stamps nothing where the same PLANTED row 2 (aftercast 0.75; the real
   row's 0 makes the take-back unobservable) completing on a corpse stamps; (f) the fixtures'
   own wire through `npcaftercast`: P1 HOLDS on the default arm, FAILS on the known-bad one.
@@ -15816,13 +15831,18 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   capture header records it; the hold called twice in enemy_attack_tick, once each in
   ally_cast_tick and ally_attack_tick, never in pick_skill; the stamp once, in land_skill;
   in the hostile loop after the reach gate and before the pay gate, and ahead of the plain
-  swing's interval gate. §4 vault-only (skips on an absent DIRECTORY): the carried rows
-  against the vault's own, column for column and build; the reader over the live corpus --
-  P1 (n >= 1,477, min >= 0.70), P2 (>= 527), P3 (>= 95, the five control skills), the
-  swings, the one gapped connection set aside by name, P5 UNDECIDABLE, P6 refuted, and P4
-  (authsrv-20260928T002701-c1 FAILS P1 inside one tick). Floors MEASURED and decided on
-  directories: 38 bare (an empty RURIK_VAULT and a nonexistent one), + 1 with
-  vault/content, + 7 with vault/captures/live, + 1 with the P4 capture = 47. PROVEN RED
+  swing's interval gate; in ally_cast_tick after the slot unpacks and AHEAD of the energy
+  block (skill_cost .. pool.spend: a held body pays nothing). §4 vault-only (skips on an
+  absent DIRECTORY): the carried rows against the vault's own, column for column and
+  build; the reader over the live corpus -- --json's stdout one JSON document (the SET
+  ASIDE line on stderr), P1 (n >= 1,477, min >= 0.70), P2 (>= 527), P3 (>= 95, the five
+  control skills), the swings, the one gapped connection set aside by name, P5
+  UNDECIDABLE, P6 refuted by instants STRICTLY inside the window (>= 2, min > 0; the
+  [58]'s own-batch one counted apart, >= 1), and P4 (authsrv-20260928T002701-c1 FAILS P1
+  inside one tick). §1 also holds `p6_split` on literal gaps. Floors MEASURED and decided
+  on directories: 42 bare (an empty RURIK_VAULT and a nonexistent one), + 1 with
+  vault/content, + 8 with vault/captures/live, + 1 with the P4 capture = 52 (38 / 47
+  before the review pass). PROVEN RED
   by 18 scratch mutants, each a copy of one module PRE-LOADED by path (a plain sys.path
   copy is shadowed: agents / content put the tree's authsrv dir first, and the first pass's
   four 'survivors' were never loaded), against a green unmutated control: the stamp
@@ -15832,4 +15852,10 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   `global` removed (2), the flag renamed in serverargs (1), the gate moved ahead of the
   reach gate (1), the hero's E3 withheld (1), the default off (2); in the reader, the
   un-targeted start dropped (10), the walk back crossing closes (3, on the orphan-58
-  literal), the floor at 0 (6). ~35 s)
+  literal), the floor at 0 (6). THE REVIEW PASS (2026-10-07) found five defects that left
+  this file green and added a check for each, every one PROVEN RED in a scratch copy
+  against a green control (52): attack skills let through the window -- the predicate (1),
+  the hostile call site alone (1), the party call site alone (1); the party call site
+  holding an instant (2); the party hold moved below the energy debit (1); the reader
+  counting the own-batch instant again (2); --json's census lines back on stdout (1).
+  ~35 s)
