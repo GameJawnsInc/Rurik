@@ -1882,13 +1882,18 @@ def section_press_ends_kbd_latch():
     # 11b. END TO END, the 08:46 shape: a 0x003D 0.29 s ago, no 0x0047 ever,
     # the Hatcher 86 u away -> the press opens the swing on the FIRST tick,
     # and the row says so.
+    # The press and its first tick AT one instant (`frozen`): the row's `age < 1.0` is the
+    # answer's clock against the press's stamp. That answer is pressverdict's, which read
+    # its OWN wall clock until 2026-10-08 -- the one row a pin on authsrv.time could not
+    # reach -- and now reads authsrv's (`pressverdict.clock`).
     rec = _Rec()
     state = _state()
     state["agents"][10]["pos"] = (86.0, 0.0)
-    state["kbd_moving_at"] = _t.time() - 0.29
-    authsrv.begin_attack(send, state, 10, 0, rec=rec)
+    t11b = _t.time()
+    state["kbd_moving_at"] = t11b - 0.29
+    frozen(t11b, authsrv.begin_attack, send, state, 10, 0, rec=rec)
     sent.clear()
-    authsrv.attack_tick(send, state, 0, rec)
+    frozen(t11b, authsrv.attack_tick, send, state, 0, rec)
     r = rows(rec, "swing")
     check(len(starts(sent)) == 1 and len(r) == 1 and r[0]["fired"] is True
           and r[0]["refused_by"] is None and r[0]["target"] == 10

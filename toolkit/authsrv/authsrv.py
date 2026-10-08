@@ -22863,6 +22863,11 @@ from pressverdict import (  # noqa: F401,E402
     _press_row, _chain_pause_note, _swing_dropped, _press_refused,
     _press_answered, _follow_superseded,
 )
+# The rows age against THIS module's clock, looked up at each call (2026-10-08): one
+# clock with the verdicts, so a test that rebinds `time` here (test_position_trust's
+# `frozen`) pins the rows too. A lambda rather than `time.time`, which would bind the
+# real function now and miss the rebind; the leaf cannot import us (pressverdict.py).
+pressverdict.clock = lambda: time.time()
 
 
 def _chain_pause_flush(state, rec, conn_id):
