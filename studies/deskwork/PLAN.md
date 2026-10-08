@@ -448,6 +448,13 @@ line.
    signet recharge; Soul Reaping on a nearby non-spirit death with the cap; Divine Favor
    on a Monk spell cast on an ally. Spawning Power, Leadership and Mysticism recorded as
    waiting on unmodelled families.
+   **Status 2026-10-07 (SKILLS-EX, studies/skills §66): Expertise and Divine Favor
+   SHIPPED** (`--no-expertise`, `--no-divine-favor`) on the player, heroes and bodies
+   alike. Expertise ROUNDS (the six JARIN spends: round 6 of 6, floor 1 of 6 -- this
+   step's 14-of-15 acceptance holds); its ritual and touch clauses are open. Divine Favor
+   is its own heal word after the spell's own, round(3.2 x rank). Energy Storage, Fast
+   Casting (a 2^(-7/15) fit, recorded), Soul Reaping and the three waiting on families
+   are recorded in skills §66.2 / §66.5 / §66.6 and not shipped.
 3. **Item words.** `equipped_attribute_bonuses` (in `authsrv.py`) decodes each
    equipped item's `modifiers` through `itemmods.attribute_bonuses` over weapon, offhand
    AND `agents.PLAYER_ARMOUR` (543 stacks, 542 takes the max per attribute, bit-31 words

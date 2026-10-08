@@ -3078,6 +3078,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="attribute 35 adds no critical chance and a critical "
                          "pays no energy. The revert for DAGGERS-B7 "
                          "(RUN-DAGGERS-1, studies/daggers F12).")
+    ap.add_argument("--no-expertise", action="store_true",
+                    help="THE REVERT ARM for SKILLS-EX: attribute 23 takes nothing "
+                         "off a cast, so a Ranger at Expertise 1 is charged 15 for "
+                         "skill 392 where retail charged 14 (20260914T005758) -- "
+                         "every run before 2026-10-07. By default an attack or "
+                         "Ranger skill costs round(cost x (1 - 0.04 x rank)), the "
+                         "client's description 2131 and the tape's rounding.")
+    ap.add_argument("--no-divine-favor", action="store_true",
+                    help="THE REVERT ARM for SKILLS-EX6: attribute 16 adds nothing, so "
+                         "a Monk spell cast on an ally heals its own number only -- "
+                         "every run before 2026-10-07. Retail sends a second heal word "
+                         "of round(3.2 x rank) behind the spell's own (+42 on a level-20 "
+                         "henchman's every Monk spell, +3 on the Smiting Monks').")
     ap.add_argument("--no-chain-state", action="store_true",
                     help="no Assassin chain: no 0x005C state on a lead / "
                          "off-hand / dual hit, and a skill's `combo_req` is "

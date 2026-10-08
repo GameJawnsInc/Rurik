@@ -64,6 +64,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
 import checks  # noqa: E402
 import pools  # noqa: E402
+import attribpassive  # noqa: E402  (SKILLS-EX: section 2c prices the Expertise spend)
 
 # FLOOR 105, and it is the MANDATORY CORE rather than the full count, which is
 # `checks.py`'s own instruction for a test whose count varies with the fixture:
@@ -136,9 +137,15 @@ PROP_ENERGY_ABSOLUTE = 33       # the setter that does not exist -- see section 
 # tell the two apart. The join in section 2 can, and says all thirty of those
 # events belong to agents whose own property-41 is 20. The degeneracy is why
 # the join is worth doing at all.
-# JARIN: (capture, skill) -> the cost the client's own column does not carry
-# -- Expertise 1 on the Ranger, 15 * 0.96 = 14.4 -> 14 (WIKI, floored).
-EXPERTISE_SPENDS = {("20260914T005758", 392): 14}
+# JARIN: (capture, skill) -> the spender's EXPERTISE RANK, for the one spend
+# whose cost the client's own column does not carry: the Ranger at Expertise 1
+# paid 14 for 392's 15. The cost is attribpassive.expertise_cost's, the server's
+# own rule -- ROUNDED, not floored: this comment said "WIKI, floored" until
+# SKILLS-EX (2026-10-07, studies/skills 66), and the same Ranger's 394 and 455
+# (10) and 433 and 446 (5) paid their full column, where floor charges 9 and 4.
+# Those five need no entry (round leaves them whole); test_attribpassive section
+# 1 scores all six, floor 1 of 6.
+EXPERTISE_SPENDS = {("20260914T005758", 392): 1}
 # JARIN: the hero's 0x00A2 [43, hero, rate] rides one message AHEAD of its
 # property 41 in the load block (37.73 s, 87.21 s, 651.62 s: agents 117, 30,
 # 324) -- an order the player's own block does not use.
@@ -1550,12 +1557,16 @@ def section_corpus_oracle():
         _c, _m, n = by_skill.get(s["skill"], (cost, s["max"], 0))
         by_skill[s["skill"]] = (cost, s["max"], n + 1)
         # JARIN (20260914T005758): the Ranger carries Expertise 1 (0x003A
-        # [23 -> 1]) and skill 392 (cost 15) charged 14 of its 22 -- WIKI
-        # (GWW, "Expertise"): 4 % per rank off an attack skill's cost,
-        # floored. The one join the raw column cannot make; allowed by name.
+        # [23 -> 1]) and skill 392 (cost 15) charged 14 of its 22 -- the
+        # client's description 2131: 4 % a rank off an attack or Ranger
+        # skill's cost, ROUNDED (SKILLS-EX; "floored" here was refuted by the
+        # same Ranger's 10s and 5s). The one join the raw column cannot make;
+        # allowed by name, priced by the server's own rule.
         if (s["stamp"], s["skill"]) in EXPERTISE_SPENDS:
-            want = f32(pools.spend_fraction(EXPERTISE_SPENDS[(s["stamp"], s["skill"])],
-                                            s["max"]))
+            want = f32(pools.spend_fraction(
+                attribpassive.expertise_cost(
+                    cost, EXPERTISE_SPENDS[(s["stamp"], s["skill"])]),
+                s["max"]))
         if want == s["value"]:
             hits += 1
         else:

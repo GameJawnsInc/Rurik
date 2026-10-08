@@ -28,6 +28,82 @@ move back.
 
 ---
 
+### SKILLS-EX -- 2026-10-07 -- **Two primaries now act on every caster.**
+
+- **Expertise** takes 4 % a rank off an attack or Ranger skill's energy, ROUNDED. The Ranger at Expertise 1 on `20260914T005758` :56011 paid 14 for 392's 15, and the full cost for its 10s and 5s. Round predicts 6 of 6; floor (test_pools' old "WIKI, floored") predicts 1 of 6.
+- **Divine Favor** heals the ally a Monk spell is cast on for round(3.2 x rank). It is its OWN property-55 word, after the spell's own heal.
+  - 360 of 360 such casts by 28 retail caster instances carry it: 42 from eight on `20260817T231139` and `20260928T103123` (the party's level-20 Monk henchman among them), 3 from the four Smiting Monks of `20260929T100038` (twenty instances).
+  - 147 of 147 come behind the spell's heal.
+  - Round is the only rounding whose image holds both 3 and 42, which are read over maxima the wire sends.
+  - Healing Touch doubles it: 84 over a 555 the wire has already sent. Which operation comes first is RECONSTRUCTION.
+- Both ship ON for the player, heroes and bodies (`--no-expertise`, `--no-divine-favor`).
+- The ten primaries' rules are now read against the client's own descriptions.
+- **UNRUN on the client.**
+
+**Expertise (SKILLS-EX1-3).**
+- Re-derived with `test_pools._scan_connection` over the whole live corpus: 288 spends joined. The Ranger's six are the only ones by an agent at a nonzero Expertise rank.
+- The triage's "18 spends" were the Ranger's six padded with the hero Koss's eleven 322s at Expertise 0 (six and eleven make 17), and its out-of-scope control, 346, is Koss's too. Koss's spends witness neither the discount nor the scope.
+- The scope is the client's description 2131: attacks, Ranger skills, rituals and touch skills.
+  - Shipped: type 14 or profession 2, 233 paid rows.
+  - Rituals and touch skills are OPEN. No tape reaches the boundary.
+- `energy_cost_for` takes the discount before the glyph. That order is RECONSTRUCTION, and moot: no `skills` row is both a spell and in scope.
+- `body_skill_cost` prices the hostile's gate and debit and the hero's, so the hero's `[62]` carries the discount.
+- A cost discounted to 0 is free.
+- The rank is the caster's live one; Weakness makes it one lower.
+- `test_pools` section 2c now prices its by-name spend through the rule.
+
+**Divine Favor (SKILLS-EX4, EX6).**
+- Scope: a Monk spell or enchantment on target byte 3 or 4, or a self enchantment.
+- Never carry it:
+  - a foe hex (251, 14 casts);
+  - a resurrection (314, 2);
+  - the same casters' profession-0 Resurrection Signets (11).
+- The first pass's "4 empty batches" were four of those signets. Each one's `[58]` shared an instant with the next Monk spell's `[60]` and was credited to it. Corrected at review: in-order attribution, 665 Monk completions, not 671.
+- The byte-0 area spell exclusion is RECONSTRUCTION at n = 1. Heal Area completed 20 times without the word: 19 by casters at Divine Favor 0, and 1 by a caster of unknown rank.
+- `divine_favor_word` is one call in `cast_tick` and one in `land_skill`, each the statement right after `resolve_heal`. It goes through `heal_agent` onto the spell's own recipient.
+- The slice's Tahlkora (Divine Favor 2) now sends +6 behind every Orison and Restore Condition.
+- The casters' ranks (1 and 13) are inferred, never on the wire. A town caster's 58 (116 halved) and Healing Touch's 67 under the cut are readings: the first over a maximum that never reaches the wire, the second over a 455 the wire sends 1.18 s after the word.
+
+**The "34 at max 455" is not an anomaly.**
+- It is 42 under a 20 % healing cut. In the same batch the spell's own heal goes 191 -> 153, over a 455 the wire sends (555 less 100). The 0.8 is OBSERVED; Deep Wound as its cause is RECONSTRUCTION (studies/skills §66.4: no `0x0042` for it reaches the observer).
+- It exposes a defect, filed and not fixed: `heal_agent` TRUNCATES the cut (33, 152) where retail ROUNDS (34, 153). Four words fit round; truncation misses three.
+
+**Recorded, not shipped.**
+- Fast Casting: Z1's agent 3 runs every `[61]` at activation x 0.72363 = 2^(-7/15), 20 of 20. The linear 1 - 0.03 r fits no integer rank.
+- Healing Touch's order: 2 x round(3.2 r) is shipped against the rival ceil(6.4 r). They part at ranks 1, 2, 6, 7, 11, 12, 16 and 17. 313 is not served.
+- Energy Storage, Soul Reaping, Leadership, Mysticism and Spawning Power have no witness beyond their sentence.
+- Nonzero primary ranks reach the wire only for Strength (15 tapes), Expertise (2) and Critical Strikes (2).
+
+**Tests.** New `test_attribpassive.py`: 49 checks with the vault; 39 bare, with five directory skips (a vault holding only captures skips the tape sections too).
+- Known-bad arms: floor, ceil, rank-0, and both flag-off arms.
+- The player's Divine Favor path runs end to end, through the real press and then `cast_tick`'s E5.
+- §16 reads the rounding off the tape: the Smiting Monks' 3 (212 readable casts) and §15's 42. ceil never makes 3; floor never makes 42.
+- Every check was proved red on a scratch copy. Review arms:
+  - the player's word aimed at nobody: 1 check red;
+  - the player's word aimed at the player: 1;
+  - the word moved before the heal: 3 in `cast_tick`, 4 in `land_skill`;
+  - Divine Favor ceil: 5;
+  - Divine Favor floor: 8;
+  - a foe spell admitted: 2.
+- ceil(6.4 r) on Healing Touch stays green. No tape separates it.
+- The 207 affected tests are green at `be1e9005` (affected.txt's 211 less the four port-binders the orchestrator runs).
+
+**Second review (wording only).** Healing Touch's 67 was filed as observed over its 455; the word goes out 1.18 s before that maximum does, so it is a reading. Section 66 cited times on two clocks and named one ambiguously; both are named (§66.1 the connection clock, §66.4 the capture clock). Deep Wound as the cut's cause is labelled RECONSTRUCTION wherever it is stated.
+
+**Runsheet** (the owner's, after landing; loopback `run/` only).
+1. **Expertise.** A Ranger-primary character at Expertise 4 (the sandbox orchestrator, or `--spawn-profession 2` plus four points in the attribute panel, which persists), with skill 455 on the bar.
+   - Press it. Expected: the tooltip reads 8, the orb drops 8, and the log prints `skill 455 costs 8 energy (Expertise took off 2) [SKILLS-EX]`.
+   - Under `--no-expertise` the orb drops 10 under the same 8 tooltip.
+2. **Divine Favor, a hero.** `--party slice` as shipped (Tahlkora, Divine Favor 2). Take damage, then watch her Orison.
+   - Expected: two blue numbers rise over the recipient, the spell's own and then +6. The log prints `Divine Favor: agent <tahlkora>'s skill 281 heals agent <x> for 6 more [SKILLS-EX6]`.
+   - Under `--no-divine-favor` one number rises.
+3. **Divine Favor, the player.** A Monk-primary character with Divine Favor raised (`--spawn-profession 3` plus points in the attribute panel) casts Orison of Healing on a hurt party member.
+   - Expected: two numbers over the ALLY, the second round(3.2 x rank), for example +16 at rank 5; one under `--no-divine-favor`.
+
+**Refuted if** the orb's drop differs from the tooltip, the client draws one summed number where two words went out, or the player's second number rises over the player.
+
+Commits on `desk-expertise`: `6c61bd83` (Expertise), `cf2e1ee5` (Divine Favor), `5d1dfb45` (review fixes), `be1e9005` (second-review wording).
+
 ### WEAPONS-C11 -- 2026-10-07 -- **Five more areas over time go live, and the caster's death gets a witness past a defeat mark. Breath of Fire 1094 and Snow Storm 2222 (rows only), Ray of Judgment 830 (Burning on each struck foe every tick), Spirit Rift 910 (ONE strike at +3.0, then Cracked Armor) and Savannah Heat 1380 (tick k deals k x its scale, for the player and a body alike; `--no-area-tick-ramp` reverts) now carry client-table rows. A Fire Storm still ticks after its caster's DEFEAT MARK: OBSERVED n = 1 on the second Zaishen tape (match 4 lost, CASTAI-ZF25), which is the reading the server already made. A caster killed in play has no witness; every candidate is inconclusive. Six of the fourteen stay inert, each needing a clause of its own (WEAPONS-C12).**
 
 - **What ships** (`d7da57c0`, `9cbe2003`; review fixes `de3779ef`, `fe875c47`, `a29f2c2e`; studies/weapons/PLAN.md §45).

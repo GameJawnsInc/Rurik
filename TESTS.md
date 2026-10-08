@@ -3639,6 +3639,68 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   once, 17 of 17; the observer's modal pips per profession are the rule's. Proved red: both
   switches off in the source redden 5; the gate moved back behind the debit reddens 1.
   Floor 7 bare (§3-5 and §7 skip), 16 with the vault. No socket, no client),
+  `toolkit/authsrv/test_attribpassive.py` (**2026-10-07, SKILLS-EX: Expertise's energy
+  discount and Divine Favor's heal word on every caster, both ROUNDED, and the ten
+  primaries read against the client's own descriptions** (studies/skills §66). The Ranger at Expertise 1 on `20260914T005758` :56011
+  paid 14 for 392's 15 and the full cost for its two 10s, a 10 and two 5s; `test_pools`
+  carried the 14 by name as "floored". §1 the six carried spends through
+  `attribpassive.expertise_cost`, the f32 words bit for bit, 6 of 6; KNOWN-BAD arms floor 1
+  of 6, ceil and no-Expertise 5 of 6 (each misses 392 only); rank 12, rank 15 and the
+  edges. §2 the scope: attacks of any profession and Ranger skills; a Warrior stance, a Monk
+  spell and a Monk touch skill are out (the touch clause OPEN). §3 the REAL
+  `energy_cost_for` at the live rank (Weakness one lower; discounted to 0 is (0, None, 0));
+  `--no-expertise` prices every row at its table cost. §4 `body_skill_cost` equals the
+  player's price at ranks 0 / 1 / 12, and a body's Weakness cuts its own rank. §5 the REAL
+  `ally_cast_tick`: a Ranger hero's 392 sends E4 then [62, hero, -14/max]; a 1-energy attack
+  at rank 15 casts on an empty pool with no [62]; the arm sends -15/max. §6 the REAL
+  `enemy_attack_tick` on a fake clock: a hostile archer at Expertise 1 pays 14, the arm 15.
+  §7 the switch: ON at import, parses, main()'s block EXECUTED flips the module's bool; the
+  three body sites read `body_skill_cost`, `energy_cost_for` the discount, `pick_skill`
+  neither; the leaf imports nothing. §8 (vault content DIR) the carried rows are the vault's
+  own; no skills row is both a spell and in scope (the glyph order is moot). §9 (vault
+  client DIR) `s_attrib`'s ten primaries carry the description ids the leaf commits, and
+  each description resolved at run time contains every numeral typed for it (never
+  printed). §10 (captures + content DIRs) `test_pools`' own join re-finds the six spends bit
+  for bit at the tape's own `0x003A` rank. DIVINE FAVOR (SKILLS-EX6): §11 round(3.2 x rank)
+  gives 3 and 42 (retail's, over maxima the wire sends) and 58 (a town caster's 116 halved, its
+  maximum a reading), and Healing Touch doubled, 84 / 116 (which operation comes first is
+  RECONSTRUCTION); the rounding argument and ceil(6.4 r), the doubling's live rival, are
+  PRINTED, not checked -- arithmetic on typed numbers cannot fail. §12 the scope on carried rows: a
+  Monk spell or enchantment on an ally (byte 3 / 4) or a self enchantment in; an area
+  spell round the caster, a hex or spell on a foe, a resurrection, a signet out. §13 the
+  REAL `ally_cast_tick` -> `land_skill` on a fake clock: a Monk hero at Divine Favor 2
+  heals with Orison's own word THEN [55, ally, hero, 6/max]; `--no-divine-favor` sends the
+  first alone; Weakened, the word is 3; `divine_favor_word` called directly for the player
+  at 13: +42, Healing Touch +84, a foe spell nothing, rank 0 nothing; THE PLAYER'S PATH, the
+  REAL `handle_skill_press` then `cast_tick`'s E5: Orison's own heal on the ally, then +42 on
+  the ALLY (not the caster), and `--no-divine-favor` sends the first alone; Deep Wound cuts
+  it (33; retail 34, §66.6); the word follows the spell's own recipient (Heal Other at a dead
+  ally: nobody; Orison: the caster). §14 the switch (main()'s block executed) and one call
+  each in `cast_tick` and `land_skill`, each the statement right after a `resolve_heal`
+  (anchored on the statement: `land_skill`'s attack arm calls `resolve_heal` first). §15
+  (captures + content DIRs) `20260817T231139` :54071: the two Monk casters' (agent 12 the
+  party's Monk henchman, agent 7 unnamed) 52 ally casts all carry the word at rank 13 (2
+  under the cut, read over any maximum the connection sends -- Healing Touch's 67 over a
+  455 that arrives 1.18 s after it), their 2 resurrections none, and the word is LAST on
+  all 43 casts with a heal of their own; a [58] closes the caster's [60] BEFORE it in wire order. §16 (captures
+  + content DIRs) `20260929T100038`: the four Smiting Monks' 259 ally casts, every one of
+  the 212 whose words read whole over their recipients' on-wire maxima carries 3, the value
+  they share most; their 14 foe hexes and 11 Resurrection Signets carry nothing; and THE
+  ROUNDING from the two measured constants: 3 and 42 are in the shipped rule's image,
+  KNOWN-BAD ceil(3.2 r) never makes 3 and KNOWN-BAD floor(3.2 r) never makes 42.
+  Proved red one at a time in a scratch runner: Expertise floor rounding (6 checks), an
+  all-skills scope (3), the server sites bypassed (7), Weakness ignored (3), one body site
+  reverted in the source (1), main()'s `global` dropped (1), a wrong numeral (1), a wrong
+  description id (2), a tape word altered (4), a carried cost altered (4); Divine Favor
+  floored (6), the doubling dropped (4), an all-skills scope (3), the word off (5), the
+  word sent BEFORE the spell's heal (6), the body call removed from the source (1), its
+  `global` dropped (1); at review, on a scratch copy: the player's word aimed at nobody or
+  at the player (1 each), the word moved before the heal in `cast_tick` (3) or in
+  `land_skill` (4), Divine Favor ceil (5, both §16) or floor (8), a foe spell admitted (2);
+  ceil(6.4 r) on Healing Touch stays green (no tape separates it -- RECONSTRUCTION). Floor
+  39 bare (§8-10 and §15-16 skip on their directories; §10 and §15-16 need captures AND
+  content, so a captures-only vault skips them too), +2 content, +2 client, +6 captures
+  with content: 49 vaulted. No socket, no client),
   `toolkit/authsrv/test_deadbout.py` (**2026-09-30, MONSTERAI-W: a hostile's bout ends with
   its last target -- once nobody it could fight is alive in range it stands a beat and walks
   home.** The owner's report on `20260930T231034`: the Bandit Raider held aggro through the

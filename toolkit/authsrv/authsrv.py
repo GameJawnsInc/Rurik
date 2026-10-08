@@ -24814,6 +24814,102 @@ def glyph_energy_amount(skill_id, rank):
         return None
 
 
+# ---- EXPERTISE (SKILLS-EX, studies/skills 66; the rule is attribpassive.py) --
+#
+# The Ranger's primary takes 4 % a rank off the energy cost of an attack skill
+# or a Ranger skill, ROUNDED to nearest: the slope and the scope from the
+# client's own description 2131 (OBSERVED, 38797), the rounding from the six
+# spends of the Ranger at Expertise 1 on 20260914T005758 :56011 (OBSERVED,
+# round 6 of 6, floor 1 of 6). One rule for the player (energy_cost_for) and
+# every body (body_skill_cost: the hostile's gate and debit, the hero's gate
+# and debit -- so a hero's [62] carries the discounted cost, HEROENERGY). A
+# cost discounted to 0 is FREE: no property 62 and no gate, the existing rule
+# for a 0-cost row.
+import attribpassive  # noqa: E402
+EXPERTISE = True                 # False (--no-expertise): every cast pays its table cost.
+
+
+def passive_rank(state, agent_id, attr):
+    """The caster's rank in a primary RIGHT NOW: a body's from its own
+    `attributes` (agent_attributes -- a hero's are its spend state's), the
+    player's from the live attribute state (player_rank_of: spent points and
+    gear), and either one lower under Weakness (SKILLS-WK). The player is not a
+    row in state["agents"], the asymmetry episodemods.taker_rank reads too."""
+    rows = state.get("agents") or {}
+    if agent_id in rows:
+        rank = agent_attributes(rows[agent_id] or {}).get(attr, 0)
+    else:
+        rank = player_rank_of(attr, state)
+    return int(weakened_rank(state, agent_id, int(rank or 0)) or 0)
+
+
+def expertise_rank(state, agent_id):
+    return passive_rank(state, agent_id, attribpassive.EXPERTISE_ATTRIBUTE)
+
+
+def expertise_energy_cost(state, agent_id, skill_id, base):
+    """`base` after the caster's Expertise; `base` unchanged with the flag off,
+    for a free row, or for a skill outside the scope (a row we cannot read is
+    outside it -- the table cost, what every cast paid before)."""
+    if not EXPERTISE or base <= 0:
+        return base
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return base
+    if not attribpassive.expertise_applies(row):
+        return base
+    return attribpassive.expertise_cost(base, expertise_rank(state, agent_id))
+
+
+def body_skill_cost(state, agent_id, skill_id):
+    """skill_cost for a BODY's cast -- (energy after Expertise, adrenaline
+    units). The hostile's gate and debit and the hero's read this, so a body
+    pays what the same build would pay as the player."""
+    cost, units = skill_cost(skill_id)
+    return expertise_energy_cost(state, agent_id, skill_id, cost), units
+
+
+# ---- DIVINE FAVOR (SKILLS-EX6, studies/skills 66.7; the rule is attribpassive.py)
+#
+# The Monk's primary heals the ally a Monk spell is cast on for round(3.2 x
+# rank) -- its OWN property-55 word from the caster, in the completion batch,
+# after the spell's own heal (OBSERVED 147 of 147) and after its effect's
+# 0x0042 (n = 2); alone for a spell with no heal of its own (Healing Breeze,
+# Reversal of Fortune). The slope is the client's description 2105; the rounding
+# is the only one whose image holds retail's 3 and 42 (a town 58 is a reading).
+# It is a HEAL, so heal_agent's Deep Wound cut applies (retail's 34 at max 455 is
+# 42 x 0.8, Deep Wound's cut by RECONSTRUCTION, 66.4). One call per completion,
+# the player's (cast_tick) and every body's (land_skill), right after resolve_heal.
+DIVINE_FAVOR = True              # False (--no-divine-favor): a Monk spell heals its own number only.
+
+
+def divine_favor_word(send, state, skill_id, caster_id, target_id, conn_id):
+    """The Divine Favor heal for one completed cast, or 0.0. Nothing with the
+    flag off, outside the scope (attribpassive.divine_favor_applies), at rank
+    0, or with no legal living recipient -- the client's target byte decides
+    who that is, the same verdict resolve_heal reads (cast_recipient)."""
+    if not DIVINE_FAVOR:
+        return 0.0
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return 0.0
+    if not attribpassive.divine_favor_applies(row):
+        return 0.0
+    bonus = attribpassive.divine_favor_bonus(
+        passive_rank(state, caster_id, attribpassive.DIVINE_FAVOR_ATTRIBUTE), skill_id)
+    if bonus <= 0:
+        return 0.0
+    recipient = cast_recipient(skill_id, caster_id, target_id,
+                               allies_of(state, caster_id))
+    if recipient is None or target_dead(state, recipient):
+        return 0.0
+    print(f"[c{conn_id}] Divine Favor: agent {caster_id}'s skill {skill_id} heals "
+          f"agent {recipient} for {bonus} more [SKILLS-EX6]", flush=True)
+    return heal_agent(send, state, recipient, caster_id, float(bonus), conn_id)
+
+
 def energy_cost_for(state, caster_id, skill_id, rank):
     """(cost, glyph episode, discount) for one cast. Consumes nothing.
 
@@ -24835,6 +24931,17 @@ def energy_cost_for(state, caster_id, skill_id, rank):
         # one this server can observe the difference of -- the wire carries
         # nothing for a free cast (44 of 44).
         return base, None, 0
+    # SKILLS-EX: Expertise FIRST, on the table cost, then the glyph's flat
+    # amount off what is left. The ORDER is RECONSTRUCTION and today it is
+    # moot: the glyph cheapens spells (types 4/5/6) and the shipped scope is
+    # attack skills and Ranger skills, and none of the 1,334 `skills` rows is
+    # both (no Ranger spell; an attack is not a spell -- test_attribpassive
+    # counts it on the vault table). It starts to matter
+    # when touch spells or binding rituals join the scope (OPEN, section 66).
+    # Discounted to 0 is free, and a free cast burns no glyph charge (below).
+    base = expertise_energy_cost(state, caster_id, skill_id, base)
+    if base <= 0:
+        return 0, None, 0
     row_type = None
     try:
         row_type = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
@@ -26829,9 +26936,12 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                  [agents.GV_ENERGY_SPENT, PLAYER_AGENT_ID, frac],
                  f"energy -{cost} of {pool.maximum:.0f} for skill {skill_id}")
+            _ex_off = skill_cost(skill_id)[0] - discount - cost      # SKILLS-EX
             print(f"[c{conn_id}] skill {skill_id} costs {cost} energy"
                   + (f" (glyph {glyph_ep['skill']} took off {discount})"
                      if discount else "")
+                  + (f" (Expertise took off {_ex_off}) [SKILLS-EX]"
+                     if _ex_off > 0 else "")
                   + f": {pool.current:.2f}/{pool.maximum:.0f} left", flush=True)
 
     # The cast animation, in the OBSERVED player shape: 0x00A0
@@ -27871,6 +27981,8 @@ def cast_tick(send, state, conn_id):
             if not _na_fail:                                    # SKILLS-LU (C)
                 resolve_heal(send, state, cast["skill_id"], rank,
                              PLAYER_AGENT_ID, target, conn_id)
+                divine_favor_word(send, state, cast["skill_id"], PLAYER_AGENT_ID,
+                                  target, conn_id)                 # SKILLS-EX6
             # THE HOLD PULSE CLOSES THE E5 INSTANT for a non-attack cast:
             # [8 -> 0] then [8 -> 1] at the batch's end, after the
             # target-facing properties, 4 of 4 spell E5s -- the cast
@@ -31764,7 +31876,7 @@ def enemy_attack_tick(send, state, conn_id):
             # it refuses is a slot the agent could cast from here if it could
             # pay -- never a heal nobody needs or a touch skill at 300 u.
             if ENERGY:
-                _cost, _units = skill_cost(_sid)
+                _cost, _units = body_skill_cost(state, agent_id, _sid)     # SKILLS-EX
                 _pool = agent_energy(agent)
                 _pool.tick(now)
                 _short = None
@@ -31816,7 +31928,7 @@ def enemy_attack_tick(send, state, conn_id):
             # added later -- Koss's [62] behind his E4, 17 of 17 -- and it is
             # sent from ally_cast_tick, HEROENERGY; a hostile never is one.)
             if ENERGY:
-                _cost, _units = skill_cost(skill_id)
+                _cost, _units = body_skill_cost(state, agent_id, skill_id)  # SKILLS-EX
                 if _units > 0:
                     agent_adrenaline(agent).use(skill_id)
                 agent_energy(agent).spend(_cost)
@@ -32140,7 +32252,7 @@ def ally_cast_tick(send, state, conn_id):
             continue
         _debit = None                       # HEROENERGY: (cost, fraction) for [62]
         if ENERGY:
-            cost, units = skill_cost(skill_id)
+            cost, units = body_skill_cost(state, agent_id, skill_id)   # SKILLS-EX: [62] too
             pool = agent_energy(agent)
             pool.tick(now)
             if units > 0:
@@ -39450,6 +39562,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # condition removed. Until 2026-09-10 this was a flat self-heal.
     healed = resolve_heal(send, state, skill_id, _rank, agent_id,
                           agent.get("cast_target"), conn_id)
+    divine_favor_word(send, state, skill_id, agent_id, agent.get("cast_target"),
+                      conn_id)                                     # SKILLS-EX6
 
     # The damage and its fraction were computed BEFORE the 58 went out (the
     # guard block at the top); from here on this is emission and bookkeeping
@@ -50522,6 +50636,18 @@ def main():
         CRITICAL_STRIKES = False
         print("NO CRITICAL STRIKES: attribute 35 adds no critical chance and "
               "a critical pays no energy (the pre-DAGGERS-B7 arm).")
+    if a.no_expertise:
+        global EXPERTISE
+        EXPERTISE = False
+        print("NO EXPERTISE: attribute 23 takes nothing off an attack or Ranger "
+              "skill's energy cost (the pre-SKILLS-EX arm; retail charged 14 "
+              "for a 15 at Expertise 1).", flush=True)
+    if a.no_divine_favor:
+        global DIVINE_FAVOR
+        DIVINE_FAVOR = False
+        print("NO DIVINE FAVOR: attribute 16 adds no heal to a Monk spell cast "
+              "on an ally (the pre-SKILLS-EX6 arm; retail's level-20 Monk "
+              "henchman sent +42 on every one).", flush=True)
     if a.no_chain_state:
         global CHAIN_STATE
         CHAIN_STATE = False

@@ -9950,6 +9950,273 @@ section records what changes HERE.
   485 of 486 within 0.05 s. The Zaishen Mage's casts run at × 0.67, the Degeneration
   Mesmer's at × 0.7236.
 
+## 66. SKILLS-EX — the primary attributes' passive rules: Expertise's discount ROUNDS (6 of 6; floor 1 of 6) and ships on every caster; Divine Favor is its own heal word, rounded, after the spell's own; the ten primaries read against the client's own descriptions (2026-10-07)
+
+DESKWORK-D7 step 2 (studies/deskwork/PLAN.md), the primaries with witnesses. Before
+this, Strength and Critical Strikes were the only primaries the server modelled; every
+cast was priced at the client's table cost and every Monk spell healed its own number
+and nothing else. The rules here come from three layers, labelled per
+studies/method: the client's own attribute descriptions (OBSERVED as text, build 38797,
+resolved at run time and never committed), the live wire (OBSERVED), and what neither
+reaches (RECONSTRUCTION, named where it is assumed). `toolkit/authsrv/attribpassive.py`
+holds the arithmetic; `test_attribpassive.py` holds it to the tape and to the
+descriptions.
+
+### 66.1 SKILLS-EX1 — Expertise on the wire: six spends, and ROUND is the only survivor. OBSERVED
+
+Every property-62 spend in the live corpus, joined to its skill by the corpus oracle's
+own join (`test_pools._scan_connection`, time-joined, spend first in the batch), the
+spender's Expertise rank read from that connection's own `0x003A` / `0x003B`, gapped
+`20260928T103123` :65009 set aside by its manifest: **288 spends joined, and exactly
+six are by an agent at a nonzero Expertise rank** — the Ranger (agent 29, `0x003A
+[23, 25 | 1, 2 | 1, 2]`: Expertise 1, Marksmanship 2) on `20260914T005758` :56011.
+
+| t (s; the CONNECTION clock, `tape.load_tape`'s: 0 = its first server segment; the capture clock of `livewire` / `deepwoundjoin.sequence` reads +86.47) | skill | type | table cost | max | paid | round | floor | ceil |
+|---|---|---|---|---|---|---|---|---|
+| 423.62 | 433 | 19 | 5 | 22 | 5 | 5 | **4** | 5 |
+| 428.10 | 394 | 14 | 10 | 22 | 10 | 10 | **9** | 10 |
+| 431.09 | 392 | 14 | 15 | 22 | 14 | 14 | 14 | **15** |
+| 435.76 | 446 | 10 | 5 | 22 | 5 | 5 | **4** | 5 |
+| 446.43 | 394 | 14 | 10 | 22 | 10 | 10 | **9** | 10 |
+| 528.55 | 455 | 3 | 10 | 19 | 10 | 10 | **9** | 10 |
+
+"paid" is the wire word × the spender's own property 41, an exact integer every time.
+**round(cost × (1 − 0.04 × rank)) predicts 6 of 6** (the f32 words bit for bit);
+**floor predicts 1 of 6** — the rule `test_pools.py`'s comment carried as "WIKI,
+floored" (DESKWORK-D7 named no rounding), REFUTED; ceil (equivalently, floor the discount) predicts 5 of 6 and
+misses 392; no discount at all predicts 5 of 6 and misses 392. **392 is the one spend on
+disk that shows a discount at all**; the five 10s and 5s are what refute floor. No tie is
+reachable: cost × (25 − rank) / 25 has an integer numerator, so the half never occurs.
+
+**The triage that seeded this lane was wrong in its count, and the correction matters.**
+It reported "18 scoped spends" (the Ranger's six and the 322s below — six and eleven make
+17, so its count does not add up either) and named 346 as the out-of-scope control. The
+11 spends of 322 and the 17 of 346 on the same connection are agent 30 — Koss, the HERO, at
+Expertise 0 (`0x003A [20, 21 | 2, 1 | 2, 1]`). They witness rank 0 paying the table cost
+(the whole corpus's rank-0 in-scope spends: 95 of 95 at the table cost) and nothing
+about the discount, and a spend at rank 0 cannot control for scope. **The scope boundary
+is not witnessed on tape at all**: no out-of-scope paid skill by an agent at Expertise
+> 0 exists in the corpus. The same Ranger is at Expertise 1 on three connections of
+`20260916T150306` and pays nothing there that the join can attribute.
+
+### 66.2 SKILLS-EX2 — the ten primaries, read against the client's own descriptions. OBSERVED (text), paraphrased
+
+`attribtable.py` reads `s_attrib` (+0x0C = the description string id) from the pinned
+38797 exe; `textrec` resolves each id from the owner's archive. **Committed here: the
+ids and a paraphrase of the numbers; the sentences are not.** `attribpassive.py` carries
+the id table (`PRIMARY_DESCRIPTION_IDS`) and the numerals we type for each
+(`PRIMARY_DESCRIPTION_NUMERALS`); `test_attribpassive` §9 re-reads the table from the
+exe, resolves each description at run time and fails if a numeral we typed is not in
+the client's own sentence.
+
+| attr | profession | description id | the rule, paraphrased (numbers from the description) | modelled | witness on disk |
+|---|---|---|---|---|---|
+| 0 Fast Casting | Mesmer | 2079 | shortens spell and signet activation (no number stated; no effect on non-Mesmer skills under 2 s); PvE: Mesmer-spell recharge −3 % a rank | no | the `[61]` word, §66.5 |
+| 6 Soul Reaping | Necromancer | 2093 | +1 energy a rank for each nearby death of a creature that is not a spirit, capped at 3 in any 15 s (the radius is NOT in the text) | no | none |
+| 12 Energy Storage | Elementalist | 2099 | +3 maximum energy a rank | no | none (no nonzero rank on any tape) |
+| 16 Divine Favor | Monk | 2105 | +3.2 health a rank to an ally you cast a Monk spell on (no rounding stated) | **yes, §66.7** | §66.4 |
+| 17 Strength | Warrior | 2113 | 1 % armour penetration a rank on attack skills | yes (combatmath) | the term is unwitnessed (combatmath) |
+| 23 Expertise | Ranger | 2131 | −4 % energy cost a rank of attacks, Rituals, touch skills and Ranger skills (no rounding stated) | **yes, §66.3** | §66.1 |
+| 35 Critical Strikes | Assassin | 2137 | +1 % critical chance a rank; 1 / 2 / 3 energy on a critical at ranks 3 / 8 / 13 | yes (DAGGERS-B7) | rank 8, 26 of 26 (daggers F12) |
+| 36 Spawning Power | Ritualist | 2147 | +4 % a rank to created creatures' health and weapon-spell duration | no | none; the families are not served |
+| 40 Leadership | Paragon | 36916 | +2 energy an ally affected by your shout or chant, at most 1 per 2 ranks | no | none |
+| 44 Mysticism | Dervish | 36922 | −4 % a rank off Dervish enchantment cost; PvE +1 armour a rank while enchanted | no | none |
+
+Over the 127 live connections that read whole (the 128th set aside by its manifest),
+a nonzero primary rank reaches the wire (`0x003A` / `0x003B`, the observer's and its
+heroes' only) for Strength on 15 tapes (7, 8), Expertise on 2 (1) and Critical Strikes on
+2 (8 to 10) — and for no other primary. **Energy Storage, Soul Reaping, Spawning Power, Leadership and Mysticism
+have no witness of any kind beyond their sentence**, and Soul Reaping's "near" has no
+number anywhere we hold — each is a client-text-only rule, and none ships in this pass.
+Energy Storage's wire, when it ships, is a `0x009F 41` resend on a rank change
+(DESKWORK-D7 step 2).
+
+### 66.3 SKILLS-EX3 — what shipped: Expertise on the press, the hostile and the hero (`EXPERTISE`, `--no-expertise`)
+
+- **The rule** (`attribpassive.expertise_cost`): round(cost × (1 − 0.04 × rank)), integer
+  arithmetic, never below 0; rank 0, a free row and a missing rank leave the cost alone.
+- **The scope shipped** (`expertise_applies`): an attack skill (type 14, any profession)
+  or a Ranger skill (profession 2, any type) — 233 paid rows of the 1,334 in the vault's
+  table (134 attacks, 141 Ranger skills, overlapping). **OPEN: "Rituals" and "touch
+  skills"** — a Ranger's nature rituals are Ranger skills and are covered, but a
+  non-Ranger ritual's type and whether the table's `touch_range` bit (an UPSTREAM-named
+  flag, DESKWORK-D8) is what the sentence calls a touch skill are reads not done, and no
+  tape can tell (§66.1). A Monk touch skill (312) pays its table cost today.
+- **Every caster, one rule.** `energy_cost_for` (the player's press gate, the queued
+  begin and the debit) takes the discount; `body_skill_cost` prices the hostile's gate
+  and debit and the hero's — so a hero's `[62]` carries the discounted cost (HEROENERGY).
+  The rank is the caster's own RIGHT NOW: the player's live effective rank
+  (`player_rank_of`: spent points and gear), a body's `attributes`, either one lower under
+  Weakness (SKILLS-WK). (`player_rank_for_skill`, the press's SKILL rank, still reads the
+  seed ranks — a separate inconsistency, not this lane's.)
+- **A cost discounted to 0 is FREE**: no `[62]`, no gate, no glyph charge burnt — the
+  existing 0-cost rule, now reachable from a positive table cost.
+- **The order against the Glyph of Lesser Energy is RECONSTRUCTION and moot today**:
+  Expertise first on the table cost, then the glyph's flat amount. The glyph cheapens
+  spells (types 4 / 5 / 6) and none of the 1,334 rows is both a spell and in the shipped
+  scope (no Ranger spell exists; an attack is not a spell) — `test_attribpassive` §8
+  counts it. It starts to matter with the touch and ritual clauses.
+- **`--no-expertise`** prices every cast at its table cost, byte for byte the server
+  before this (the known-bad arm: 15 for 392 at Expertise 1, where retail charged 14).
+- **Owed, a client run**: the runsheet in `PLAN-LOG.md`'s SKILLS-EX entry — a Ranger with
+  Expertise raised pressing a 10-energy Ranger skill, the orb's drop against the tooltip.
+
+### 66.4 SKILLS-EX4 — Divine Favor on the wire: its own heal word, after the spell's own, on every Monk spell cast on an ally. OBSERVED
+
+The join: every `[58]` completion whose caster's last `[60]` BEFORE it in wire order named
+a Monk skill, and the property-55 words that caster put in that batch (`healjoin.batches`,
+the 50 ms shoulder), over the whole live corpus (665 Monk-skill completions). Every time in
+§66.4 is on the CAPTURE clock (`wire.jsonl`'s, which `livewire` and
+`deepwoundjoin.sequence` read), not §66.1's connection clock. The order
+matters: a `[58]` can share its instant with the caster's NEXT `[60]`, and a join that reads
+the batch's `[60]`s first credits the completion to the cast just begun — the first pass did,
+counted 671, and read four Resurrection Signet completions as empty Monk-spell batches
+(below; corrected at review, 2026-10-07). A caster CARRIES a
+constant c when a word worth exactly c points (over an integer maximum the connection
+uses) rides its completions of at least two different skills. **28 casters do**: six
+Monk-caster instances on the connections of `20260817T231139` that carry the party's
+level-20 Monk henchman (agent 12 on :54071 is that henchman by its own `0x01BF`; agent 7
+there is a second Monk the tape does not name) and two on `20260928T103123` with
+**c = 42**, and the four Smiting Monks of `20260929T100038` (20 connection-instances) with
+**c = 3** — the 3 HP CASTAI-ZF32 counted, and the "constant alongside a varying partner"
+animref §18 left unattributed (0.0757 = 42 / 555) is the same word.
+
+- **Shape.** A separate `0x00A3 [55, recipient, caster, c / recipient's max]` in the
+  completion batch. Where the spell has its own heal on the same recipient, **the spell's
+  heal comes first and the Divine Favor word second, every time the pool is
+  unambiguous** — 147 of 147: Mend Condition 275 67, Orison of Healing 281 24, Word of
+  Healing 282 26, Heal Other 286 18, Healing Touch 313 12; the only positive words after
+  it are later heals landing in the same batch (Reversal of Fortune's conversions). A spell with no heal of its
+  own carries the word alone (Healing Breeze 288 15, Remove Hex 301 6, Reversal of Fortune
+  307 90, Balthazar's Aura 272 27, Zealot's Fire 271 22) — and so does a Mend Condition
+  that sends no heal of its own (nothing removed, by §58's rule): 24 of its 91 completions,
+  every one carrying the word. On the two batches where the
+  observer can see the enchantment's `0x0042`, the word follows it (n = 2).
+- **Scope.** Of 360 completions by those casters of a Monk spell or enchantment with the
+  client's target byte 3 (ally) or 4 (other ally), or a self-cast enchantment (type 6,
+  byte 0: 271), **all 360 carry the word** (271 22 of 22, 275 91, 302 29, 307 90 among
+  them). The first pass counted 364 with 4 "empty": each was a Resurrection Signet (2,
+  profession 0, a signet on a dead ally, 3 s activation) whose `[58]` shared its instant
+  with the caster's next `[60]` (:62925 caster 5 at 295.97, :51090 caster 5 at 422.56,
+  :51199 caster 3 at 555.42, :64557 caster 3 at 664.90); the real completions of the
+  spells so credited carry the word, and the one at 295.97 (307) never completed. Those
+  casters' Resurrection Signets — 11 on the Smiting tape — carry no word at all: a
+  profession-0 signet is outside the rule, as the client's sentence says. Of 16 completions
+  outside that set — Scourge Healing 251, a hex cast on a FOE (byte 5), 14; Restore Life
+  314 (byte 6, a resurrection), 2 — **none carries it**. Heal Area 280 (a spell, byte 0,
+  an area round the caster) completed 20 times without the word: 19 by the Zaishen Monks
+  of `20260928T103123` :50295, whose other Monk spells carry none either (Divine Favor 0,
+  uninformative), and once by a profession-3 caster that carries nothing else on its
+  connection (`20260817T231139` :50527), so its rank is unknown — three base heals and no
+  word: an UNVERIFIED negative (n = 1). Casters with no word on anything (those Zaishen
+  Monks, a profession-1 caster on :50061) have Divine
+  Favor 0. The client's sentence ties the heal to casting a Monk
+  SPELL on the ally: a signet is not one (293 / 294 are served; no Monk signet completion
+  is on tape either way).
+- **The rounding, from the reachable values alone.** The slope is the description's 3.2 a
+  rank. Two constants decide it, and both are read over maxima the wire itself sends for
+  the recipient — OBSERVED: **3** (the Smiting Monks, over 555 / 483 / 421 / 569, 138
+  words) and **42** (the level-20 Monks, over 555 and 480, 32 words). round(3.2 r) reaches
+  3 (r = 1) and 42 (r = 13); floor(3.2 r) never makes 42 (41 / 44); ceil(3.2 r) never makes
+  3 (4 at r = 1). **ROUND is the only one of the three whose image holds both**, and under it
+  each names a UNIQUE rank — 1 for the Smiting Monks, 13 for the 42-casters. Those ranks are
+  INFERRED: no `0x003A` for either caster is on the wire. `test_attribpassive` §15-16 read
+  both constants off the tape and check the rounding against them. A town caster's 58 (r = 18
+  under round; Healing Touch's 116 halved, below) fits too but decides nothing: its maximum
+  is a reading.
+- **Healing Touch (313) doubles it.** OBSERVED on one caster over a maximum the wire has
+  already sent: agent 7 on :54071, 84 = 2 × 42 over its running 555 (t = 644.55 and
+  756.05). Its 67 = round(0.8 × 84) under the cut (below; t = 687.55) is a reading: it
+  reads whole only over the 455 the wire sends 1.18 s AFTER that word (688.72), while the
+  running maximum is still 555 (81.73 there). The other witnesses are readings too:
+  agent 12's own maximum never reaches the wire, and a non-party caster that heals itself in town on ten tapes (agents 100 / 102 /
+  122 / 123) sends 116 beside its own 63 or 84 only under the maxima 480 / 408 / 210 / 192
+  — RECONSTRUCTION, each the smallest whole reading of the word pair, its own maximum
+  never on any tape; agent 122's pair on three September tapes is equally whole at 120 /
+  240 / 360 / 480, so its 116 is a chosen reading. CORROBORATED by the client: 313's own
+  description (resolved at run time, not committed) is the one player-corpus template that
+  says its Divine Favor gain is doubled, and its table row's flat bonus slot is 2. **Which
+  operation comes first is RECONSTRUCTION**: 2 × round(3.2 r) is shipped to match the
+  single-bonus rule; round(6.4 r) makes neither 84 nor 116 (83 / 90, 115 / 122), but
+  ceil(6.4 r) makes both and is the live rival — it parts from the shipped reading at ranks
+  1, 2, 6, 7, 11, 12, 16 and 17 (7 against 6 at rank 1), none of them on tape.
+  313 is not served.
+- **The 34 at max 455 is a healing cut, not an anomaly.** Both witnesses (`20260817T231139`
+  :54071 t = 689.05, agent 7, over a 455 the wire sends; `20260928T103123` :50061 t = 210.26,
+  agent 8, whose own maximum never reaches the wire — 402 is the reading that makes its
+  words whole, RECONSTRUCTION) carry the base heal cut by the same factor in the same
+  batch: 191 → 153 and 42 → 34, round(0.8 x) both times. 455 is 555 less Deep Wound's capped 100 (`deepwoundjoin.predicted_max`), so
+  Deep Wound's −20 % healing is the reading — RECONSTRUCTION, because no `0x0042 482`
+  reaches the observer for that agent. **And it measures something the server gets
+  wrong**: `heal_agent` cuts and then TRUNCATES (`_whole_points`), which sends 152 and 33.
+  A third batch (:50061 t = 208.25, Healing Touch on the same 402-max body) gives 72 → 58
+  and 84 → 67: round(0.8 x) fits all four, truncation misses three, "x − floor(0.2 x)"
+  misses 84. Filed in §66.6; not changed here.
+
+### 66.5 SKILLS-EX5 — Fast Casting's factor on tape: 2^(−7/15) fits, the linear reading does not. RECORD ONLY
+
+On `20260928T103123` :50061 every `[61]` cast-time word of agent 3 (20 casts) is the
+table activation × 0.72363 — 1.0 → 0.7236 (7), 2.0 → 1.4473 (12), 3.0 → 2.1709 (1).
+2^(−7/15) = 0.723635: an exponential at integer rank 7 fits all twenty; a linear
+1 − 0.03 r fits no integer rank (0.73 at 9, 0.70 at 10). The rank is a FITTED parameter
+(no `0x003A` for agent 3), the form is RECONSTRUCTION, and nothing ships: the `[61]` seam
+(`signet_activation` / `dazed_activation`) is where it would go, with the description's
+"no effect on non-Mesmer skills under 2 s" and the PvE recharge −3 % a rank. Agent 9 on
+the same connection (an Elementalist) runs × 0.67 on 30 words — not Fast Casting.
+
+### 66.6 Open
+
+- **Expertise's "Rituals" and "touch skills"** (§66.3): a type read for non-Ranger
+  rituals and a check that the `touch_range` bit is the sentence's touch skill; no tape
+  can witness the boundary until a character at Expertise > 0 pays for an out-of-scope
+  skill. A Ranger at Expertise ≥ 2 on tape would also be the first witness of the slope
+  past rank 1.
+- **Deep Wound's healing cut rounds on retail and truncates here** (§66.4; retail's 0.8 is
+  OBSERVED, Deep Wound as its cause RECONSTRUCTION): `heal_agent`
+  sends 152 / 33 where retail sent 153 / 34. Four words fit round(0.8 x); the change is a
+  `heal_agent` edit with its own revert arm and a re-pin of whatever test holds the cut.
+- **The five primaries with no witness** (§66.2): Energy Storage (the cheapest — an
+  Elementalist with ranks on any tape, and the `0x009F 41` resend), Soul Reaping (its
+  radius), Leadership, Mysticism, Spawning Power (families not served).
+- **Fast Casting** (§66.5): a Mesmer with a known rank on tape, then the `[61]` seam.
+- **Divine Favor's edges** (§66.7): skill 1118 (served, a label row) spreads its Divine
+  Favor gain to the party in earshot of its target by its own description — the word
+  lands on the target only here; the byte-0 SPELL exclusion rests on one Heal Area
+  (n = 1); Healing Touch's order (2 × round(3.2 r) against ceil(6.4 r), §66.4 — a 313
+  at rank 1, 2, 6 or 7 on tape would tell; 313 is not served); the ranks behind 3 and
+  42 (1, 13) are inferred, so a retail Monk at a KNOWN Divine Favor rank on tape is the
+  first direct witness of the slope.
+
+### 66.7 SKILLS-EX6 — what shipped: Divine Favor on every caster's Monk spell (`DIVINE_FAVOR`, `--no-divine-favor`)
+
+- **The rule** (`attribpassive.divine_favor_bonus`): round(3.2 × rank), integer
+  arithmetic ((32 r + 5) // 10; 32 r is even, so no half), × 2 on Healing Touch (313);
+  nothing at rank 0.
+- **The scope** (`divine_favor_applies`): a Monk (profession 3) spell or enchantment
+  (types 5 / 6) whose target byte is 3 or 4, or a self-cast enchantment (type 6, byte
+  0). OBSERVED per skill (§66.4: 11 skills in, 251 and 314 out); the byte-0 spell
+  exclusion (Heal Area; byte-0 heal spells such as the served 287) is RECONSTRUCTION
+  at n = 1; Monk signets (293 / 294) are out by the description's word, unwitnessed.
+- **One word per completed cast, from every caster**: `divine_favor_word` is called once
+  in `cast_tick` (the player's E5) and once in `land_skill` (every body's spell — hero,
+  henchman, hostile monk), each right AFTER `resolve_heal`, so the spell's own heal goes
+  first and the effect's `0x0042` before both: retail's order (147 of 147; n = 2 for the
+  `0x0042`). It fires whether or not the spell healed (§66.4: the spells with no heal of
+  their own carry it alone, and a Mend Condition that sent no heal of its own carries it,
+  24 of 24).
+- **The recipient is the spell's own** (`cast_recipient`, `resolve_heal`'s verdict): an
+  ally spell aimed at a dead or hostile body lands on the caster, an other-ally spell
+  aimed at nobody lands on nobody.
+- **The rank is the caster's own RIGHT NOW** (`passive_rank`, shared with Expertise): the
+  player's live effective rank, a body's `attributes`, one lower under Weakness. The
+  slice's Tahlkora (Divine Favor 2) now sends +6 behind every Orison and Restore
+  Condition; no henchman or hostile row carries rank 16, so they send nothing yet.
+- **It is a HEAL** (`heal_agent`): Deep Wound cuts it, the overheal number rides a full
+  pool, the books take what fits. The cut truncates where retail rounds (§66.6).
+- **`--no-divine-favor`** sends the spell's own heal alone, the server before this.
+- **Owed, a client run**: Tahlkora's heals with and without the switch (the PLAN-LOG
+  entry's runsheet) — two blue numbers over the ally where there was one.
+
 ## 67. SKILLS-LW — pass 3 of the residue: the 210 conditional SERVED rows are FAMILIES read per sentence; 60 hit-gated rows (43 attack skills) ship as label rows marked HIT_GATED / CONDITIONAL_DROPPED, and the triage's 68 carried eight over-applications (2026-10-07)
 
 **Status: SHIPPED as a marked set of the label tier; no server edit; the overlay is STAGED,
