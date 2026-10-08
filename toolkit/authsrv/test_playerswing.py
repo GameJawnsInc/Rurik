@@ -159,18 +159,23 @@ def section_two_phases():
 
 def section_start_to_start():
     import authsrv
+    from test_position_trust import frozen
 
     print("\n2. the interval gates START to START, not landing to landing")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = _state()
-    authsrv.begin_attack(send, state, 10, 0)
-    authsrv.attack_tick(send, state, 0)                    # START 1
+    # EVERY TICK AT t2 (`frozen`); time moves only by the rewinds. After the landing's
+    # rewind the start gate had 0.965 s left on the wall clock, and the landing tick and
+    # the next one spent it: "no new START" read red on the machine's speed.
+    t2 = _tt.time()
+    frozen(t2, authsrv.begin_attack, send, state, 10, 0)
+    frozen(t2, authsrv.attack_tick, send, state, 0)        # START 1
     _rewind(state, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
-    authsrv.attack_tick(send, state, 0)                    # landing 1
+    frozen(t2, authsrv.attack_tick, send, state, 0)        # landing 1
     n_after_landing = len(sent)
 
-    authsrv.attack_tick(send, state, 0)
+    frozen(t2, authsrv.attack_tick, send, state, 0)
     check(len(sent) == n_after_landing,
           "right after a landing, no new START -- the backswing half of the "
           "interval is a WAIT, not an event (no wire message exists for it)",
@@ -180,7 +185,7 @@ def section_start_to_start():
     # it the REST of the interval into the past and the next START is due.
     _rewind(state, authsrv.ATTACK_INTERVAL
             - authsrv.swing_windup(authsrv.ATTACK_INTERVAL))
-    authsrv.attack_tick(send, state, 0)
+    frozen(t2, authsrv.attack_tick, send, state, 0)
     started = [v for op, v, _ in sent[n_after_landing:]
                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                and v[0] == authsrv.agents.GV_ATTACK_STARTED]
@@ -3457,9 +3462,13 @@ def section_target_death_holds():
         st, sent, send = armed()
         _rewind(st, 5.0)
         landed = tick(st, sent, send)
-        st["player_last_swing"] = time.time() - 0.2
+        # The death tick AT the instant the last start is aged from (`frozen`): "after the
+        # landing, before the next due start" is 1.55 s of start gate, which the wall clock
+        # spent before this tick read its own -- past it the release went out at the death.
+        t26c = time.time()
+        st["player_last_swing"] = t26c - 0.2
         st["agents"][10]["dead"] = True
-        at_death = tick(st, sent, send)
+        at_death = frozen(t26c, tick, st, sent, send)
         pend = st.get("target_death_release") or {}
         interval = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(st, PLAYER)
         want = st["player_last_swing"] + authsrv.swing_interval_due(st, interval)
@@ -3531,15 +3540,19 @@ def section_target_death_holds():
               "silently, as before (retail's case is the input's own door)", f"{at_death}")
 
         # 26i. the deadline pass wakes for a next-start release.
+        # As 26c (`frozen`); and the release is read with .get, because past the gate it
+        # had already gone out at the death and the subscript aborted the file.
         st, sent, send = armed()
         _rewind(st, 5.0)
         tick(st, sent, send)
-        st["player_last_swing"] = time.time() - 0.2
+        t26i = time.time()
+        st["player_last_swing"] = t26i - 0.2
         st["agents"][10]["dead"] = True
-        tick(st, sent, send)
-        check(st["target_death_release"]["at"] in authsrv.combat_deadlines(st),
+        frozen(t26i, tick, st, sent, send)
+        pend_i = st.get("target_death_release")
+        check(pend_i is not None and pend_i["at"] in authsrv.combat_deadlines(st),
               "26i. combat_deadlines carries the scheduled release, so it lands on its instant "
-              "rather than a tick late", "")
+              "rather than a tick late", f"release {pend_i}")
 
         # 26j. KNOWN-BAD ARM: the next-tick release, no [3].
         authsrv.TARGET_DEATH_HOLDS = False
