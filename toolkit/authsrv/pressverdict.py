@@ -35,19 +35,27 @@ record `_press_answered` opens at a follow and `_press_refused` counts into -- t
 gates that held a follow-answered press after its walk, which the press row could
 not say (its row closes at the 0x002A).
 
-THE FAKE CLOCK DOES NOT REACH HERE. `test_position_trust.py` drives time by
-rebinding `authsrv.time`; the four functions below that call `time.time()`
-(`_swing_dropped`, `_press_refused`, `_press_answered`, `_follow_close`) read *this* module's
-`time`, which that rebind does not touch. Nothing depends on it today -- these
-rows are telemetry and no check compares an `age` against a driven clock -- but a
-later test that drives the clock and then asserts on a row would be reading the
-wall clock and passing for the wrong reason.
+THE ROWS READ THE SERVER'S CLOCK (2026-10-08). The four functions below that age a
+row (`_swing_dropped`, `_press_refused`, `_press_answered`, `_follow_close`) read
+`clock()`, which `authsrv.py` sets on import to a lambda over ITS OWN `time` --
+looked up at each call, so `test_position_trust.frozen`, which rebinds
+`authsrv.time`, pins these rows with the verdicts they describe. Standalone, `clock`
+is this module's wall clock. In production the two are one clock, so nothing a
+session records changes. This paragraph used to read "THE FAKE CLOCK DOES NOT REACH
+HERE", and it predicted the failure it was guarding: "a later test that drives the
+clock and then asserts on a row would be reading the wall clock". test_playerswing
+11b was that test -- its `age < 1.0` was pressverdict's wall clock against the press's
+stamp, the one window in its family a pin on `authsrv.time` could not close.
 
 Standard library only, and no import of the server: `authsrv.py` imports this
 file, never the other way round. It runs as `__main__`, so an import back would
-load a second copy whose flags `main()` never set.
+load a second copy whose flags `main()` never set -- which is why the clock is
+HANDED OVER rather than fetched.
 """
 import time
+
+# What every row below ages against. Replaced by authsrv.py at import (see above).
+clock = time.time
 
 
 def _chain_pause_charge(state, now):
@@ -155,7 +163,7 @@ def _swing_dropped(state, rec, conn_id, branch, **detail):
     swing = state.get("player_swing")
     if swing is None:
         return
-    now = time.time()
+    now = clock()
     detail.setdefault("target", state.get("attacking"))
     detail["into_windup"] = round(now - swing.get("armed_at", now), 3)
     detail["lands_in"] = round(swing.get("lands_at", now) - now, 3)
@@ -185,7 +193,7 @@ def _follow_close(state, rec, conn_id, fired, reason):
     pf = state.pop("press_followed", None)
     if pf is None:
         return
-    now = time.time()
+    now = clock()
     if rec is not None:
         try:
             rec.event("follow_swing", target=pf["target"], fired=fired, reason=reason,
@@ -228,14 +236,14 @@ def _press_refused(state, rec, conn_id, branch, **detail):
         if detail.pop("terminal", False):
             pend["answered"] = branch
             _press_row(rec, fired=False, reason=branch, target=pend["target"],
-                       age=round(time.time() - pend["t"], 3),
+                       age=round(clock() - pend["t"], 3),
                        refused_by=pend["refused"], ticks=pend["ticks"],
                        **detail)
             state["press_pending"] = None
         return
     terminal = detail.pop("terminal", False)
     pend["refused"] = branch
-    age = round(time.time() - pend["t"], 3)
+    age = round(clock() - pend["t"], 3)
     _press_row(rec, fired=False, reason=branch, target=pend["target"],
                age=age, ticks=pend["ticks"], **detail)
     why = ", ".join(f"{k} {v}" for k, v in detail.items())
@@ -269,7 +277,7 @@ def _press_answered(state, rec, conn_id, how, **detail):
             _follow_close(state, rec, conn_id, False, "superseded")
     if pend is None or pend.get("answered") is not None:
         return
-    now = time.time()
+    now = clock()
     age = round(now - pend["t"], 3)
     if how == "follow":
         state["press_followed"] = {"t": pend["t"], "target": pend["target"],
