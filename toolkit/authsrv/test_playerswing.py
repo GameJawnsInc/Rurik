@@ -1828,6 +1828,7 @@ def section_press_ends_kbd_latch():
     """
     import authsrv
     import time as _t
+    from test_position_trust import frozen
 
     print("\n11. ANIMREF-RE 41: the press supersedes the keyboard belief; every "
           "press leaves a row")
@@ -1907,11 +1908,15 @@ def section_press_ends_kbd_latch():
         rec2 = _Rec()
         state2 = _state()
         state2["agents"][10]["pos"] = (86.0, 0.0)
-        state2["kbd_moving_at"] = _t.time() - 0.29
-        authsrv.begin_attack(send, state2, 10, 0, rec=rec2)
+        # The press and its three refused ticks AT one instant (`frozen`): the row's
+        # latch_age is the tick's own clock against this stamp, and "~0.29 s old" read
+        # 0.2-1.0 s -- 0.71 s of wall clock for the press and the first tick to spend.
+        t11c = _t.time()
+        state2["kbd_moving_at"] = t11c - 0.29
+        frozen(t11c, authsrv.begin_attack, send, state2, 10, 0, rec=rec2)
         sent.clear()
         for _ in range(3):
-            authsrv.attack_tick(send, state2, 0, rec2)
+            frozen(t11c, authsrv.attack_tick, send, state2, 0, rec2)
         r = rows(rec2, "moving")
         check(starts(sent) == [] and len(r) == 1 and r[0]["fired"] is False
               and r[0]["latch"] == "kbd" and 0.2 <= r[0]["latch_age"] <= 1.0
