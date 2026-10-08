@@ -2934,10 +2934,16 @@ Remove Hex, the Healer's self-form cast on the gapped `:65009` prefix, scores th
 rides the same rule is RECONSTRUCTION by class. The caster is a legal target for byte 3 (6
 self-form casts, one of them the Healer's 301 stopped by a `[59]`) and never for byte 4 (0 of
 92). **There is no health floor**, on the reconstructed health: retail cured a monk read at
-1.000 and Remove Hexed four bodies read at 0.906–1.000 (the henchman Healer's three at
-0.9965–1.000), none of those readings anchored by a health word — so "no floor" rests on
-the reconstruction and on the WIKI line below (cleansing even conditions about to wear
-off), not on a measured 100 %. (A first cut of this table gave 301's median as 0.906, the
+1.000 (two monks' simultaneous Mend Conditions, one `0x00F1` clearing the condition bit in
+their shared completion batch) and AIMED Remove Hex at four hexed bodies read at
+0.906–1.000 — five casts, of which two removed a hex (the henchman Healer's at 0.9965 and
+0.9977, each completion carrying the `[7]` pair), two were RM2's late removers on a target
+an earlier 301 had already cleaned (0.906), and one, the Healer's self-form at 1.000, was
+stopped by a `[59]` (the review's second round, VF-2: the first wording, "Remove Hexed four
+bodies", claimed four removals). None of those readings is anchored by a health word — so
+"no floor" rests on the AIM (which is what the gate decides) at the reconstructed health
+and on the WIKI line below (cleansing even conditions about to wear off), not on a measured
+100 %. (A first cut of this table gave 301's median as 0.906, the
 upper of the two middle values; the review's EV-3 re-derived 0.812.) **Triage correction:** "5
 self-form 277s" is zaishenrun Z3.P3's 5 self-form casts, which are 3 Mend Ailments and 2
 Remove Hexes; the conclusion (byte 3 admits the caster) stands. Tier: the Zaishen teams are
@@ -2991,8 +2997,11 @@ rule and `REMOVAL_NEEDS_AFFLICTION` on — so the one flag reverts the whole lan
 removal (the first cut rode the cure rule alone, and the revert then aimed a hero's 301 the
 old way AND removed the hex: the review's EV-2). `toolkit/authsrv/test_castgate.py` §7
 (bare-machine, carried rows; every driven tick under a `len(bar) + 1` pick bound, so a
-spin is a FAIL by name; both loops' self cures; a removed Suffering's [44] back to 0; the
-revert reproducing `642d8957`'s bytes for the 276 fights AND for a 301 at a hexed player and
+spin is a FAIL by name; both loops' self cures; a removed Suffering's [44] back to 0 and a
+removed Deep Freeze's 0x0027 base declared back — the latter added in the review's second
+round, VF-1, when `push_speed` deleted alone still left §7 green; `push_attributes` after a
+hex removal has no check and can have none today, since it acts only on Weakness, a
+condition `remove_hexes` never closes; the revert reproducing `642d8957`'s bytes for the 276 fights AND for a 301 at a hexed player and
 a self-hexed hostile's 301) and §8 (vault: the retail casts replayed through
 `removal_target` — 0 of 116 held, retail's own target named every time; the known-bad arm
 asks the server's own pre-gate rule, `hostile_heal_target` with the gate off, and it misses

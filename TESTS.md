@@ -15787,8 +15787,8 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   squad while every OTHER slot fires, and that it is the removal gate holding it (every
   look asks `removal_target` and gets None, the line once per 5 s); §3's HEAD_SEQUENCE
   turns both CASTAI gates off by name (19213513 had neither). §7 runs on CARRIED rows
-  (`RM_RECORD`: the vault's loaded 26 / 108 / 179 / 275 / 276 / 277 / 281 / 301 at build
-  38974, `rm_carried` replaces the skills
+  (`RM_RECORD`: the vault's loaded 26 / 108 / 179 / 234 / 275 / 276 / 277 / 281 / 301 at
+  build 38974, `rm_carried` replaces the skills
   table for the block), so it is bare-machine: (a) `episodemods.removal_class` /
   `carries_removable` on literal inputs (364's singular `removes_condition`, a bool, a
   zero and a both-kinds row are no removal; an enchantment is neither class; a closed
@@ -15810,7 +15810,14 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   clear, neither fires the end burst while a CONTROL (the same hex left to expire)
   reaches it; a removed Suffering 108 (a hex with pips, through the real `apply_effect`)
   sends the wearer's [44] back to 0 (CD-6: the close's speed / attributes / regen pushes
-  had no check); 301 removes nothing under `--no-condition-heal-rule`; (i) KNOWN-BAD ARM:
+  had no check), and a removed Deep Freeze 234 (a hex with a snare, planted) declares the
+  wearer's 0x0027 base back -- only "below the base, then exactly the base", so the snare
+  arithmetic is not its subject (the review's second round, VF-1: push_speed deleted
+  ALONE still left §7 green). `push_attributes` after a hex removal stays unchecked ON
+  PURPOSE: it acts only on Weakness 486, a condition `remove_hexes` never closes, so
+  deleting it changes no byte today (an equivalent mutant, not a missing check); a hex
+  that moves attributes would need its own check. 301 removes nothing under
+  `--no-condition-heal-rule`; (i) KNOWN-BAD ARM:
   the flag off reproduces 642d8957's sends for both fights byte for byte (`RM_HEAD`,
   recorded through a `git show 642d8957` export) and the gate on sends no 276 announce;
   and for Remove Hex (`RM_HEAD_301`, the same export; the review's EV-2 -- the flag
@@ -15843,7 +15850,9 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   other-ally heal aimed at the caster (test_agentlife SLICE-B3 (3) and (3b')),
   removal_target offering the caster for byte 4 (SLICE-B3's bleeding-monk twin;
   test_mechanics §26 "alone"), the party loop's `_heal_t` branch aiming nowhere
-  (test_mechanics §28, 2 FAILs). With the vault, sections 8 (a) and (b) replaced by
-  no-ops that declare no skip print "ONLY 141 OF A DECLARED FLOOR OF 146". Floors per
-  machine on the vault content DIRECTORY (CD-7): 95 checks bare (FLOOR_BARE 95, 4
-  declared skips), 146 with the vault (FLOOR_VAULT 146). ~70 s)
+  (test_mechanics §28, 2 FAILs); and in the second round (2026-10-08), remove_hexes
+  without push_speed alone (the Deep Freeze check, 1 FAIL), while push_attributes alone
+  stays green, as (h) says it must. With the vault, sections 8 (a) and (b) replaced by
+  no-ops that declare no skip print "ONLY 142 OF A DECLARED FLOOR OF 147". Floors per
+  machine on the vault content DIRECTORY (CD-7): 96 checks bare (FLOOR_BARE 96, 4
+  declared skips), 147 with the vault (FLOOR_VAULT 147). ~40 s)

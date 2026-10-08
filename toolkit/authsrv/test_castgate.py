@@ -70,7 +70,8 @@ WHAT IT IS REALLY CHECKING. Two things shipped together, each behind its own rev
      a hero's 301 on its own hex); (g) a hero cures the bleeding player at full health;
      (h) 301 held with no hex, the NEWEST of two removed, the [7]s and the 0x800 clear only
      with the last, an Incendiary Bonds removed fires no end burst (a control shows the
-     expiry path does), a removed Suffering (a hex with pips) sends its [44] back to 0;
+     expiry path does), a removed Suffering (a hex with pips) sends its [44] back to 0,
+     a removed Deep Freeze (a hex with a snare) declares the 0x0027 base back;
      (i) KNOWN-BAD ARM: the flag off reproduces 642d8957's bytes (RM_HEAD) -- the 276
      fights, and a hero's 301 at a hexed player and a self-hexed hostile's 301, which
      remove nothing there; (j) source checks.
@@ -124,9 +125,12 @@ import vaultpath                                               # noqa: E402
 # 5's driven half, 8 (a), 8 (b)). The +8 / +7 over 138 / 88: section 7 (f)'s two party-loop
 # self cures, (h)'s removed Suffering [44], (i)'s two 301 reverts with their gate-ON
 # contrasts (+4), and -- vault only -- section 2's "the removal gate holds 276" check.
+# 2026-10-08 (the review's second round, VF-1): +1 on both machines -- section 7 (h)'s
+# removed Deep Freeze declaring the 0x0027 base back. MEASURED: 147 with the vault, 96 bare
+# (RURIK_VAULT=C:/nonexistent-vault, the same 4 declared skips).
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
-FLOOR_VAULT = 146
-FLOOR_BARE = 95
+FLOOR_VAULT = 147
+FLOOR_BARE = 96
 LEDGER = checks.Ledger("cast gate (CASTAI)",
                        floor=FLOOR_VAULT if HAVE_VAULT_CONTENT else FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -961,6 +965,7 @@ def section_source():
 # --no-removal-needs-affliction).
 MEND_COND, MEND_AIL, REMOVE_HEX, ORISON, INC_BONDS, EMPATHY = 275, 277, 301, 281, 179, 26
 SUFFERING = 108                      # a hex with health-degeneration pips (skill_effect.108)
+DEEP_FREEZE = 234                    # a hex with a movement snare (skill_effect.234: the flat 66)
 ALLY2, HERO2 = 12, 201
 # The rows sections 7's driven halves read, CARRIED so a bare machine runs them: the
 # vault's LOADED skills rows (toolkit/clientscan/skilltable.py at build 38974), in
@@ -978,6 +983,7 @@ RM_RECORD = {
     "26": (2.0, 0.75, 10, 10, 0, 0, 2, 5, 4, 5, 0, 0, 0, 0.0, 7, 5, 15, 10, 55, 1, 15, 2077, 2077, False, False),        # Empathy (a Mesmer hex)
     "108": (1.0, 0.75, 10, 15, 0, 0, 7, 4, 4, 16, 0, 0, 0, 240.0, 1, 6, 30, 0, 3, 0, 0, 2077, 2077, False, False),      # Suffering (a hex with pips)
     "179": (1.0, 0.75, 7, 10, 0, 0, 10, 6, 4, 5, 0, 0, 0, 240.0, 6, 3, 3, 20, 80, 1, 3, 2077, 2077, False, False),      # Incendiary Bonds
+    "234": (2.0, 0.75, 15, 25, 0, 0, 11, 6, 4, 16, 0, 0, 0, 312.0, 2, 10, 10, 10, 85, 66, 66, 2077, 414, False, False),  # Deep Freeze (a hex with a snare)
     "275": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 5, 70, 0, 0, 2077, 2077, False, False),         # Mend Condition
     "276": (0.75, 0.75, 2, 5, 0, 0, 15, 3, 5, 4, 0, 0, 0, 0.0, 2, 0, 0, 10, 70, 0, 0, 2077, 2077, False, False),        # Restore Condition
     "277": (0.75, 0.75, 5, 5, 0, 0, 15, 3, 5, 3, 0, 0, 0, 0.0, 2, 0, 0, 5, 70, 0, 0, 2077, 2077, False, False),         # Mend Ailment
@@ -1449,6 +1455,39 @@ def section_rm_hex():
           "remove_hexes re-sends the regen word after the close, as remove_conditions does",
           f"hexed {hexed_now} [44] at the apply {rate_on} at the removal (bits) {rate_off} "
           f"out {got}")
+    # A hex WITH A SNARE removed (round 2 of the review, VF-1): after the Suffering check
+    # above, deleting push_speed ALONE from remove_hexes still left section 7 green, since
+    # no hex the section planted moved the 0x0027 base. Deep Freeze 234 (skill_effect.234:
+    # "Movement speed decrease" in the bonus slot, the flat 66; a type-4 hex) is planted on
+    # the hostile and its snared base declared; the 301 that removes it must declare the
+    # base back. Only "below the base, then exactly the base" is asserted -- not the x0.34 --
+    # so the snare arithmetic (move_speed_factor) is not this check's subject. (push_attributes
+    # after a hex removal stays unchecked on purpose: it reacts only to Weakness 486, a
+    # CONDITION remove_hexes never closes, so deleting it changes no byte today.)
+    speed_op = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE
+    with rm_carried(), arm(clock=Clock(T0), REMOVAL_NEEDS_AFFLICTION=True):
+        st = world(authsrv)
+        st["agents"][HOSTILE] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE)
+        st["agents"][ALLY] = body(authsrv, (), agents.ALLEGIANCE_HOSTILE, pos=(120.0, 40.0))
+        st["agents"][HERO] = body(authsrv, (), agents.ALLEGIANCE_PLAYER, pos=(150.0, 0.0))
+        put, took = [], []
+        with contextlib.redirect_stdout(io.StringIO()):
+            st["effects"].apply(HOSTILE, DEEP_FREEZE, 12, 10.0, T0, type_code=4, caster=HERO)
+            authsrv.push_speed(lambda op, vals, why="", quiet=False: put.append((op, list(vals))),
+                               st, HOSTILE, 0)
+            base_speed = authsrv.agent_speed_base(st, HOSTILE)
+            got = authsrv.resolve_heal(lambda op, vals, why="", quiet=False:
+                                       took.append((op, list(vals))),
+                                       st, REMOVE_HEX, 0, ALLY, HOSTILE, 0)
+    snared = [v[1] for op, v in put if op == speed_op and v[0] == HOSTILE]
+    freed = [v[1] for op, v in took if op == speed_op and v[0] == HOSTILE]
+    check(authsrv.MOVE_SPEED_EFFECTS and len(snared) == 1 and 0 < snared[0] < base_speed
+          and got and got.get("hexes_removed") == 1 and len(freed) == 1
+          and abs(freed[0] - base_speed) < 1e-6 and not st["effects"].on_agent(HOSTILE),
+          "a removed Deep Freeze (234, a hex with a snare) declares the wearer's 0x0027 base "
+          "back -- remove_hexes re-sends the speed word after the close, as remove_conditions "
+          "does for a cured Crippled",
+          f"snared {snared} base {base_speed} at the removal {freed} out {got}")
     with arm(REMOVAL_NEEDS_AFFLICTION=True, CONDITION_HEAL_RULE=False):
         with rm_carried():
             st = world(authsrv)
