@@ -50559,8 +50559,8 @@ def main():
         global DIVINE_FAVOR
         DIVINE_FAVOR = False
         print("NO DIVINE FAVOR: attribute 16 adds no heal to a Monk spell cast "
-              "on an ally (the pre-SKILLS-EX6 arm; retail's henchmen sent +42 "
-              "on every one).", flush=True)
+              "on an ally (the pre-SKILLS-EX6 arm; retail's level-20 Monk "
+              "henchman sent +42 on every one).", flush=True)
     if a.no_chain_state:
         global CHAIN_STATE
         CHAIN_STATE = False

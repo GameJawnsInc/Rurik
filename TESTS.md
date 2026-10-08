@@ -3660,29 +3660,46 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   own; no skills row is both a spell and in scope (the glyph order is moot). §9 (vault
   client DIR) `s_attrib`'s ten primaries carry the description ids the leaf commits, and
   each description resolved at run time contains every numeral typed for it (never
-  printed). §10 (captures DIR) `test_pools`' own join re-finds the six spends bit for bit at
-  the tape's own `0x003A` rank. DIVINE FAVOR (SKILLS-EX6): §11 round(3.2 x rank) gives
-  retail's 3 / 42 / 58 and Healing Touch's doubled 84 / 116; KNOWN-BAD floor never makes 42
-  or 58, ceil never 3, round(6.4 r) neither doubled word. §12 the scope on carried rows: a
+  printed). §10 (captures + content DIRs) `test_pools`' own join re-finds the six spends bit
+  for bit at the tape's own `0x003A` rank. DIVINE FAVOR (SKILLS-EX6): §11 round(3.2 x rank)
+  gives 3 and 42 (retail's, over maxima the wire sends) and 58 (a town caster's 116 halved, its
+  maximum a reading), and Healing Touch doubled, 84 / 116 (which operation comes first is
+  RECONSTRUCTION); the rounding argument and ceil(6.4 r), the doubling's live rival, are
+  PRINTED, not checked -- arithmetic on typed numbers cannot fail. §12 the scope on carried rows: a
   Monk spell or enchantment on an ally (byte 3 / 4) or a self enchantment in; an area
   spell round the caster, a hex or spell on a foe, a resurrection, a signet out. §13 the
   REAL `ally_cast_tick` -> `land_skill` on a fake clock: a Monk hero at Divine Favor 2
   heals with Orison's own word THEN [55, ally, hero, 6/max]; `--no-divine-favor` sends the
-  first alone; Weakened, the word is 3; the player at 13: +42, Healing Touch +84, a foe
-  spell nothing, rank 0 nothing; Deep Wound cuts it (33; retail 34, §66.6); the word
-  follows the spell's own recipient (Heal Other at a dead ally: nobody; Orison: the
-  caster). §14 the switch (main()'s block executed) and one call each in `cast_tick` and
-  `land_skill`, after `resolve_heal`. §15 (captures DIR) `20260817T231139` :54071: the two
-  Monk henchmen's 52 ally casts all carry the word at rank 13 (2 under the cut), their 2
-  resurrections none, and the word is LAST on all 43 casts with a heal of their own.
+  first alone; Weakened, the word is 3; `divine_favor_word` called directly for the player
+  at 13: +42, Healing Touch +84, a foe spell nothing, rank 0 nothing; THE PLAYER'S PATH, the
+  REAL `handle_skill_press` then `cast_tick`'s E5: Orison's own heal on the ally, then +42 on
+  the ALLY (not the caster), and `--no-divine-favor` sends the first alone; Deep Wound cuts
+  it (33; retail 34, §66.6); the word follows the spell's own recipient (Heal Other at a dead
+  ally: nobody; Orison: the caster). §14 the switch (main()'s block executed) and one call
+  each in `cast_tick` and `land_skill`, each the statement right after a `resolve_heal`
+  (anchored on the statement: `land_skill`'s attack arm calls `resolve_heal` first). §15
+  (captures + content DIRs) `20260817T231139` :54071: the two Monk casters' (agent 12 the
+  party's Monk henchman, agent 7 unnamed) 52 ally casts all carry the word at rank 13 (2
+  under the cut), their 2 resurrections none, and the word is LAST on all 43 casts with a
+  heal of their own; a [58] closes the caster's [60] BEFORE it in wire order. §16 (captures
+  + content DIRs) `20260929T100038`: the four Smiting Monks' 259 ally casts, every one of
+  the 212 whose words read whole over their recipients' on-wire maxima carries 3, the value
+  they share most; their 14 foe hexes and 11 Resurrection Signets carry nothing; and THE
+  ROUNDING from the two measured constants: 3 and 42 are in the shipped rule's image,
+  KNOWN-BAD ceil(3.2 r) never makes 3 and KNOWN-BAD floor(3.2 r) never makes 42.
   Proved red one at a time in a scratch runner: Expertise floor rounding (6 checks), an
   all-skills scope (3), the server sites bypassed (7), Weakness ignored (3), one body site
   reverted in the source (1), main()'s `global` dropped (1), a wrong numeral (1), a wrong
   description id (2), a tape word altered (4), a carried cost altered (4); Divine Favor
   floored (6), the doubling dropped (4), an all-skills scope (3), the word off (5), the
   word sent BEFORE the spell's heal (6), the body call removed from the source (1), its
-  `global` dropped (1). Floor 39 bare (§8-10 and §15 skip on their
-  directories), +2 content, +2 client, +4 captures: 47 vaulted. No socket, no client),
+  `global` dropped (1); at review, on a scratch copy: the player's word aimed at nobody or
+  at the player (1 each), the word moved before the heal in `cast_tick` (3) or in
+  `land_skill` (4), Divine Favor ceil (5, both §16) or floor (8), a foe spell admitted (2);
+  ceil(6.4 r) on Healing Touch stays green (no tape separates it -- RECONSTRUCTION). Floor
+  39 bare (§8-10 and §15-16 skip on their directories; §10 and §15-16 need captures AND
+  content, so a captures-only vault skips them too), +2 content, +2 client, +6 captures
+  with content: 49 vaulted. No socket, no client),
   `toolkit/authsrv/test_deadbout.py` (**2026-09-30, MONSTERAI-W: a hostile's bout ends with
   its last target -- once nobody it could fight is alive in range it stands a beat and walks
   home.** The owner's report on `20260930T231034`: the Bandit Raider held aggro through the

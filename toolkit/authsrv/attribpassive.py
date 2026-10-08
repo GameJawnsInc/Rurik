@@ -134,29 +134,42 @@ def expertise_cost(base, rank):
 # ---- DIVINE FAVOR (attribute 16) -------------------------------------------
 #
 # THE RULE, and where each half comes from (studies/skills 66.4):
-#   * the SLOPE, 3.2 health a rank, and "allies ... whenever you cast Monk
-#     spells on them": OBSERVED, the client's description 2105 (38797). No
+#   * the SLOPE, 3.2 health a rank, to an ally the caster targets with a Monk
+#     spell: OBSERVED, the client's description 2105 (38797), paraphrased. No
 #     rounding is stated.
 #   * the SHAPE, OBSERVED over 28 casters on three tapes: its OWN property-55
 #     word [55, recipient, caster, bonus / max] in the cast's completion batch,
 #     AFTER the spell's own heal word on the same recipient whenever there is
 #     one (147 of 147 where the pool is unambiguous), and alone for a spell
 #     with no heal of its own.
-#   * the ROUNDING, from the values alone: the constants on tape are 3, 42 and
-#     58 (the last via Healing Touch's 116). round(3.2 r) reaches all three;
-#     floor(3.2 r) never makes 42 or 58 and ceil(3.2 r) never makes 3. The
-#     casters' ranks (1, 13, 18) are then INFERRED -- none is on the wire.
+#   * the ROUNDING, from the values alone: the two constants read over
+#     maxima the wire itself sends are 3 (the Smiting Monks, over 555 / 483 /
+#     421 / 569) and 42 (the level-20 Monks, over 555 and 480).
+#     round(3.2 r) reaches both; floor(3.2 r) never makes 42 and ceil(3.2 r)
+#     never makes 3 -- those two decide it (test_attribpassive 15 / 16 read them
+#     off the tape). A town caster's 58 (half its 116) fits round too, but its
+#     maximum never reaches the wire -- 116 is the smallest whole reading of its
+#     word pair, RECONSTRUCTION, and decides nothing. The casters' ranks (1, 13,
+#     18) are INFERRED -- none is on the wire.
 #   * the SCOPE, OBSERVED per skill, generalised by RECONSTRUCTION: a Monk spell
 #     or enchantment cast on an ally (the client's target byte 3 or 4) carries
-#     it 360 of 364 (the other 4 batches carry no property 55 at all); so does
-#     a self-cast enchantment (type 6, byte 0: 271, 22 of 23); a hex on a foe
-#     (251, 14) and a resurrection (314, 2) never do. Heal Area (a spell,
-#     byte 0) was seen once without it from a caster whose rank no tape shows:
-#     the byte-0 SPELL exclusion is RECONSTRUCTION, n = 1. A signet is not a
-#     spell (the description's word); no Monk signet completion is on tape.
-#   * HEALING TOUCH (313) DOUBLES the ROUNDED bonus: 84 = 2 x 42 on the
-#     level-20 Monks, 116 = 2 x 58 on a town caster; round(6.4 r) makes neither.
-#     OBSERVED, two kinds of caster.
+#     it 360 of 360; so does a self-cast enchantment (type 6, byte 0: 271, 22 of
+#     22); a hex on a foe (251, 14) and a resurrection (314, 2) never do, nor
+#     does a profession-0 Resurrection Signet (2) by the same casters (11 on the
+#     Smiting tape; four of them, closing in the instant the next Monk spell
+#     began, were once miscounted as that spell's empty batches). Heal Area (a
+#     spell, byte 0) was seen without it 20 times: 19 by casters at Divine Favor
+#     0 (uninformative) and once from a caster whose rank no tape shows -- the
+#     byte-0 SPELL exclusion is RECONSTRUCTION, n = 1. A signet is not a spell
+#     (the description's word); no Monk signet completion is on tape.
+#   * HEALING TOUCH (313) DOUBLES the bonus: OBSERVED on one caster over maxima
+#     the wire sends -- 84 = 2 x 42 over 555, and 67 = round(0.8 x 84) over 455.
+#     WHICH operation comes first is RECONSTRUCTION: 2 x round(3.2 r) is chosen
+#     to match the single-bonus rule; round(6.4 r) makes neither 84 nor 116, but
+#     ceil(6.4 r) makes both and is the live rival -- it parts from the shipped
+#     reading at ranks 1, 2, 6, 7, 11, 12, 16 and 17 (ceil 7 against 6 at
+#     rank 1, 13 against 12 at rank 2, ...).
+#     313 is not served, so nothing runs it today.
 DIVINE_FAVOR_ATTRIBUTE = 16
 DIVINE_FAVOR_DESCRIPTION_ID = 2105
 DIVINE_FAVOR_TENTHS_PER_RANK = 32       # 3.2 health a rank, in tenths
@@ -164,7 +177,7 @@ DIVINE_FAVOR_PROFESSION = 3             # Monk
 DIVINE_FAVOR_SPELL_TYPES = (5, 6)       # Spell, Enchantment Spell (studies/skills 35)
 DIVINE_FAVOR_ALLY_TARGETS = (3, 4)      # the client's target byte: ally, other ally
 DIVINE_FAVOR_SELF_ENCHANTMENT = (6, 0)  # (type, target byte): an enchantment on yourself
-DIVINE_FAVOR_MULTIPLIER = {313: 2}      # Healing Touch (OBSERVED, above)
+DIVINE_FAVOR_MULTIPLIER = {313: 2}      # Healing Touch: doubling OBSERVED, its order RECONSTRUCTION
 
 
 def divine_favor_applies(row):

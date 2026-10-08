@@ -37,8 +37,17 @@ roundings that predicts all six.
   9  the client (client DIR): s_attrib's ten primaries carry the description ids
      attribpassive commits, and each resolved description CONTAINS every numeral
      we typed for it (the text is read at run time and never printed).
- 10  the tape (captures DIR): the join test_pools uses re-finds the six spends on
-     20260914T005758, bit for bit, at Expertise 1 from the tape's own 0x003A.
+ 10  the tape (captures + content DIRs): the join test_pools uses re-finds the six
+     spends on 20260914T005758, bit for bit, at Expertise 1 from the tape's own 0x003A.
+ 11  Divine Favor's number (bare): round(3.2 x rank), Healing Touch doubled; the
+     rounding argument is PRINTED here and decided on the tape in 16.
+ 12  its scope (bare, carried rows).
+ 13  the server's word (bare, carried rows): the REAL ally_cast_tick -> land_skill for a
+     hero, the REAL handle_skill_press -> cast_tick for the player, and the direct call.
+ 14  its switch and its two call sites, each the statement right after resolve_heal.
+ 15  the tape (captures + content DIRs): the level-20 Monks' 42 on 20260817T231139.
+ 16  the tape (captures + content DIRs): the Smiting Monks' 3 on 20260929T100038, and
+     the rounding decided by the two constants read over maxima the wire sends.
 """
 import argparse
 import ast
@@ -66,23 +75,40 @@ import effects                                                 # noqa: E402
 import pools                                                   # noqa: E402
 import vaultpath                                               # noqa: E402
 
-# The floor is VAULT-CONDITIONAL (test_agentlife's precedent), decided on three
+# The floor is VAULT-CONDITIONAL (test_agentlife's precedent), decided on
 # DIRECTORIES and never on what loaded: vault/content (section 8, 2 checks),
-# vault/client (section 9, 2 checks) and vault/captures/live (sections 10 and 15,
-# 2 + 2 checks). FLOOR_BARE is sections 1-7 and 11-14, MEASURED on the
-# bare-machine green run of 2026-10-07 (RURIK_VAULT at an empty directory and at a
-# nonexistent path): 39 checks, 4 declared skips. The vault run the same day: 47
-# checks, 0 skips. (Stage 1, Expertise alone, measured 25 / 31.)
+# vault/client (section 9, 2 checks), and vault/captures/live AND vault/content
+# together (sections 10, 15 and 16, 2 + 2 + 2 checks -- the tape sections price
+# what they find through the vault's skills table, so a vault with captures and no
+# content skips them -- found at review, 2026-10-07). FLOOR_BARE is sections 1-7 and 11-14,
+# MEASURED on the bare-machine green run of 2026-10-07 after review (RURIK_VAULT at
+# an empty directory, and at one holding only captures/): 39 checks, 5 declared
+# skips. The vault run the same day: 49 checks, 0 skips. (Stage 1, Expertise alone,
+# measured 25 / 31; stage 2 before review 39 / 47.)
 FLOOR_BARE = 39
-FLOOR_PER_DIR = {("content",): 2, ("client",): 2, ("captures", "live"): 4}
+FLOOR_PER_DIRS = (((("content",),), 2), ((("client",),), 2),
+                  ((("captures", "live"), ("content",)), 6))
 
 
 def _floor():
     n = FLOOR_BARE
-    for parts, k in FLOOR_PER_DIR.items():
-        if os.path.isdir(vaultpath.vault_path(*parts)):
+    for dirs, k in FLOOR_PER_DIRS:
+        if all(os.path.isdir(vaultpath.vault_path(*parts)) for parts in dirs):
             n += k
     return n
+
+
+def _need(*dirs, what):
+    """require_dir for every directory a section reads; the first one absent is a
+    declared LEDGER.skip naming the section's checks, and the section returns None."""
+    out = []
+    for parts in dirs:
+        try:
+            out.append(vaultpath.require_dir(*parts, why=what))
+        except SystemExit as exc:
+            LEDGER.skip(what, str(exc).splitlines()[0])
+            return None
+    return out
 
 
 LEDGER = checks.Ledger("primary attributes (SKILLS-EX)", floor=_floor())
@@ -98,7 +124,9 @@ CAPTURE, CONN, RANGER = "20260914T005758", "56011", 29
 # the whole live corpus, gapped :65009 set aside): the ONLY paid spends by an agent
 # at a nonzero Expertise rank in 288 joined -- the Ranger (agent 29, 0x003A
 # [23, 25 | 1, 2 | 1, 2]) on :56011. (t, skill, table cost, its 41 maximum, the
-# property-62 word's f32 bits.) The 11 spends of 322 and 17 of 346 on the same
+# property-62 word's f32 bits.) t is tape.decode_all's connection-relative clock,
+# the decoder section 10 reads; livewire.decode_conn puts the same six 86.47 s
+# later (510.09 ... 615.03). The 11 spends of 322 and 17 of 346 on the same
 # connection are the HERO's, Koss at Expertise 0, and witness nothing here.
 TAPE = (
     (423.622, 433, 5, 22, 0xBE68BA2F),
@@ -118,6 +146,14 @@ TAPE_RANK = 1
 # ally. Counts pinned from the run (section 15).
 DF_CAPTURE, DF_CONN, DF_CASTERS, DF_RANK = "20260817T231139", "54071", (7, 12), 13
 DF_TAPE = {"eligible": 52, "outside": 2, "cut": 2, "with_base": 43}
+# The Smiting Monks of 20260929T100038 (agents 3-6 on every connection of it): the
+# OTHER constant, 3, and the only one that refutes ceil (ceil(3.2 r) is never 3).
+# Read over the RECIPIENT's own on-wire maxima (555 / 483 / 421 / 569), so it is
+# OBSERVED, where the town caster's 58 is a reading. Counts pinned from the run.
+SMITE_CAPTURE, SMITE_CASTERS, SMITE_RANK = "20260929T100038", (3, 4, 5, 6), 1
+SMITE_TAPE = {"eligible": 259, "readable": 212, "outside": 14, "signet": 11}
+RES_SIGNET = 2      # profession 0, a signet on a dead ally (four of its completions
+                    # were once miscounted as empty Monk-spell batches, studies/skills 66.4)
 
 # THE CARRIED ROWS: the vault's `skills` rows (skilltable.py, build 38974), every
 # column, so sections 3-6 and 12-13 run on a bare machine; section 8 holds them to
@@ -628,11 +664,11 @@ def section_client():
 
 def section_tape():
     print("== 10. the tape: the six spends re-found by test_pools' own join ==")
-    try:
-        live = vaultpath.require_dir("captures", "live", why="the JARIN tape")
-    except SystemExit as exc:
-        LEDGER.skip("the six spends on the tape (2 checks)", str(exc).splitlines()[0])
+    got = _need(("captures", "live"), ("content",),
+                what="the six spends on the tape, priced by the vault's skills table (2 checks)")
+    if got is None:
         return
+    live = got[0]
     import tape
     import test_pools
     from codec import Codec
@@ -695,24 +731,28 @@ def section_df_rule():
     b = attribpassive.divine_favor_bonus
     got = [b(r) for r in (0, 1, 2, 13, 18)]
     check(got == [0, 3, 6, 42, 58] and b(-1) == 0 and b(None) == 0,
-          "rank 1 -> 3 and rank 13 -> 42 (retail's two constants), 18 -> 58 (the town "
-          "caster's, half its 116), 2 -> 6 (the slice's Tahlkora); nothing at rank 0",
-          f"{got}")
+          "rank 1 -> 3 and rank 13 -> 42 (retail's two constants over on-wire maxima), "
+          "18 -> 58 (a town caster's 116 halved -- its maximum never on the wire, a "
+          "RECONSTRUCTION), 2 -> 6 (the slice's Tahlkora); nothing at rank 0", f"{got}")
     check(b(13, TOUCH) == 84 and b(18, TOUCH) == 116 and b(13, ORISON) == 42,
-          "Healing Touch (313) doubles the ROUNDED bonus: 84 and 116, retail's words; "
-          "Orison is not doubled", f"{b(13, TOUCH)}, {b(18, TOUCH)}")
+          "Healing Touch (313) is doubled -- 84 is retail's word over a 555 the wire sends; "
+          "the shipped ORDER (2 x the rounded bonus) is RECONSTRUCTION; Orison is not "
+          "doubled", f"{b(13, TOUCH)}, {b(18, TOUCH)}")
+    # PRINTED, NOT CHECKED (re-aimed at review, 2026-10-07): these were two checks of
+    # arithmetic on typed numbers, which cannot redden under any change to the
+    # product -- a check that cannot fail is not a check. Which rounding the tape picks is
+    # checked in section 16, from the constants read off the tape; this prints the
+    # argument and the live rival to the doubling's order.
     ranks = range(0, 41)
     rnd = {(32 * r + 5) // 10 for r in ranks}
     flo = {(32 * r) // 10 for r in ranks}
     cei = {-(-32 * r // 10) for r in ranks}
-    six = {(64 * r + 5) // 10 for r in ranks}
-    check({3, 42, 58} <= rnd and not ({42, 58} & flo) and 3 not in cei,
-          "KNOWN-BAD floor never makes 42 or 58 and KNOWN-BAD ceil never makes 3 -- round "
-          "is the only one of the three whose image holds every constant on tape",
-          f"floor has {sorted({42, 58} & flo)}, ceil has 3: {3 in cei}")
-    check(not ({84, 116} & six) and {84, 116} <= {2 * x for x in rnd},
-          "KNOWN-BAD round(6.4 x rank) makes neither 84 nor 116: the doubling is of the "
-          "rounded bonus", f"{sorted({84, 116} & six)}")
+    apart = [r for r in range(0, 21) if 2 * ((32 * r + 5) // 10) != -(-64 * r // 10)]
+    print(f"   note: round(3.2 r) holds 3 and 42 {3 in rnd and 42 in rnd}; floor holds 42 "
+          f"{42 in flo}; ceil holds 3 {3 in cei}. Healing Touch: round(6.4 r) makes 84 / "
+          f"116 {bool({84, 116} & {(64 * r + 5) // 10 for r in ranks})}, ceil(6.4 r) makes "
+          f"both {({84, 116} <= {-(-64 * r // 10) for r in ranks})} -- the live rival, apart "
+          f"from 2 x round(3.2 r) at ranks {apart}")
 
 
 def section_df_scope():
@@ -779,6 +819,29 @@ def _hero_heal(df_rank, weaken=False):
     return sent, st
 
 
+def _player_heal():
+    """The PLAYER's path, end to end: the REAL handle_skill_press (Healing Prayers 3,
+    Divine Favor 13, Orison at a hurt party body 201), the pending cast's clocks moved
+    30 s into the past, then ONE REAL cast_tick -- its E5 branch is the player's
+    resolve_heal and divine_favor_word. [(recipient, caster, points)] of every 55, in
+    wire order (points over 201's 480, or the player's own maximum)."""
+    st = _state({13: 3, DF: 13}, {201: _body(201, {}, pos=(100.0, 0.0), health=200.0)})
+    sent = []
+
+    def send(op, vals, why="", quiet=False):
+        sent.append((op, list(vals)))
+    authsrv.handle_skill_press([0, ORISON, 0, 201], send, st, 0, authsrv.GAME_CMSG_USE_SKILL)
+    queued = len(st.get("pending_casts") or ())
+    for cast in st.get("pending_casts") or ():
+        for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+            if cast.get(k) is not None:
+                cast[k] -= 30.0
+    authsrv.cast_tick(send, st, 0)
+    pmax = float(authsrv.player_max_health(st))
+    return queued, [(v[1], v[2], round(_f(v[3]) * (480.0 if v[1] == 201 else pmax), 3))
+                    for op, v in sent if op == HEAL and v[0] == agents.GV_HEALTH_GAIN]
+
+
 def _direct(ranks, skill, caster=None, body=None, deep_wound=False):
     """divine_favor_word called directly: (points on 201's 480 max, in wire order)."""
     st = _state(ranks, {201: body or _body(201, {}, health=100.0)})
@@ -803,9 +866,11 @@ def section_df_server():
         dw = _direct({DF: 13}, ORISON, deep_wound=True)
         dead_other = _direct({DF: 13}, HEAL_OTHER, body=dict(_body(201, {}), dead=True))
         dead_self = _direct({DF: 13}, ORISON, body=dict(_body(201, {}), dead=True))
+        pq, press = _player_heal()
     with carried(ENERGY=False, DIVINE_FAVOR=False, EFFECTS=True):
         osent, _ = _hero_heal(2)
         h0 = [(tg, round(f * mx, 3)) for tg, f in _heals(osent, 200)]
+        pq0, press0 = _player_heal()
     check(len(h2) == 2 and h2[0][0] == 201 and h2[1] == (201, 6.0) and h2[0][1] > 6.0,
           "a Monk hero at Divine Favor 2 casts Orison on a hurt ally: the spell's own heal, "
           "THEN [55, ally, hero, 6 / max] -- retail's order, 147 of 147", f"{h2}")
@@ -816,8 +881,18 @@ def section_df_server():
           "a Weakened caster's Divine Favor is one rank lower: 2 -> 1, the word 3 "
           "(SKILLS-WK)", f"{hw}")
     check(direct == {"orison": [42.0], "touch": [84.0], "banish": [], "rank0": []},
-          "the player at Divine Favor 13: Orison on an ally +42, Healing Touch +84, a "
-          "spell on a foe nothing; at rank 0 nothing", f"{direct}")
+          "divine_favor_word called directly for the player at Divine Favor 13: Orison on "
+          "an ally +42, Healing Touch +84, a spell on a foe nothing; at rank 0 nothing",
+          f"{direct}")
+    base = press[0][2] if press else None
+    check(pq == 1 and len(press) == 2 and press[0][:2] == (201, P) and base > 0
+          and base != 42.0 and press[1] == (201, P, 42.0),
+          "THE PLAYER'S PATH (the real press, then cast_tick's E5): Orison at Divine "
+          "Favor 13 sends its own heal on the ally, THEN [55, ally, player, 42 / max] -- "
+          "on the ALLY, not on the caster", f"queued {pq}: {press}")
+    check(pq0 == 1 and press0 == press[:1],
+          "KNOWN-BAD --no-divine-favor on the player's path: the same press sends the "
+          "spell's heal alone", f"queued {pq0}: {press0}")
     check(len(dw) == 1 and 0 < dw[0] < 42,
           "a Deep-Wounded recipient's word is cut (heal_agent's -20 %: 33 here, where "
           "retail rounds to 34 -- studies/skills 66.6)", f"cut {dw}")
@@ -865,75 +940,122 @@ def section_df_wiring():
           "sets the MODULE's bool to False", f"flip {i_flip} -> {flipped}")
 
     def _after_heal(name):
-        seg = ast.get_source_segment(src, _func(tree, name))
-        i_heal = seg.find("resolve_heal(")
-        i_df = seg.find("divine_favor_word(")
-        return 0 <= i_heal < i_df and seg.count("divine_favor_word(") == 1
+        """Each divine_favor_word call in `name` is a statement of its own whose
+        IMMEDIATELY preceding statement in the same block calls resolve_heal --
+        anchored on the statement, not on the first `resolve_heal(` in the text
+        (land_skill has two: its attack arm's comes first and is not the spell's)."""
+        fn = _func(tree, name)
+        verdicts = []
+        for node in ast.walk(fn):
+            for field in ("body", "orelse", "finalbody"):
+                block = getattr(node, field, None)
+                if not isinstance(block, list):
+                    continue
+                for i, stmt in enumerate(block):
+                    val = getattr(stmt, "value", None)
+                    if not (isinstance(stmt, (ast.Expr, ast.Assign)) and isinstance(val, ast.Call)
+                            and getattr(val.func, "id", None) == "divine_favor_word"):
+                        continue
+                    verdicts.append(i > 0 and bool(_calls(block[i - 1], "resolve_heal")))
+        return verdicts == [True] and len(_calls(fn, "divine_favor_word")) == 1
     check(_after_heal("cast_tick") and _after_heal("land_skill")
           and not _calls(_func(tree, "pick_skill"), "divine_favor_word"),
-          "one call each in cast_tick (the player) and land_skill (every body), each after "
-          "resolve_heal; pick_skill none")
+          "one call each in cast_tick (the player) and land_skill (every body), each the "
+          "statement right after a resolve_heal; pick_skill none",
+          f"cast_tick {_after_heal('cast_tick')}, land_skill {_after_heal('land_skill')}")
+
+
+def _completions(cap, connection):
+    """Every [58] on one connection, as (caster, skill, [(recipient, f)], maxima):
+    the skill is the caster's LAST [60] BEFORE the [58] in wire order -- a [58] that
+    shares its instant with the caster's next [60] closes the PREVIOUS cast (four
+    Resurrection Signet completions on the Smiting tape were once credited to the
+    Monk spell begun in the same instant, and read as empty batches); the words are
+    the caster's positive property-55 words in the [58]'s batch (healjoin.batches,
+    the 50 ms shoulder, over deepwoundjoin.sequence); `maxima` is every property-42
+    value each agent is sent on the connection."""
+    import bufflog
+    import deepwoundjoin
+    import healjoin
+    seq = deepwoundjoin.sequence(cap, connection, bufflog.Codec())
+    maxima = {}
+    for _i, _t, op, v in seq:
+        if op == 0x009F and v[1] == 42:
+            maxima.setdefault(v[2], set()).add(v[3])
+    ann = {}
+    for batch in healjoin.batches(seq):
+        words, closed = [], []
+        for _i, _t, op, v in batch:
+            if op == 0x009F and v[1] == 58:
+                closed.append((v[2], ann.get(v[2])))
+            elif op == 0x00A0 and v[1] == 60:
+                ann[v[2]] = v[4]
+            elif op == 0x009F and v[1] == 60:
+                ann[v[2]] = v[3]
+            elif op == 0x00A3 and v[1] == 55 and _f(v[4]) > 0:
+                words.append((v[2], v[3], _f(v[4])))
+        for caster, skill in closed:
+            yield caster, skill, [(tg, f) for tg, cs, f in words if cs == caster], maxima
+
+
+def _readable(mine, maxima):
+    """The whole-point values of a completion's words, each read over a maximum its
+    OWN recipient is sent on the wire -- or None when any word is whole over none of
+    them (a pool that moved where the observer did not see it: unreadable, set aside)."""
+    out = set()
+    for tg, f in mine:
+        vals = {int(round(f * m)) for m in maxima.get(tg, ()) if abs(f * m - round(f * m)) < 1e-3}
+        if not vals:
+            return None
+        out |= vals
+    return out
 
 
 def section_df_tape():
     print("== 15. the tape: the level-20 Monks' +42 on " + DF_CAPTURE + " :" + DF_CONN + " ==")
-    try:
-        live = vaultpath.require_dir("captures", "live", why="the henchman tape")
-    except SystemExit as exc:
-        LEDGER.skip("Divine Favor on the henchman tape (2 checks)", str(exc).splitlines()[0])
-        return
-    import bufflog
+    got = _need(("captures", "live"), ("content",),
+                what="Divine Favor on the henchman tape, priced by the vault's skills table "
+                     "(2 checks)")
+    if got is None:
+        return None
     import deepwoundjoin
-    import healjoin
-    cap = os.path.join(live, DF_CAPTURE)
+    cap = os.path.join(got[0], DF_CAPTURE)
     chans = [c for c in deepwoundjoin.whole_s2c(cap, None) if DF_CONN in c["connection"]]
     rows = content.load().rows("skills")
     tally = {"eligible": 0, "carries": 0, "outside": 0, "outside_carries": 0,
              "with_base": 0, "df_last": 0, "cut": 0}
+    values = {}
 
-    maxima = set()
-
-    def pts(f, want):
-        # over a maximum THIS connection sends (its own 0x009F [42] words: the
-        # henchmen's 555, Deep Wound's 455, the observer's 480)
-        return any(abs(f * m - want) < 1e-3 for m in maxima)
     for ch in chans:
-        seq = deepwoundjoin.sequence(cap, ch["connection"], bufflog.Codec())
-        maxima = {v[3] for _i, _t, op, v in seq
-                  if op == 0x009F and v[1] == 42 and v[3] >= 100}
-        ann = {}
-        for batch in healjoin.batches(seq):
-            words = []
-            for _i, _t, op, v in batch:
-                if op == 0x00A0 and v[1] == 60:
-                    ann[v[2]] = v[4]
-                elif op == 0x009F and v[1] == 60:
-                    ann[v[2]] = v[3]
-                elif op == 0x00A3 and v[1] == 55 and _f(v[4]) > 0:
-                    words.append((v[2], v[3], _f(v[4])))
-            for _i, _t, op, v in batch:
-                if not (op == 0x009F and v[1] == 58) or v[2] not in DF_CASTERS:
-                    continue
-                skill = ann.get(v[2])
-                row = rows.get(str(skill))
-                if row is None or int(row.get("profession", -1)) != 3:
-                    continue
-                c = attribpassive.divine_favor_bonus(DF_RANK, skill)
-                mine = [(tg, f) for tg, cs, f in words if cs == v[2]]
-                hit = [k for k, (_tg, f) in enumerate(mine)
-                       if pts(f, c) or pts(f, round(0.8 * c))]
-                inside = attribpassive.divine_favor_applies(row)
-                tally["eligible" if inside else "outside"] += 1
-                if not hit:
-                    continue
-                tally["carries" if inside else "outside_carries"] += 1
-                tg = mine[hit[0]][0]
-                same = [k for k, (t2, _f2) in enumerate(mine) if t2 == tg]
-                if len(same) > 1:
-                    tally["with_base"] += 1
-                    tally["df_last"] += int(hit[0] == same[-1])
-                tally["cut"] += int(any(pts(f, round(0.8 * c)) and not pts(f, c)
-                                        for _tg, f in mine))
+        conn_max = set()
+
+        def pts(f, want):
+            # over a maximum THIS connection sends (its own 0x009F [42] words: the
+            # henchmen's 555, Deep Wound's 455, the observer's 480)
+            return any(abs(f * m - want) < 1e-3 for m in conn_max)
+        for caster, skill, mine, maxima in _completions(cap, ch["connection"]):
+            conn_max = {m for ms in maxima.values() for m in ms if m >= 100}
+            row = rows.get(str(skill))
+            if caster not in DF_CASTERS or row is None or int(row.get("profession", -1)) != 3:
+                continue
+            c = attribpassive.divine_favor_bonus(DF_RANK, skill)
+            hit = [k for k, (_tg, f) in enumerate(mine)
+                   if pts(f, c) or pts(f, round(0.8 * c))]
+            inside = attribpassive.divine_favor_applies(row)
+            tally["eligible" if inside else "outside"] += 1
+            if inside and skill not in attribpassive.DIVINE_FAVOR_MULTIPLIER:
+                for x in _readable(mine, maxima) or ():
+                    values[x] = values.get(x, 0) + 1
+            if not hit:
+                continue
+            tally["carries" if inside else "outside_carries"] += 1
+            tg = mine[hit[0]][0]
+            same = [k for k, (t2, _f2) in enumerate(mine) if t2 == tg]
+            if len(same) > 1:
+                tally["with_base"] += 1
+                tally["df_last"] += int(hit[0] == same[-1])
+            tally["cut"] += int(any(pts(f, round(0.8 * c)) and not pts(f, c)
+                                    for _tg, f in mine))
     check(tally["eligible"] == DF_TAPE["eligible"] and tally["carries"] == tally["eligible"]
           and tally["outside"] == DF_TAPE["outside"] and tally["outside_carries"] == 0
           and tally["cut"] == DF_TAPE["cut"],
@@ -944,6 +1066,70 @@ def section_df_tape():
     check(tally["with_base"] >= DF_TAPE["with_base"] and tally["df_last"] == tally["with_base"],
           "where the spell has its own heal on the same recipient, the Divine Favor word "
           "comes LAST, every time", f"{tally['df_last']} of {tally['with_base']}")
+    # The constant MEASURED, for section 16: the whole-point value the most readable
+    # completions share, each word over its own recipient's on-wire maxima.
+    return max(values, key=lambda x: (values[x], -x)) if values else None
+
+
+def section_df_smite(c_hench):
+    print("== 16. the tape: the Smiting Monks' +3 on " + SMITE_CAPTURE
+          + ", and the rounding the two constants decide ==")
+    got = _need(("captures", "live"), ("content",),
+                what="Divine Favor on the Smiting tape, and the rounding (2 checks)")
+    if got is None:
+        return
+    import deepwoundjoin
+    cap = os.path.join(got[0], SMITE_CAPTURE)
+    rows = content.load().rows("skills")
+    tally = {"eligible": 0, "readable": 0, "carries": 0, "outside": 0, "outside_words": 0,
+             "signet": 0, "signet_words": 0}
+    values = {}
+    c = attribpassive.divine_favor_bonus(SMITE_RANK)
+    for ch in deepwoundjoin.whole_s2c(cap, None):
+        for caster, skill, mine, maxima in _completions(cap, ch["connection"]):
+            if caster not in SMITE_CASTERS:
+                continue
+            if skill == RES_SIGNET:
+                tally["signet"] += 1
+                tally["signet_words"] += len(mine)
+                continue
+            row = rows.get(str(skill))
+            if row is None or int(row.get("profession", -1)) != 3:
+                continue
+            if not attribpassive.divine_favor_applies(row):
+                tally["outside"] += 1
+                tally["outside_words"] += len(mine)
+                continue
+            tally["eligible"] += 1
+            vals = _readable(mine, maxima) if mine else None
+            if vals is None:
+                continue
+            tally["readable"] += 1
+            tally["carries"] += int(attribpassive.divine_favor_bonus(SMITE_RANK, skill) in vals)
+            if skill not in attribpassive.DIVINE_FAVOR_MULTIPLIER:
+                for x in vals:
+                    values[x] = values.get(x, 0) + 1
+    c_smite = max(values, key=lambda x: (values[x], -x)) if values else None
+    check(tally["eligible"] == SMITE_TAPE["eligible"] and tally["readable"] == SMITE_TAPE["readable"]
+          and tally["carries"] == tally["readable"] and c_smite == c
+          and tally["outside"] == SMITE_TAPE["outside"] and tally["outside_words"] == 0
+          and tally["signet"] == SMITE_TAPE["signet"] and tally["signet_words"] == 0,
+          f"the four Smiting Monks' {tally['eligible']} Monk spells on an ally: every one of "
+          f"the {tally['readable']} whose words read whole over their recipients' on-wire "
+          f"maxima carries {c} -- attribpassive's word at rank {SMITE_RANK}, and the value "
+          f"those completions share most ({c_smite}); their {tally['outside']} foe hexes and "
+          f"{tally['signet']} Resurrection Signets carry no word", f"{tally}, shared {c_smite}")
+    image = {attribpassive.divine_favor_bonus(r) for r in range(0, 41)}
+    ceil_image = {-(-32 * r // 10) for r in range(0, 41)}
+    floor_image = {(32 * r) // 10 for r in range(0, 41)}
+    check(c_smite is not None and c_hench is not None
+          and {c_smite, c_hench} <= image and c_smite not in ceil_image
+          and c_hench not in floor_image,
+          f"THE ROUNDING, from the two constants read off the tape: {c_smite} (here) and "
+          f"{c_hench} (section 15) are both in the shipped rule's image; KNOWN-BAD ceil(3.2 r) "
+          f"never makes {c_smite} and KNOWN-BAD floor(3.2 r) never makes {c_hench}",
+          f"smite {c_smite} hench {c_hench}; ceil has it {c_smite in ceil_image}, floor has "
+          f"it {c_hench in floor_image}")
 
 
 def main():
@@ -961,7 +1147,8 @@ def main():
     section_df_scope()
     section_df_server()
     section_df_wiring()
-    section_df_tape()
+    c_hench = section_df_tape()
+    section_df_smite(c_hench)
     return LEDGER.verdict()
 
 
