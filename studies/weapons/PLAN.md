@@ -1691,6 +1691,16 @@ pair for the next start, a same-base switch arms nothing -- retail's 2/2 each wa
 whether retail re-sends 41 / 43 on a switch that moves the MAXIMUM ENERGY -- still INFERRED, no 556
 item was in any 1A set. RUN-W9-2 itself is closed.
 
+**2026-10-08, a live pass (RIDERS-R5, [studies/livekey/RIDERS.md](../livekey/RIDERS.md)).** In
+Kamadan on `20261008T132845` `:65410` the owner's step asked for the held set's key, an empty set's
+key and a switch into an energy weapon's set. Between that step's mark (245.4 s) and the first switch
+(267.0 s) **no `0x0032` left the client at all**: if both presses happened, retail's CLIENT refuses
+the same-set and the empty-set press locally and the server is never asked -- which would make the
+open "reply" question moot rather than answered. Owed: the owner's word that the two presses were
+made. The switch `0x0032 [1]` and back `[0]` were answered at +46 / +33 ms by `0x0148 [90, n]` and one
+`0x014B` for item 10573, with **no 41 / 43** -- so either that set moved no maximum energy or the
+re-send does not happen; the item's modifiers are not read here, so it stays INFERRED.
+
 ## 29. WEAPONS-W9, the desk close -- 2026-09-19: what the client does with `0x0152`, and the item family's first field
 
 **Two of §28's four opens were the client's to answer, not a tape's, and its handlers answer

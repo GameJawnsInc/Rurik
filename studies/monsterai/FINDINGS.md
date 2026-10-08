@@ -3068,6 +3068,61 @@ player and heal nothing), so her Orison comes round faster; a Bleeding or Poison
 member — the player included, at full health — draws 276 at once; the corridor's academy
 monks cure each other.
 
+### 18.6 SCORED — CASTAI-H1, the PvE healer (2026-10-08)
+
+**The run.** Live capture `20261008T132845`: the owner, the secondary account, build
+**38974**, base mode, plan `live_riders_h1.txt` sealed before launch, whose `setup` / `zone`
+/ `fights` / `front` / `calm` lines are `castai_h1_healer.txt`'s byte for byte (checked
+before the seal); the outpost half of the same session is the RIDERS record,
+[studies/livekey/RIDERS.md](../livekey/RIDERS.md). Kamadan into the **Plains of Jarin**
+(map 430, `:51409`, 288.9–604.0 s), a party of two: the observer (agent 29) and **Koss**
+(agent 30) — a **Warrior hero with a Monk secondary**, not a Monk: the owner had no Monk hero
+unlocked. His bar: Orison of Healing 281, Healing Breeze 288, Healing Touch 313 and 1396
+(named Word of Comfort by the owner's screen; its heal is on the wire). He ran in **Avoid
+Combat** throughout (c2s `0x0015 [30, 2]`, 308.6 s). Three fights; in the second the
+observer stood against a level-6 Stormseed to take damage (the `front` case, by the owner's
+notes), died at 443.4 s and stood again at 455.7 s. `front` and `calm` were pressed through
+because their cases had happened inside `fights` — so P4's windows are chosen after the
+fact, and say so. Scorer: `studies/monsterai/review/healerrun.py`.
+
+**A defect the run found in our own reader first.** Four of Koss's heals read as heals on a
+FULL-health observer. They were not: `castethogram`'s health integrator ignored `0x009F [32,
+agent, 0]` (GV_MAX_HP_REACHED — bar full AND regeneration zero, skills §64.5) and ran a
+closed Healing Breeze's rate on to the next `[44]`, up to 29 s later. With `[32]` read
+(`PROP_MAX_HP_REACHED`, 2026-10-08) the post-fight Breeze at 373.54 s lands on 0.7714 —
+32 HP down by the deltas after the `[32]` at 360.72 — not on 1.0. Re-running the committed
+Z1 and Z2 scorers moves **no verdict**; six Z3 spike-target and two Heal Area caster health
+readings shift. The observer's health is exact between anchors: every damage and heal word
+is a whole number of 1/140ths (1/119ths after the death penalty).
+
+| Prediction | Verdict | Numbers (OBSERVED on this capture unless labelled) |
+|---|---|---|
+| **H1.P1** every heal on a hurt ally, the most-hurt first | **NULL** (floor 20) | 19 heals, **15 on another ally** (the observer) and 4 on Koss himself. **0 on an unhurt target** (the heaviest at 0.852). Where both were hurt the lower was chosen **2 of 2** (423.58 → the observer at 0.789 over Koss at 0.936; 430.34 → Koss at 0.80 over the observer at 0.929). |
+| **H1.P2** Orison only once the ally has lost what it heals | **FAILED**, 0 of 6 | All six Orisons landed on the observer, where health is exact. Deficit at the announce **0.148–0.244** against heals of **0.286–0.336** (40 HP); at the landing, after the Breeze ticks, 0.064–0.275 — every one below its heal either way. Four of the six follow a Healing Breeze by 1.75 s (its activation plus aftercast). The wiki's rule (rev 2738568) is refuted for a hero. |
+| **H1.P3** no enchantment re-cast on a carrier | **HELD**, 0 of 6 | Six Healing Breezes, none onto a target still carrying one (`0x0042` / `0x0044`, exact on the observer; each Breeze lasts 15.000 s on the wire). |
+| **H1.P4** out of combat, heal the hurt and stop | **HELD, post hoc** | Three windows of ≥ 15 s with no party damage word: 372.4–413.3, 455.1–493.5, 556.2–603.7 s. Five heals inside, every one on a hurt target (the two post-fight Breeze + Orison pairs on the observer at 0.77–0.85; Koss on himself at 0.567 after the revive), none after the party read full. |
+
+**What the owner saw, against the wire.** "He cast Orison… then Healing Breeze… when I won
+the fight, he did another Healing Breeze and an Orison" — the post-fight pairs at 373.5 /
+375.3 and 556.7 / 558.5 s; the same Breeze-then-Orison pair also runs INSIDE the fights
+(414.6 / 416.3, 530.6 / 532.3), so it is not a post-fight mode. "Koss probably ran out of
+energy" — he cast nothing for 17.6 s (430.3 → 447.9) while the observer went from 0.93 to
+dead. His spends are on the wire (`[62]` on agent 30: −0.5, −0.25, −0.25, −0.5 between
+414.6 and 430.3 s, 30 energy of a 20 maximum — `[41] 20` at his add) but no absolute energy
+word is, so the empty pool is a RECONSTRUCTION. "Word of Comfort" — 1396's heals read
+0.207 at 140 and 0.244 at 119, i.e. 29 HP both times.
+
+**Against our server.** Every scored point agrees with what ships: a hero's byte-3 heal goes
+to the hurt-most of the caster and its allies (SLICE-H8 — Koss chose himself at 0.80 over
+the observer at 0.93, as ours would), `live_effect_hold` refuses an enchantment onto a
+carrier, and our `HERO_HEAL_AT = 0.9` admits all 19 retail heals (a non-refutation, not a
+measurement of the threshold: no stretch shows Koss idle at 0.85–0.9 with energy). P2's
+wiki rule was never modelled, so its failure costs nothing. **Nothing ships from H1.**
+
+**Still open.** P1 below its floor (a longer run, or a party with henchmen, reaches 20); a
+Monk-PRIMARY hero (Divine Favor and a Monk's energy pool are not on this tape); the
+threshold itself.
+
 ## 19. The charmable animal's turn — RANGERPRE-S12 (2026-09-30)
 
 §12's passive rule (MONSTERAI-J: stand until hit, then fight) had one creature family it

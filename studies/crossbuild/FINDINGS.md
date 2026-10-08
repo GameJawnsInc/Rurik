@@ -1589,7 +1589,13 @@ independent walk got the same fix.
     client.
   - **Tested:** `test_tape` §10 on captures it builds itself, each check with a control.
   - **Still to see:** the first 38974 live tape framing to its last byte through this
-    path is the real verification.
+    path is the real verification. **SEEN 2026-10-08** (RIDERS-F1,
+    [studies/livekey/RIDERS.md](../livekey/RIDERS.md)): live capture `20261008T132845`,
+    both game connections, 5,794 and 16,711 messages, `livewire.decode_conn` ok to the
+    last byte in 38974's numbering; the same s2c bytes through the PINNED numbering stop
+    at offset 1,139 on both (the control goes red, as it must); the new `0x0194` once per
+    connection. The 38974 key-tap cave tapped all three keys on its first live run.
+    OBSERVED.
 
 ### 11.6 The content overlay follows 38974 (the owner's ruling, 2026-10-01)
 

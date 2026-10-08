@@ -3979,9 +3979,26 @@ GAME_CMSG_SKILLBAR_SKILL_SET = 0x005C
 # field 3 the one in the slot it was DROPPED ON (RUN-HEROLIB-D, 2026-09-15:
 # two pre-registered drags on the two END slots gave [281, 0, 256, 0] then
 # [256, 0, 281, 0], mirror images, outcome confirmed on screen between them).
-# The copy indices were 0 in all four sightings. Retail's REPLY is unobserved
-# -- studies/heroes/RUN-HEROLIB.md 12.
+# The copy indices were 0 in all four sightings. Retail's REPLY is OBSERVED
+# since 2026-10-08 (studies/heroes/RUN-HEROLIB.md 12.6): 2 of 2 on a hero's bar,
+# BAR_EDIT_RETAIL_ECHO below.
 GAME_CMSG_SKILLBAR_SKILL_SWAP = 0x005E
+# Retail's answer to a bar edit that succeeded -- OBSERVED over every live
+# connection (129) on 2026-10-08, the RIDERS census:
+#   0x005C on the PLAYER's bar: one 0x00D9 [agent, slot, skill, 0], 7 of 7 (what
+#     this server always sent);
+#   0x005C on a HERO's bar: that 0x00D9 THEN 0x0065 [hero, mask], 17 of 17, all in
+#     one batch at +30..44 ms (20261008T132845 :65410, Koss, mask 0 throughout);
+#   0x005E on a HERO's bar: TWO 0x00D9 -- the SOURCE slot (where the picked-up skill
+#     was) first, now holding the target skill, then the target slot holding the
+#     source skill -- THEN 0x0065 [hero, mask], 2 of 2 (+37 / +44 ms; the swap and
+#     its mirror swap back).
+# This server sent NOTHING on a successful swap ("an echo would be a guess") and no
+# 0x0065 after a hero's set. Both now follow retail. The PLAYER's swap is on no
+# tape: it gets the two 0x00D9 and no 0x0065 -- the player's set never draws one,
+# 7 of 7 -- which is RECONSTRUCTION by the player's own set. --no-bar-edit-echo
+# restores the old replies.
+BAR_EDIT_RETAIL_ECHO = True
 GAME_CMSG_ATTRIBUTE_DECREASE = 0x000E
 GAME_CMSG_ATTRIBUTE_INCREASE = 0x000F
 GAME_CMSG_ATTRIBUTE_LOAD = 0x0010
@@ -14795,6 +14812,22 @@ PARTY_FULL_REPLY_CODE = None   # --party-full-reply CODE (desk-partyfull,
                                # (#57757) is a CLIENT-side const text -- so
                                # retail's client may refuse locally and its
                                # server may send nothing. RECONSTRUCTION.
+                               # 2026-10-08: the HENCHMAN half is now OBSERVED
+                               # (RIDERS, 20261008T132845) and no longer
+                               # waits on this flag -- HENCH_FULL_REPLY_RETAIL
+                               # below. This variable is the operator's CODE,
+                               # and it still decides the HERO add alone.
+HENCH_FULL_REPLY_RETAIL = True  # --no-party-full-reply-retail reverts: a HENCHMAN
+                               # add refused at the cap is answered with retail's
+                               # ONE 0x01BC [64] (henchparty.RETAIL_HENCH_FULL_CODE,
+                               # OBSERVED 1 of 1: the client SENDS the 0x009F at the
+                               # cap, its button not greyed, and retail answers at
+                               # +54 ms with that and nothing else). An explicit
+                               # --party-full-reply CODE still wins. The hero add's
+                               # refusal is on no tape and stays the operator's.
+HENCH_KICK_SIZE_FIRST = True   # --hench-kick-row-first reverts: the kick's reply is
+                               # 0x00B0 then 0x01C0, retail's order 3 of 3 on
+                               # 20261008T132845 (henchparty.henchman_kick_batch).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -26039,6 +26072,10 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
 
     send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, slot, skill_id, 0],
          f"SKILLBAR_UPDATE_SKILL({who} slot {slot} <- skill {skill_id})")
+    if BAR_EDIT_RETAIL_ECHO and not is_player:
+        # retail's hero set: the 0x00D9 then the whole mask, 17 of 17
+        send(GAME_SMSG_HERO_UNNAMED_0065, [agent_id, hero_disabled_mask(state, hero_index)],
+             f"0x0065({who} mask after the set) [retail's, BAR_EDIT_RETAIL_ECHO]")
     print(f"[c{conn_id}] SKILLBAR SET {who}: slot {slot} "
           f"{before[slot]} -> {skill_id}"
           + (f"  (skill {skill_id} ALSO sits in slot {dup}; retail's UI swaps "
@@ -26058,10 +26095,13 @@ def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
     dropped on (RUN-HEROLIB-C and -D; the constant's comment has the numbers).
     Agent-keyed like 0x005C, so it edits the player's bar or a hero's.
 
-    ON SUCCESS NOTHING IS SENT. The client has already swapped locally, and
-    retail's reply to this message is UNOBSERVED (zero corpus sightings), so
-    an echo here would be a guess about a message retail may not send. The
-    store write is the whole answer. A REFUSAL still answers, as 0x005C's
+    ON SUCCESS retail ECHOES (OBSERVED 2 of 2 on a hero's bar, 2026-10-08;
+    BAR_EDIT_RETAIL_ECHO's comment): both slots' new contents through 0x00D9,
+    the source slot first, then -- a hero only -- the whole mask, 0x0065.
+    Until that tape this sent nothing ("an echo would be a guess about a
+    message retail may not send"), and --no-bar-edit-echo still does. The
+    player's swap is on no tape and takes the two 0x00D9 without the mask,
+    by the player's own set (7 of 7, no 0x0065). A REFUSAL still answers, as 0x005C's
     does: it echoes BOTH slots' unchanged contents through 0x00D9, the one
     per-slot message the client is known to accept, so the client's local
     swap is retired rather than left disagreeing with us.
@@ -26135,6 +26175,17 @@ def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
                             f"and {tgt_slot} (0x00821460); suppression follows "
                             f"the skill")
         sync_hero_body_bar(state, agent_id, after, conn_id)   # SANDBOX-B7
+
+    if BAR_EDIT_RETAIL_ECHO:
+        # retail's swap reply (2 of 2 on a hero): the source slot first, then the
+        # target slot, then -- a hero only -- the mask (the constant's comment)
+        send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, src_slot, tgt, 0],
+             f"SKILLBAR_UPDATE_SKILL({who} slot {src_slot} <- skill {tgt}) [swap echo]")
+        send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, tgt_slot, src, 0],
+             f"SKILLBAR_UPDATE_SKILL({who} slot {tgt_slot} <- skill {src}) [swap echo]")
+        if not is_player:
+            send(GAME_SMSG_HERO_UNNAMED_0065, [agent_id, hero_disabled_mask(state, hero_index)],
+                 f"0x0065({who} mask after the swap) [retail's, BAR_EDIT_RETAIL_ECHO]")
 
     print(f"[c{conn_id}] SKILLBAR SWAP {who}: skill {src} slot {src_slot} <-> "
           f"skill {tgt} slot {tgt_slot}; bar now {after}"
@@ -35131,7 +35182,7 @@ def handle_hero_add(values, send, state, conn_id):
         print(f"[c{conn_id}] HERO_ADD({hid}) refused: the party already holds "
               f"{party_member_count(state)} members (heroes and henchmen), the "
               f"served cap ({cap}: {cap_why}; --henchman-cap "
-              f"overrides); {party_full_refusal_note()} "
+              f"overrides); {party_full_refusal_note(PARTY_FULL_REPLY_CODE)} "
               f"[DESKWORK-D1]", flush=True)
         for op, vals, label in henchparty.party_full_reply(PARTY_FULL_REPLY_CODE):
             send(op, vals, label + " [HERO_ADD]")
@@ -35248,15 +35299,29 @@ def party_size_on_wire(state):
     return party_member_count(state, count_heroes=PARTY_SIZE_COUNTS_HEROES)
 
 
-def party_full_refusal_note():
-    """What the two cap refusals (henchman add, hero add) print about the wire:
-    nothing sent by default -- retail's refusal reply is NOT FOUND -- or, under
-    --party-full-reply CODE, the one 0x01BC [CODE] that follows the line
-    (henchparty.party_full_reply; RECONSTRUCTION, the code the operator's)."""
-    if PARTY_FULL_REPLY_CODE is None:
-        return "nothing sent (retail's refusal reply NOT FOUND)"
-    return (f"0x01BC PARTY_ERROR_PROMPT [code {PARTY_FULL_REPLY_CODE}] follows "
-            f"(--party-full-reply; RECONSTRUCTION, retail's reply NOT FOUND)")
+def hench_full_reply_code():
+    """The 0x01BC code a HENCHMAN add refused at the cap is answered with, or
+    None: the operator's --party-full-reply CODE when given, else retail's
+    (henchparty.RETAIL_HENCH_FULL_CODE, OBSERVED 1 of 1 on 20261008T132845)
+    unless --no-party-full-reply-retail, which restores the silent refusal."""
+    if PARTY_FULL_REPLY_CODE is not None:
+        return PARTY_FULL_REPLY_CODE
+    return henchparty.RETAIL_HENCH_FULL_CODE if HENCH_FULL_REPLY_RETAIL else None
+
+
+def party_full_refusal_note(code=None):
+    """What a cap refusal prints about the wire, given the code it sends (None:
+    nothing). The henchman add passes hench_full_reply_code() -- retail's 64 by
+    default, OBSERVED; the hero add passes PARTY_FULL_REPLY_CODE -- nothing by
+    default, because no tape carries a refused hero add."""
+    if code is None:
+        return "nothing sent (retail's refusal reply NOT FOUND for this add)"
+    if PARTY_FULL_REPLY_CODE is None and code == henchparty.RETAIL_HENCH_FULL_CODE:
+        return (f"0x01BC PARTY_ERROR_PROMPT [code {code}] follows (retail's, "
+                f"OBSERVED 1 of 1 on 20261008T132845; --no-party-full-reply-retail "
+                f"silences it)")
+    return (f"0x01BC PARTY_ERROR_PROMPT [code {code}] follows "
+            f"(--party-full-reply; the code the operator's)")
 
 
 def handle_henchman_add(values, send, state, conn_id):
@@ -35271,10 +35336,12 @@ def handle_henchman_add(values, send, state, conn_id):
     standing NPC is NOT destroyed (no 0x0021 follows on the tape); it keeps
     standing and its record moves into the party.
 
-    THE REFUSALS send NOTHING (retail's refusal reply is NOT FOUND -- no tape
-    carries a refused add) -- except the CAP refusal under the opt-in
-    --party-full-reply CODE, which sends ONE 0x01BC [CODE] (RECONSTRUCTION,
-    default off; the review of 2026-09-25, RV-4). The three: an agent that is
+    THE REFUSALS send NOTHING (retail's reply to the first two is NOT FOUND)
+    -- except the CAP refusal, which sends ONE 0x01BC [64]: retail's, OBSERVED
+    1 of 1 on 20261008T132845 (the client sent the 0x009F at 4 of 4, its
+    button not greyed, and the screen showed row 64's sentence);
+    hench_full_reply_code(), --party-full-reply CODE overriding it and
+    --no-party-full-reply-retail silencing it. The three: an agent that is
     not a hireable henchman of this
     outpost; one already in the party; and one that would put the party over the
     map's cap (party_cap(state): the served map's own max_party from
@@ -35296,12 +35363,13 @@ def handle_henchman_add(values, send, state, conn_id):
         return
     cap, cap_why = party_cap(state)
     if henchparty.party_is_full(party_member_count(state), cap):
+        _code = hench_full_reply_code()
         print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: the party already holds "
               f"{party_member_count(state)} members (heroes and henchmen), the "
               f"served cap ({cap}: {cap_why}; --henchman-cap "
-              f"overrides); {party_full_refusal_note()} "
+              f"overrides); {party_full_refusal_note(_code)} "
               f"[DESKWORK-D1]", flush=True)
-        for op, vals, label in henchparty.party_full_reply(PARTY_FULL_REPLY_CODE):
+        for op, vals, label in henchparty.party_full_reply(_code):
             send(op, vals, label + " [HENCHMAN_ADD]")
         return
     party[aid] = hench
@@ -35320,11 +35388,13 @@ def handle_henchman_kick(values, send, state, conn_id):
 
     THE REQUEST is named on OUR client (CONFIRM-2 section 2 step 6, run
     20260924T090622: `a8 80 1f 00`, one word = the hired henchman's agent id,
-    the row kept until a reply): values[1] is that agent id. THE REPLY is
-    RECONSTRUCTION -- no retail tape carries 0x00A8 or 0x01C0 (0 of 96 live
-    connections) -- modelled on the one OBSERVED kick, the hero's (0x01C3 row
-    then 0x00B0 size, 20260916T150306): 0x01C0 [party 1, agent] then 0x00B0
-    PLAYER_PARTY_SIZE, henchparty.henchman_kick_batch. Read from the binary
+    the row kept until a reply): values[1] is that agent id -- and retail's
+    client sends the same one word (20261008T132845: [3] / [2] / [1], the
+    agents its 0x01BF rows named). THE REPLY is OBSERVED since 2026-10-08,
+    3 of 3 on that tape: 0x00B0 PLAYER_PARTY_SIZE then 0x01C0 [party, agent],
+    SIZE THEN ROW, henchparty.henchman_kick_batch. It shipped 2026-09-24 as
+    the reverse, modelled on the hero kick (0x01C3 then 0x00B0) when no tape
+    carried a henchman kick; --hench-kick-row-first keeps that. Read from the binary
     (build 38797; henchparty.py THE KICK): the client's 0x01C0 worker
     0x00858DE0 removes the row 0x01BF inserted from the same stride-0x34 array
     and returns silently on an unknown party or agent; its party lookup is the
@@ -35368,12 +35438,16 @@ def handle_henchman_kick(values, send, state, conn_id):
     aid = int(values[1])
     hench = party.pop(aid)
     size = party_size_on_wire(state)
-    for op, vals, label in henchparty.henchman_kick_batch(1, PLAYER_NUMBER, size, aid):
+    for op, vals, label in henchparty.henchman_kick_batch(
+            1, PLAYER_NUMBER, size, aid, size_first=HENCH_KICK_SIZE_FIRST):
         send(op, vals, label + " [HENCHMAN_KICK]")
     print(f"[c{conn_id}] HENCHMAN_KICK: {hench.get('name', aid)} (agent {aid}) left "
           f"the party; size now {size}; the NPC keeps standing and stays hireable "
-          f"(0x01C0 then 0x00B0 -- RECONSTRUCTION, the hero kick's shape; not "
-          f"persisted, as the hire is not) [CLEANUP-3]", flush=True)
+          + ("(0x00B0 then 0x01C0 -- retail's order, 3 of 3 on 20261008T132845; "
+             if HENCH_KICK_SIZE_FIRST else
+             "(0x01C0 then 0x00B0 -- --hench-kick-row-first, the 2026-09-24 "
+             "RECONSTRUCTION; ")
+          + "not persisted, as the hire is not) [CLEANUP-3]", flush=True)
 
 
 def handle_party_leave(values, send, state, conn_id):
@@ -50220,9 +50294,29 @@ def main():
               f"the cap (henchman 0x009F, hero 0x001E) is answered with 0x01BC "
               f"PARTY_ERROR_PROMPT [code {PARTY_FULL_REPLY_CODE}] -- the client's "
               f"party error table row {PARTY_FULL_REPLY_CODE} shown on channel 10 "
-              f"with a centre-screen popup. RECONSTRUCTION: retail's reply to a "
-              f"refused add is NOT FOUND (0 of 96 live connections) and the table "
-              f"has no 'party is full' row; the default sends nothing.", flush=True)
+              f"with a centre-screen popup. The code is yours; retail's for a "
+              f"henchman add is {henchparty.RETAIL_HENCH_FULL_CODE} (OBSERVED 1 of 1, "
+              f"20261008T132845), for a hero add NOT FOUND.", flush=True)
+    if a.no_party_full_reply_retail:
+        global HENCH_FULL_REPLY_RETAIL
+        HENCH_FULL_REPLY_RETAIL = False
+        print("[party] --no-party-full-reply-retail: a henchman add refused at the cap "
+              "is silent again (every run before 2026-10-08); retail answers it with "
+              f"ONE 0x01BC [{henchparty.RETAIL_HENCH_FULL_CODE}] (20261008T132845).",
+              flush=True)
+    if a.hench_kick_row_first:
+        global HENCH_KICK_SIZE_FIRST
+        HENCH_KICK_SIZE_FIRST = False
+        print("[party] --hench-kick-row-first: the henchman kick answers 0x01C0 then "
+              "0x00B0 (the 2026-09-24 RECONSTRUCTION); retail sends 0x00B0 first, "
+              "3 of 3 on 20261008T132845.", flush=True)
+    if a.no_bar_edit_echo:
+        global BAR_EDIT_RETAIL_ECHO
+        BAR_EDIT_RETAIL_ECHO = False
+        print("[skillbar] --no-bar-edit-echo: a successful 0x005E swap sends nothing "
+              "and a hero's 0x005C set its 0x00D9 alone (every run before 2026-10-08); "
+              "retail echoes both swapped slots and sends a hero's 0x0065 after either "
+              "(20261008T132845).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

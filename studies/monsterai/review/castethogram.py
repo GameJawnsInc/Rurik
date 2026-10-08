@@ -217,6 +217,12 @@ PROP_ADD_EFFECT, PROP_REMOVE_EFFECT = 6, 7
 PROP_DMG = (16, 17)
 PROP_HEALTH_SET = 34
 PROP_REGEN = 44
+# GV_MAX_HP_REACHED: 0x009F [32, agent, 0] sets the bar FULL and the regeneration to ZERO
+# on the client (skills FINDINGS 64.5, a static read of the int record path), which is why
+# retail sends no [44] zero after it. The integrator ignored it until 2026-10-08 and ran a
+# closed Healing Breeze's rate on to the next [44]: on 20261008T132845 it read the player at
+# 1.0 for the post-fight Breeze at 373.54, 32 HP down by the deltas after the [32] at 360.72.
+PROP_MAX_HP_REACHED = 32
 PROP_HEAL = 55
 PROP_INSTANT, PROP_ATTACK_SKILL, PROP_CAST = 48, 50, 60
 END_PROPS = (58, 46, 59, 45, 35)
@@ -397,7 +403,9 @@ class Conn:
             elif op == OP_UNAPPLY and len(v) > 2:
                 self.unapplies[v[1]].append((t, v[2], i))
             elif op == OP_INT and len(v) > 3:
-                if v[1] in (PROP_ADD_EFFECT, PROP_REMOVE_EFFECT):
+                if v[1] == PROP_MAX_HP_REACHED:
+                    hev(v[2], t, "max32", None, i)
+                elif v[1] in (PROP_ADD_EFFECT, PROP_REMOVE_EFFECT):
                     self.effects6[v[2]].append((t, 1 if v[1] == PROP_ADD_EFFECT else -1, v[3]))
                     self.effects6_i[v[2]].append(i)
                 elif v[1] in (PROP_CAST, PROP_INSTANT):
@@ -483,6 +491,8 @@ class Conn:
                 h, how = max(0.0, min(1.0, val)), "anchored (55)"
             elif kind == "regen":
                 rate = val
+            elif kind == "max32":
+                h, how, rate = 1.0, "anchored (32)", 0.0
             elif kind == "delta" and h is not None:
                 h = max(0.0, min(1.0, h + val))
             elif kind == "dead" and use_dead:

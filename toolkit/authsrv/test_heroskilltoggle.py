@@ -74,7 +74,7 @@ import checks                                                # noqa: E402
 import charstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("hero skill toggle (DESKWORK-D1 step 6)", floor=71)   # 2026-09-23, from the green run (53 -> 71 at the fix pass)
+led = checks.Ledger("hero skill toggle (DESKWORK-D1 step 6)", floor=74)   # 2026-10-08 RIDERS: 74 = 71 + the hero swap's and set's retail echo + the --no-bar-edit-echo arm, from the green run (79 with the vault: +5 in §5r, the 20261008T132845 tape, a declared skip without it); 2026-09-23, from the green run (53 -> 71 at the fix pass)
 
 SRC_PATH = os.path.join(HERE, "authsrv.py")
 ARGS_PATH = os.path.join(HERE, "serverargs.py")
@@ -235,10 +235,16 @@ try:
     led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x9C and 348 in body["skill_disabled_ids"]
            and 322 not in body["skill_disabled_ids"],
            "before the swap: 348 (slot 2) suppressed, 322 (slot 0) not; mask 0x9C")
+    sent6.clear()
     authsrv.handle_skillbar_skill_swap([0x5E, 200, 322, 0, 348, 0], send6, st6, 0, Rec())
     led.ok(authsrv.hero_panel_bar_ids(st6, 6) == [348, 0, 322, 1, 385, 0, 0, 2]
            and store.hero_skillbar(UUID, 6) == [348, 0, 322, 1, 385, 0, 0, 2],
            "0x005E [200, 322, 0, 348, 0] swapped slots 0 and 2 on the panel bar and in the store")
+    UPD = authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL
+    led.ok(sent6 == [(UPD, [200, 0, 348, 0]), (UPD, [200, 2, 322, 0]), (MASK_MSG, [200, 0x99])],
+           "RIDERS: the hero's swap is answered as retail's (2 of 2, 20261008T132845) -- 0x00D9 "
+           "for the SOURCE slot (322's old slot 0, now 348), 0x00D9 for the target slot, then the "
+           "whole mask 0x0065 AFTER the exchange (0x99)", f"{sent6}")
     led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x99,
            "...and the server's mask EXCHANGED bits 0 and 2 the way the client's routine does: "
            "0x9C -> 0x99", f"mask {authsrv.hero_disabled_mask(st6, 6):#x}")
@@ -254,7 +260,20 @@ try:
     # a 0x005C SET into a suppressed slot clears its bit (0x008212C0, ChCliSkill:258: btr)
     lib6 = sorted(authsrv.hero_usable_library(st6, 6, authsrv.hero_bar_ids(6)))
     new6 = next(s for s in lib6 if s not in [348, 0, 322, 1, 385, 0, 0, 2])
+    sent6.clear()
     authsrv.handle_skillbar_skill_set([0x5C, 200, 0, new6, 0], send6, st6, 0, Rec())
+    led.ok(sent6 == [(UPD, [200, 0, new6, 0]), (MASK_MSG, [200, 0x98])],
+           "RIDERS: the hero's set is answered as retail's (17 of 17) -- the slot's 0x00D9, then "
+           "the whole mask 0x0065 with the set slot's bit already cleared (0x98)", f"{sent6}")
+    sent6.clear()
+    authsrv.BAR_EDIT_RETAIL_ECHO = False
+    try:
+        authsrv.handle_skillbar_skill_set([0x5C, 200, 0, new6, 0], send6, st6, 0, Rec())
+    finally:
+        authsrv.BAR_EDIT_RETAIL_ECHO = True
+    led.ok(sent6 == [(UPD, [200, 0, new6, 0])],
+           "--no-bar-edit-echo: the same set sends its 0x00D9 alone, every run before 2026-10-08",
+           f"{sent6}")
     led.ok(authsrv.hero_panel_bar_ids(st6, 6)[0] == new6
            and authsrv.hero_disabled_mask(st6, 6) == 0x98
            and body["skill_disabled_ids"] == frozenset({1, 385, 2}),
@@ -416,6 +435,75 @@ try:
            "connection, holes kept; the session that edited it reads the same bar)", f"{cur6}")
     led.ok(authsrv.hero_panel_bar_ids(st7, 6, [1, 2, 3]) == [1, 2, 3, 0, 0, 0, 0, 0],
            "...and a short bar handed in is padded to eight")
+
+    # -- §5r RIDERS: the echo rule against retail's own replies ----------------------
+    # 20261008T132845 :65410 (Kamadan, build 38974): the owner edited the hero Koss's bar
+    # (agent 253) 17 times by 0x005C and swapped two slots twice by 0x005E. Walk the bar
+    # from the hero's load 0x00DA, and the mask from the load's 0x0065 -- 8 on this tape,
+    # slot 3 suppressed on the account, the first NON-zero hero mask on any tape --
+    # through every edit, and require each reply (the own agent's 0x00D9 / 0x0065 within
+    # 0.2 s) to be what the server's rules predict from the bar and mask at that moment:
+    # a set's 0x00D9, then the mask with the set slot's bit CLEARED (the client's
+    # 0x008212C0 `btr`, which hero_mask_write follows -- retail held 8 through sets into
+    # slots 0-2 and dropped to 0 on the set into slot 3); a swap's SOURCE slot first,
+    # then the target slot, then the mask with the two bits EXCHANGED. Vault-gated
+    # (5 checks, outside the floor).
+    import livewire                                          # noqa: E402
+    import herolib                                           # noqa: E402
+    rcap = os.path.join(livewire.captures_root(), "20261008T132845")
+    rconn = "game-10.0.0.210_65410-to-52.3.40.244_80.jsonl"
+    if os.path.exists(os.path.join(rcap, rconn)):
+        _c, rr, rok = livewire.decode_conn(rcap, rconn)
+        K = 253
+        bar = next((list(v[2])[:8] for _t, d, op, v in rr if d == "s2c" and op == 0x00DA and v[1] == K),
+                   None)
+        mask = next((v[2] for _t, d, op, v in rr if d == "s2c" and op == 0x0065 and v[1] == K), None)
+        load_mask = mask
+        n_set = n_swap = 0
+        misses, masks = [], []
+        for i, (t, d, op, v) in enumerate(rr):
+            if d != "c2s" or op not in (0x005C, 0x005E) or v[1] != K or bar is None or mask is None:
+                continue
+            got = [(o, list(w[1:])) for t2, d2, o, w in rr[i + 1:]
+                   if t2 <= t + 0.2 and d2 == "s2c" and o in (0x00D9, 0x0065) and w[1] == K]
+            if op == 0x005C:
+                slot, skill = v[2], v[3]
+                bar[slot] = skill
+                mask &= ~(1 << slot)
+                want = [(0x00D9, [K, slot, skill, 0]), (0x0065, [K, mask])]
+                n_set += 1
+            else:
+                src, tgt = v[2], v[4]
+                s_slot, t_slot = bar.index(src), bar.index(tgt)
+                bar = herolib.apply_bar_swap(bar, src, tgt)
+                if ((mask >> s_slot) & 1) != ((mask >> t_slot) & 1):
+                    mask ^= (1 << s_slot) | (1 << t_slot)
+                want = [(0x00D9, [K, s_slot, tgt, 0]), (0x00D9, [K, t_slot, src, 0]), (0x0065, [K, mask])]
+                n_swap += 1
+            masks.append(mask)
+            if got != want:
+                misses.append((round(t, 3), op, got, want))
+        led.ok(bar is not None and n_set == 17 and n_swap == 2 and load_mask == 8,
+               "(§5r) the tape holds Koss's load bar (0x00DA) and load mask 8, then 17 sets and 2 swaps "
+               "on agent 253", f"sets {n_set} swaps {n_swap} load mask {load_mask}")
+        led.ok(not misses,
+               "(§5r) every one of the 19 retail replies is exactly the server's prediction from the bar "
+               "and mask at that moment -- a set: its 0x00D9 then the mask with that slot's bit cleared; "
+               "a swap: SOURCE slot, target slot, the mask with the bits exchanged", f"{misses[:2]}")
+        led.ok(masks[:4] == [8, 8, 8, 0],
+               "(§5r) the mask's own witness: 8 through the sets into slots 0, 1 and 2, and 0 after the "
+               "set into slot 3 -- retail clears the SET slot's bit, as the client's 0x008212C0 does and "
+               "hero_mask_write follows (EVID-D1C-1, until now read only from the binary)", f"{masks[:4]}")
+        # KNOWN-BAD: the target slot first would have predicted the first swap's pair reversed.
+        first_swap = next(((t, v) for t, d, op, v in rr if d == "c2s" and op == 0x005E and v[1] == K), None)
+        led.ok(first_swap is not None and first_swap[1][2:] == [281, 0, 288, 0],
+               "(§5r) the first swap is [253, 281, 0, 288, 0] -- picked up 281 from slot 0, dropped on 288 "
+               "in slot 1 -- and its reply leads with slot 0, so a target-first rule fails here",
+               f"{first_swap}")
+        led.ok(authsrv.BAR_EDIT_RETAIL_ECHO is True,
+               "(§5r) the module default follows the tape: BAR_EDIT_RETAIL_ECHO is ON")
+    else:
+        led.skip("§5r RIDERS tape", "20261008T132845 :65410 not in the vault")
 
     # -- §6 source locks ---------------------------------------------------------------
     with open(SRC_PATH, encoding="utf-8") as f:

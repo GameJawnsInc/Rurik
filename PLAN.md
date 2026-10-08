@@ -1989,14 +1989,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   **CONFIRMED on the client 2026-09-23 to 09-25**, every step above but travel: kick, add,
   suppress, move, equip, swap, the doll's order, the display mode and the drag, the henchman
   add and kick, the town weapon and field shield carriers, the town armour
-  (studies/deskwork/CONFIRM-2026-09-23.md; CONFIRM-2026-09-24.md §2-§10; PLAN-LOG). **Open**: **the refusal at the cap** (PLAN-LOG
-  "DESKWORK-D1, the refusal at the cap", 2026-09-25): retail's reply is NOT FOUND on 96 live
-  connections, the client's party error table (81 rows at `0x00B97968`, carriers `0x01B8` /
-  `0x01BC` / `0x01D6` / `0x01E3`) has no "party is full" row, and the sentence a player expects
-  (#57757) is CLIENT const text — so retail's client may refuse locally, and why ours does not is
-  UNVERIFIED; `--party-full-reply CODE` (one `0x01BC [CODE]`) ships OPT-IN, default silent; owed:
-  the owner's loopback runsheet (studies/cmsg "The refusal at the cap") and, in any live session,
-  ONE Add click at a full party; travel's confirmation BLOCKED on content (no fog-initialised view
+  (studies/deskwork/CONFIRM-2026-09-23.md; CONFIRM-2026-09-24.md §2-§10; PLAN-LOG). **Open**: **the refusal at the cap**
+  for a HERO add only — the henchman add's is retail's since 2026-10-08 (RIDERS-R3: the client
+  sends the add at the cap and retail answers ONE `0x01BC [64]`, now the default; PLAN-LOG
+  "RIDERS"), the hero add's is on no tape and stays silent; travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
@@ -2086,7 +2082,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   item**; and **the owed runs**, their steps in the plan: RUN-WEAPONS-1B (five bows, staff,
   wand — 1200 / 1600 / 2800 u/s predicted; the dodge's two numbers on the Orb block; the
   staff's `570` halving; Strength's 1 % a rank; retail's reply to a same-set and to an
-  empty-set press, and whether a switch that moves maximum energy re-sends 41 / 43),
+  empty-set press (none left retail's client on 2026-10-08, RIDERS-R5), and whether a switch that moves maximum energy re-sends 41 / 43),
   RUN-WEAPONS-2 (every range is WIKI or reconstructed and 1A's spear PARKED at 0.75 × the
   wiki's number, §25.4 — the run must separate park from range) and RUN-WEAPONS-3 (the unmet
   divisor against the strike-level drop, Q10).
@@ -2124,9 +2120,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Heroes** — [studies/heroes/RUN-HEROLIB.md](studies/heroes/RUN-HEROLIB.md)
 
-* **Retail's reply to `0x005E`** (a live-account swap at human cadence) is unobserved
-  (§12.6). The settings blob's five `5a`–`5e` groups read like an appearance record, and
-  that is a guess.
+* **RIDERS-R7**: retail's HERO_ADD batch, first seen 2026-10-08, against ours field by field
+  ([studies/livekey/RIDERS.md](studies/livekey/RIDERS.md) §2). The settings blob's five
+  `5a`–`5e` groups read like an appearance record, and that is a guess.
 
 **Quests and the schema** — [studies/quests/FINDINGS.md](studies/quests/FINDINGS.md),
 [studies/divergence/FINDINGS.md](studies/divergence/FINDINGS.md)
@@ -2245,7 +2241,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   UNVERIFIED ([studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md)).
 * **CASTAI's live runs** (monsterai §18): Z1 SCORED 2026-09-28 (P4-P6 held, P7 failed,
   P1-P3 need a second Degeneration session); Z2 SCORED 2026-09-29 (P5 failed 1 of 43, the
-  rest held); H1 and a full Z3 unrun. Plans: `vault/plans/castai_*.txt`.
+  rest held); H1 SCORED 2026-10-08 (P1 null below its floor, P2 failed, P3-P4 held, §18.6);
+  a full Z3 unrun. Plans: `vault/plans/castai_*.txt`.
+* **RIDERS's residue** ([studies/livekey/RIDERS.md](studies/livekey/RIDERS.md) §5): `0x005F`
+  from a bar drag, the hero add at the cap, the Leave with henchmen, the switched set's item
+  (no 41 / 43), the owner's word on the same-set / empty-set presses, a hero's `0x0041` / `0x000F`.
 * **296 map rows are limited by information, not effort**: one live capture on a
   known-named zone yields one exact `(map id, file id)` pair
   ([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md)).
