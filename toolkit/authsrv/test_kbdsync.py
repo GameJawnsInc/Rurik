@@ -42,17 +42,19 @@ import time                 # noqa: E402
 import authsrv              # noqa: E402
 import checks               # noqa: E402
 # The arm extractor is test_position_trust's and is IMPORTED rather than
-# copied: it re-reads authsrv.py (a parse cached per process on the file's mtime
-# and size) and executes the server's own bytes, and two copies of a subtle
-# extractor drifting apart is exactly the failure this repo keeps recording.
+# copied: it re-reads authsrv.py (the parse and each arm's code object cached
+# per process on the file's mtime and size) and executes the server's own bytes,
+# and two copies of a subtle extractor drifting apart is exactly the failure this
+# repo keeps recording.
 # Importing is safe -- that file guards its main() behind __name__.
 from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # So is the frozen clock. The server judges its windows on its OWN `time.time()` -- a
 # windup `now < lands_at`, a follow's eta, a kill point 288 u/s x an age -- so a check
 # that stamps one off the wall clock and then runs server code races that code, and
-# drive_heading alone compiles the 0x003D arm on every call (0.26-0.37 s idle,
-# 2026-10-07). Section 30 went red under load that way (2026-10-08); `frozen` pins the
-# instant the check meant. It was section 35's Clock35 here, a third copy.
+# drive_heading alone re-extracted the 0x003D arm on every call (0.26-0.37 s idle,
+# 2026-10-07; cached since 2026-10-08, ~0.1 ms now). Section 30 went red under load
+# that way (2026-10-08); `frozen` pins the instant the check meant, which a fast call
+# does not make unnecessary. It was section 35's Clock35 here, a third copy.
 from test_position_trust import frozen                        # noqa: E402
 
 # Parse once HERE, before any check stamps an absolute time into a state: the
@@ -95,7 +97,7 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
     `at` pins the server's clock for the arm (`frozen`): the report arrives AT
     that instant however long this call takes. Pass it whenever the caller stamped
     a window the arm will judge -- a windup's `lands_at`, an eta -- or the window
-    includes this call's own compile. None (the default) is the wall clock."""
+    includes this call's own run. None (the default) is the wall clock."""
     st = state if state is not None else {
         "pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
     w, r = Sent(st), FakeRec()
@@ -2684,10 +2686,11 @@ def main():
     # THE WINDUP IS STAMPED AFTER THE PRESS AND THE REPORT ARRIVES AT ITS STAMP (`frozen`).
     # Every helper below used to read `t` BEFORE press29 and arm `lands_at = t + 0.5`, and the
     # server reads its own clock for `now < lands_at` -- so the press and drive_heading's
-    # per-call compile of the arm (~0.27 s idle) were inside the windup, and under load the
-    # swing had "landed" before the report arrived: 30b, 30c and 30k red (2026-10-08). Now
-    # the report arrives 0 s into a 0.5 s windup whatever the machine is doing; the checks
-    # are unchanged, and a past `lands_at` still reddens all three.
+    # per-call re-extraction of the arm (~0.27 s idle; cached since 2026-10-08, ~0.1 ms) were
+    # inside the windup, and under load the swing had "landed" before the report arrived:
+    # 30b, 30c and 30k red (2026-10-08). Now the report arrives 0 s into a 0.5 s windup
+    # whatever the machine is doing; the checks are unchanged, and a past `lands_at` still
+    # reddens all three.
     def parked30(on=True, swing=False, walk=True):
         """Press-stop a walking body (as section 29), then send its next key report."""
         t = _t27.time()
@@ -2988,7 +2991,7 @@ def main():
         authsrv.PLACEMENT_PARKS = parks
         try:
             # at=t: 30p/30r's in-flight guard is `time.time() < eta` with eta = +1.0 s, and the
-            # drive's own compile sat inside it (parked30's note).
+            # drive's own run sat inside it (parked30's note).
             st2, w2 = drive_heading([1, [float(pin[0]), float(pin[1])], 0, [0.0, -766.0], 1],
                                     state=st, at=t)
         finally:
