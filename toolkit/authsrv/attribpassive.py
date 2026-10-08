@@ -162,9 +162,11 @@ def expertise_cost(base, rank):
 #     0 (uninformative) and once from a caster whose rank no tape shows -- the
 #     byte-0 SPELL exclusion is RECONSTRUCTION, n = 1. A signet is not a spell
 #     (the description's word); no Monk signet completion is on tape.
-#   * HEALING TOUCH (313) DOUBLES the bonus: OBSERVED on one caster over maxima
-#     the wire sends -- 84 = 2 x 42 over 555, and 67 = round(0.8 x 84) over 455.
-#     WHICH operation comes first is RECONSTRUCTION: 2 x round(3.2 r) is chosen
+#   * HEALING TOUCH (313) DOUBLES the bonus: OBSERVED on one caster over a
+#     maximum the wire has already sent -- 84 = 2 x 42 over its 555, twice. Its
+#     67 = round(0.8 x 84) under the cut reads whole only over the 455 the wire
+#     sends 1.2 s AFTER that word: a reading, not a second witness. WHICH
+#     operation comes first is RECONSTRUCTION: 2 x round(3.2 r) is chosen
 #     to match the single-bonus rule; round(6.4 r) makes neither 84 nor 116, but
 #     ceil(6.4 r) makes both and is the live rival -- it parts from the shipped
 #     reading at ranks 1, 2, 6, 7, 11, 12, 16 and 17 (ceil 7 against 6 at

@@ -124,10 +124,12 @@ CAPTURE, CONN, RANGER = "20260914T005758", "56011", 29
 # the whole live corpus, gapped :65009 set aside): the ONLY paid spends by an agent
 # at a nonzero Expertise rank in 288 joined -- the Ranger (agent 29, 0x003A
 # [23, 25 | 1, 2 | 1, 2]) on :56011. (t, skill, table cost, its 41 maximum, the
-# property-62 word's f32 bits.) t is tape.decode_all's connection-relative clock,
-# the decoder section 10 reads; livewire.decode_conn puts the same six 86.47 s
-# later (510.09 ... 615.03). The 11 spends of 322 and 17 of 346 on the same
-# connection are the HERO's, Koss at Expertise 0, and witness nothing here.
+# property-62 word's f32 bits.) t is the CONNECTION clock (tape.load_tape's: 0 =
+# its first s2c segment), which section 10 decodes; the capture clock that
+# livewire.decode_conn and deepwoundjoin.sequence read puts the same six 86.47 s
+# later (510.09 ... 615.03), and sections 15-16 read that one. The 11 spends of
+# 322 and 17 of 346 on the same connection are the HERO's, Koss at Expertise 0,
+# and witness nothing here.
 TAPE = (
     (423.622, 433, 5, 22, 0xBE68BA2F),
     (428.099, 394, 10, 22, 0xBEE8BA2F),
@@ -1031,7 +1033,10 @@ def section_df_tape():
 
         def pts(f, want):
             # over a maximum THIS connection sends (its own 0x009F [42] words: the
-            # henchmen's 555, Deep Wound's 455, the observer's 480)
+            # henchmen's 555, the 455 under the cut -- Deep Wound's by
+            # RECONSTRUCTION, studies/skills 66.4 -- the observer's 480). Any
+            # maximum the connection sends, at any time: Healing Touch's 67 at
+            # 687.55 reads whole over a 455 sent 1.18 s after it (a reading).
             return any(abs(f * m - want) < 1e-3 for m in conn_max)
         for caster, skill, mine, maxima in _completions(cap, ch["connection"]):
             conn_max = {m for ms in maxima.values() for m in ms if m >= 100}

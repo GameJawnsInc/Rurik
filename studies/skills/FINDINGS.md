@@ -9971,7 +9971,7 @@ spender's Expertise rank read from that connection's own `0x003A` / `0x003B`, ga
 six are by an agent at a nonzero Expertise rank** — the Ranger (agent 29, `0x003A
 [23, 25 | 1, 2 | 1, 2]`: Expertise 1, Marksmanship 2) on `20260914T005758` :56011.
 
-| t (s; `tape.decode_all`'s clock — `livewire` reads +86.47) | skill | type | table cost | max | paid | round | floor | ceil |
+| t (s; the CONNECTION clock, `tape.load_tape`'s: 0 = its first server segment; the capture clock of `livewire` / `deepwoundjoin.sequence` reads +86.47) | skill | type | table cost | max | paid | round | floor | ceil |
 |---|---|---|---|---|---|---|---|---|
 | 423.62 | 433 | 19 | 5 | 22 | 5 | 5 | **4** | 5 |
 | 428.10 | 394 | 14 | 10 | 22 | 10 | 10 | **9** | 10 |
@@ -9989,8 +9989,9 @@ disk that shows a discount at all**; the five 10s and 5s are what refute floor. 
 reachable: cost × (25 − rank) / 25 has an integer numerator, so the half never occurs.
 
 **The triage that seeded this lane was wrong in its count, and the correction matters.**
-It reported "18 scoped spends" and named 346 as the out-of-scope control. The 11 spends
-of 322 and the 17 of 346 on the same connection are agent 30 — Koss, the HERO, at
+It reported "18 scoped spends" (the Ranger's six and the 322s below — six and eleven make
+17, so its count does not add up either) and named 346 as the out-of-scope control. The
+11 spends of 322 and the 17 of 346 on the same connection are agent 30 — Koss, the HERO, at
 Expertise 0 (`0x003A [20, 21 | 2, 1 | 2, 1]`). They witness rank 0 paying the table cost
 (the whole corpus's rank-0 in-scope spends: 95 of 95 at the table cost) and nothing
 about the discount, and a spend at rank 0 cannot control for scope. **The scope boundary
@@ -10064,7 +10065,9 @@ Energy Storage's wire, when it ships, is a `0x009F 41` resend on a rank change
 
 The join: every `[58]` completion whose caster's last `[60]` BEFORE it in wire order named
 a Monk skill, and the property-55 words that caster put in that batch (`healjoin.batches`,
-the 50 ms shoulder), over the whole live corpus (665 Monk-skill completions). The order
+the 50 ms shoulder), over the whole live corpus (665 Monk-skill completions). Every time in
+§66.4 is on the CAPTURE clock (`wire.jsonl`'s, which `livewire` and
+`deepwoundjoin.sequence` read), not §66.1's connection clock. The order
 matters: a `[58]` can share its instant with the caster's NEXT `[60]`, and a join that reads
 the batch's `[60]`s first credits the completion to the cast just begun — the first pass did,
 counted 671, and read four Resurrection Signet completions as empty Monk-spell batches
@@ -10121,10 +10124,12 @@ animref §18 left unattributed (0.0757 = 42 / 555) is the same word.
   both constants off the tape and check the rounding against them. A town caster's 58 (r = 18
   under round; Healing Touch's 116 halved, below) fits too but decides nothing: its maximum
   is a reading.
-- **Healing Touch (313) doubles it.** OBSERVED over maxima the wire sends on one caster:
-  agent 7 on :54071, 84 = 2 × 42 over its 555 and 67 = round(0.8 × 84) over its 455 (the
-  cut, below). The other witnesses are readings: agent 12's own maximum never reaches the
-  wire, and a non-party caster that heals itself in town on ten tapes (agents 100 / 102 /
+- **Healing Touch (313) doubles it.** OBSERVED on one caster over a maximum the wire has
+  already sent: agent 7 on :54071, 84 = 2 × 42 over its running 555 (t = 644.55 and
+  756.05). Its 67 = round(0.8 × 84) under the cut (below; t = 687.55) is a reading: it
+  reads whole only over the 455 the wire sends 1.18 s AFTER that word (688.72), while the
+  running maximum is still 555 (81.73 there). The other witnesses are readings too:
+  agent 12's own maximum never reaches the wire, and a non-party caster that heals itself in town on ten tapes (agents 100 / 102 /
   122 / 123) sends 116 beside its own 63 or 84 only under the maxima 480 / 408 / 210 / 192
   — RECONSTRUCTION, each the smallest whole reading of the word pair, its own maximum
   never on any tape; agent 122's pair on three September tapes is equally whole at 120 /
@@ -10166,7 +10171,8 @@ the same connection (an Elementalist) runs × 0.67 on 30 words — not Fast Cast
   can witness the boundary until a character at Expertise > 0 pays for an out-of-scope
   skill. A Ranger at Expertise ≥ 2 on tape would also be the first witness of the slope
   past rank 1.
-- **Deep Wound's healing cut rounds on retail and truncates here** (§66.4): `heal_agent`
+- **Deep Wound's healing cut rounds on retail and truncates here** (§66.4; retail's 0.8 is
+  OBSERVED, Deep Wound as its cause RECONSTRUCTION): `heal_agent`
   sends 152 / 33 where retail sent 153 / 34. Four words fit round(0.8 x); the change is a
   `heal_agent` edit with its own revert arm and a re-pin of whatever test holds the cut.
 - **The five primaries with no witness** (§66.2): Energy Storage (the cheapest — an

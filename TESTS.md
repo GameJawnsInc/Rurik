@@ -3680,8 +3680,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   (anchored on the statement: `land_skill`'s attack arm calls `resolve_heal` first). §15
   (captures + content DIRs) `20260817T231139` :54071: the two Monk casters' (agent 12 the
   party's Monk henchman, agent 7 unnamed) 52 ally casts all carry the word at rank 13 (2
-  under the cut), their 2 resurrections none, and the word is LAST on all 43 casts with a
-  heal of their own; a [58] closes the caster's [60] BEFORE it in wire order. §16 (captures
+  under the cut, read over any maximum the connection sends -- Healing Touch's 67 over a
+  455 that arrives 1.18 s after it), their 2 resurrections none, and the word is LAST on
+  all 43 casts with a heal of their own; a [58] closes the caster's [60] BEFORE it in wire order. §16 (captures
   + content DIRs) `20260929T100038`: the four Smiting Monks' 259 ally casts, every one of
   the 212 whose words read whole over their recipients' on-wire maxima carries 3, the value
   they share most; their 14 foe hexes and 11 Resurrection Signets carry nothing; and THE

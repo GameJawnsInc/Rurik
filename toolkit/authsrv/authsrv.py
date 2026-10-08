@@ -24803,11 +24803,11 @@ def body_skill_cost(state, agent_id, skill_id):
 # rank) -- its OWN property-55 word from the caster, in the completion batch,
 # after the spell's own heal (OBSERVED 147 of 147) and after its effect's
 # 0x0042 (n = 2); alone for a spell with no heal of its own (Healing Breeze,
-# Reversal of Fortune). The slope is the client's description 2105; the
-# rounding is the only one whose image holds retail's 3, 42 and 58. It is a
-# HEAL, so heal_agent's Deep Wound cut applies (retail's 34 at max 455 is 42
-# under that cut). One call per cast completion: the player's (cast_tick) and
-# every body's spell (land_skill), each right after resolve_heal.
+# Reversal of Fortune). The slope is the client's description 2105; the rounding
+# is the only one whose image holds retail's 3 and 42 (a town 58 is a reading).
+# It is a HEAL, so heal_agent's Deep Wound cut applies (retail's 34 at max 455 is
+# 42 x 0.8, Deep Wound's cut by RECONSTRUCTION, 66.4). One call per completion,
+# the player's (cast_tick) and every body's (land_skill), right after resolve_heal.
 DIVINE_FAVOR = True              # False (--no-divine-favor): a Monk spell heals its own number only.
 
 
