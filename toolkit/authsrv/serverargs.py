@@ -3400,8 +3400,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "nothing at the cast either way (skill_condition is "
                          "None for it).")
     ap.add_argument("--no-label-knockdowns", action="store_true",
-                    help="ignore `knocks_down` on LABEL-tier rows (187, 231, "
-                         "294, 784, 1086 -- the gate turns an unconditional "
+                    help="ignore `knocks_down` on EVERY LABEL-tier row that "
+                         "carries it (187, 231, 294, 784, 1086, and SKILLS-LW's "
+                         "355 behind its landed hit: 6 on the 38974 overlay -- "
+                         "the gate turns an unconditional or bare-landing "
                          "'knocked down' clause on the foe(s) the row lands on "
                          "into the hand rows' own field): nobody falls to a "
                          "label row, as until 2026-09-25; the hand rows' "

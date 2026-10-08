@@ -28,6 +28,57 @@ move back.
 
 ---
 
+### SKILLS-LW (DESKWORK-D4 residue pass 3) -- 2026-10-07 -- **The 210 conditional SERVED rows are families, read sentence by sentence, and 60 of them now act as label rows: 43 attack skills (Warrior 19; Ranger 8, with the bow set 391 393 400 402 404 409; Assassin 7; Paragon 7; Dervish 2), 11 spells, 4 stances, an enchantment and a signet. A landed hit is read as non-conditional on an ATTACK skill only, because that path already lands an attack skill's bonus, condition and knock-down on a landed strike alone (RANGERPRE-S22). Every new row is marked HIT_GATED or CONDITIONAL_DROPPED, and no server line moved. The owner's plain set is untouched: `plain_served` and COMPOUND_FLAGS are as they were, and every plain row is byte-identical in the new emit. The triage's 68 also carried eight over-applications: two of the four new rules refuse six of them by name, the per-sentence reading leaves 884 out of the set, and a widened older flag refuses 1814 (§67.2). A review-and-fix pass the same day corrected nine claims of the first record and one help text, closed three test gaps, and taught CLAUSE_REMOVAL one qualifier word; a second review found six residuals in the records, the drafts and the runsheet, all fixed, none in code the emit reads. The overlay is staged and goes in at the merge.**
+
+- **The reading** (`skilldesc.conditional_reading`, our own patterns; studies/skills §67.1). Each number-bearing sentence is NONE, HIT (only bare "if / when it lands" clauses) or OTHER.
+  - 38797: HIT_ONLY 67 (48 not hand), NUMBER_UNGATED 45 (41), GATED 98 (89).
+  - 38974 and 38888: 65 / 46 / 98 of 209 (338 SERVED = 129 + 209).
+  - `hit_gated_served` (112; 111 on 38974) is a PARALLEL set, and the label tier takes plain + it.
+- **The gate** (§67.2). Four new reasons run after every older rule:
+  - TARGET_REQUIREMENT: 778 1636 ("must strike a <state> foe", judged by no server path).
+  - HIT_NOT_EVALUATED: 171 237 824 1374, spells (4 on 38797; 3 on 38974, where 1374 is not served).
+  - LIMITING_CLAUSE: 866.
+  - ENDS_EARLY: 995 1037 1514 1728.
+- **The knock-down sentence guard** (`KD_SENTENCE_GUARD`). A fall behind a predicate, or on a state of the foe, keeps CLAUSE_KNOCKDOWN: 296 777 2135. 163, 844 and 358 are also timed records. 355 ships `knocks_down` behind its landing, and `--no-label-knockdowns` drops it with the five older ones (its `serverargs` help names all six; `authsrv`'s startup banner still names five, owed to the next lane that edits `authsrv.py`).
+- **Three flag widenings:** UNMODELLED_CLASS learns "demonic" (1814), CLAUSE_RANGE learns "melee range" (2210), and (the fix pass) CLAUSE_REMOVAL reads one qualifier word before its noun -- 15 corpus rows gain exactly that flag on 38797 and 38974 alike, no tier moves, no plain row; on the 60 it marks 1753 and 2146 (the caster's own enchantment lost or removed).
+- **Funnel:** 112 -> 71 after the older rules -> 60. The same 60 ids ship on all three builds.
+- **The tier:** 116 rows on 38797 (56 + 60), 115 on 38974 and 38888 (55 + 60).
+  - Marks: HIT_GATED 42 (41 on 38974), CONDITIONAL_DROPPED 35 (36 on 38974). 19 rows would carry no mark without them (17 since the CLAUSE_REMOVAL widening); the triage said 17 with a different list.
+  - `content.LABEL_DETAILS_KNOWN` gains both tokens, so a tree older than this DROPS the 60 rows at load.
+  - The revert is `--no-skill-labels` (server, the whole tier). `skilldesc.py --emit-labels --no-hit-gated` is a DIAGNOSTIC emit of the plain set (its rows equal the old overlay's), not a revert: the suite pins the full set.
+- **The fix pass (two reviews, 14 findings: 14 fixed, 0 rejected).**
+  - The numbers are OBSERVED per build, not "build-stable": 38888 -> 38974 moved none of the 60's, but 38797 -> 38888 moved four served numbers (296's scale, 336's, 1466's Burning, 2202's heal) and 393's refused bonus (§67.4).
+  - CONDITIONAL_DROPPED is not "under-application by construction": 976 (an added recharge on a miss) and 1413 (adrenaline lost when the stance ends) drop a COST, so the server's skill is the stronger; shipped marked, 831 / 1118's precedent (§67.3).
+  - The unmarked residue is 888 889 1022 (the target's stance ends) and 1696 (a cost; on 38974 also an unblockable wording no flag reads); 1547 is marked but misnamed (CLAUSE_MOVE_SPEED for a projectile's speed); 1753 2146 are now marked (§67.3).
+  - A BODY's chain-gated attacks land with no lead: 776 777 976 986 1022 2135 join the hand rows 775 780 781 (`_na_body_req` is 0 for an attack skill); accepted as the hand rows' existing behaviour, a body-side guard owed with "a BODY's own chain" (§67.4).
+  - The runsheet: 391's log line reads "(HIT_GATED)"; 777 lands two strikes; under --no-skill-labels only 777's bonus leaves the daggers arm (782 and 780 are hand rows) (§67.5).
+  - Tests: the knock-down guard's non-attack clause gets an invented witness and a forced checker arm; `--no-hit-gated` is driven through `main()` with a known-bad arm; the strip arm names a missing witness instead of a KeyError.
+- **The round-2 pass (a second review, 6 findings: 6 fixed, 0 rejected; no line the emit reads moved, so the staged overlay stands).**
+  - This entry's heading and the §8 line were wrong in two places: the tier is not "all marked" (11 PLAIN rows carry no mark on both builds, 117 191 220 286 293 959 1043 1120 1404 1686 1762, SKILLS-LV's eleven; the 60 are all marked), and the eight over-applications are not "four new rules" (HIT_NOT_EVALUATED 171 237 824 1374 and TARGET_REQUIREMENT 778 1636; 884 is a GATED row; 1814 falls to the widened UNMODELLED_CLASS). Both re-derived on 38797 and 38974.
+  - The runsheet could not have produced its predictions: a sandbox run passes `--persist`, and the owner's store holds a Warrior bar, secondary 1 and ranks that win over the spec. The four specs now say `persist = false`, and the dry compile carries no `--persist` (§67.5).
+  - The §8 line and §67.6 had dropped §67.2's seven refusals (778 1636 866 995 1037 1514 1728) and the 60's falls left marked (296 777 2135 behind a predicate, 163 358 844 timed); both are back on the open list.
+  - The proposed rewording of deskwork step 5 kept only the §6.1 row and would have deleted the owner's go-ahead from that plan. It is withdrawn; the replacement keeps both conditions (§67.7).
+  - `test_skilldamage`'s comment cited a CLI emit for 38797's 116, which the CLI refuses against a 38974 skills table; it now says in-process (comment and TESTS.md only, no check moved).
+- **Corrections to the triage.**
+  - 68 -> 60. The eight extra: 171 237 824 1374 (a hit reading on a spell), 778 1636 (a target requirement), 884 (a predicate in its number's own sentence), 1814 (a demonic recipient).
+  - 45 attacks -> 43; 116 / 93 -> 112 / 89; 73 -> 72 through the gate.
+  - "Identical on both builds" -> 341/131/210 vs 338/129/209.
+  - 69 NO_SLOT on 38974 -> 67; INDETERMINATE 74/46/23 -> 74/44/23.
+  - 358's knock-down is the older timed-record rule, and 163's qualified fall was missed.
+- **Tests.**
+  - test_skilldesc: 105 bare (floor 91 -> 102 -> 105) / 194 with the vault and the staged emit. Every new check reddens under one mutation of what it guards (19 in the first pass; 4 more in the fix pass). The "first passing conditional row" arm is re-aimed to 334 plus the 46 gate-passing GATED rows, as a set.
+  - test_labelconsumers §9 + §5d: 74 bare (floor 69 -> 74) / 82 + 1 skip / 83 with the emit. The landed-guard mutation goes red.
+  - test_skilldamage `LABEL_ROWS_BY_BUILD` 116 / 115 / 115: 94 + 1 skip on a shadow vault carrying the emit.
+  - The fix pass re-ran the 98 tests that import or read a changed module, one at a time, with the staged overlay simulated as installed: 97 green first time; test_playerswing's 12 ms wall-clock check missed by 0.3 ms under load and was 303 green solo. The round-2 pass re-ran the same 98 the same way after its commit: 98 green first time (test_playerswing 303 included), and test_skilldamage 76 + 5 skips bare (an empty RURIK_VAULT directory and a nonexistent path alike).
+- **The merge owes:** install the staged 38974 emit as `vault/content/skill_labels.toml` (115 rows, sha256 a1c61f9ae67f5827...). Until then two checks stay red, each naming the regeneration: test_skilldesc's on-disk BYTES check and test_skilldamage §14's count.
+- **The record** (§67.7).
+  - Step 5's licence is recorded (2026-09-22, PLAN.md §1's row; skills §54.8). The owner's go-ahead for the dataset was never asked -- deskwork Q3 covered the template label tier -- and stays owed with its §6.1 row before any use.
+  - Step 5's practical blocker is the rows' shape: 40 of the 68 no-slot rows carry no number; 13 are readable from the client alone.
+  - The 141 INDETERMINATE: bonus 74, duration 44, scale 23, on 131 skills. Only 348 and 475 have a retail episode.
+  - Families 3-14 are tabled with the consumer each needs. Families 5 (named condition) and 6 (knocked down) are next.
+- **Owed:** the client run (§67.5). No retail press of any of the 60 is on tape (127 connections, the one declared set-aside audited).
+- Commits db58af79, a4895dfc, 98bd2125, 9b7530ec, 27651f5a.
+
 ### The four empty-vault test reds -- 2026-10-07 -- **`test_daggers`, `test_mechanics`, `test_skilldamage` and `test_agentlife` now pass with `RURIK_VAULT` at an empty directory and at a nonexistent path alike. On the vault they still pass, with every old check in place plus one new check each. No red was a server defect: every one was a fixture reading the vault-only `skills` or attribute tables. Each file now carries the record's rows for the sections that exercise server behaviour, REPLACED so a vault run takes the same path, and one vault-only check holds those rows to the vault's own. What IS the vault skips on its directory: a client-table number pinned, the live corpus, a pristine client image. Each floor is now per machine, decided on directories and never on what loaded (`test_codescan`'s shape), so a vault whose skills.toml fails to load still owes the whole floor. Test-only: no server change. Closes PLAN.md §8.1's "Four tests are red on an empty vault", filed in the entry below.**
 
 - **Who did what.** test_daggers here. test_mechanics, test_skilldamage and test_agentlife were each done by an Opus agent in an isolated worktree, one file apiece, then reviewed and merged into this branch. Those worktrees were created at 12251eda, 55 commits behind, and each fast-forwarded to 30e34a66 before starting. None had commits of its own.

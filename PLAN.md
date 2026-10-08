@@ -2010,24 +2010,25 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   or hero as interrupt VICTIM (RECONSTRUCTION, final-confirmation-needs-run) and the
   windup-swing drop (UNOBSERVED); 229's recharge anchor (HSR proc vs start, a capture
   campaign); NPC aftercast proper and attack-skill recharge cadence (unmeasured).
-* **DESKWORK-D4**: skill coverage in bulk. **Steps 1–4 LANDED** — 1–3 on 2026-09-22
-  (skills §54, SKILLS-DT: the slot mapping, the referee, the Q7 census; the step-3 gate
-  FAILED at 27 %), **step 4 on 2026-09-23 on the owner's option 1** (skills §55, SKILLS-LT;
-  PLAN-LOG): the 131 PLAIN SERVED rows through the step-4 gate → **47 label-tier rows** in
-  `vault/content/skill_labels.toml` (59 before the same day's review-driven fix pass,
-  §55.7), under the hand rows, 36 of them marked, `--no-skill-labels` reverting; 84
-  excluded by reason (§55.2); the three hand-row fixes done. (i) **The client confirmation
-  is DONE** (2026-09-23, studies/deskwork/CONFIRM-2026-09-23.md): 187 drew −7 on the
-  client, nothing under `--no-skill-labels`; 183's caster-centred area 30 on the near foe
-  only, nothing under `--no-caster-areas`. **Still open:** (ii) **the
-  residue per skill** — pass 1 and its fix pass landed 2026-09-23 (skills §59–§59.7,
-  SKILLS-LU; PLAN-LOG): 57 label rows (`57ae1dbe`); pass 2 landed 2026-09-25 (skills §60, SKILLS-LV; PLAN-LOG): 60 rows, the overlay installed at the merge, CONFIRMED on the client (CONFIRM-2 §11). Still out: a BODY's own chain (a body's chain-gated cast lands on NOBODY;
-  retail's bodies meet the requirement, 5 of 5 live 784s); 770's ally-centred adjacency; the ON-STRUCK riders (2136; 113) and 926 (a tooltip run); byte 1's resolution (769 917 1468) and its 3 heals; 292's
-  percent-of-loss heal; 943's conditioned heal, 1262's "creatures"; the 210 conditional
-  SERVED rows, the two knock-downs left marked (192, 3425), 840's self-Poison, 1113's four ticks, 1033 (a tooltip run), 784's Poison CONTESTED 2 of 4 (§60.8), then the 924 RECOGNISED and §54.4's two-consumer
-  proposal (still the owner's call); (iii) step 5, the 68 no-slot rows; (iv)
-  step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots wait on a
-  client tooltip run (§54.3).
+* **DESKWORK-D4**: skill coverage in bulk. Steps 1–4 and residue passes 1–3 LANDED (skills
+  §54–§55, §59, §60, §67; PLAN-LOG): **116 label rows on 38797, 115 on 38974** (plain 56 / 55 +
+  SKILLS-LW's 60 hit-gated, the 60 all marked), `--no-skill-labels` reverting; passes 1–2
+  CONFIRMED on the client (CONFIRM-2026-09-23, CONFIRM-2 §11), **pass 3's run owed** (§67.5).
+  **Still open:** (ii) per skill — a BODY's own chain (its chain-gated cast lands on NOBODY; 5
+  of 5 live 784s meet it; its chain-gated ATTACKS land unjudged, 775 780 781 and SKILLS-LW's
+  776 777 976 986 1022 2135, §67.4); 770's ally-centred adjacency; the ON-STRUCK riders (2136;
+  113), 926 (a tooltip run); byte 1 (769 917 1468) and its 3 heals; 292's percent-of-loss
+  heal; 943, 1262; the 98 GATED conditional rows by family (§67.7: 5 named-condition and 6
+  knocked-down next, on existing consumers), the HIT_NOT_EVALUATED spells (4 on 38797, 3 on
+  38974), §67.2's other refusals (778 1636 866 995 1037 1514 1728), §67.3's unmarked residue
+  (888 889 1022 1696), `authsrv`'s knock-down banner (355, §67.2); the knock-downs left
+  marked (192, 3425; the 60's 296 777 2135 behind a predicate, 163 358 844 timed); 840's
+  self-Poison, 1113's four ticks, 1033 (a tooltip run), 784's Poison CONTESTED 2 of 4 (§60.8);
+  then the 924 RECOGNISED and §54.4's two-consumer proposal (the owner's call); (iii) step 5
+  — per skill: 40 of 68 no-slot rows carry no number, 13 are client-readable (§67.7); the
+  dataset still owes the owner's go-ahead and a §6.1 row (licence recorded 2026-09-22); (iv)
+  step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots — a client
+  tooltip run or a static read of the formatter (§54.3, §67.7).
 
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)

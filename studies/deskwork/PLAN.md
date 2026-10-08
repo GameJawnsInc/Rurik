@@ -373,8 +373,10 @@ generality; skills §16, §47.
    (`authsrv` ~3262 "A LABEL DOES NOT SAY WHEN": Ignite Arrows' "Fire damage" is a
    preparation). The gate: descriptions are ArenaNet's authored text; what leaves the parse
    is a label enum, a slot index and numbers, into the vault, never git.
-5. **Residue** — the 68 rows with no slot and any referee conflict — via the dataset
-   (after its licence is settled and the owner's go-ahead) or the browser crawl
+5. **Residue** — the 68 rows with no slot and any referee conflict — per skill, not in
+   bulk (skills §67.7: 40 carry no number in the record; 13 print a flat field the client
+   holds, `literal_check`): via the dataset (licence recorded 2026-09-22, skills §54.8; it
+   still owes the owner's go-ahead and its §6.1 row before any use) or the browser crawl
    (`/api.php generator=categorymembers`, 50 pages a call, revid recorded). Final Thrust
    (client 1..40 vs wiki 5..40) is the precedent for a currency mismatch.
 6. **EFFECT_TYPES** (CMB-2). Admit 24 Item Spell, 25 Weapon Spell, 26 Form, 28 Echo and

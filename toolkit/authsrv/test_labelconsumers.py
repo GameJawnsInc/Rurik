@@ -29,7 +29,16 @@ a failed step skips a heal and an effect ON THE WIRE, and 5b reads the HAND
 rows through the same predicates (a hand row a consumer would silently
 re-route is named).
 
-NOT bare-capable in 5a, 5b, 5c and section 8's hand-row census, whose subject is the
+SKILLS-LW (2026-10-07, skills 67) adds section 9: the hit-gated label rows have no new
+consumer -- they ride the attack path every hand attack row rides -- so the section drives
+three of their shapes (391's bow Bleeding, 889's sword +damage and Weakness, 1022's dagger
++damage behind a lead) and 382's shape as a HAND row through the real press, E5 and
+arrival: the bonus and the condition on a landed strike, nothing on a block or a Blind
+miss, the condition back on the block when RANGERPRE-S22's landed guard is dropped, the
+chain still judged, and nothing at all with the tier taken out. 5d checks the loaded
+overlay's HIT_GATED rows against the attack reader.
+
+NOT bare-capable in 5a, 5b, 5c, 5d and section 8's hand-row census, whose subject is the
 vault's own table: each declares its skip (5a and 8 on an absent vault/content DIRECTORY,
 5b and 5c on an overlay with no marks); everything else needs no vault.
 """
@@ -77,7 +86,13 @@ import vaultpath  # noqa: E402
 # yes, so at 1c27ebe9 it passed bare as [] == [] and from ed781f26 (re-aimed at [167]) it
 # FAILED bare. Its subject is the vault's table, so it now skips on an absent vault/content
 # directory (`_vault_census`, with 5a beside it) and fails on a table that did not load.
-LEDGER = checks.Ledger("label consumers", floor=69)
+# SKILLS-LW (2026-10-07, skills 67): +5 -> FLOOR 74 from the bare run (RURIK_VAULT at an empty
+# directory: 74 + 5 skips) -- section 9 drives three hit-gated attack rows (391's, 889's and
+# 1022's shapes) and 382's shape as a hand row through the real land: landed, blocked, Blind-missed,
+# the landed guard dropped, the chain requirement, the tier dropped; 5d (a skip on an overlay
+# with no HIT_GATED row) checks the loaded mark against the attack reader. 82 + 1 skip with the
+# vault's 55-row overlay, 83 with the 115-row 38974 emit (RURIK_CONTENT_EXTRA).
+LEDGER = checks.Ledger("label consumers", floor=74)
 check = LEDGER.ok
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -96,6 +111,11 @@ S_CHAINDMG, S_CHAINHEAL, S_CHAINSTANCE = 900007, 900008, 900009
 # the fix pass (skills 60.8): 1041's shape, a byte-0 Stance over 156 u with a Blind slot
 S_PREP, S_ENCH, S_TOUCH, S_KDCOND, S_SIGNET, S_HANDKD, S_FLAT, S_INDET, S_STANCEAREA = (
     900010, 900011, 900012, 900013, 900014, 900015, 900016, 900017, 900018)
+# SKILLS-LW (2026-10-07, skills 67): three HIT-GATED attack rows -- 391's shape (a bow
+# attack whose Bleeding rides the hit, scale slot), 889's (a Warrior's +damage and Weakness
+# on the hit), 1022's (an Assassin's off-hand +damage that must follow a lead) -- and 382's
+# shape as a HAND row (no tier), the identical-path control
+S_RANGER, S_WARRIOR, S_ASSASSIN, S_HAND382 = 900019, 900020, 900021, 900022
 
 
 def _skill(target, tc=5, aoe=0.0, s=(30, 30), args=2, d=(0, 0), combo=0, combo_req=0):
@@ -127,6 +147,10 @@ SKILLS = {
     str(S_INDET): dict(_skill(5, s=(10, 40)), bonus_scale0=5, bonus_scale15=20),   # 1033's slot shape
     str(S_STANCEAREA): dict(_skill(0, tc=3, aoe=156.0, s=(0, 0), args=5, d=(10, 30)),
                             bonus_scale0=5, bonus_scale15=20),                      # 1041's shape
+    str(S_RANGER): _skill(5, tc=14, s=(3, 25)),                                     # 391's shape
+    str(S_WARRIOR): dict(_skill(5, tc=14, s=(25, 25), args=6), bonus_scale0=5, bonus_scale15=20),  # 889's
+    str(S_ASSASSIN): _skill(5, tc=14, s=(20, 20), combo=2, combo_req=2),            # 1022's shape
+    str(S_HAND382): dict(_skill(5, tc=14, s=(0, 0), args=4), bonus_scale0=5, bonus_scale15=25),    # 382's
 }
 EFFECTS = {
     str(S_FIRE): {"scale_means": "Fire damage", "tier": "label", "tier_detail": ["AREA_CASTER"]},
@@ -154,6 +178,12 @@ EFFECTS = {
                    "tier_detail": ["INDETERMINATE_SLOT", "CONDITION_BIT_CLEAR_REFUSED"]},
     str(S_STANCEAREA): {"bonus_scale_means": "Blind", "tier": "label",
                         "tier_detail": ["AREA_CASTER", "CLAUSE_UNBLOCKABLE"]},
+    str(S_RANGER): {"scale_means": "Bleeding", "tier": "label", "tier_detail": ["TARGET_FOE", "HIT_GATED"]},
+    str(S_WARRIOR): {"scale_means": "+ Damage", "bonus_scale_means": "Weakness", "tier": "label",
+                     "tier_detail": ["TARGET_FOE", "HIT_GATED", "CLAUSE_UNBLOCKABLE"]},
+    str(S_ASSASSIN): {"scale_means": "+ Damage", "tier": "label",
+                      "tier_detail": ["TARGET_FOE", "HIT_GATED", "CONDITIONAL_DROPPED", "CLAUSE_UNBLOCKABLE"]},
+    str(S_HAND382): {"bonus_scale_means": "Bleeding"},                              # no tier: a hand row
 }
 
 
@@ -218,6 +248,56 @@ def _press_and_land(st, send, sid, target):
     with contextlib.redirect_stdout(buf):
         authsrv.cast_tick(send, st, 1)
     return buf.getvalue()
+
+
+def _press_strike(st, sid, target):
+    """SKILLS-LW: the player's ATTACK skill through the real path -- handle_skill_press, the
+    E5 brought forward through cast_tick (the melee strike lands there), then an arrow
+    brought to its arrival through projectile_tick (a bow's strike lands there):
+    test_condhit's recipe. Returns (what was sent, the log)."""
+    sent, send = _sender()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        authsrv.handle_skill_press([0, sid, 0, target], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        for cast in st.get("pending_casts", ()):
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        for _ in range(3):
+            authsrv.cast_tick(send, st, 1)
+        for shot in st.get("player_projectiles") or ():
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+    return sent, buf.getvalue()
+
+
+def _fails(sent, target):
+    """[reason] of every attack-fail word the player drew on `target` (0 block, 3 miss)."""
+    return [v[3] for op, v in sent if op == 0x00A0 and v[0] == agents.GV_ATTACK_FAIL
+            and v[1] == target and v[2] == PLAYER]
+
+
+@contextlib.contextmanager
+def _strike_arm(blocker=None, blind_roll=False, needs_hit=True):
+    """The weapon's number fixed at 7 -- swing_damage (the ranked branch) and the raw range
+    (the branch a machine with no attribute tables takes) -- so a word is 7 + the row's bonus
+    and nothing else; a `block_chance` of 1.0 on `blocker`; a Blinded swinger missing every
+    time (the Blind itself is a real episode the caller opens); RANGERPRE-S22's
+    CONDITION_NEEDS_HIT. Everything put back as found."""
+    saved = (authsrv.swing_damage, authsrv.block_chance, authsrv.BLIND_MISS_CHANCE,
+             authsrv.CONDITION_NEEDS_HIT, authsrv.PLAYER_SWING_DAMAGE)
+    real_bc = authsrv.block_chance
+    try:
+        authsrv.swing_damage = lambda *a, **k: 7.0
+        authsrv.PLAYER_SWING_DAMAGE = (7, 7)
+        if blocker is not None:
+            authsrv.block_chance = lambda s, a: 1.0 if a == blocker else real_bc(s, a)
+        if blind_roll:
+            authsrv.BLIND_MISS_CHANCE = 1.0
+        authsrv.CONDITION_NEEDS_HIT = needs_hit
+        yield
+    finally:
+        (authsrv.swing_damage, authsrv.block_chance, authsrv.BLIND_MISS_CHANCE,
+         authsrv.CONDITION_NEEDS_HIT, authsrv.PLAYER_SWING_DAMAGE) = saved
 
 
 def main():
@@ -935,6 +1015,83 @@ def main():
                   "condition means sits on a bit-clear slot (the census of 2026-09-25)", hand_clear)
 
         # ------------------------------------------------------------------
+        print("\n9. (G) SKILLS-LW: hit-gated ATTACK rows through the land path -- a landed "
+              "strike, a block, a Blind miss")
+        BLEED = effects.CONDITION_BY_NAME["Bleeding"]
+        WEAK = effects.CONDITION_BY_NAME["Weakness"]
+        import chain as _chain
+
+        def _strike(sid, weapon, dist, lead=False, blind=False, **arm):
+            """One press of `sid` at a hostile `dist` u off with `weapon`: (health it lost,
+            the conditions on it, the attack-fail reasons drawn, the log)."""
+            authsrv.apply_party_character({"player_weapon": weapon})
+            st = {"agents": {FOE: _hostile((dist, 0.0))}, "pos": (0.0, 0.0),
+                  "player_health": 480.0, "player_dead": False, "level": 20}
+            authsrv.effect_table(st)
+            authsrv.player_pools(st)
+            if lead:
+                authsrv.player_chain(st).advance(FOE, _chain.LEAD, time.time())
+            if blind:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    authsrv.apply_condition(_sender()[1], st, PLAYER, BLIND, 60.0, 0, 1, 1)
+            with _strike_arm(blind_roll=blind, **arm):
+                sent, log = _press_strike(st, sid, FOE)
+            lost = round(9000.0 - st["agents"][FOE]["health"], 3)
+            conds = sorted(ep["skill"] for ep in authsrv.effect_table(st).on_agent(FOE))
+            return lost, conds, _fails(sent, FOE), log
+
+        ROWS = {S_RANGER: ("starter_bow", 800.0, False, 0.0, [BLEED]),        # 391's shape
+                S_WARRIOR: ("starter_sword", 50.0, False, 25.0, [WEAK]),      # 889's shape
+                S_ASSASSIN: ("starter_daggers", 50.0, True, 20.0, []),        # 1022's shape
+                S_HAND382: ("starter_sword", 50.0, False, 0.0, [BLEED])}      # 382's, a HAND row
+        landed = {s: _strike(s, w, d, lead=ld) for s, (w, d, ld, _b, _c) in ROWS.items()}
+        check(all(landed[s][0] == 7.0 + b and landed[s][1] == c and landed[s][2] == []
+                  for s, (_w, _d, _ld, b, c) in ROWS.items())
+              and all("HIT_GATED" in landed[s][3] for s in (S_RANGER, S_WARRIOR, S_ASSASSIN))
+              and "LABEL-tier" not in landed[S_HAND382][3],
+              "a LANDED strike of each hit-gated row lands its bonus and its condition: 391's shape "
+              "(a bow, the arrow's arrival) Bleeds the foe for the weapon's 7; 889's (a sword) deals "
+              "7 + 25 and Weakens; 1022's (daggers, after a lead) deals 7 + 20 -- and 382's shape "
+              "as a HAND row lands its Bleeding the same way; the label rows' log names the tier and "
+              "HIT_GATED, the hand row's does not",
+              {s: v[:3] for s, v in landed.items()})
+        blocked = {s: _strike(s, w, d, lead=ld, blocker=FOE) for s, (w, d, ld, _b, _c) in ROWS.items()}
+        missed = {s: _strike(s, w, d, lead=ld, blind=True) for s, (w, d, ld, _b, _c) in ROWS.items()}
+        check(all(blocked[s][:3] == (0.0, [], [agents.ATTACK_FAIL_BLOCK]) for s in ROWS)
+              and all(missed[s][:3] == (0.0, [], [agents.ATTACK_FAIL_MISS]) for s in ROWS),
+              "a BLOCKED and a Blind-MISSED strike of each: the fail word ([38, foe, me, 0] / "
+              "[.., 3]), no damage -- so no bonus -- and NO condition, the hand row's identical "
+              "(RANGERPRE-S22's attack_condition_lands at the melee strike and the arrow's "
+              "arrival; WIKI GWW 'Hit': a blocked or missed attack is no hit)",
+              ({s: v[:3] for s, v in blocked.items()}, {s: v[:3] for s, v in missed.items()}))
+        bad_arm = {s: _strike(s, w, d, lead=ld, blocker=FOE, needs_hit=False)
+                   for s, (w, d, ld, _b, c) in ROWS.items() if c}
+        check(all(bad_arm[s][1] == ROWS[s][4] and bad_arm[s][2] == [agents.ATTACK_FAIL_BLOCK]
+                  and bad_arm[s][0] == 0.0 for s in bad_arm) and len(bad_arm) == 3,
+              "KNOWN-BAD ARM (the landed guard dropped: CONDITION_NEEDS_HIT False, "
+              "--no-condition-needs-hit): the same BLOCKED strikes now put the condition on the foe "
+              "(391's Bleeding, 889's Weakness, 382's Bleeding) with no damage -- the null above is "
+              "the guard, not a strike that never reached the land",
+              {s: v[:3] for s, v in bad_arm.items()})
+        nolead = _strike(S_ASSASSIN, "starter_daggers", 50.0, lead=False)
+        check(nolead[:3] == (0.0, [], [agents.ATTACK_FAIL_FAIL]),
+              "the Assassin row's chain requirement is still judged for a label row (DAGGERS-B5, "
+              "the record's combo_req): with no lead on the foe the press FAILS -- [38, foe, me, 2], "
+              "no damage, no bonus", nolead[:3])
+        tier_rows = {k: tables["skill_effect"].pop(str(k)) for k in (S_RANGER, S_WARRIOR, S_ASSASSIN)}
+        try:
+            dropped = {s: _strike(s, ROWS[s][0], ROWS[s][1], lead=ROWS[s][2])
+                       for s in (S_WARRIOR, S_RANGER, S_HAND382)}
+        finally:
+            for k, r in tier_rows.items():
+                tables["skill_effect"][str(k)] = r
+        check(dropped[S_WARRIOR][:3] == (7.0, [], []) and dropped[S_RANGER][:3] == (7.0, [], [])
+              and dropped[S_HAND382][:3] == (7.0, [BLEED], []),
+              "REVERT (--no-skill-labels drops the tier -- World.drop_tier's shape, the label rows "
+              "taken out): the same landed strikes are the weapon's 7 with no bonus and no condition; "
+              "the HAND row still Bleeds", {s: v[:3] for s, v in dropped.items()})
+
+        # ------------------------------------------------------------------
         print("\n5. the flags parse and rebind; the loaded overlay's marks agree with the predicates")
         import serverargs
         ap = serverargs.build_parser(
@@ -1092,6 +1249,21 @@ def main():
                   f"condition still resolves only through the flat reader (167's Blind, 479 for "
                   f"10 s) -- the mark keeps a subject whether or not the overlay still carries 167",
                   (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off, raw_marked, shadowed_ok))
+        # SKILLS-LW's mark against the server's own reader: HIT_GATED says the numbers ride a
+        # LANDED strike, and only the attack path reads the strike's verdict (a skip on an
+        # overlay that predates SKILLS-LW)
+        hg = sorted(s for s, r in lab.items() if "HIT_GATED" in (r.get("tier_detail") or ()))
+        if not hg:
+            LEDGER.skip("5d. the loaded overlay's SKILLS-LW mark (1 check)",
+                        "no HIT_GATED row is loaded -- the vault's overlay predates SKILLS-LW; "
+                        "regenerate it or point RURIK_CONTENT_EXTRA at a fresh emit")
+        else:
+            not_attack = [s for s in hg if not authsrv._is_attack_skill(s)]
+            kd_hg = sorted(s for s in hg if authsrv.skill_knocks_down(s))
+            check(not_attack == [] and len(hg) >= 40 and kd_hg == [355],
+                  f"every loaded HIT_GATED row ({len(hg)}) is an ATTACK skill by the server's own "
+                  f"reader -- the one land that gates on the strike's verdict -- and 355 is the one "
+                  f"whose knock-down the server reads (behind its landed strike)", (not_attack, kd_hg))
     finally:
         tables["skills"] = saved_tables["skills"]
         tables["skill_effect"] = saved_tables["skill_effect"]

@@ -425,8 +425,10 @@ FLAG_PATTERNS = (
     (FLAG_TARGET_ALLY, r"\btarget (other )?ally\b"),
     (FLAG_AREA_NEAR, r"\bnear (your|this|that|the) (target|location)\b"
                      r"|\bup to (two|three|four|five|\d+) (other )?(foes|targets|allies|creatures)\b"),
+    # SKILLS-LW: "demonic" -- a recipient the server cannot tell from any other foe
+    # (1814's target; 2 corpus rows, none plain)
     (FLAG_UNMODELLED_CLASS, r"(?<!non-)\bspirits?\b|\bminions?\b|\bpets?\b|\banimal companion\b"
-                            r"|\bcorpses?\b|\bexploit\b|\bfleshy\b"),
+                            r"|\bcorpses?\b|\bexploit\b|\bfleshy\b|\bdemonic\b"),
     (FLAG_CLAUSE_KNOCKDOWN, r"\bknock(ed|s)? down\b|\bknockdown\b"),
     (FLAG_CLAUSE_SHADOW_STEP, r"\bshadow step"),
     # "is easily interrupted" is a property of the cast, not a clause the
@@ -435,12 +437,17 @@ FLAG_PATTERNS = (
     (FLAG_CLAUSE_DOUBLE_DAMAGE, r"\bdouble damage\b"),
     (FLAG_CLAUSE_DISABLE, r"\bdisabled\b"),
     # SKILLS-LU: "relieved of <condition>" is a cure too (2221, 943), and "you
-    # and all adjacent foes" (840) puts the caster in the class beside a target
-    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (condition|hex|enchantment)"
+    # and all adjacent foes" (840) puts the caster in the class beside a target.
+    # SKILLS-LW fix pass: ONE qualifier word may sit before the noun ("lose 1
+    # <profession> enchantment" -- the caster's own, a COST: 1753 2146 among the
+    # shipped rows; 15 corpus rows gain the flag, no tier moves, no plain row)
+    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (?:[a-z]+ )?(condition|hex|enchantment)"
                           r"|\brelieved of\b"),
     (FLAG_CLAUSE_ALSO_CASTER, r"\byou and (target|that|all)\b"),
     (FLAG_CLAUSE_CAST_SPEED, r"\bcasts? (spells? )?[^.]{0,24}?\b(slower|faster)\b"),
-    (FLAG_CLAUSE_RANGE, r"\bhalf (the normal |its normal )?range\b|\b(shorter|longer|reduced|increased) range\b"),
+    # SKILLS-LW: "melee range" on a ranged weapon's attack (2210; 1 corpus row, none plain)
+    (FLAG_CLAUSE_RANGE, r"\bhalf (the normal |its normal )?range\b|\b(shorter|longer|reduced|increased) range\b"
+                        r"|\bmelee range\b"),
     (FLAG_SPEED_MOVE, r"\bmoves?\b[^.]{0,40}?\b(slower|faster)\b"),
     (FLAG_CLAUSE_REVEAL, r"\bhidden objects?\b|\bare revealed\b"),
     (FLAG_CLAUSE_UNBLOCKABLE, r"\bcannot be blocked\b"),
@@ -579,6 +586,144 @@ def knockdown_kind(text):
     if _KD_QUALIFIED_RE.search(low):
         return KD_QUALIFIED
     return KD_FOE
+
+
+# --------------------------------------------------------------------------
+# SKILLS-LW (2026-10-07, skills 67): what a conditional row's NUMBERS are gated on
+# --------------------------------------------------------------------------
+#
+# `plain_served` is a ROW test -- any of COMPOUND_FLAGS anywhere holds the whole
+# row back -- and it is the owner's definition, kept as it is. Read per SENTENCE
+# instead, the 210 conditional SERVED rows are families, not one-offs: each
+# SLOT-bearing sentence (the ones that carry a number the label would serve) is
+#   GATE_NONE    no compound wording in it at all;
+#   GATE_HIT     its only compound wording is if / when clauses that each say
+#                the strike LANDS -- a subject (the attack, it, they, the skill's
+#                own name) and a verb of landing, nothing about WHOM it lands on,
+#                in what state, or how it fails;
+#   GATE_OTHER   anything else: a predicate on the target or the caster, an
+#                event ("whenever"), a count, a chance, an exception.
+# and the row's family is HIT_ONLY (every slot sentence NONE or HIT, at least
+# one HIT), NUMBER_UNGATED (every slot sentence NONE: the conditional wording is
+# all in sentences that carry no number) or GATED. A sentence with compound
+# wording and NO slot is DROPPED by a label row -- whatever it does, the row does
+# not -- and the gate reads it for the two directions a drop can over-apply: a
+# LIMITING clause (the row's own number cut under a predicate) and an EARLY END
+# (the episode stops before its duration under a predicate). Read off our own
+# patterns over the normalised text, never fitted to a record; ids, tokens and
+# counts leave the parse, no clause does (skills 67).
+GATE_NONE, GATE_HIT, GATE_OTHER = "none", "hit", "other"
+GATE_QUALIFIED = "qualified"     # a knock-down sentence naming a STATE of the foe it fells
+FAMILY_HIT_ONLY = "HIT_ONLY"
+FAMILY_NUMBER_UNGATED = "NUMBER_UNGATED"
+FAMILY_GATED = "GATED"
+_COMPOUND_RES = tuple((f, re.compile(p)) for f, p in FLAG_PATTERNS if f in COMPOUND_FLAGS)
+_COND_OPEN_RE = re.compile(r"\b(if|whenever|when)\b")
+# a clause runs to the next punctuation or the next conditional opener; it is NOT
+# cut at "and", so "it lands and <more>" reads as more than a landing (the
+# conservative side: a false OTHER holds a row back, a false HIT would ship one)
+_CLAUSE_END_RE = re.compile(r"[,.;:!?()]|\b(?:if|whenever|when)\b")
+_LAND_VERBS = frozenset({"hits", "hit", "strikes", "lands"})
+_LAND_OBJECTS = (("target", "foe"), ("your", "target"))
+# words that make a subject something other than the strike itself: the caster
+# ("you"), a failure ("fails to hit"), a state or a count
+_HIT_SUBJECT_STOP = frozenset({"you", "fails", "fail", "to", "not", "never", "is", "are", "was",
+                               "were", "be", "a", "an", "any", "more", "than", "foe", "foes",
+                               "ally", "allies", "who", "which"})
+# a dropped sentence that CUTS what the row serves, under a predicate (866's shape:
+# the skill's own damage halved when the foe carries something)
+_LIMITING_RE = re.compile(r"\b(?:half|less|fewer|reduced|only)\b|\bno (?:damage|effect)\b"
+                          r"|\bfails?\b(?! to hit)|\bnot (?:deal|heal|inflict|take)\b")
+# a dropped sentence that ENDS the effect early, under a predicate (a stance or an
+# enchantment that stops when something happens)
+_ENDS_EARLY_RE = re.compile(r"\bends (?:prematurely )?if\b")
+# a USE requirement on the target the server does not judge ("must strike a <state>
+# foe"); the chain grammar ("must follow a lead attack") is combo_req's and is
+# judged (DAGGERS-B5), so it does not match
+_TARGET_REQUIREMENT_RE = re.compile(
+    r"\bmust (?:strike|hit|target|attack|be used on) (?:a|an) [a-z-]+ (?:foe|target|enemy|creature)s?\b")
+_KD_VERB_RE = re.compile(r"\bknock(?:s|ed)? down\b")
+_KD_STATE_RE = re.compile(
+    r"\b(?:attacking|moving|casting|fleeing|running|hexed|enchanted|blinded|crippled|bleeding"
+    r"|poisoned|burning|weakened|diseased|dazed|non-human|human|non-moving)\b")
+
+
+def _clause_after(sentence, start):
+    m = _CLAUSE_END_RE.search(sentence, start)
+    return sentence[start:m.start() if m else len(sentence)].strip()
+
+
+def bare_hit_clause(clause):
+    """Does this if / when clause say only that the strike LANDS? A subject of at
+    most four words with none of _HIT_SUBJECT_STOP, then a verb of landing, then
+    at most 'target foe' / 'your target'. Our own reading; tested on invented
+    phrases (test_skilldesc 1b)."""
+    words = clause.split()
+    for obj in _LAND_OBJECTS:
+        if len(words) > len(obj) + 1 and tuple(words[-len(obj):]) == obj:
+            words = words[:-len(obj)]
+            break
+    if len(words) < 2 or words[-1] not in _LAND_VERBS:
+        return False
+    subject = words[:-1]
+    return len(subject) <= 4 and not set(subject) & _HIT_SUBJECT_STOP
+
+
+def sentence_gate(sentence):
+    """GATE_NONE / GATE_HIT / GATE_OTHER for one lower-cased sentence."""
+    kinds = {f for f, rx in _COMPOUND_RES if rx.search(sentence)}
+    if not kinds:
+        return GATE_NONE
+    if kinds - {FLAG_IF, FLAG_WHEN}:
+        return GATE_OTHER
+    opens = list(_COND_OPEN_RE.finditer(sentence))
+    if not opens:
+        return GATE_OTHER
+    for m in opens:
+        if m.group(1) == "whenever" or not bare_hit_clause(_clause_after(sentence, m.end())):
+            return GATE_OTHER
+    return GATE_HIT
+
+
+def conditional_reading(norm):
+    """SKILLS-LW: the per-sentence reading of one NORMALISED template, as a dict of
+    tokens, booleans and sentence indices (no text): `gate_family` (None for a row
+    with no compound wording), `slot_gates`, `dropped_conditional` (the number-free
+    sentences with compound wording), `limiting`, `ends_early` (either among the
+    dropped sentences), `target_requirement` (any sentence), and `knockdown_gate`
+    -- the worst gate over the sentences that FELL someone (the verb, not the noun
+    "knockdown", so "this knockdown lasts longer if ..." is a length, dropped),
+    GATE_QUALIFIED for an unconditional one whose subject is a state of the foe."""
+    info = []
+    for _s, _e, t in sentences_of(norm):
+        low = SLOT_RE.sub(" N ", t).lower()
+        info.append((bool(SLOT_RE.search(t)), low, sentence_gate(low)))
+    compound = any(g != GATE_NONE for _h, _l, g in info)
+    slot_gates = [g for has, _l, g in info if has]
+    if not compound:
+        family = None
+    elif not slot_gates or GATE_OTHER in slot_gates:
+        family = FAMILY_GATED
+    elif GATE_HIT in slot_gates:
+        family = FAMILY_HIT_ONLY
+    else:
+        family = FAMILY_NUMBER_UNGATED
+    dropped = [i for i, (has, _l, g) in enumerate(info) if not has and g != GATE_NONE]
+    rank = {GATE_NONE: 0, GATE_HIT: 1, GATE_QUALIFIED: 2, GATE_OTHER: 3}
+    kd_gate = None
+    for _has, low, g in info:
+        m = _KD_VERB_RE.search(low)
+        if m is None:
+            continue
+        if g == GATE_NONE and _KD_STATE_RE.search(low[:m.start()]):
+            g = GATE_QUALIFIED
+        if kd_gate is None or rank[g] > rank[kd_gate]:
+            kd_gate = g
+    return {"gate_family": family, "slot_gates": slot_gates, "dropped_conditional": dropped,
+            "limiting": any(_LIMITING_RE.search(info[i][1]) for i in dropped),
+            "ends_early": any(_ENDS_EARLY_RE.search(info[i][1]) for i in dropped),
+            "target_requirement": any(_TARGET_REQUIREMENT_RE.search(low) for _h, low, _g in info),
+            "knockdown_gate": kd_gate}
 
 
 # --------------------------------------------------------------------------
@@ -1082,6 +1227,8 @@ def analyse(records, texts, hand=None, mapping=None):
                "template_sha16": template_sha16(text),
                # SKILLS-LV: what a knock-down clause knocks down (a token or None)
                "knockdown": knockdown_kind(norm)}
+        # SKILLS-LW: what the row's numbers are gated on, sentence by sentence
+        row.update(conditional_reading(norm))
         labels_at = collections.defaultdict(set)
         for n, label, _detail in slots:
             labels_at[n].add(label)
@@ -1352,11 +1499,18 @@ EXCL_HEAL_RECIPIENT_CLASS = "HEAL_RECIPIENT_CLASS"    # a byte-0 heal on a CLASS
 EXCL_EPISODE_REFUSED = "EPISODE_REFUSED"              # an on-hit rider whose EPISODE never opens here (926: its duration is INDETERMINATE) -- a rider with nothing to ride
 EXCL_CONDITION_RIDER_CLASS = "CONDITION_RIDER_CLASS"  # an on-hit rider whose weapon class has no reader (RIDER_WEAPON_READERS: any / physical / melee)
 EXCL_CONDITION_RIDER_NO_EPISODE = "CONDITION_RIDER_NO_EPISODE"   # rider wording on a NON-episode type: the at-cast consumer would inflict it at the cast
+# SKILLS-LW (2026-10-07, skills 67): the hit-gated set's own over-applications, each
+# AFTER every rule above, so a row both refuse keeps the older reason
+EXCL_TARGET_REQUIREMENT = "TARGET_REQUIREMENT"   # "must strike a <state> foe": a use requirement no server path judges (778, 1636) -- the skill would fire on any foe
+EXCL_HIT_NOT_EVALUATED = "HIT_NOT_EVALUATED"     # a bare "if it hits" on a NON-attack: no strike verdict gates its land (171 237 824 1374, spells)
+EXCL_LIMITING_CLAUSE = "LIMITING_CLAUSE"         # a dropped conditional sentence CUTS the row's own number (866: half damage under a predicate)
+EXCL_ENDS_EARLY = "ENDS_EARLY"                   # a dropped conditional sentence ENDS the effect before its duration (995 1037 1514 1728)
 EXCLUSIONS = (EXCL_HAND_ROW, EXCL_SELF_CONFLICT, EXCL_DURATION_ONLY, EXCL_PERCENT_SLOT,
               EXCL_CONDITION_ON_EPISODE, EXCL_EPISODE_REFUSED, EXCL_CONDITION_RIDER_CLASS,
               EXCL_CONDITION_RIDER_NO_EPISODE, EXCL_PET_ATTACK, EXCL_CHAIN_REQUIREMENT,
               EXCL_UNMODELLED_CLASS, EXCL_RECIPIENT_NOT_A_FOE, EXCL_RECIPIENT_NOT_AN_ALLY,
-              EXCL_HEAL_RECIPIENT_CLASS)
+              EXCL_HEAL_RECIPIENT_CLASS, EXCL_TARGET_REQUIREMENT, EXCL_HIT_NOT_EVALUATED,
+              EXCL_LIMITING_CLAUSE, EXCL_ENDS_EARLY)
 
 DETAIL_AREA_BURST = "AREA_BURST"              # spell_burst covers the radius (byte 16, Spell, at cast, no projectile, no duration)
 DETAIL_AREA_ONE_TARGET = "AREA_ONE_TARGET"    # area wording; the server reaches one recipient
@@ -1379,12 +1533,17 @@ DETAIL_CHAIN_STEP_ADVANCES = "CHAIN_STEP_ADVANCES"     # "counts as an off-hand 
 DETAIL_CONDITION_RIDER_ON_HIT = "CONDITION_RIDER_ON_HIT"   # authsrv.episode_condition_riders: the WEARER's landed attacks (of the row's rider_weapon class) inflict it; never the cast
 DETAIL_KNOCKDOWN_APPLIED = "KNOCKDOWN_APPLIED"             # the row carries `knocks_down`: the foe(s) it lands on fall for KNOCK_DOWN_SECONDS (replaces CLAUSE_KNOCKDOWN on the row)
 DETAIL_CONDITION_FLAT_CONSTANT = "CONDITION_FLAT_CONSTANT" # a bit-clear EQUAL condition slot: skill_condition reads it as the flat constant it is (167's Blind 10/10)
+# SKILLS-LW (2026-10-07, skills 67): the hit-gated set's two marks -- between them on
+# every row of the set and on no plain row, so they also NAME the set
+DETAIL_HIT_GATED = "HIT_GATED"                 # the numbers sit behind a bare "if it hits" on an ATTACK: they land on a landed strike only (hit_enemy's verdict, attack_condition_lands, the landed knock-down) -- the machinery, like AREA_BURST
+DETAIL_CONDITIONAL_DROPPED = "CONDITIONAL_DROPPED"   # a sentence with conditional wording and no number: whatever it does, the row does not -- the server does LESS than the text says, which may be a benefit dropped or a COST dropped (976's added recharge on a miss, 1413's adrenaline lost at the stance's end: the server's skill is then the stronger, 831 / 1118's precedent); a limiting or early-ending one is excluded instead
 DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
            DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION, DETAIL_DURATION_UNMODELLED,
            DETAIL_CONDITION_UNNUMBERED, DETAIL_LITERAL_DROPPED, DETAIL_CHAIN_STEP_NOT_ADVANCED,
            DETAIL_CLAUSE_MOVE_SPEED, DETAIL_AREA_CASTER, DETAIL_HEAL_PARTY, DETAIL_CHAIN_GATED,
            DETAIL_CHAIN_STEP_ADVANCES, DETAIL_CONDITION_RIDER_ON_HIT, DETAIL_KNOCKDOWN_APPLIED,
-           DETAIL_CONDITION_FLAT_CONSTANT) + tuple(sorted(CLAUSE_FLAGS))
+           DETAIL_CONDITION_FLAT_CONSTANT, DETAIL_HIT_GATED,
+           DETAIL_CONDITIONAL_DROPPED) + tuple(sorted(CLAUSE_FLAGS))
 AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES, FLAG_ALL_ALLIES, FLAG_TOUCH}
 CASTER_AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES}    # the foe-area words a byte-0 Spell bursts on
 # The fields a label row may carry beyond the two means (SKILLS-LV): the rider
@@ -1457,6 +1616,9 @@ def episode_opens(rec, rank=12):
         return False
 
 
+KD_SENTENCE_GUARD = True        # SKILLS-LW; False is the known-bad arm (test_skilldesc 3)
+
+
 def knockdown_emittable(row, rec, target, caster_area):
     """Why a CLAUSE_KNOCKDOWN row may NOT carry `knocks_down`, or None when it may:
     the clause must knock down the FOE(S) the row lands on (not the caster, not a
@@ -1464,10 +1626,25 @@ def knockdown_emittable(row, rec, target, caster_area):
     field must be 0/0 (skill_knock_down_seconds reads a flat duration as the
     knock-down's length -- 192's 9 s shower would fall for 9 s), no projectile of
     its own (the arrival paths carry a strike's knock-down, not a row's), and the
-    recipients must be foes (byte 5 / 16, or the caster-centred area)."""
+    recipients must be foes (byte 5 / 16, or the caster-centred area).
+
+    SKILLS-LW: and the sentence that FELLS must be unconditional, or conditioned
+    on a bare landed hit on an ATTACK (the attack path knocks down on a landed
+    strike only) -- a fall behind any other predicate ("if that foe was attacking",
+    "if it is not adjacent to an ally") or on a state of the foe ("attacking foes
+    ... are knocked down", 163) is one the server cannot test, so the emitter
+    writing `knocks_down` would fell every foe the row lands on. The row keeps
+    CLAUSE_KNOCKDOWN. `KD_SENTENCE_GUARD = False` is the known-bad arm."""
     kind = row.get("knockdown")
     if kind != KD_FOE:
         return f"knock-down kind {kind}"
+    kg = row.get("knockdown_gate")
+    if KD_SENTENCE_GUARD and kg == GATE_OTHER:
+        return "a conditional knock-down (its sentence's condition is not a bare landed hit)"
+    if KD_SENTENCE_GUARD and kg == GATE_QUALIFIED:
+        return "a qualified knock-down (a state of the foe the server does not test)"
+    if KD_SENTENCE_GUARD and kg == GATE_HIT and int(row.get("type_code", -1)) != ATTACK_TYPE:
+        return "a hit-conditioned knock-down on a non-attack (no strike verdict to read)"
     if int(rec.get("duration0", 0) or 0) or int(rec.get("duration15", 0) or 0):
         return "a timed record (the duration slot would be read as the knock-down's length)"
     if _own_projectile(rec):
@@ -1517,6 +1694,24 @@ def conditional_served(report):
     """[sid]: SERVED rows a label tier would fire unconditionally -- held back."""
     return sorted(sid for sid, row in report["rows"].items()
                   if row["tier"] == "SERVED" and set(row["flags"]) & COMPOUND_FLAGS)
+
+
+HIT_GATED_FAMILIES = frozenset({FAMILY_HIT_ONLY, FAMILY_NUMBER_UNGATED})
+
+
+def hit_gated_served(report):
+    """[sid]: SKILLS-LW (2026-10-07, skills 67) -- the conditional SERVED rows whose
+    NUMBERS are gated on nothing but a bare landed hit (HIT_ONLY), or on nothing
+    at all (NUMBER_UNGATED: the conditional wording sits only in sentences that
+    carry no number, and is dropped and marked). A PARALLEL set beside
+    `plain_served`, never a widening of it: the owner's plain set is defined by
+    COMPOUND_FLAGS and stays as it is (131 on 38797). The gate then reads a
+    landed hit as non-conditional on an ATTACK skill only -- the one type whose
+    land the server gates on the strike's verdict -- and refuses the rest by
+    reason (HIT_NOT_EVALUATED, LIMITING_CLAUSE, ENDS_EARLY, TARGET_REQUIREMENT)."""
+    return sorted(sid for sid, row in report["rows"].items()
+                  if row["tier"] == "SERVED" and set(row["flags"]) & COMPOUND_FLAGS
+                  and row.get("gate_family") in HIT_GATED_FAMILIES)
 
 
 def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
@@ -1638,6 +1833,22 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
     party_heal = bool(heals) and party_heal_record(sid, row, rec, tc, target, flags)
     if heals and target == SELF_TARGET_BYTE and flags & AREA_WORDING and not party_heal:
         return EXCL_HEAL_RECIPIENT_CLASS, [], {}, verified
+    # SKILLS-LW (skills 67): the hit-gated set's over-applications, after every
+    # rule above. A use requirement on the target that nothing judges ("must
+    # strike a <state> foe": the skill would fire on any foe -- no plain row has
+    # one on 38797); then, for a row with conditional wording, a hit reading on a
+    # type whose land reads no strike verdict, a dropped sentence that CUTS the
+    # row's number under a predicate, and one that ENDS the effect early.
+    if row.get("target_requirement"):
+        return EXCL_TARGET_REQUIREMENT, [], {}, verified
+    compound = bool(flags & COMPOUND_FLAGS)
+    hit_only = compound and row.get("gate_family") == FAMILY_HIT_ONLY
+    if hit_only and tc != ATTACK_TYPE:
+        return EXCL_HIT_NOT_EVALUATED, [], {}, verified
+    if compound and row.get("limiting"):
+        return EXCL_LIMITING_CLAUSE, [], {}, verified
+    if compound and row.get("ends_early"):
+        return EXCL_ENDS_EARLY, [], {}, verified
     # shipped: name what the server does LESS of
     detail = sorted(f for f in flags if f in AREA_WORDING or f in (FLAG_TARGET_FOE, FLAG_TARGET_ALLY))
     timed = bool(int(rec.get("duration0", 0) or 0) or int(rec.get("duration15", 0) or 0))
@@ -1697,21 +1908,31 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
                       else DETAIL_CHAIN_STEP_NOT_ADVANCED)
     if FLAG_SPEED_MOVE in flags and not any(l[0] in MOVE_SPEED_LABELS for l in labels):
         detail.append(DETAIL_CLAUSE_MOVE_SPEED)
+    # SKILLS-LW: the hit-gated set's marks -- the landed-hit machinery the numbers
+    # ride, and every number-free conditional sentence the row does not carry
+    if hit_only:
+        detail.append(DETAIL_HIT_GATED)
+    if compound and row.get("dropped_conditional"):
+        detail.append(DETAIL_CONDITIONAL_DROPPED)
     detail.extend(sorted((flags & CLAUSE_FLAGS)
                          - ({FLAG_CLAUSE_KNOCKDOWN} if knockdown_applied else set())))
     return None, detail, fields, verified
 
 
-def label_rows(report, records, hand_ids):
+def label_rows(report, records, hand_ids, hit_gated=True):
     """({sid: row}, [(sid, exclusion)], [plain sids]) -- the label tier from a report.
 
     The row dict holds the emitted body (`fields`, `type_code`, `tier`,
     `tier_detail`) and its `verified` list; `emit_labels` writes it.
+    SKILLS-LW: the candidates are the plain set PLUS `hit_gated_served` (the
+    returned list stays the plain one, the owner's definition); `hit_gated=False`
+    is the plain set alone (`--no-hit-gated`, a diagnostic emit -- the revert is
+    the server's --no-skill-labels, since the suite pins the full set).
     """
     plain = plain_served(report)
     sc = {s[0] for s in report["self_conflicts"]}
     rows, excluded = {}, []
-    for sid in plain:
+    for sid in plain + (hit_gated_served(report) if hit_gated else []):
         row = report["rows"][sid]
         why, detail, fields, verified = build_label_row(row, records[sid], hand_ids, sc)
         if why is not None:
@@ -1731,6 +1952,13 @@ def check_label_rows(rows, report, hand_ids, records=None):
     and, since the fix pass, the classes the reviewers found shipped: a percent
     slot under a non-percent label, an unmodelled recipient class, and (with
     `records`) a chain requirement on a non-attack type.
+
+    SKILLS-LW: conditional wording is admitted ONLY on a row of the hit-gated
+    families (HIT_ONLY / NUMBER_UNGATED, read off the report's own sentences),
+    and such a row is held to its reading: a hit reading on a non-attack, a
+    limiting or early-ending dropped sentence, a use requirement on the target,
+    HIT_GATED / CONDITIONAL_DROPPED marks that do not match the sentences, and a
+    conditional row with no mark at all are each named.
     """
     out = []
     for sid, r in rows.items():
@@ -1741,8 +1969,27 @@ def check_label_rows(rows, report, hand_ids, records=None):
         if rep["tier"] != "SERVED":
             out.append(f"{sid}: tier {rep['tier']}, not SERVED")
         bad = sorted(set(rep["flags"]) & COMPOUND_FLAGS)
-        if bad:
+        family = rep.get("gate_family") if bad else None
+        if bad and family not in HIT_GATED_FAMILIES:
             out.append(f"{sid}: conditional wording {' '.join(bad)}")
+        det_lw = set(r.get("tier_detail") or ())
+        if rep.get("target_requirement"):
+            out.append(f"{sid}: a use requirement on the target that no server path judges")
+        if family in HIT_GATED_FAMILIES:
+            if family == FAMILY_HIT_ONLY and int(rep["type_code"]) != ATTACK_TYPE:
+                out.append(f"{sid}: a hit-gated number on a non-attack (type {rep['type_code']}): "
+                           f"no strike verdict gates its land")
+            if rep.get("limiting"):
+                out.append(f"{sid}: a dropped conditional sentence LIMITS the row's own number")
+            if rep.get("ends_early"):
+                out.append(f"{sid}: a dropped conditional sentence ENDS the effect before its duration")
+            if not det_lw & set(DETAILS):
+                out.append(f"{sid}: a conditional row shipped with no mark")
+        if (DETAIL_HIT_GATED in det_lw) != (family == FAMILY_HIT_ONLY):
+            out.append(f"{sid}: the HIT_GATED mark does not match a hit-only reading of its sentences")
+        if (DETAIL_CONDITIONAL_DROPPED in det_lw) != bool(family and rep.get("dropped_conditional")):
+            out.append(f"{sid}: the CONDITIONAL_DROPPED mark does not match a number-free "
+                       f"conditional sentence")
         if sid in hand_ids:
             out.append(f"{sid}: a hand row exists")
         pct = sorted(s["index"] for s in rep["slots"]
@@ -1913,7 +2160,8 @@ def template_digest(texts):
     return h.hexdigest()
 
 
-def emit_labels(rows, excluded, build, exe, out_path, plain=(), dat=None, digest=None):
+def emit_labels(rows, excluded, build, exe, out_path, plain=(), dat=None, digest=None,
+                hit_gated=()):
     """Write the label overlay. Deterministic: sorted ids, fixed field order, no
     clock. Returns the row count. The header carries the counts and every
     excluded id by reason, so the file itself says how the set was cut; with
@@ -1933,12 +2181,16 @@ def emit_labels(rows, excluded, build, exe, out_path, plain=(), dat=None, digest
     if digest is not None:
         lines.append(f"# templates_sha256: {digest} (the corpus's description templates in id "
                      f"order; a different value means the labels were parsed from other text)")
+    hit_part = (f" + {len(hit_gated)} hit-gated SERVED (SKILLS-LW: numbers behind a bare "
+                f"landed hit or none)" if hit_gated else "")
     lines += [
         f"# rows: {len(rows)} label-tier skill_effect rows = {len(plain)} plain SERVED "
-        f"(SERVED and none of {' '.join(sorted(COMPOUND_FLAGS))}) minus {len(excluded)} excluded",
+        f"(SERVED and none of {' '.join(sorted(COMPOUND_FLAGS))}){hit_part} minus "
+        f"{len(excluded)} excluded",
         "# Loaded by toolkit/content.py as kind 'skill_effect', UNDER the hand rows: a",
         "# tier = \"label\" row never replaces a row without that tier. --no-skill-labels",
-        "# makes the server ignore this file. studies/skills/FINDINGS.md 55 (SKILLS-LT).",
+        "# makes the server ignore this file. studies/skills/FINDINGS.md 55 (SKILLS-LT),",
+        "# 67 (SKILLS-LW: the hit-gated rows, marked HIT_GATED / CONDITIONAL_DROPPED).",
     ]
     for why in EXCLUSIONS:
         ids = sorted(sid for sid, w in excluded if w == why)
@@ -2031,6 +2283,14 @@ def main(argv=None):
                          "Default PATH is vault/content/skill_labels.toml. Refuses an exe "
                          "whose bytes match no pristine build (no honest `build` stamp), "
                          "a shifted mapping, and a row set its own checker faults.")
+    ap.add_argument("--no-hit-gated", action="store_true",
+                    help="with --emit-labels: a DIAGNOSTIC emit of the plain SERVED set "
+                         "alone, as before SKILLS-LW (2026-10-07) -- leaves out the hit-gated "
+                         "rows (HIT_GATED / CONDITIONAL_DROPPED); its rows equal the pre-SKILLS-LW "
+                         "overlay's, its header names SKILLS-LW. NOT a revert: the suite pins "
+                         "the full set (test_skilldesc 3's on-disk check, test_skilldamage 14's "
+                         "count), so an overlay written this way reddens both. The revert is the "
+                         "server's --no-skill-labels (the whole tier)")
     a = ap.parse_args(argv)
 
     records, texts, ix, exe, why = load_corpus(a.exe, a.dat)
@@ -2102,8 +2362,8 @@ def main(argv=None):
                       "nothing", "slot", "SERVED", "RECOG", "UNPARSED"), rows)
         plain = plain_served(rep)
         print(f"plain SERVED (no {' / '.join(sorted(COMPOUND_FLAGS))}): {len(plain)}; "
-              f"conditional SERVED: {len(conditional_served(rep))}; "
-              f"label rows loaded: {len(labels_loaded)}")
+              f"conditional SERVED: {len(conditional_served(rep))} (hit-gated, SKILLS-LW: "
+              f"{len(hit_gated_served(rep))}); label rows loaded: {len(labels_loaded)}")
         print()
 
     if a.hand:
@@ -2219,7 +2479,8 @@ def main(argv=None):
             print(f"REFUSED: {exc}", file=sys.stderr)
             ix.close()
             return 2
-        rows, excluded, plain = label_rows(rep, records, set(hand))
+        rows, excluded, plain = label_rows(rep, records, set(hand), hit_gated=not a.no_hit_gated)
+        hit = [] if a.no_hit_gated else hit_gated_served(rep)
         bad = check_label_rows(rows, rep, set(hand), records)
         if bad:
             print("REFUSED: the label rows fail their own checker:\n  " + "\n  ".join(bad[:20]),
@@ -2228,10 +2489,11 @@ def main(argv=None):
             return 2
         import textrec
         n = emit_labels(rows, excluded, build, exe, out, plain,
-                        dat=a.dat or textrec.DEFAULT_DAT, digest=template_digest(texts))
+                        dat=a.dat or textrec.DEFAULT_DAT, digest=template_digest(texts),
+                        hit_gated=hit)
         tally = collections.Counter(w for _s, w in excluded)
-        print(f"wrote {out}: {n} label-tier rows = {len(plain)} plain SERVED - "
-              f"{len(excluded)} excluded {dict(sorted(tally.items()))}")
+        print(f"wrote {out}: {n} label-tier rows = {len(plain)} plain SERVED + {len(hit)} "
+              f"hit-gated SERVED - {len(excluded)} excluded {dict(sorted(tally.items()))}")
         detail = collections.Counter(d for r in rows.values() for d in r["tier_detail"] if d in DETAILS)
         print(f"   under-applied, by detail: {dict(sorted(detail.items()))}")
     ix.close()
