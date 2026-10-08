@@ -2033,9 +2033,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)
 
-* **SLICE-F48, the snare row.** Movement speed's decrease arm has no content row to run
-  on: a Water hex, a self-snare stance or Deep Freeze, to settle boost × snare on our
-  own client (slice §48).
+* **SLICE-F48b**: SHIPPED ON, UNRUN (runsheets slice §48.7.1); under-cap snare × boost, Crippled over it: untaped.
+* **SLICE-F48b**: wiki owed: flat-66 129/210/212/213 (census-blind), "Icy Ground".
 * **SKILLS-WK, heroes and bodies.** Weakness's −1 reaches a hero's or a body's rank
   arithmetic and never the wire; no tape weakens one, a live run's question (skills §51.3).
 * **The Frenzy arm is UNSEPARATED** — both orderings of the multipliers fit the four

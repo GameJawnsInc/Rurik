@@ -4750,6 +4750,24 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   arm opens the condition and sends no 0x0027. `test_effects.py` §4d and §5 (three checks) now
   expect the 0x0027 that Rush's apply and expiry carry, in retail's position behind the
   apply/remove.
+  **SLICE-F48b (2026-10-07, floors 343 -> 356 bare / 385 -> 398 vault, all thirteen bare).**
+  `test_mechanics.py` §8c: a snare past the -50 cap OVERRIDES the boosts
+  (`episodemods.SNARE_OVERRIDES_BOOST`, speedwords P7-P10). Through the real sender and
+  `_apply_effect_on`: the player's Windborne 383.04, then Deep Freeze over it 97.92 (not the
+  product's 130.23); "Charge!" opening and closing under the snare sends NO 0x0027 (retail's
+  silence, from `push_speed`'s send-on-change); the snare's end restores 383.04 and
+  Windborne's 288.0; a body the same, its snare's end declaring both boosts' cap 385.92; a
+  base-300 body under a synthetic 75 % snare row (a test fixture, ids 99000 + 100 n + pct,
+  removed in the finally) sends the Zaishen tapes' own 399.0 -> 75.0 -> 399.0. The known-bad
+  arm (flag off) reads 130.23 / 131.21 / 130.23 and fails the same `retail_shape` predicate
+  the override passes. The boundary: 33 and 50 keep the product (0.8911, 0.665), 51 / 66 /
+  75 are the snare alone; two 33s or two 50s keep it (a SINGLE source overrides), 66 beside
+  33 overrides; under the cap the flag changes nothing. Crippled still multiplies on top
+  (0.17, UNVERIFIED). The flag parses through `serverargs.build_parser` and main()'s block,
+  lifted off the syntax tree and run against authsrv's globals, clears the leaf's bool; the
+  source lock holds the bool to the leaf (no authsrv copy, no `global`). Seven mutation arms
+  in a scratch copy (rule removed, Crippled skipped, bare-name flip, misspelt flag, `>=`,
+  sum-not-single, an authsrv copy) each reddened 8c.
 
 - `toolkit/authsrv/test_speedwords.py` -- **SLICE-F48 (2026-09-16, floor 12).** The reader's
   predictions over the live corpus, stated before the scan in `speedwords.py`'s docstring:
@@ -4761,6 +4779,35 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   witnesses reddens rather than letting `push_speed`'s numbers drift from retail's. Two
   controls: no uncapped double boost (× 1.66 / × 1.77) anywhere, and every 160/364 apply not
   over a snare reads × 1.33 or × 1.34 and nothing else. Reads the vault; skips loudly without it.
+  **SLICE-F48b (2026-10-07, floors 34 vault / 11 bare, per machine on the live-captures
+  DIRECTORY).** An over-cap snare over a boost, on retail's wire (831 words, 26 captures):
+  P7 every word in the × 0.25 CLASS (within 0.02 of it) is base × 0.25 EXACTLY (14 / 0; P7a
+  skill 493's own apply on an agent with no slow open, 1 / 0); P7j an exposure floor on the
+  ATTRIBUTION, not a prediction -- 9 of the 14 are batch-joined to 493's apply or an `0x0043`
+  renewal of the buff it opened, and the other 5 (both P9 witnesses) are printed as having no
+  source on the wire; P8 a "Charge!" applied to and ending on an observer whose last word is
+  × 0.25 sends NO word for it (2 / 0), with P8b each batch MOVING another agent's word with the
+  boost (up at the apply, down at the end, at or above × 0.5 both sides; 2 / 0) and P8c the
+  same walker wording 116 boosts on an unslowed observer (its own control); P9 a boosted
+  body's snare ends back on its boosted word (2 / 0); P10 the OVERRIDE rule agrees 4 / 0 and
+  P10m multiplicative / P10a additive agree 0 of 4. The census sets the gapped connection
+  aside BY NAME (`tape.whole_channels`, one `capgaps.audit` check) instead of an `except`.
+  §4 runs on every machine: the scorer on three synthetic tapes through the real
+  `speed_rows` / `boost_events` -- retail's shape green, the multiplicative and additive
+  worlds each reddening P8 and P10 and turning their own arm, a 72.5 a P7 miss -- and the
+  lane's review's four (2026-10-07): a × 0.17 and a × 0.10 word sit OUTSIDE P7 (an unscored
+  census line, where the old (0, 0.3) window counted them misses: red on good news); a
+  snared foe's onset or restore in a boost's batch is NOT P8b's control (1 / 3 on a tape the
+  old any-word predicate scored 3 / 1); P7j joins through 493's own buff's renewal but not
+  another buff's nor one after its `0x0044`; and `--json` writes the JSON alone to stdout
+  with capgaps' SET ASIDE line on stderr (it had been printed ahead of the `[`). The
+  verification after the review added two, for conjuncts nothing could redden: P8b's
+  companion must move the boost's WAY and stay at or above × 0.5 (1 / 2: an ally Crippled
+  300 → 150 at an apply and a foe's 288 → 72 onset at an end are not it; a `moved()` with
+  no direction or no new-word floor scored 2 / 1), and P7a counts 493 only on an agent
+  with no slow open (493 over Crippled, 36.0, is out of scope: unscoped 1 / 1, scoped
+  strictly above base 0 / 0). Every new corpus check, and each of the review's four and
+  the verification's two, was driven red in a scratch arm.
   **SLICE-B7c (2026-09-12).** `toolkit/authsrv/test_mechanics.py` §28 (floor 162 → 174,
   with B7a's four): a PARTY body casts a heal at the player. Eight checks, four of them
   arms: the policy picks the hurt player (who is not a row in `agents`, which is B7a's

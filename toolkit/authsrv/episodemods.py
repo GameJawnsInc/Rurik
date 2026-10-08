@@ -287,28 +287,58 @@ def swing_preparation_bonus(state, weapon_row, agent_id, SCALE_MEANS_DAMAGE):
 #   snares   sum, capped at -50 -- "capped at -50% slower than normal; however,
 #            a single skill that causes more than -50% ... can override the -50%
 #            cap" (WIKI, GWW "Snare (tactic)", rev. 2026-04-24). OBSERVED: six
-#            x0.34 rows (a -66% source) on the MANTID tape. No content row
-#            declares a decrease today, so this arm runs on nothing; it is here
-#            so the day one does, the rule is the game's.
+#            x0.34 rows (Teinai's Prison, -66%) on 20260913T210901, and 14 x0.25
+#            rows (-75%) on the Zaishen tapes -- 9 batch-joined to skill 493's
+#            apply or its buff's 0x0043 renewals, 5 with no source on the wire
+#            (speedwords P7j). The rows that declare one today: Deep Freeze 234
+#            and Ice Spikes 211 (the flat 66 in the bonus slot, DESKWORK-D6),
+#            and on a vault machine the label tier's 1044, 1404 (Flail's 33)
+#            and 1652.
 #   Crippled MULTIPLIES the result by 0.5 -- "you move 50% slower" (WIKI, GWW
 #            "Crippled", rev. 2020-10-23). OBSERVED, and this is the arithmetic
 #            the corpus settles: Crippled over a 33% boost reads x0.665 =
 #            1.33 x 0.5 on 21 of 21 such rows, and the additive x0.83 appears
 #            nowhere. Alone it is x0.5 (27 rows, 288 -> 144.0).
 #
-# BOOST x SNARE is the WIKI's multiplicative rule -- GWW "Effect stacking"
-# (rev. 2026-09-07): "Attack speed and movement speed stack multiplicatively.
-# For example, a character affected by Flail and 'Fall Back!' will have 89.1%
-# movement speed rather than 100%." CONTESTED by one row: a PvP body that read
-# x0.8 from its create batch (an 0x006F item change in the same batch -- GWW
-# "Bundle": "Some bundles ... reduce movement speed") took "Charge!" to x1.13 =
-# 1 + 0.33 - 0.20, additive, on 3 of 3. A bundle's slow is not a skill's, and
-# nothing here models a bundle, so the wiki's rule ships and the row is on
-# record (studies/slice/FINDINGS.md SLICE-F48).
+# BOOST x SNARE, TWO REGIMES (SLICE-F48b, 2026-10-07, studies/slice/FINDINGS.md
+# F48.7):
+#
+#   UNDER the -50 cap: the WIKI's multiplicative rule -- GWW "Effect stacking"
+#            (rev. 2026-09-07): "Attack speed and movement speed stack
+#            multiplicatively. For example, a character affected by Flail and
+#            'Fall Back!' will have 89.1% movement speed rather than 100%."
+#            WIKI only: no under-cap skill snare over a boost is on any tape
+#            (the one under-cap row, a bundle's x0.8 under "Charge!", read
+#            x1.13 = 1 + 0.33 - 0.20, ADDITIVE, 3 of 3 -- a bundle is not a
+#            skill and nothing here models one; CONTESTED, on record).
+#   OVER the cap (a single snare above 50): the snare OVERRIDES the boosts --
+#            the factor is 1 - snare/100 whatever boosts are open, and they
+#            come back when it ends. OBSERVED on retail's wire at x0.25
+#            (speedwords P7-P10, n small): a "Charge!" applied to and ending on
+#            an observer under 493 sends NO word (2 of 2, an unsnared ally's
+#            word moved with the boost in both batches); a boosted body's onset
+#            reads 75.0 = 300 x 0.25 (2 of 2, never the multiplicative 99.75 or
+#            the additive 174.0) and the snare's end restores the boosted 399.0
+#            (2 of 2) -- but those onsets' source is NOT on the wire (P7j), so
+#            that they are 493's, or one 75% snare's, is RECONSTRUCTION. So is
+#            every other over-cap snare -- the 66s (Deep Freeze, Ice Spikes,
+#            Teinai's Prison) and the client table's 90s: same regime, never seen
+#            under a boost. SNARE_OVERRIDES_BOOST; the revert
+#            --snare-multiplies-boost restores the multiplicative product above
+#            the cap too (Windborne + Deep Freeze = 130.2, retail's shape says
+#            97.92).
+#
+# Crippled's x0.5 still multiplies on top of an overriding snare: UNVERIFIED
+# (no tape holds Crippled and an over-cap snare at once); it is the reading that
+# keeps Crippled's own rule (P3, 21 of 21) untouched.
 MOVE_SPEED_CAP_UP = 34.0
 MOVE_SPEED_CAP_DOWN = 50.0
 CRIPPLED_FACTOR = 0.5
 MOVE_SPEED_MEANS = {"Movement speed increase": +1, "Movement speed decrease": -1}
+# SLICE-F48b: past the snare cap the boosts are dropped (above). A leaf flag for the
+# reason WEAKNESS_ATTRIBUTES is one; `authsrv.main()` clears it for
+# --snare-multiplies-boost.
+SNARE_OVERRIDES_BOOST = True
 
 
 def _episode_percent(ep, which):
@@ -368,24 +398,32 @@ def _capped_snare(terms, cap):
     (HEX-1, 2026-09-27), two of them SUMMED to 132 through `_capped` and
     declared a negative speed (0x0027 [foe, -92.16]) -- Deep Freeze +
     Ice Spikes on one foe, or the placeholder AI's re-cast. RECONSTRUCTION:
-    retail's stacking of two over-cap snares is on no tape (the MOVESPEED
-    arc's snare row is still open); whatever the rule is, a speed below the
-    strongest single snare's is wrong under all of them."""
+    retail's stacking of two over-cap snares is on no tape (one 75% snare at
+    a time is all the Zaishen tapes hold, SLICE-F48b); whatever the rule is,
+    a speed below the strongest single snare's is wrong under all of them."""
     if max(terms) > cap:
         return max(terms)
     return _capped(terms, cap)
 
 
 def move_speed_factor(state, agent_id):
-    """What the agent's open episodes do to its declared 0x0027 base. 1.0 = nothing."""
+    """What the agent's open episodes do to its declared 0x0027 base. 1.0 = nothing.
+
+    Boosts x snares x Crippled, with ONE exception (SLICE-F48b, the banner
+    above): a single snare past MOVE_SPEED_CAP_DOWN drops the boosts --
+    Windborne + Deep Freeze is 0.34, not 1.33 x 0.34 = 0.4522 -- and the boosts
+    come back when it closes, because this is recomputed from the open
+    episodes at every change. Under the cap the product stands (WIKI)."""
     boosts, snares, crippled = move_speed_terms(state, agent_id)
+    overridden = (SNARE_OVERRIDES_BOOST and bool(snares)
+                  and max(snares) > MOVE_SPEED_CAP_DOWN)
     factor = 1.0
-    if boosts:
+    if boosts and not overridden:
         factor *= 1.0 + _capped(boosts, MOVE_SPEED_CAP_UP) / 100.0
     if snares:
         factor *= 1.0 - _capped_snare(snares, MOVE_SPEED_CAP_DOWN) / 100.0
     if crippled:
-        factor *= CRIPPLED_FACTOR
+        factor *= CRIPPLED_FACTOR       # over an override too: UNVERIFIED (banner)
     return factor
 
 

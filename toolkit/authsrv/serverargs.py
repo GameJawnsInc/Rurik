@@ -2937,6 +2937,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "
                          "movement-speed-decrease episode is live.")
+    ap.add_argument("--snare-multiplies-boost", action="store_true",
+                    help="SLICE-F48b REVERT: a single snare past the -50%% cap MULTIPLIES "
+                         "the open boosts instead of dropping them -- Windborne Speed + "
+                         "Deep Freeze declares 288 x 1.33 x 0.34 = 130.23 u/s, and a boost "
+                         "opening or closing under the snare sends a 0x0027 -- this "
+                         "server's bytes until 2026-10-07 (the multiplicative rule of GWW "
+                         "'Effect stacking', applied past the cap). Known-bad: on "
+                         "retail's wire a \"Charge!\" applied to and ending on an observer "
+                         "under skill 493's x0.25 sends NO word (2 of 2, 20260928T103123 "
+                         ":50295), and a boosted body's x0.25 onset reads 75.0 = 300 x 0.25 "
+                         "(2 of 2, never the product's 99.75; their source is not on the "
+                         "wire, so a 75%% snare there is RECONSTRUCTION) -- speedwords "
+                         "P7-P10. Under the cap the product stands either way.")
     ap.add_argument("--no-hex-degeneration", action="store_true",
                     help="studies/weapons 43 (B2) REVERT: a skill_effect row naming "
                          "`Health degeneration` (Suffering 108's 0..3, Faintheartedness "
