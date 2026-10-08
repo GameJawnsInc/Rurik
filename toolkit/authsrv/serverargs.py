@@ -2991,6 +2991,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="studies/weapons 43 (B2) REVERT: a wearer of an `on_skill_use = "
                          "\"interrupt other wearers\"` hex (Panic 52) completing a skill "
                          "interrupts nobody.")
+    ap.add_argument("--no-hex-cast-triggers", action="store_true",
+                    help="studies/skills 69 (SKILLS-CT) REVERT: a spell completion fires no "
+                         "`triggers_on_cast` payoff -- an Aura of Restoration 180 bearer is "
+                         "not healed and a Backfire 28 wearer is not punished. The known-bad "
+                         "arm: retail heals a live 180 bearer IMMEDIATELY ahead of its [58] on "
+                         "256 of 257 spell completions (trigjoin.py), so this reproduces the "
+                         "pre-SKILLS-CT server, which dropped every one.")
     ap.add_argument("--no-hex-end-burst", action="store_true",
                     help="studies/skills 61 REVERT: a hex whose row says `on_end = "
                          "\"burst\"` (Incendiary Bonds 179) ends -- at expiry or at its "

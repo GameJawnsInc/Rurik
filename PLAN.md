@@ -2020,8 +2020,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   CONFIRMED on the client (CONFIRM-2026-09-23, CONFIRM-2 §11), **pass 3's run owed** (§67.5).
   **Still open:** (ii) per skill — a BODY's own chain (its chain-gated cast lands on NOBODY; 5
   of 5 live 784s meet it; its chain-gated ATTACKS land unjudged, 775 780 781 and SKILLS-LW's
-  776 777 976 986 1022 2135, §67.4); 770's ally-centred adjacency; the ON-STRUCK riders (2136;
-  113), 926 (a tooltip run); byte 1 (769 917 1468) and its 3 heals; 292's percent-of-loss
+  776 777 976 986 1022 2135, §67.4); 770's ally-centred adjacency; the event triggers past skills §69.8 (on-struck 2136 /
+  113, 926 a tooltip run); byte 1 (769 917 1468) and its 3 heals; 292's percent-of-loss
   heal; 943, 1262; the 98 GATED conditional rows by family (§67.7: 5 named-condition and 6
   knocked-down next, on existing consumers), the HIT_NOT_EVALUATED spells (4 on 38797, 3 on
   38974), §67.2's other refusals (778 1636 866 995 1037 1514 1728), §67.3's unmarked residue
@@ -2207,6 +2207,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   shipped 2026-10-07, PLAN-LOG).
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
 * **SLICE-F52 52.8** (no E5 / E6 at a recharge-0 completion): SHIPPED ON, UNRUN -- runsheet in studies/slice 52.10.
+* **SKILLS-CT** (skills §69, 180 / 28 on-cast payoffs): SHIPPED ON, UNRUN -- runsheet §69.9. Open, §69.8: Deep Wound cut 36 (retail 37); a hostile drops its cast when its fight target dies.
 * **RANGERLOOP-F9:** fixed on the desk 2026-10-07 (PLAN-LOG); owed, the RUN-T re-run
   (CONFIRM-2026-09-30 §12.3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

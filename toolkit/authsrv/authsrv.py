@@ -6902,6 +6902,22 @@ EFFECT_LIST_SELF_ONLY = True  # False (--effect-list-to-all): the pre-MANTID arm
 # fraction on every one of them, which is what "health-max is a rare
 # mid-combat correction" (unit-setup) turns out to be.
 HEX_TRIGGERS = True           # False (--no-hex-triggers): a hex is an icon and a bit, nothing more.
+# SKILLS-CT (studies/skills/FINDINGS.md 69, 2026-10-07): A PAYOFF THAT RIDES THE
+# BEARER'S OWN SPELL COMPLETION -- on_cast_triggers, beside on_attack_triggers.
+# OBSERVED for Aura of Restoration 180 (trigjoin.py, 7 live captures, 19 bearers):
+# under a LIVE episode every spell completion carries ONE 0x00A3 [55, b, b, +f]
+# IMMEDIATELY ahead of the bearer's [58, b, 0] -- 256 of 257, the one miss after a
+# Drain Enchantment onto the bearer -- and f x max = round(paid energy x the scale %
+# / 100), the scale the client's own 200..500 slot at the bearer's rank (555 at 13:
+# 23 / 46). None when 180 is gone (74 of 74), on a signet (0 of 5), on a stopped
+# cast (0 of 13), or on the 180 re-cast itself (0 of 2). Backfire 28 rides the same
+# hook in the other direction -- the HEXER's scale as armour-ignoring damage on the
+# hexed caster, Empathy's channel: RECONSTRUCTION (no tape; the client's own
+# template numbers one DAMAGE slot, the scale). A row's `triggers_on_cast` names
+# which. The player-bearer arm has no witness at all (no observer ever cast 180).
+HEX_CAST_TRIGGERS = True      # False (--no-hex-cast-triggers): a spell completion fires no payoff -- the pre-SKILLS-CT bytes.
+CAST_TRIGGER_DAMAGE = "Damage"                   # the row label: Backfire 28
+CAST_TRIGGER_HEAL = "Heal % of energy cost"      # the row label: Aura of Restoration 180
 GAME_SMSG_AGENT_UPDATE_SPEED_BASE = 0x0027   # [agent, f32 maxSpeed] -- schema's earned name
 # [agent, string16]: the SPEECH BUBBLE over a body (the schema's unnamed
 # GAME_SMSG_0165; the name is OURS). OBSERVED riding every Shout announce in the
@@ -27523,6 +27539,19 @@ def cast_tick(send, state, conn_id):
             # 62 stances and shouts is E4, the debit, E5, [48], [21], (the
             # bubble), the applies, E3, then the speed words; 0 of 62 carry
             # a 58 (skills 56.9, instantjoin.py).
+            # SKILLS-CT (studies/skills 69): the player's on-cast payoffs ride
+            # behind the E5 and IMMEDIATELY ahead of the [58] -- a body's slot
+            # (OBSERVED, 256 of 257), the player's RECONSTRUCTION (no observer
+            # ever cast under 180). A failed chain step fires none (its verdict
+            # read here, player_chain_unmet); a payoff that KILLS the player ends
+            # the completion -- nothing of the cast lands, the E3 / E6 still close
+            # the cycle on their clocks (land_swing's rule, RECONSTRUCTION).
+            if (not cast["attack"]
+                    and not player_chain_unmet(state, cast["skill_id"], cast.get("target"), now)
+                    and on_cast_triggers(send, state, PLAYER_AGENT_ID, cast["skill_id"], conn_id,
+                                         paid=cast.get("cost") if ENERGY else None)
+                    and state.get("player_dead")):
+                continue
             _inst = (INSTANT_ANNOUNCE and not cast["attack"]
                      and _is_instant_skill(cast["skill_id"]))
             if _inst:
@@ -28461,6 +28490,131 @@ def on_attack_triggers(send, state, attacker_id, conn_id):
             amount, conn_id, f"hex {ep['skill']} punishes the attack",
             skill_id=ep["skill"])                       # 3(b): the word's skill
     return total
+
+
+def on_cast_triggers(send, state, caster_id, skill_id, conn_id, paid=None):
+    """SKILLS-CT (studies/skills 69): `caster_id` is COMPLETING `skill_id`, and
+    this runs right AHEAD of its [58] -- the slot retail puts the payoff in,
+    IMMEDIATELY before the bearer's [58, b, 0] on 256 of 257 live completions
+    (trigjoin.py P1c; OBSERVED for bodies, RECONSTRUCTION for the player).
+    Each trigger SKILL on the caster fires ONCE per completion, however many
+    live episodes of it the caster holds -- EffectTable.apply gives a re-cast
+    a new episode beside the old one (effects.py: retail's own allocator),
+    and retail sends ONE word on 11 of 11 spell completions under two
+    unexpired, unstripped 180s (20260928T103123 :50061 x7, :58544 x4;
+    OBSERVED, the fix pass's RV-1). The NEWEST live episode is the one that
+    fires (its rank, its caster) -- the one a re-cast leaves: RECONSTRUCTION,
+    no tape holds two episodes of one trigger skill at different ranks or
+    from two casters. Two DIFFERENT trigger skills on one caster both fire,
+    ascending buff id: RECONSTRUCTION, no tape holds a bearer under both
+    (test_trigcast 3f, round 2's VF-1).
+
+      * CAST_TRIGGER_HEAL (Aura of Restoration 180) -- the BEARER is healed for
+        `paid` x the episode's scale % / 100, whole points: OBSERVED (trigjoin
+        P2c: cost 5 -> 23 and 10 -> 46 over 555 at rank 13 -- 14 of the 17
+        bearers with clean words fit (555, 13) alone, the other 3 fit several
+        (max, rank) pairs, every one consistent). The ROUNDING is
+        UNDISCRIMINATED: every witnessed product is whole (the costs on tape
+        are 5 and 10, the scale 200 + 20 x rank), so half-up here is a
+        choice, not a measurement. It is HEALING, so Deep Wound cuts it --
+        OBSERVED, 6 words at 0x00F1 bit 0x20 over 455 (heal_agent's door;
+        retail rounds the cut, 37 from 46, where heal_agent truncates to 36 --
+        HEAL-INT's rule, named in skills 69.4, not changed here). `paid` is the
+        energy the cast paid -- the player's glyph-discounted `cast["cost"]`,
+        a body's record cost (both body cast sites pay exactly that); the
+        tape's bearers paid the record's cost, so base vs paid is
+        UNDISCRIMINATED. The row's energy-gain half (its bonus slot, 0..1 bit
+        clear: skilldesc's INDETERMINATE) is NOT modelled.
+      * CAST_TRIGGER_DAMAGE (Backfire 28) -- the HEXER's scale at the hexer's
+        rank, armour-ignoring, onto the caster (Empathy's channel and door):
+        RECONSTRUCTION, no tape.
+
+    Nothing fires for a non-spell (`_is_spell_skill`: a signet 0 of 5, an
+    attack skill), for an episode already past its expiry (one completion at
+    age 60.031 drew none), or for the bearer re-casting the episode's own
+    skill (180 under a live 180, 0 of 2). A stopped / interrupted / cancelled /
+    failed cast never reaches a call site. A spell whose TARGET died during
+    the cast still completes and still fires (land_skill's dead-target exit
+    calls this too): OBSERVED 3 of 3 -- the live 180 completions whose
+    0x00A0 target was alive at the announce and carried the death bit
+    before the bearer's [58] (20260817T231139 :54071 b10 764.549 and b14
+    769.736, :50286 b10 376.744) each carry the word (the fix pass's RV-2) --
+    Random Arenas characters, one a foe of the observer (:54071 b10, the
+    0x0020 allegiance token), two its teammates. A HOSTILE whose FIGHT target
+    dies mid-cast never reaches that exit: enemy_attack_tick's corpse branch
+    (SLICE-H3) clears the armed cast first -- no [58], no payoff, where that
+    foe-side witness completed with both. A gap outside these call sites,
+    recorded in studies/skills 69.8 (round 2's VF-2).
+    Returns the number of payoffs fired;
+    a caller whose caster died of one aborts the rest of its completion batch
+    (land_swing's rule for on_attack_triggers)."""
+    if not HEX_CAST_TRIGGERS or not EFFECTS or not _is_spell_skill(skill_id):
+        return 0
+    table = state.get("effects")
+    if not table:
+        return 0
+    now = time.time()
+    newest = {}                         # trigger skill -> its newest live episode (RV-1)
+    for ep in table.on_agent(caster_id):
+        what = skill_effect_row(ep["skill"]).get("triggers_on_cast")
+        if what not in (CAST_TRIGGER_HEAL, CAST_TRIGGER_DAMAGE):
+            continue
+        if table.live.get(ep["buff"]) is not ep or now >= float(ep.get("expires_at", math.inf)):
+            continue                    # closed, or expired and not yet ticked out
+        hexer = ep.get("caster") or PLAYER_AGENT_ID
+        if ep["skill"] == skill_id and hexer == caster_id:
+            continue                    # the bearer re-casting its own: 0 of 2 (trigjoin Q4)
+        was = newest.get(ep["skill"])
+        if was is None or float(ep.get("applied_at", 0.0)) >= float(was[0].get("applied_at", 0.0)):
+            newest[ep["skill"]] = (ep, what, hexer)
+    fired = 0
+    for ep, what, hexer in sorted(newest.values(), key=lambda x: x[0]["buff"]):
+        if target_dead(state, caster_id):
+            break                       # a payoff before this one killed the bearer
+        try:
+            scale = skill_scale_value(ep["skill"], ep.get("rank", 0))
+        except Exception as exc:                                # noqa: BLE001
+            print(f"[c{conn_id}] effect {ep['skill']} triggers on a cast but its "
+                  f"scale is unreadable: {exc}", flush=True)
+            continue
+        if what == CAST_TRIGGER_HEAL:
+            cost = float(paid) if paid is not None else float(skill_cost(skill_id)[0])
+            amount = int(cost * float(scale) / 100.0 + 0.5)
+            if amount <= 0:
+                continue
+            print(f"[c{conn_id}] effect {ep['skill']} on agent {caster_id}: spell "
+                  f"{skill_id} completes -- {cost:.0f} energy x {scale}% = {amount} "
+                  f"healed, ahead of the 58 [SKILLS-CT]", flush=True)
+            heal_agent(send, state, caster_id, caster_id, amount, conn_id, healing=True)
+        else:
+            print(f"[c{conn_id}] hex {ep['skill']} on agent {caster_id}: spell "
+                  f"{skill_id} completes -- {scale} armour-ignoring from agent {hexer}, "
+                  f"ahead of the 58 [SKILLS-CT, RECONSTRUCTION]", flush=True)
+            armour_ignoring_damage(send, state, caster_id, hexer, scale, conn_id,
+                                   f"hex {ep['skill']} punishes the spell",
+                                   skill_id=ep["skill"])
+        fired += 1
+    return fired
+
+
+def player_chain_unmet(state, skill_id, target, now):
+    """SKILLS-CT: would cast_tick's E5 block judge this player NON-attack's chain
+    step FAILED (its `_na_fail`, SKILLS-LU (C))? The same three arms, read AHEAD
+    of the [58] because the on-cast payoff rides there and a failed cast fires
+    nothing -- 784 and 973 are SPELLS with a chain requirement. Pure: the
+    chain table's `state_on` reads, it never writes."""
+    if _is_attack_skill(skill_id):
+        return False
+    _combo, req, _ = skill_chain_fields(skill_id)
+    if not req:
+        return False
+    if not NONATTACK_CHAIN_GATE:
+        return True                     # the gate's exclusion: it lands on nobody
+    if not CHAIN_STATE:
+        return False
+    if not target:
+        return True
+    return not chain.requirement_met(req, player_chain(state).state_on(target, now))
 
 
 def account_skills_held(state):
@@ -39392,11 +39546,17 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # between. A foe-target cast has always been dropped for this (the tick's
     # own `target_dead` branch, before it reaches here); an ALLY-target one
     # never passes through that branch, because its target is not the fight's.
+    # (That branch keys on the FIGHT target, so it drops ANY armed cast when
+    # the fight target dies -- a heal on a living fellow hostile too -- with
+    # no [58]; studies/skills 69.8 records it as owed, round 2's VF-2.)
     # The cast ENDS -- the caster is released and its recharge stands, it did
-    # cast -- and nothing lands. What retail puts on the wire for a spell
-    # whose target dies under it is NOT OBSERVED for an NPC; the close we
-    # already send for every finished cast is the one message sent.
-    # RECONSTRUCTION. A resurrection is the exception by construction: it
+    # cast -- and nothing lands. The close we already send for every finished
+    # cast is the one message sent, APART FROM the on-cast payoff ahead of it
+    # (SKILLS-CT: retail's word rides this [58] on 3 of 3 live 180
+    # completions whose target died mid-cast -- Random Arenas characters,
+    # 20260817T231139, not NPCs; studies/skills 69.6). That [58] close is
+    # OBSERVED for those player characters and RECONSTRUCTION for an NPC
+    # caster (NOT OBSERVED). A resurrection is the exception by construction: it
     # returned above, and a corpse is exactly what it wants. AN AREA OVER TIME
     # is the other (studies/weapons 42, WIKI "Area of effect" rev 2685457: it
     # "doesn't fail" when the target dies before the completion) -- it passes
@@ -39408,6 +39568,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
                        is not None) else None)
     if _tid != agent_id and target_dead(state, _tid) and _aot_corpse is None:
         agent["casting"] = None
+        # SKILLS-CT (studies/skills 69.6): the on-cast payoff rides this [58] too,
+        # IMMEDIATELY ahead of it -- OBSERVED 3 of 3 live 180 completions whose
+        # target died during the cast (the fix pass's RV-2); a payoff that kills
+        # the caster ends the cast here as at the main exit below.
+        if on_cast_triggers(send, state, agent_id, skill_id, conn_id) and agent.get("dead"):
+            return
         if _inst:
             # SKILLS-IA: the close an instant skill sends for every finished
             # cast is the [48] (the rule the [58] line below states for a
@@ -39654,6 +39820,18 @@ def land_skill(send, state, agent_id, agent, conn_id):
     elif damage is not None and _spell_how is None:
         dealt, conversion, frac, spell_ar = body_spell_terms(
             state, agent, skill_id, damage[0], _tid, _tbody)
+    # SKILLS-CT (studies/skills 69): the caster's on-cast payoffs -- Aura of
+    # Restoration's self-heal, Backfire's punishment -- go out IMMEDIATELY ahead
+    # of its [58]: OBSERVED for bodies, 256 of 257 live 180 completions (a hero's
+    # E5 / E3 above stay first, RECONSTRUCTION: no hero bearer is on tape). A
+    # payoff that KILLS the caster ends the cast here, nothing of it lands --
+    # land_swing's rule for on_attack_triggers (RECONSTRUCTION). The dead-target
+    # exit above fires it too (OBSERVED 3 of 3, RV-2); the chain-gated and
+    # resurrection exits fire none (UNWITNESSED: the player's failed chain step
+    # and its resurrection fire none either, so the two paths agree).
+    if on_cast_triggers(send, state, agent_id, skill_id, conn_id) and agent.get("dead"):
+        agent["casting"] = None
+        return
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
     # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
     # cast episode with a property-58 batch, 58 leading (709/709 finished
@@ -50737,6 +50915,13 @@ def main():
         HEX_SKILL_USE_CHAIN = False
         print("HEXES: --no-hex-skill-use-chain -- Panic's wearer completing a skill "
               "interrupts nobody [studies/weapons 43 revert]", flush=True)
+    if a.no_hex_cast_triggers:
+        global HEX_CAST_TRIGGERS
+        HEX_CAST_TRIGGERS = False
+        print("HEXES: --no-hex-cast-triggers -- a spell completion fires no payoff: no "
+              "Aura of Restoration self-heal, no Backfire punishment (retail heals a 180 "
+              "bearer ahead of 256 of its 257 live spell completions) [studies/skills 69 "
+              "revert]", flush=True)
     if a.no_hex_end_burst:
         global HEX_END_BURST
         HEX_END_BURST = False

@@ -526,6 +526,58 @@ of its own hit (`triggers_on_attack`). The `bonus` -- the foe's attacks deal 1..
 -- is NOT modelled, said here. The aura ids index a client table this repo does not \
 read; they are Empathy's own, measured, and reused for nothing else."""
 
+# SKILLS-CT (2026-10-07, studies/skills/FINDINGS.md 69): payoffs that ride the BEARER's own
+# spell completion -- authsrv.on_cast_triggers, beside Empathy's on_attack_triggers above.
+# Neither row names a `scale_means`: the readers that key on one would resolve the scale AT
+# CAST (skill_heal would heal 180's bearer 460 on its own completion), and the scale here is
+# what the episode does while it is up.
+[skill_effect.180]
+triggers_on_cast = "Heal % of energy cost"
+[skill_effect.180.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """OBSERVED, toolkit/authsrv/trigjoin.py over the live corpus 2026-10-07 \
+(7 captures, 17 connections, 19 bearers, builds 38833 / 38888): under a LIVE 180 episode \
+every spell completion of the bearer carries ONE 0x00A3 [55, b, b, +f] IMMEDIATELY ahead \
+of its [58, b, 0], 256 of 257 (the one miss after a Drain Enchantment 68 onto the bearer); \
+none on 74 completions where 180 is gone, on a signet (0 of 5), a stopped cast (0 of 13) \
+or the 180 re-cast itself (0 of 2); ONE word per completion under two live 180s (a refresh, \
+11 of 11), and the word still rides a completion whose target died mid-cast (3 of 3). The \
+amount is the paid energy x the client's own scale slot as a percent (200..500, bit set; \
+38797 / 38833 / 38849 / 38888 / 38974 alike): cost 5 -> 23 and cost 10 -> 46 over a 555 \
+maximum at rank 13 -- 14 of the 17 bearers with clean words fit (555, 13) alone, the other \
+3 several (max, rank) pairs, all consistent; the declared [42] 555 and 480 are inside the \
+fits. The rounding is UNDISCRIMINATED (every witnessed product is whole; the server's \
+half-up is a choice). Deep Wound cuts it (6 words \
+under 0x00F1 bit 0x20: 37 / 18 over 455). The client's own template numbers two slots: a \
+HEAL at str1 (the scale, AGREE_PROGRESSION) and an ENERGY at str2 (the bonus slot, 0..1 bit \
+clear: INDETERMINATE) -- template sha16 3ddf258356bb54b7 on 38797 (skilldesc.py)."""
+note = """The scale is read at run time from the skills table (skill_scale_value at the \
+episode's rank); this row carries no number. NOT modelled: the energy-gain half (the \
+bonus slot is INDETERMINATE and a body's energy is never on the wire). The player-bearer \
+arm has NO witness -- no observer ever cast 180 -- and rides the body's slot \
+(RECONSTRUCTION). Whether the percent is of the record's cost or the paid one is \
+UNDISCRIMINATED (every bearer paid full price); the server uses what the cast paid."""
+
+[skill_effect.28]
+triggers_on_cast = "Damage"
+[skill_effect.28.provenance]
+source = "measured"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """The client's own description template for 28 (sha16 7911e7c7e91b46d8, build \
+38797, skilldesc.parse_row) numbers ONE slot, a DAMAGE at str1 -- the scale, 35..140 with \
+the bit set (AGREE_PROGRESSION; 38797 / 38833 / 38849 / 38888 / 38974 alike) -- carries the \
+TARGET_FOE and WHEN flags, and names a spell being cast as its trigger (measured as a \
+boolean over the normalised template; no text is carried). The duration is the record's \
+flat 10 / 10."""
+note = """RECONSTRUCTION on the wire: no live tape carries Backfire (hexjoin's census, \
+110 announced ids). Modelled on Empathy's channel -- the HEXER's scale at the hexer's rank, \
+armour-ignoring, 0x00A3 [55, caster, hexer, -f] -- ahead of the punished caster's [58], the \
+slot 180's payoff OBSERVED-ly rides. That it ignores armour, and that a payoff killing the \
+caster ends the cast, are UNVERIFIED: GWW "Backfire" and "Armor-ignoring damage" are owed."""
+
 [skill_effect.40]
 scale_means = "Energy loss"
 bonus_scale_means = "Heal per energy lost"
