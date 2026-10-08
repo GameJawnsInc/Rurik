@@ -28,6 +28,64 @@ move back.
 
 ---
 
+### CASTAI-RM -- 2026-10-07 -- **A removal slot now needs an afflicted target, Remove Hex 301 works, and CASTAI-C7 is closed. Both AI loops used to aim Mend Condition 275, Restore Condition 276 and Mend Ailment 277 as heals: at the hurt-most ally under 0.9, whether or not it carried a condition. The cast landed and removed and healed nothing, and an afflicted ally at 0.9 or above was never cured. A hostile's Remove Hex went at itself and removed nothing. The Zaishen tapes, re-derived today with castethogram, put 106 of 106 AI cures and 10 of 10 AI Remove Hexes at a body carrying the matching status bit on the wire, with no health floor on castethogram's reconstructed health (0.035 to 1.000). `REMOVAL_NEEDS_AFFLICTION` (ON; `--no-removal-needs-affliction` reverts the whole lane, the aim AND Remove Hex's removal) aims a removal slot at a carrier and HOLDS it the heal hold's way when there is none. It is a target step in both loops, not a selector: pick_skill is untouched and each loop still calls live_effect_hold once. It EXTENDS the class of §7 Q19's ruling ("can this body legally and usefully cast the slot it picked") to removals, shipped under the derived + flagged + tested rule. `remove_hexes` closes a hex through the existing path and fires no end burst. What the owner will feel: the slice's Tahlkora stops casting 276 at a hurt, clean player and casts it at a bleeding one at full health.**
+
+- **Evidence** (studies/monsterai §18.5, CASTAI-RM1 and RM2; every number re-derived at 642d8957, and the review's corrections re-derived again by the fixer):
+  - castethogram `--json --no-save`:
+    - 275 x92 (the Smiting Monks): condition bit 92 of 92 (OBSERVED), 0 self-targets; target health 0.035 / 0.563 / 1.000, 2 at >= 0.9.
+    - 277 x14: condition bit 14 of 14, 3 self-form.
+    - 301 x10 (Zaishen 7, henchman Healer 3): hexed bit 10 of 10, 3 self-form; target health 0.239 / 0.812 / 1.000, 5 at >= 0.9 (the first cut gave the median as 0.906; review EV-3). Those 5 were AIMED at four hexed bodies; 2 removed a hex (the henchman Healer's, at 0.9965 and 0.9977), 2 were the late removers below on a target already cleaned, and 1 was stopped by a [59] (review round 2, VF-2: the study's first wording, "Remove Hexed four bodies", claimed four removals). The aim is what the gate decides.
+    - The target-health figures are castethogram's RECONSTRUCTION (integrated from a full-health create; 84 of the 92 275 readings and 9 of the 10 301 readings, every 1.000 among them, have no anchoring health word). The carrier counts are OBSERVED; "no floor" rests on the reconstruction and on the WIKI line below (review EV-4).
+    - An 11th 301 is on the gapped :65009 prefix (zaishenrun `--prefix`, Z1.P2 4 of 4).
+  - 276 has no retail cast; it follows the rule by class (RECONSTRUCTION).
+  - The wire: 11 of 13 completed 301s carry [7, T, 1] [7, T, class] and clear 0x800. The other 2 were late removers announced at 459.68 on a target that a 301 announced at 458.93 and completed at 459.95 had already cleaned (review EV-7: the first cut wrote "completed 0.75 s earlier").
+  - A removed Incendiary Bonds fires nothing, 4 of 4 (studies/skills 61.1).
+  - WIKI *Hero behavior* rev 2741080: "NPCs will try to cleanse allies of conditions" and hex removal is cast "indiscriminately". The page does NOT say henchmen share the heroes' AI (review EV-6). That the henchman Healer is the class our party bodies model is RECONSTRUCTION.
+  - RECONSTRUCTION, said at the call site: which of several carriers is picked (lowest health fraction, then lowest id); one hex per cast (a GWW "Remove Hex" read is owed); the normal-mode monster tier (CASTAI-W2).
+  - Triage corrections: the "5 self-form 277s" are 3 x 277 and 2 x 301. C7's 229s are not "metronome bodies".
+- **Shipped (`e0af0629`, review fixes `3b6e33c4`, review round 2 `1360608e`):**
+  - episodemods: `removal_class` and `carries_removable`, both pure.
+  - authsrv: the `REMOVAL_NEEDS_AFFLICTION` flag; `removal_slot_class`, `removal_target` and `removal_hold_note`; the step in enemy_attack_tick and ally_cast_tick.
+  - authsrv: `remove_hexes` (newest first, through the 0x0044 / aura-off / push_status / speed / attributes / regen path, no `hex_end_burst`). resolve_heal's `removes_hexes` branch reads the row only with BOTH the cure rule and `REMOVAL_NEEDS_AFFLICTION` on, so `--no-removal-needs-affliction` is the whole revert. The first cut rode the cure rule alone, and the revert then aimed a hero's 301 the old way AND removed the hex (review EV-2).
+  - serverargs: `--no-removal-needs-affliction` (its help names the removal); `--no-condition-heal-rule`'s help and print now name 301.
+  - content: `skill_effect.301 removes_hexes = 1` as an INVENTED row (the count is chosen; the capture evidence is in `verified`; review EV-5). The stale "no retail cast of 275" label is refreshed, and the 276 / 277 rows now say what the tapes show.
+- **Tests:**
+  - test_castgate §7 runs on carried rows, so it works on a bare machine. It covers the predicates, removal_target, the hostile and party loops, the planted Bleeding, two allies, byte 3 against byte 4, both loops' self cures (a hero's 277 and 301 on itself), the hero curing the player at full health, and 301's newest-first removal with the [7]s sent only for the last hex, no burst against an expiry control, a removed Suffering's [44] back to 0, and a removed Deep Freeze 234 declaring the 0x0027 base back. The Deep Freeze check came in review round 2 (VF-1), because push_speed deleted alone had left §7 green; it asserts only "below the base, then exactly the base", so the snare arithmetic desk-snare changes is not its subject.
+  - Every driven §7 tick runs pick_skill under a len(bar) + 1 bound, so a spin is a FAIL by name and not a hang (review CD-5).
+  - Its known-bad arm reproduces 642d8957's bytes for the two 276 fights (`RM_HEAD`) and for two 301 fights (`RM_HEAD_301`: a hero's 301 at a hexed player and a self-hexed hostile's 301, the hex left in place), all recorded through a `git show` export.
+  - `_flips` now requires main()'s `global`, without which a flag binds a local (review CD-1).
+  - Sections 2-5 now drive the Hatcher's bar in the shipping configuration with the removal gate on: 276 is held at the clean squad and every other slot fires. HEAD_SEQUENCE turns both gates off by name (review CD-4).
+  - test_castgate §8 (vault only): castethogram's census over the two Zaishen tapes, replayed through removal_target, holds 0 of 116. The known-bad arm asks the server's own pre-gate rule (`hostile_heal_target` with the gate off), which misses exactly the casts at a target at or above 0.9: 2 of 92 275s, 5 of 10 301s, 0 of 14 277s (review EV-8).
+  - The implementer's 11 in-process and 2 source mutants were all red. The fixer's mutants: twelve source mutants, each red by name with its control green: a hold without `_held.add` (named as an overrun, no hang), remove_hexes without its pushes or without push_regen alone, the party loop forcing byte 4, `removes_hexes` riding the cure rule alone, `removal_slot_class` always None, the heal rule without its 0.9 floor, main() without the `global`, an other-ally heal aimed at the caster, removal_target offering the caster for byte 4 (test_agentlife and test_mechanics), and the party loop's `_heal_t` branch aiming nowhere. Review round 2: push_speed deleted alone from remove_hexes goes red by name. push_attributes deleted alone stays green, and must: it acts only on Weakness, a condition remove_hexes never closes, so it is an equivalent mutant, not a missing check. With the vault, sections 8 (a) / (b) dropped without a skip print "ONLY 142 OF A DECLARED FLOOR OF 147".
+  - Re-aimed, with the reason written at each site:
+    - test_agentlife `section_enemy_skill`: the opening cast and the "sends NO 55" check now use a bleeding ally, plus 1 new check that a clean ally holds 276.
+    - test_agentlife SLICE-B3 (3) and (3b) (review CD-3): the heal rule's byte-4 question is asked with Heal Other 286, a byte-4 heal that is not a removal. 276 keeps a byte-4 twin on the removal path, with the monk itself bleeding. (3b') adds the run's shape with 286 (+2 checks).
+    - test_mechanics §26: bleeding allies, with the clean-ally landing kept as the known-bad arm (+1 check). Its "alone" check now has the lone hostile bleeding (review CD-3).
+    - test_mechanics §28: the health-driven party heal casts Heal Other 286, which walks 276's old `_heal_t` branch. The first re-aim named Orison 281, which test_mechanics' RECORD does not carry (review CD-2).
+    - test_mechanics §40: a Bleeding is planted on 276's target.
+    - test_pools §10 / 10b: the ally bleeds.
+  - Counts:
+
+| Test | Bare | Vault | Floor |
+|---|---|---|---|
+| test_castgate | 96 | 147 | 36 -> 96 bare / 147 vault (per machine, decided on the content directory; review CD-7; +1 each in review round 2) |
+| test_agentlife | 697 | 708 | 707 / 697 |
+| test_mechanics | 344 | 386 | 386 / 344 |
+| test_pools | (see below) | 154 | unchanged |
+
+  - After review round 2 (1360608e), every test in the lane's affected.txt ran again, one at a time with the vault: 148 of 148 green on the first pass (test_castgate 147). The 3 excluded by instruction are test_handshake, test_harness and test_preflight_owner. Among the 148: test_heroskilltoggle 71, test_dispatch 54, test_effects 95, test_condwords 19, test_labelconsumers 77, test_pools 154, test_content 58 and test_playerswing 303. The lints are green: test_srclint 26, test_checks 20, test_citelint 50, test_identlint 28, test_provlint 19.
+  - test_pools' bare-machine run is red ("ONLY 36 OF 154"). That predates this lane: 642d8957's own test_pools.py gives the same result.
+- **CASTAI-C7 is CLOSED (RM5).** AI recharge runs from the completion: 1,209 of 1,216 completion-measured AI re-casts obey it, and 21 sit within 50 ms of it.
+  - 1197 is an artefact of the measure (its previous cast never completed).
+  - 1217 is an n = 1 body the table does not govern.
+  - 129's two 229s stay UNEXPLAINED.
+- **Q19 addendum, one line for §7 Q19's "What stays open":** *Addendum 2026-10-07 (CASTAI-RM, monsterai §18.5): removal skills are now n = 117 on tape with 0 counterexamples, and the same world-hold class covers them -- `REMOVAL_NEEDS_AFFLICTION`, reverted (aim and Remove Hex's removal) by `--no-removal-needs-affliction`; pick_skill untouched.*
+- **Still open** (in §8.1's rewritten line): selection order, the AI tier, heal thresholds on another ally, CASTAI-R3, the 289 / 290 upkeep hold, and Smite Hex 302 / Drain Enchantment 68.
+  - The upkeep hold was not shipped: the evidence is n = 4 from one definition, and its marker belongs in the landing path, which other lanes own in this pass.
+  - Named, unowned: joining 275's retail completion batch (on tape since 20260929T100038) against remove_conditions' batch.
+  - push_attributes after a hex removal has no check, and can have none until a hex moves attributes (review round 2, VF-1).
+- **Client confirmation** is owed: the runsheet below, owner-driven. Amended by the review: no `--practice-target`, which stopped the hostile swinging and casting (review EV-1). `--hostile-target-player` is added, because by default the hostile fights Tahlkora herself, whom 276 can never target. B1's heal expectation is one word per 276, with the amount scaled by the conditions removed (review CD-8).
+
 ### SKILLS-EX -- 2026-10-07 -- **Two primaries now act on every caster.**
 
 - **Expertise** takes 4 % a rank off an attack or Ranger skill's energy, ROUNDED. The Ranger at Expertise 1 on `20260914T005758` :56011 paid 14 for 392's 15, and the full cost for its 10s and 5s. Round predicts 6 of 6; floor (test_pools' old "WIKI, floored") predicts 1 of 6.

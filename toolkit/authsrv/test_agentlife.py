@@ -95,9 +95,18 @@ from codec import Codec  # noqa: E402
 # is no bare-machine number for this file", is history: the number is 694.
 # (The 2026-08-31 note at the top of this comment -- 261 vault / 248 bare --
 # predates every section since; neither is this file's number today.)
+# 2026-10-07 CASTAI-RM +1 (section_enemy_skill: with the ally CLEAN the hostile holds
+# 276 and opens with 253 -- the removal gate; the opening check and the 55 check were
+# re-aimed onto a bleeding ally, counts unchanged), from the green runs: 706 checks with
+# the vault (1 skip), 695 bare (6 skips). Both floors +1: 705 / 695.
+# 2026-10-07 the CASTAI-RM review (CD-3) +2 (section_hostile_heal_target: the heal rule's
+# byte 4 asked with Heal Other 286 in (3), and 276's byte-4 twin on the REMOVAL path --
+# the monk itself bleeding, the only carrier; (3b') the run's shape with 286 in 276's
+# place, both holds the heal rule's), from the green runs: 708 checks with the vault (1
+# skip), 697 bare (6 skips). Both floors +2: 707 / 697.
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
-FLOOR_VAULT = 704
-FLOOR_BARE = 694
+FLOOR_VAULT = 707
+FLOOR_BARE = 697
 LEDGER = checks.Ledger("agent lifetime", floor=FLOOR_VAULT if HAVE_VAULT_CONTENT else FLOOR_BARE)   # the second aot merge (2026-09-27): 703 = aot's 692 + main's +11 (the party-target gate), from the common 650 ;; aot's side: the merged tree (aot + main, 2026-09-26): 692 = aot's 677 + main's +15 (the taker's armour +11, the party-death doors +4), both from base 635; aot's chain: 2026-09-26 (later) the scatter review repaired, R3-F1..F5 + the mutation pass F3-F7: section_scatter +12 (the refusal once, the corridor, the pocked mesh, clause (d) alone, the burrow, the ceaser and the hold halted mid-chase, the stationary member, the re-entrant, the [59] form, the book on close, the real cast site), floor 665 -> 677 from the green run (678 with the vault's re-emitted skills table; still no bare-machine number)  # 2026-09-26 MONSTERAI-S +30 (section_scatter: the delay, the group, the one trigger, the cancel against interrupt_body's shape, the flee point dodging a second area, the refusing mesh, the legs, the flight, the hold and its lift, the never set, the two flags, the end-to-end check through D6's real open_area / area_tick / hit_enemy) + 1 declared skip (S9, party bodies), floor 635 -> 665 from the green run (666 with the vault's re-emitted skills table; the file still has no bare-machine number)  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run ;; main's chain: 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 639 -> 650 = THE CORE, from the green run (651 with the vault's re-emitted skills table)  # 2026-09-26 the party-death doors +4 (JARIN-S 5b: the known-bad arm -- kill_agent's default on a hero pays a KILL_REWARD and skips the death tick, and the predicate refuses it; a foe's Empathy (26, the real rows) killing the hero on its own swing through on_attack_triggers -> armour_ignoring_damage; the hostile control on that door; a heal on a Deep Wounded hero that does not clear zero), floor 635 -> 639 = THE CORE, from the green run (640 with the vault's re-emitted skills table, as before); HEAD's pre-fix authsrv.py reddens the two door checks  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run ;; main's side: 2026-09-26 the party-target gate: section_party_target_gate +11 (the two KNOWN-BAD ARMS -- an order and a pending cast reaching the tick at a hero damage it, and the swing engages the party on its own member; the attack order refused with nothing on the wire and a party-target row; a refused order leaves a running chain alone; a foe spell, an attack skill (#1934, retail's answer to the same operator action), --refusal-reasons' #1986 and a target-byte-16 spell refused at the press; the controls: a keyless row and a dead hero keep their answers, ally/other-ally/dead-ally skills at a hero and a foe spell at the foe are accepted; the 0x0026 arm's order), floor 650 -> 661 = THE CORE, from the green run (662 with the vault's re-emitted skills table); HEAD's pre-gate authsrv.py reddens 7 of the 11, the four arms and controls stay green  # 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 639 -> 650 = THE CORE, from the green run (651 with the vault's re-emitted skills table)  # 2026-09-26 the party-death doors +4 (JARIN-S 5b: the known-bad arm -- kill_agent's default on a hero pays a KILL_REWARD and skips the death tick, and the predicate refuses it; a foe's Empathy (26, the real rows) killing the hero on its own swing through on_attack_triggers -> armour_ignoring_damage; the hostile control on that door; a heal on a Deep Wounded hero that does not clear zero), floor 635 -> 639 = THE CORE, from the green run (640 with the vault's re-emitted skills table, as before); HEAD's pre-fix authsrv.py reddens the two door checks  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
@@ -203,7 +212,7 @@ ATTRIBUTE_PRIMARY = {0, 6, 12, 16, 17, 23, 35, 36, 40, 44}
 _BAR = ("316", "317", "318", "319", "320", "321", "322", "323")   # TEST_SKILLBAR
 # Every row each section READ on a vault run (the 2026-10-07 tracer), by section.
 CARRIED = {
-    "hostile_heal_target": ("1", "276", "281", "289", "312"),
+    "hostile_heal_target": ("1", "276", "281", "286", "289", "312"),   # 286: CASTAI-RM CD-3
     "cast_target_died": ("2", "276", "281"),
     "party_target_gate": ("2", "167", "191", "281", "286", "322"),
     "hold_plane": ("2", "26", "194", "252", "253", "276", "281") + _BAR
@@ -961,7 +970,7 @@ def main():
     section_swing_back()
     # THE CARRIED ROWS (2026-10-07, the comment above RECORD): each wrapped
     # section reads exactly the record's rows, on a vault run and a bare one.
-    with carried(*CARRIED["hostile_heal_target"]):
+    with carried(*CARRIED["hostile_heal_target"], labels=("286",)):
         section_hostile_heal_target()
     section_passive_hostiles()
     with carried(*CARRIED["cast_target_died"]):
@@ -1040,9 +1049,14 @@ def _world_ally(dist=85.0, **over):
                                # SLICE-B3: a hostile's heal aims at whoever is
                                # HURT (hostile_heal_target), so an ally at full
                                # health draws no cast at all. Half health keeps
-                               # every section below measuring what it did --
-                               # the targeted form, the bar's cycle -- and 276
-                               # still heals nothing here: no condition to cure.
+                               # every section below measuring what it did.
+                               # CASTAI-RM (2026-10-07): this ally carries NO
+                               # condition, so 276 -- a removal slot -- is now
+                               # HELD here (REMOVAL_NEEDS_AFFLICTION: a cure needs
+                               # an afflicted target) and the bar cycles on through
+                               # 253 / 312 / 289; it used to be cast at this ally
+                               # and heal nothing. section_enemy_skill plants a
+                               # Bleeding where it needs 276 cast.
                                health=50.0, max_health=100.0)
     return state
 
@@ -1501,8 +1515,9 @@ def section_hostile_heal_target():
     Three arms: a hurt ally is healed, a healthy squad skips the slot AND
     advances the round-robin cursor (the trap: a skipped slot that held the
     cursor would be picked again every tick), and a hurt monk with a healthy
-    ally heals itself under Orison but never under Restore Condition -- the
-    client's target byte, not ours.
+    ally heals itself under Orison but never under an other-ally heal (Heal
+    Other 286 since the CASTAI-RM review; Restore Condition is a removal slot
+    now and keeps its own byte-4 twin) -- the client's target byte, not ours.
     """
     import authsrv
     print("\n== SLICE-B3: a hostile's heal aims at the hurt body ==")
@@ -1573,18 +1588,40 @@ def section_hostile_heal_target():
               "a hurt monk with a healthy ally heals ITSELF under Orison -- "
               "target byte 3 lets the caster be the recipient",
               f"target {st['agents'][10].get('cast_target')}")
-    st = squad(60, 200, [(276, 0.75, 2.0)])
+    # RE-AIMED 2026-10-07 (the CASTAI-RM review, CD-3): this asked the HEAL rule's
+    # byte-4 question with Restore Condition 276 -- which is a REMOVAL slot now, held
+    # by the removal gate (nobody carries a condition) before the heal rule is asked,
+    # so it stayed green under a heal rule that aimed byte 4 at the caster. The heal
+    # rule's byte 4 is asked with Heal Other 286 (byte 4, a heal and not a removal; its
+    # row and label carried), and 276 keeps its own byte-4 twin on the REMOVAL path:
+    # the monk itself bleeding, the only carrier, still not a target.
+    st = squad(60, 200, [(286, 0.75, 3.0)])
     _swings(st)
     LEDGER.ok(st["agents"][10].get("casting") is None
               and st["agents"][10].get("last_slot") == 0,
-              "but never under Restore Condition: target OTHER ally, the "
-              "healthy ally does not need it, and the slot is stepped past",
-              f"casting {st['agents'][10].get('casting')}")
+              "but never under Heal Other: target OTHER ally, the healthy ally "
+              "does not need it, and the slot is stepped past (the heal rule's "
+              "byte 4)", f"casting {st['agents'][10].get('casting')}")
+    st = squad(60, 200, [(276, 0.75, 2.0)])
+    authsrv.effect_table(st).apply(10, 478, 0, 30.0, time.time(), type_code=8, caster=99)
+    _swings(st)
+    LEDGER.ok(st["agents"][10].get("casting") is None
+              and st["agents"][10].get("last_slot") == 0
+              and [ep["skill"] for ep in authsrv.effect_table(st).on_agent(10)] == [478],
+              "nor under Restore Condition with the MONK itself bleeding: the "
+              "removal gate's byte 4 never offers the caster, the only carrier "
+              "(CASTAI-RM), and the slot is stepped past",
+              f"casting {st['agents'][10].get('casting')} cast_target "
+              f"{st['agents'][10].get('cast_target')}")
 
     # (3b) THE RUN'S OWN SHAPE, the known-bad arm: two heals and a recharging
     # attack on a healthy squad. Harness 20260912T122339 saw the monk cast
     # Orison at itself at full health, because the first re-pick loop ended
     # by exhaustion with a heal slot in hand and the player as its target.
+    # 2026-10-07 (CASTAI-RM; the review's CD-3): the run's bar is kept, and its
+    # 276 is now held by the REMOVAL gate (the squad is clean) -- the bound this
+    # checks is the same either way; the HEAL hold's half is (3b') below, the same
+    # shape with Heal Other 286 in 276's place.
     st = squad(200, 200, [(281, 1.0, 2.0), (252, 1.0, 10.0), (276, 0.75, 2.0)])
     st["agents"][10]["skill_ready"][1] = time.time() + 9.0      # Banish recharging
     st["agents"][10]["last_slot"] = 1                            # just cast it
@@ -1595,11 +1632,26 @@ def section_hostile_heal_target():
                       authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT)
             and v and v[0] == agents.GV_SKILL_ACTIVATED]
     LEDGER.ok(m.get("casting") is None and not cast,
-              "two heals and a RECHARGING attack on a healthy squad: nothing "
-              "is cast -- the search ends when it re-picks a slot it already "
-              "held, and never falls out with a heal aimed at the player "
+              "a heal, a cure and a RECHARGING attack on a healthy, clean squad: "
+              "nothing is cast -- the search ends when it re-picks a slot it "
+              "already held, and never falls out with a heal aimed at the player "
               "(the run's self-heal at full health)",
-              f"casting {m.get('casting')} casts {cast} held both heals")
+              f"casting {m.get('casting')} casts {cast} held both")
+    # (3b') the same shape with two HEALS -- Heal Other 286 in 276's place -- so
+    # both holds are the heal rule's, as the run's were before CASTAI-RM.
+    st = squad(200, 200, [(281, 1.0, 2.0), (252, 1.0, 10.0), (286, 0.75, 3.0)])
+    st["agents"][10]["skill_ready"][1] = time.time() + 9.0      # Banish recharging
+    st["agents"][10]["last_slot"] = 1                            # just cast it
+    sent = _swings(st)
+    m = st["agents"][10]
+    cast = [v for op, v, _l in sent
+            if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT)
+            and v and v[0] == agents.GV_SKILL_ACTIVATED]
+    LEDGER.ok(m.get("casting") is None and not cast,
+              "  and with two HEALS (281, Heal Other 286) and the recharging "
+              "attack: nothing is cast, both held by the heal rule",
+              f"casting {m.get('casting')} casts {cast}")
 
     # (3c) a SELF heal is gated the same way, and a NON-heal ally skill is not.
     st = squad(200, 200, [(1, 2.0, 4.0)])
@@ -5907,7 +5959,20 @@ def section_enemy_skill():
     #    LONE hostile can no longer cast it (test_mechanics 26 pins that); the
     #    bar's cycle is exercised here with an idle ally standing by, and the
     #    opening cast names THAT ally rather than the player.
+    #    RE-AIMED 2026-10-07 (CASTAI-RM, studies/monsterai 18.5): a removal slot
+    #    now needs an AFFLICTED target, so with the ally CLEAN 276 is HELD and the
+    #    bar opens with 253 at the player -- checked first, below. The cycle this
+    #    section measures needs 276 castable, so the ally then BLEEDS: the cure 276
+    #    exists for (retail's AI cures went at a carrier 106 of 106).
+    clean = cast_msgs(_swings(_world_ally()))
+    LEDGER.ok(len(clean) == 1 and clean[0][1][-1] == authsrv.ENEMY_SKILL_BAR[1][0]
+              and clean[0][1][2] == authsrv.PLAYER_AGENT_ID,
+              "with the ally CLEAN the hostile HOLDS 276 (nobody carries a condition) "
+              "and opens with 253 at the player (CASTAI-RM; before 2026-10-07 276 went "
+              "at the clean ally and healed nothing)", f"{clean}")
     state = _world_ally()
+    authsrv.effect_table(state).apply(11, 478, 0, 30.0, time.time(), type_code=8,
+                                      caster=99)                 # Bleeding on the ally
     sent = _swings(state)
     casts = cast_msgs(sent)
     LEDGER.ok(len(casts) == 1 and casts[0][1][1] == 10
@@ -5966,12 +6031,21 @@ def section_enemy_skill():
               f"{fl} -- 276 Restore Condition heals 10-70 (GWW). The old flat "
               f"fraction made a heal hurt the player; dealing its magnitude AS "
               f"damage would have been worse, not better")
-    heals = dmg_floats(land, props=(agents.GV_HEALTH_GAIN,))
-    LEDGER.ok(not heals,
-              "and it sends NO 55 either: the ally carries no condition, "
-              "and Restore Condition heals per condition REMOVED "
-              "(SKILLS-RC; the pre-2026-09-10 flat self-overheal is gone)",
-              f"{heals} -- test_mechanics 24 drives the cured case")
+    heals = [v for op, v, _l in land
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+             and v[0] == agents.GV_HEALTH_GAIN]
+    bleeds = [ep for ep in authsrv.effect_table(state).on_agent(11) if ep["skill"] == 478]
+    # RE-AIMED 2026-10-07 (CASTAI-RM): this was "it sends NO 55 either: the ally
+    # carries no condition" -- the clean-ally cast that healed nothing, which the
+    # removal gate now HOLDS (the clean check at 1. above). With the ally bleeding
+    # the cure removes the one condition and heals ONCE, on the ally, from the caster.
+    LEDGER.ok(len(heals) == 1 and heals[0][1:3] == [11, 10] and not bleeds,
+              "and it sends ONE 55, on the ALLY from the caster: its one condition "
+              "(Bleeding) removed, healed once -- Restore Condition heals per "
+              "condition REMOVED (SKILLS-RC; the pre-2026-09-10 flat self-overheal "
+              "is gone)",
+              f"{heals} bleeding left {len(bleeds)} -- test_mechanics 24 drives the "
+              f"resolver's own cases")
     # The damage skill on the same bar, to prove the path is not simply dead.
     LEDGER.ok(holy is not None and holy[1] == "standalone" and holy[0] == 46,
               "while 312 Holy Strike on the same bar DOES damage, at 46",

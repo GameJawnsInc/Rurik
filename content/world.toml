@@ -553,7 +553,10 @@ MECHANIC (SKILLS-RC, 2026-09-10, studies/skills 45): GWW's description --
 ally is healed for 10...58...70 Health" -- and "cannot self-target". Text taken
 2026-09-10 through the wiki's search index (the page itself refused the
 fetcher); revision date of the description not retrieved. The client's target
-byte for 276 is 4 = other ally (effects.OTHER_ALLY_TARGET)."""
+byte for 276 is 4 = other ally (effects.OTHER_ALLY_TARGET). RETAIL, 2026-10-07: 276
+itself has 0 AI casts on tape; that its slot needs an afflicted target
+(REMOVAL_NEEDS_AFFLICTION, CASTAI-RM) rides 275's and 277's 106 of 106 by class --
+RECONSTRUCTION for 276."""
 
 [skill_effect.277]
 scale_means = "Healing"
@@ -567,7 +570,10 @@ legal -- effects.ALLY_TARGET). GWW: "Removes one condition ... from target
 ally. For each remaining Condition, that ally is healed for 5...57...70
 Health." Which one: GWW "Effect"/"Cover" -- "the most recently applied effect
 is always the first one to be removed". SKILLS-MA, studies/skills 46. Revision
-dates not retrieved (the pages refused the fetcher)."""
+dates not retrieved (the pages refused the fetcher). RETAIL, refreshed 2026-10-07
+(CASTAI-RM1, studies/monsterai 18.5): OBSERVED, 14 AI casts of 277 on 20260928T103123
+(the Zaishen Elementalists), every one at a body carrying a condition bit, 3 of them in
+the self form 0x009F [60] -- byte 3's caster IS a legal target."""
 
 # DESKWORK-D5 3(d), SKILLS-MC (2026-09-23): the third cure shape skills 46.3 left
 # unmodelled -- remove ONE condition and, IF one was removed, heal the flat scale once.
@@ -591,9 +597,46 @@ The client's own description template is the LOCAL witness for the mechanic
 5/70, labelled HEAL; flags CLAUSE_REMOVAL, IF, TARGET_ALLY; hand row scale_means =
 Healing AGREE): a flat heal inside an IF clause on the removal, neither per-removed (276)
 nor per-remaining (277). Which condition goes: the newest (GWW "Cover", the rule
-remove_conditions already honours). RECONSTRUCTION on the wire: no retail cast of 275
-has been captured (46.3 stands); the numbers are the client's own row. studies/skills
-58."""
+remove_conditions already honours). ~~RECONSTRUCTION on the wire: no retail cast of 275
+has been captured (46.3 stands)~~ -- STALE since the Zaishen tapes, refreshed 2026-10-07
+(CASTAI-RM1, studies/monsterai 18.5): OBSERVED, 92 retail AI casts of 275 on
+20260929T100038 (the Smiting Monks), every one 0x00A0 [60] at ANOTHER monk carrying the
+condition bit 0x02, 0 at a clean one, 0 self-targets (byte 4 agrees); target health
+0.035 / median 0.563 / 1.000 is castethogram's RECONSTRUCTION (84 of the 92 readings,
+both 1.000s among them, unanchored by any health word). The completion batch's cure wire
+is on tape for the first
+time and is NOT yet joined against remove_conditions' batch (named, not done). The
+numbers are the client's own row. studies/skills 58."""
+
+# CASTAI-RM (2026-10-07; studies/monsterai/FINDINGS.md 18.5): Remove Hex as a working
+# skill -- the hex sibling of the three cures above. resolve_heal reads `removes_hexes`
+# (remove_hexes: newest first, no end burst); the AI loops' removal target step reads it
+# through episodemods.removal_class. On no default bar; a hero bar edit (0x005C) or an
+# operator's --skills reaches it.
+[skill_effect.301]
+removes_hexes = 1
+[skill_effect.301.provenance]
+source = "invented"
+note = """Ours: the row's one value, the COUNT 1, is chosen rather than observed (see
+`verified` -- the wire shows THAT a Remove Hex removes a hex, never how many). Until
+the pass-9 review of 2026-10-07 this row said source = "capture" over a value its own text
+called RECONSTRUCTION; the capture evidence is in `verified`, and the GWW "Remove Hex"
+read that would make it a wiki row is owed."""
+verified = """OBSERVED, CASTAI-RM2 (a livewire scan of every live 301, the gapped :65009 set
+aside by capgaps): 14 announces of 301 (10 AI -- the Zaishen Elementalists x7 and the
+henchman Healer x3 -- and 4 human on 20260817T231139), 13 completed with [58, caster, 0].
+11 of the 13 completion batches carry [7, T, 1] [7, T, class] and an 0x00F1 with 0x800
+clear -- the target's last hex gone; the other 2 (two late casters on 20260928T103123,
+announced at 459.68 while their target was still hexed, completed at 460.68) found it
+already cleaned by a 301 announced at 458.93 and completed at 459.95, 0.73 s before
+theirs, and sent neither. A removed
+Incendiary Bonds hex fired NO payoff, 4 of 4 (studies/skills 61.1). Every AI 301 went at
+a hexed body (10 of 10, castethogram hexed_bit). The COUNT, 1: the client record (type 5,
+target byte 3, args 0 -- no count slot, toolkit/clientscan/skilldesc.py --row 301 flags
+TARGET_ALLY only) carries no number for it, and a removal that leaves another same-class
+hex sends a non-observer reader nothing, so one-per-cast is UNVERIFIED on the wire and
+RECONSTRUCTION from the skill's singular name; GWW "Remove Hex" is the read OWED. The
+completion visual [20, T, caster, 537] has no skill_visual row (cosmetic, left out)."""
 
 # SLICE-B3 (2026-09-12): the slice's monk bar. Both rows below carry a
 # DISAGREEMENT this file had not met before: the client's endpoints and the

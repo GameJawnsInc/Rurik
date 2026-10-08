@@ -677,3 +677,66 @@ def carries_live_effect(table, wearer_id, skill_id, klass, condition_id=None):
                 name = effects.CONDITION_SKILLS.get(condition_id, str(condition_id))
                 return f"{name} ({condition_id}, buff {ep['buff']}, live)"
     return None
+
+
+# ---- CASTAI-RM (2026-10-07; studies/monsterai/FINDINGS.md 18.5): THE REMOVAL GATE'S
+# PREDICATES -- "is this a removal slot, and does this body carry what it removes".
+# Pure, like the live-effect predicate above: they read a content row and the effect
+# table and decide nothing about WHICH slot is cast. The gate that asks them is
+# authsrv's `removal_target` (REMOVAL_NEEDS_AFFLICTION), a target step inside the AI
+# loops' heal arm -- not a selector, and not a second live_effect_hold call.
+#
+# The hex type code is the client's own column (effects.EFFECT_TYPES: 4 = hex;
+# effects.TYPE_STATUS_BITS maps it to 0x800, the bit retail's removers were cast at).
+REMOVAL_HEX_TYPE = 4
+REMOVAL_KEYS = (("removes_conditions", "condition"), ("removes_hexes", "hex"))
+
+
+def removes_some(value):
+    """A removal key's value names a removal: "all" or a positive count. A bool is
+    refused as a count (True would read as 1 -- a typo, not a row)."""
+    if value == "all":
+        return True
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def removal_class(erow):
+    """'condition' | 'hex' | None -- what a skill_effect row's removal removes.
+
+    'condition' for `removes_conditions` (Mend Condition 275, Restore Condition 276,
+    Mend Ailment 277), 'hex' for `removes_hexes` (Remove Hex 301), else None. NOT
+    364's singular `removes_condition` ("Charge!"): that is a shout's named side
+    effect, never the reason the slot is cast, so it is not a removal slot and stays
+    out of this gate (RECONSTRUCTION). A row naming BOTH plural keys asks no single
+    question and returns None -- ungated, the pre-gate cast; no row has that shape,
+    and the first one should decide its own rule rather than inherit one here.
+    """
+    if not erow:
+        return None
+    named = [klass for key, klass in REMOVAL_KEYS if removes_some(erow.get(key))]
+    return named[0] if len(named) == 1 else None
+
+
+def carries_removable(table, aid, klass):
+    """Why agent `aid` carries something a `klass` removal would take off, or None.
+
+    'condition': any LIVE episode of one of the ten conditions (effects.CONDITION_SKILLS
+    -- the episodes resolve_heal's remove_conditions closes); 'hex': any live episode
+    of type 4 (the episodes remove_hexes closes). Live means still in the table, the
+    same reading carries_live_effect makes. Any caster, any age.
+
+    OBSERVED, retail (CASTAI-RM1, studies/monsterai 18.5): every AI removal cast on
+    tape went at a body carrying the matching status bit -- 106 of 106 condition cures
+    (275 x92, 277 x14; castethogram's cond_bit) and 10 of 10 Remove Hex (301; hexed_bit,
+    the 11th on the gapped :65009 prefix, zaishenrun --prefix) -- and none at a clean
+    one. The status bit is the wire's proxy for the episode this reads.
+    """
+    if not table or klass not in ("condition", "hex"):
+        return None
+    for ep in table.on_agent(aid):
+        if klass == "condition" and ep["skill"] in effects.CONDITION_SKILLS:
+            return (f"{effects.CONDITION_SKILLS[ep['skill']]} ({ep['skill']}, "
+                    f"buff {ep['buff']})")
+        if klass == "hex" and int(ep.get("type_code", 0) or 0) == REMOVAL_HEX_TYPE:
+            return f"hex {ep['skill']} (buff {ep['buff']})"
+    return None

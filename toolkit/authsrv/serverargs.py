@@ -1972,6 +1972,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "stances are never held (the JARIN hero re-cast 346 while "
                          "live, 10 of 17). WIKI 'Hero behavior' for heroes, "
                          "RECONSTRUCTION for normal-mode monsters.")
+    ap.add_argument("--no-removal-needs-affliction", action="store_true",
+                    help="CASTAI-RM REVERT (studies/monsterai 18.5; the class of PLAN.md "
+                         "sec.7 Q19): a removal slot -- Mend Condition 275, Restore "
+                         "Condition 276, Mend Ailment 277, Remove Hex 301 -- aims as it did "
+                         "before 2026-10-07: a cure at the hurt-most ally under "
+                         "HERO_HEAL_AT whether or not it carries a condition (the cast "
+                         "lands, removes nothing and heals nothing) and never at an "
+                         "afflicted ally at 90%% health or more; a hostile's 301 at "
+                         "itself; and Remove Hex 301 removes nothing, as when it had no "
+                         "effect row -- the flag reverts the whole lane. Wrong both ways: "
+                         "retail's AI cured only carriers (the status bit on the wire), "
+                         "106 of 106 cures and 10 of 10 Remove Hex, with no health floor "
+                         "(castethogram's reconstructed target health 0.035 to 1.000). By "
+                         "default the slot aims at an ally carrying what it removes "
+                         "(lowest health, then lowest id: RECONSTRUCTION) and is HELD, the "
+                         "heal hold's way, when nobody does.")
     ap.add_argument("--self-cast-names-target", action="store_true",
                     help="CASTAI REVERT: a cast that lands on its own caster "
                          "announces on 0x00A0 naming whatever the cast site "
@@ -3147,7 +3163,9 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "self-heal again -- no condition removal, no "
                          "per-condition amount, no target legality -- the "
                          "pre-2026-09-10 wire that healed the enemy to full "
-                         "every three seconds. GWW: 'Remove all conditions "
+                         "every three seconds; every other cure removes nothing "
+                         "either, and Remove Hex 301 removes no hex (CASTAI-RM). "
+                         "GWW: 'Remove all conditions "
                          "from target other ally. For each condition "
                          "removed, that ally is healed'.")
     ap.add_argument("--no-casting-armour", action="store_true",
