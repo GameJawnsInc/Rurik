@@ -2324,11 +2324,16 @@ def main():
         """Run the shipped arm over `reports` with ZERO_LEAD set to `flag`.
 
         `stamp_age` back-dates the send-side hook's `grant_at` by that many
-        seconds. The arm reads the real clock for its own `now`, so the rate
-        limit is driven by moving the LAST GRANT rather than by faking the
-        present: `stamp_age=0` leaves every send inside the floor (the rate
-        limit bites) and `stamp_age=10` puts every send well outside it (the
-        limit is open), with no monkey-patching of `time`.
+        seconds, so the rate limit is driven by moving the LAST GRANT:
+        `stamp_age=0` leaves every send inside the floor (the rate limit bites)
+        and `stamp_age=10` puts every send well outside it (the limit is open).
+
+        EVERY REPORT ARRIVES AT ONE INSTANT `t` (`frozen`), which is what "two
+        reports 0 s apart" says. Until 2026-10-08 each report re-read the wall
+        clock and the arm read its own: the second report's distance from the
+        first grant was the whole of the first arm run plus the start of the
+        second, against GRANT_MIN_INTERVAL's 0.5 s -- RATE, the fourth cell and
+        the refusal's telemetry row read the machine's speed under load.
         """
         st = {"pos": (1000.0, 2000.0), "plane": plane, "pos_seen": 0.0}
         w, r = Sent(st), FakeRec()
@@ -2347,9 +2352,10 @@ def main():
         authsrv.ZERO_LEAD = flag
         authsrv.KBD_SYNC = False
         try:
+            t = time.time()
             for v in reports:
-                w.now = time.time() - stamp_age
-                arm(v, st, r, w, 0)
+                w.now = t - stamp_age
+                frozen(t, arm, v, st, r, w, 0)
         finally:
             authsrv.ZERO_LEAD = was
             authsrv.KBD_SYNC = was_ks
@@ -3097,11 +3103,13 @@ def main():
 
         `steps` is [(report, may_grant), ...]. The rate limit is driven by
         setting the SHARED `grant_at` clock directly before each report --
-        `may_grant=False` stamps it at `now`, inside the floor -- because the
-        arm reads the real clock for its own `now` and the alternative is
-        monkey-patching `time`. That is the same technique section 14's
-        `drive()` uses through `Sent.now`, made per-report so a refusal can sit
-        BETWEEN two grants, which is the shape the named limit is about.
+        `may_grant=False` stamps it at `now`, inside the floor. That is the same
+        technique section 14's `drive()` uses through `Sent.now`, made
+        per-report so a refusal can sit BETWEEN two grants, which is the shape
+        the named limit is about. Each report's arm runs AT its own `now`
+        (`frozen`): on the wall clock a refusal was 0.5 s of margin against
+        whatever ran before the arm's rate read, and past it the refused report
+        GRANTED and NAMED LIMIT read the machine's speed.
 
         `wire` swaps in a different send() (see `PcDeadWire`) and `catch` names
         the exception class the driver absorbs, stashing it on `w.raised` --
@@ -3123,7 +3131,7 @@ def main():
                 st["grant_at"] = now - (10.0 if may else 0.0)
                 w.now = now - 10.0
                 try:
-                    arm(values, st, r, w, 0)
+                    frozen(now, arm, values, st, r, w, 0)
                 except catch as exc:
                     w.raised.append(exc)
         finally:

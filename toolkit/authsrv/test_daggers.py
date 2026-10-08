@@ -1125,7 +1125,12 @@ def section_early_double(have_fields):
               "and a record that rolled a single arms nothing, whatever the chance is now")
 
         # the gate itself: 7/8 of an interval after the last start
-        iv = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(st, PLAYER)
+        # The gate reads AT the stamp (`frozen`, test_position_trust): a single's
+        # margin is iv/8 - 0.02 = 0.147 s of wall clock between this stamp and
+        # attack_tick's own `time.time()`, which one preemption under load spends --
+        # and then the single opens and "a single's does not" reds on the machine.
+        from test_position_trust import frozen
+        iv =authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(st, PLAYER)
         for roll, want in ((True, 2), (False, 1)):
             st = _world(authsrv)
             sent.clear()
@@ -1133,8 +1138,9 @@ def section_early_double(have_fields):
             authsrv.attack_tick(send, st, 1)                  # the first swing opens
             st["player_swing"] = None                         # ... and has landed
             st["player_double_roll"] = roll
-            st["player_last_swing"] = time.time() - (iv * 7 / 8 + 0.02)
-            authsrv.attack_tick(send, st, 1)
+            t12 = time.time()
+            st["player_last_swing"] = t12 - (iv * 7 / 8 + 0.02)
+            frozen(t12, authsrv.attack_tick, send, st, 1)
             check(len(starts()) == want,
                   ("7/8 of an interval on, a DOUBLING swing opens" if roll
                    else "and a single's does not -- it waits the full interval"),
