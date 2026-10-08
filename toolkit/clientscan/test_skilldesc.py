@@ -1198,11 +1198,21 @@ if records is not None:
           f"the rest nothing (815)", dict(g))
     cbt = skilldesc.census_by_type(records, grades, rep)
     n_hand_14 = sum(1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 14)
-    check(cbt[5]["n"] == 287 and cbt[5]["nothing"] >= 268 and cbt[14]["modelled"] == n_hand_14   # 269 since B4's two Spell hand rows (2059, 799)
+    # RE-AIMED 2026-10-07 (studies/weapons 45): this was `cbt[5]["nothing"] >= 268` (269 since
+    # B4's two Spell hand rows, 2059 and 799) -- a content-side count pinned as a literal, the
+    # ENG-7 shape the comment above refuses: weapons 45's five area-over-time hand rows (1094,
+    # 2222, 830, 910, 1380, all Spells) moved five Spells from "nothing" to "modelled" (264),
+    # and the floor reddened on good news. A Spell is not an EFFECT_TYPES row, so it is
+    # modelled exactly when it carries a hand row and resolves nothing otherwise: the check now
+    # states that EXACTLY, derived from the rows loaded, as the type-14 half beside it does.
+    n_hand_5 = sum(1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 5)
+    check(cbt[5]["n"] == 287 and cbt[5]["modelled"] == n_hand_5
+          and cbt[5]["nothing"] == 287 - n_hand_5 and cbt[14]["modelled"] == n_hand_14
           and cbt[6]["episode-only"] + cbt[6]["episode-refused"] + sum(
               1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 6) == 227,
-          "by type: 270+ of 287 Spells resolve nothing; the type-14 modelled count is the hand rows' "
-          "own; every one of the 227 enchantments is an episode, a refusal or a hand row",
+          f"by type: of 287 Spells the {n_hand_5} with a hand row are modelled and the other "
+          f"{287 - n_hand_5} resolve nothing; the type-14 modelled count is the hand rows' own; "
+          f"every one of the 227 enchantments is an episode, a refusal or a hand row",
           {k: dict(v) for k, v in cbt.items() if k in (5, 6, 14)})
     check(all(grades[sid] == "modelled" for sid in hand_rows if sid in records) and n_hand >= 50,
           f"every hand row is a corpus row and grades modelled ({n_hand} rows)")

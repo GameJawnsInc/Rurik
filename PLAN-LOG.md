@@ -28,6 +28,69 @@ move back.
 
 ---
 
+### WEAPONS-C11 -- 2026-10-07 -- **Five more areas over time go live, and the caster's death gets a witness past a defeat mark. Breath of Fire 1094 and Snow Storm 2222 (rows only), Ray of Judgment 830 (Burning on each struck foe every tick), Spirit Rift 910 (ONE strike at +3.0, then Cracked Armor) and Savannah Heat 1380 (tick k deals k x its scale, for the player and a body alike; `--no-area-tick-ramp` reverts) now carry client-table rows. A Fire Storm still ticks after its caster's DEFEAT MARK: OBSERVED n = 1 on the second Zaishen tape (match 4 lost, CASTAI-ZF25), which is the reading the server already made. A caster killed in play has no witness; every candidate is inconclusive. Six of the fourteen stay inert, each needing a clause of its own (WEAPONS-C12).**
+
+- **What ships** (`d7da57c0`, `9cbe2003`; review fixes `de3779ef`, `fe875c47`, `a29f2c2e`; studies/weapons/PLAN.md §45).
+  - Five `skill_effect` rows after 167's: `source = "client-table"`, `extractor = "toolkit/clientscan/skilldesc.py"`, `build = 38797`. The records are identical on 38797, 38888 and 38974. At rank 12, through the client's interpolator, they deal 34 / 38 / 42 / 105 / 17.
+  - One code change, the ramp:
+    - `areatime.tick_amount` and `authsrv.area_tick_ramp`;
+    - open_area records the row's `tick_ramp`;
+    - `_area_strike` computes each tick's amount once, for both the player's and a body's words.
+    - `AREA_TICK_RAMP` sits at column 0, and main() flips `--no-area-tick-ramp` under a `global`. The flat revert deals 85 over the area, against 255.
+  - None of the five was ever cast on a live tape (aotjoin P8). The wire reuses Fire Storm's OBSERVED shape, which is RECONSTRUCTION for these five:
+    - the completion opens the area with no word and no ground effect;
+    - each tick sends one clean word per foe inside;
+    - to the player: `0x00CF`, `[10, me, sid]`, then the word.
+- **The witness (WEAPONS-C11).** Re-derived with aotjoin, a raw `deepwoundjoin.sequence` read, and zaishenrun:
+  - On `20260929T100038` :51199, the Zaishen Mage (agent 10) completes Fire Storm (announced 562.188) and ticks k = 1..3.
+  - Its dead bit rises at completion + 8.487, and that is its last status word on the connection.
+  - A clean tick lands at + 9.989 (k = 10) on foes 4 and 6.
+  - **That dead bit is match 4's DEFEAT MARK, not a kill.** Match 4 is lost (monsterai FINDINGS 18.3).
+    - `zaishenrun.py --capture 20260929T100038` lists its end marks at 572.686: the Mage at a reconstructed 0.4955 and the Archer (agent 8) at 0.9459, marked dead at one instant.
+    - Its resets come at +8.237: `0x00A2 [55, 3 / 4 / 6, 0.6085]` (= 300/493) and `[55, 5, 1.0]`.
+    - CASTAI-ZF25 is OBSERVED as a pattern; reading it as the match's end is RECONSTRUCTION.
+    - So the k = 10 tick lands after both the caster's defeat mark and the match-end reset, on two reset Monks.
+  - **The Zaishen tapes' only caster killed in play** is :58544's agent 9 (`20260928T103123`, cast #8).
+    - Its dead bit rises alone, 29 s before the connection ends, at a reconstructed 0.0326 (castethogram `death_checks`, RECONSTRUCTION).
+    - It is inconclusive: nobody was struck after k = 4.
+    - §41's two PvP caster deaths are inconclusive too (both areas empty); they were not read for a defeat mark.
+  - Tally of caster deaths with the area live, 4 in all: 1 positive (past a defeat mark) and 3 inconclusive.
+  - Left unresolved, and said so: the k = 10 fraction differs from the cast's earlier one.
+- **The lock.** `test_aotrows.py` (NEW): 26 checks bare, 30 with the vault.
+  - The five go through the real press and E5, scored by one predicate.
+  - Known-bad arms: the row deleted, 910 without `tick_period`, 1380 without `tick_ramp`, and 830's Burning applied once.
+  - A hostile's 1094 through `land_skill`.
+  - §4b, added in review: Savannah Heat cast by a BODY (a hostile's onto the player, a hero's onto two hostiles) deals k x the amount at tick k. Before §4b, a body path that dropped the ramp stayed green.
+  - The flag's main() block is executed, and is shown not to bind without its `global`.
+  - On the vault:
+    - the twenty Zaishen casts, checked against the server's 197 schedule as read from its row;
+    - cast #17's tick after its caster's dead bit, with the defeat mark's two marks read off the wire (second review): agent 8 dead in the caster's batch, and both takers' 0.6085 setter at one instant before it;
+    - the server's hostile Fire Storm still sending words after its caster dies.
+  - Scratch mutation passes:
+    - 14 of 14 mutants red, control green at 26;
+    - on the vault, five in-memory edits of the decoded stream each redden the cast-#17 check alone.
+- **Re-aimed.** `test_skilldesc`'s by-type census check (`nothing >= 268`) was a content-side literal, and good news at 264 turned it red. It now states the Spell split exactly from the rows loaded (ENG-7).
+- **Cross-lane.** 830's holy word rides property 16 today. desk-chan55 moves armour-ignoring spell damage to 55 this pass; ONE check in test_aotrows §2 pins the channel and is re-pointed at merge.
+- **Corrections.**
+  - To the triage:
+    - the skills overlay is 38974, not 38888;
+    - the witness offsets are from the completion, not the announce;
+    - there is one late tick (P5r) among the twenty casts;
+    - the +0x80 column is non-2077 on 16 raw records, not 9.
+  - To the lane's own first draft, from review:
+    - the visual columns are five +0x7c and two +0x78 among the eleven, not three and three;
+    - 910's skilldesc flags include UNMODELLED_CLASS, a regex hit on the skill's own name, not a spirit;
+    - "neither has a damage word in the 2 s before" was false for agent 10, which takes one property-55 word at +6.968;
+    - the death's cause was labelled UNOBSERVED and the +8.237 batch "unexplained", where zaishenrun and CASTAI-ZF25 already read both as match 4's end;
+    - the takers' armour note named PvP players, who are §41's takers; :51199's are the Zaishen Monks.
+- **Left on §8.1 and in §45.**
+  - The six inert areas: 77, 196, 215, 844, 1083, 1372.
+  - A caster killed in play, with its area live and struck afterwards (no witness).
+  - Bodies' adjacent damage and Cyclone Axe (no witness).
+  - The +0x80 and +0x78 / +0x7c visual leads (UNVERIFIED).
+  - The five wiki pages (owed).
+  - A client run of the new rows (the owner's).
+
 ### SLICE-F48b -- 2026-10-07 -- **An over-cap snare OVERRIDES the boosts on retail's wire, and now on ours. The Zaishen tapes held fourteen × 0.25 words that no study had read. A "Charge!" applied to, and ending on, an observer under skill 493's own × 0.25 sends no speed word at all, 2 of 2, while an unsnared ally's word moves with the boost in both batches. Two boosted bodies read 75.0 = 300 × 0.25 at a snare's onset, where the shipped product said 99.75 and the sum 174.0, and its end restores the boosted 399.0, 2 of 2 -- though what snared those two is not on the wire. `episodemods.move_speed_factor` now drops the boosts when a single snare passes the −50 cap (`SNARE_OVERRIDES_BOOST`, revert `--snare-multiplies-boost`). Windborne + Deep Freeze declares 97.92, not 130.23, and `push_speed`'s send-on-change produces retail's silence with no further code. Under the cap the wiki's product stands, still WIKI only. SHIPPED ON, UNRUN: neither registered runsheet has run. This closes PLAN.md §8.1's "SLICE-F48, the snare row". Its "settle on our own client" was a category error: our client walks at whatever we declare, so only retail's tapes can settle retail's rule.**
 
 - **The reader first (`f2169070`).** `speedwords.py` gains P7-P10, written into the session's notes before its own run. They are not blind, because a triage had seen the words. P7: 14 / 0 words in the × 0.25 class at exactly base × 0.25 (72.0 on 288, 75.0 on 300), and skill 493's own apply on an agent with no slow open is joined at × 0.25 (1 / 0). P8: 2 / 0 boost events on an observer at × 0.25 send no word (20260928T103123 :50295 t=468.208 and 474.211). Its controls: each batch moves another agent's word with the boost (2 / 0), and the same walker words 116 boosts on an unslowed observer. P9: 2 / 0 restores, 399 → 75 → 399, on agent 9 of 103123 and agent 10 of 20260929T100038. P10: the override agrees with 4 / 4 exposed rows; the multiplicative rule shipped since F48 agrees with 0 / 4, and so does the additive one. The event half checks the word's VALUE. The census now sets the gapped 103123 :65009 aside BY NAME (`tape.whole_channels`, audited with `capgaps.audit`) instead of through an `except` that dropped it unannounced. It was the only connection of 128 that clause ever caught.

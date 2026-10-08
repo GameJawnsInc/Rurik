@@ -36,6 +36,12 @@ these three names at its section-42 site.
     any other duration this is RECONSTRUCTION (d = 9 gives [0, 3]; d = 5 gives
     [0]), said here and at the call site.
 
+  * `tick_amount(amount, k, ramp)` -- what tick k (1-based) deals (2026-10-07,
+    weapons 45): the area's amount, or under `ramp = "elapsed"` (TICK_RAMPS)
+    k x the amount -- Savannah Heat 1380, whose one damage slot the client's
+    template marks FOR_EACH second the spell has been in effect
+    (RECONSTRUCTION: never cast on a tape; authsrv's banner says the rest).
+
   * `area_hex_row(row)` -- the AREA HEX's shape (DESKWORK-D6 step 4, weapons
     43): target byte 16, a Hex (type 4), an `aoe_range` above 0. OBSERVED on
     the pinned skills table: exactly the SEVEN rows aotjoin.classify names
@@ -105,6 +111,20 @@ def tick_instants(t0, duration, period=1.0):
         return []
     n = int(math.floor(duration / period + 1e-9))
     return [t0 + k * period for k in range(1, n + 1)]
+
+
+TICK_RAMPS = ("elapsed",)       # the `tick_ramp` values tick_amount models
+
+
+def tick_amount(amount, k, ramp=None, period=1.0):
+    """What tick k (1 = the first, at t0 + period) of an area of `amount` deals:
+    the amount itself, or the amount x the SECONDS the area has stood at that
+    tick (k x period) when `ramp` is "elapsed" -- k x the amount at Savannah
+    Heat's 1 s period (weapons 45). Any other ramp is the caller's to refuse;
+    here it is the flat amount, never a guess."""
+    if ramp == "elapsed":
+        return float(amount) * int(k) * float(period)
+    return float(amount)
 
 
 def visual_instants(t0, duration, period=3.0, tail=4.0):

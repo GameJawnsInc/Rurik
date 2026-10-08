@@ -2105,10 +2105,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   Monk, four spells, empty hands); a harness scenario that wants the walk-in passes
   `--no-enemy-skills` or `--enemy-weapon`.
 
-**Areas over time and scatter** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §41–§42, [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §16
+**Areas over time and scatter** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §41–§45, [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §16
 
 * **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a condition on a FOE sends no `[6]` id (Burning 25, Dazed 28, Cracked Armor / Weakness 29); a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy; retail's `[61]` for a player's own cast.
-* **The other eleven areas over time** carry no row and are inert; Meteor Shower and Eruption have no ground-visual id; whether a caster's death ends its area is UNVERIFIED (ours outlives it, an n = 1 lean).
+* **Six areas over time stay inert** (77, 196, 215, 844, 1083, 1372; WEAPONS-C12); no ground-visual id for 192 / 167 / the new five; wiki pages owed; a caster killed in play is unwitnessed (WEAPONS-C11).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
 * **CASTAI's residue** (monsterai §17-18; §7 Q19): which READY skill a normal-mode monster fires (round robin stays; three Zaishen bars are not round robin, Z1.P6); the AI TIER (CASTAI-W2); heal-on-ally and removal under their floors (Z1.P2-P3); four casts before their recharge (CASTAI-C7); area-hex wearers ungated (CASTAI-R3); upkeep enchantments (289, 290) open no episode.
 * **The Zaishen tapes' server residue** (monsterai §18.2, §18.4): ZF16's open halves, a body's busy window and next swing (PLAN-LOG); Deep Wound re-applied stacks (ZF18); Zealot's Fire's payoff, Balthazar's Aura's tick and Divine Favor unmodelled (ZF30, ZF32); holy damage and life steal ride property 55, ours 16 (ZF31); a hit after the killing blow keeps its adrenaline gain (ZF34); naming c2s `0x0042` is the owner's (ZF35).
