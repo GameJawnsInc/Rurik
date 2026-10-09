@@ -28,6 +28,19 @@ move back.
 
 ---
 
+### S22-A/B with --enemy-hit 0.008 -- 2026-10-09 -- **CONFIRMED: the player survives both, and both arms pass. A: 9 of 9 Blind-missed Sever Artery strikes inflict nothing. B (known-bad): 9 of 9 bleed. 0 deaths, 123 Hatcher hits, the player's lowest health 17 of 140. All four S22 arms now run with the player alive. A's landed control is still short (1, floor 2): that is a press-count limit, not the deaths.**
+
+- **The runs.** `confirm.py --only S22-A,S22-B`, from `main` at `62191d0b`: harness `20261009T154625` (A) and `…155025` (B). Both used C/D's `--enemy-hit 0.008` and no-death check, with the walk (10 presses `wait:6`) and the 75 s hold unchanged. Launcher verdict **PASS / PASS**.
+- **Against the registered predictions** ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4; OBSERVED, both arms alike):
+  - 0 deaths (predicted 0);
+  - 123 Hatcher hits (~120), the player's lowest health 17 (~20);
+  - the Hatcher lands a hit every 1.46 s over the fight (1.50 measured on the original's alive windows), with 22 casts of 220;
+  - 10 of 10 presses fired, none dropped (the originals dropped 4 each);
+  - 9 missed under Blind (~9).
+  - **A:** 9 of 9 misses are followed by `the strike missed -- no condition`, and none by a Bleeding.
+  - **B:** 9 of 9 misses bleed, with no refusal.
+- **Unchanged by the fix: A's landed control is 1, against the runsheet's 2.** The original pass recorded the same shortfall ("CONFIRMED, A's control short"). Blind is up about 7 s in every 8, so 10 presses yield about one unblinded hit; more presses would buy the second.
+
 ### S22-C/D fixture v2 -- 2026-10-09 -- **CONFIRMED: the player survives and both arms pass. C: 8 of 8 blocked Sever Artery strikes inflict nothing. D (known-bad): 9 of 9 bleed. 0 deaths, 13 casts of 380 every 11.2 s, the player's lowest health 34 of 140. The redesign the owner asked for is closed.**
 
 - **The runs.** `confirm.py --only S22-C,S22-D`, from `main` at `015a8c88`: harness `20261009T142739` (C) and `…143107` (D). Both used `--enemy-hit 0.008` and 16 presses `wait:4`, with a 20 s hold. Launcher verdict **PASS / PASS**, with every mechanical check green: no death, 106 Hatcher hits, 13 casts of 380, C's 8 refusals and 8 Bleedings, D's 9 blocked strikes and no refusal.
