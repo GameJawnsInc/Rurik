@@ -28,6 +28,19 @@ move back.
 
 ---
 
+### S22-C/D fixture v2 -- 2026-10-09 -- **CONFIRMED: the player survives and both arms pass. C: 8 of 8 blocked Sever Artery strikes inflict nothing. D (known-bad): 9 of 9 bleed. 0 deaths, 13 casts of 380 every 11.2 s, the player's lowest health 34 of 140. The redesign the owner asked for is closed.**
+
+- **The runs.** `confirm.py --only S22-C,S22-D`, from `main` at `015a8c88`: harness `20261009T142739` (C) and `…143107` (D). Both used `--enemy-hit 0.008` and 16 presses `wait:4`, with a 20 s hold. Launcher verdict **PASS / PASS**, with every mechanical check green: no death, 106 Hatcher hits, 13 casts of 380, C's 8 refusals and 8 Bleedings, D's 9 blocked strikes and no refusal.
+- **Against v2's registered predictions** ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4; OBSERVED, both arms alike):
+  - 0 deaths (predicted 0);
+  - 106 Hatcher hits (~100), leaving the player at 34 of 140;
+  - 13 casts at gaps of 11.2–11.3 s (~11 at 11.2 s);
+  - 16 of 16 presses fired, none dropped.
+  - **C:** 8 blocked, all with the refusal and none bleeding; 8 landed and bled (predicted ~10 / ~5).
+  - **D:** 9 blocked, all bleeding.
+  - 0 adrenaline opcodes name agent 10.
+- **The block share is lower than modelled.** Presses were blocked 51 of 90 times over v1 + v2 (57 %). Plain swings ran 56–61 % in all four runs (C 67 / 110, D 63 / 108, and v1's 81 / 139, 82 / 146). Against "89 % uptime × 75 %" (about 67 %), that is about 2 sd low, and the same for presses and swings, so it is not specific to attack skills. The effective rate is about 58 %; why is UNVERIFIED and unexamined. Neither arm's question depends on it, and both floors (5 gated, 2 landed) cleared with margin.
+
 ### S22-C/D fixture v1 -- 2026-10-09 -- **Both arms answered decisively under CONFPASS-F4. C: 20 of 20 blocked Sever Artery strikes inflict nothing, and the S22 refusal fires on each. D (known-bad): 14 of 14 blocked strikes bleed. Survival failed once per arm, at hit 140, because v1's cycle model was wrong. v2 is built and owed (PLAN.md §8).**
 
 - **The runs.** `confirm.py --only S22-C,S22-D`, from `main` at `6f13a74b`: harness `20261009T135431` (C) and `…135943` (D). Both used `--enemy-hit 0.008` (1-point hits) and 30 presses `wait:4`, with a 20 s hold. The launcher's verdict is FAIL on both, on the one check `the player dies (found 1)`. Every other check passed:
