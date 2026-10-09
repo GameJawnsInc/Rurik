@@ -2209,10 +2209,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   + E2 and no E3 (n = 1, 20260929T100038 :51090 423.923); ours sends the E3 on the corpse's clock.
   And the death batch's `0x00D0` rides ahead of the `0x002D` on retail (16 of 16), after it on ours.
   Both found by `deathcastjoin.py` ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); F1 itself shipped 2026-10-09 (PLAN-LOG).
-* **`swingcensus`'s `landed` over-counts by 23** (CONFPASS-F3, PLAN-LOG): it still reads 0-1.6 s unbounded,
-  so 17 swings a skill press cancelled read as landed on the strike's own hit, and 6 others on the next
-  swing's. All 23 are cancels, so §13's ceiling is untouched, but 1z-da's landed and cancel figures both move.
-  Also: 21 of the 26 still silent start under 1.6 s before their capture ends, so they cannot be judged.
+* **`swingcensus.retail()` has the over-count ours had** (CONFPASS-F3b, PLAN-LOG). It reads 3.0 s past the
+  attacker's next start and ranks damage over a stop. Bounded, retail's player goes from stopped 1.8 % to
+  5.9 %, which moves 1z-db's "8.3x" and would redden §13b's stopped ≤ 12 % (13.9 %). That is the owner's call.
+  Same comparison: `main()` / §13 count only the inferred `cancel`, never the verdict-sourced `cancel:*`.
+  21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
 * **A hostile re-casts its stance every world tick** (CONFPASS-F3's aside, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3):
   S22-C/D's Bonetti 380, ~4,000 `[48, 10, 380]` per run. The gate (recharge, adrenaline, stance up) is unread.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds

@@ -41,9 +41,34 @@ swing its successor's verdict -- hiding a drop from the ceiling, the wrong way
 for a ceiling to err. Where a verdict and a fail both fall inside, the EARLIER
 names the swing: a press that cancels the swing and then strikes closes the
 swing at the verdict, and the strike's own fail is the strike's.
-(`landed` still reads 0-1.6 s unbounded, and over-counts by 23 cancelled swings
-whose next hit or skill strike landed inside it -- PLAN 8, not fixed here
-because it moves the landed and cancel numbers 1z-da compared to retail.)
+
+A SWING LANDS ON ITS OWN CLOSE (2026-10-09, the second pass). `landed` read any
+damage-family row 0-1.6 s after the start, and over-counted by 23 of 1,979:
+  * 16 swings a press DROPPED (`attack_stopped: skill N ends the swing`, 351,
+    382, 780, 782), credited with the attack skill's strike ~0.5 s later;
+  * 6 dropped by a move or a stance (346), credited with the NEXT swing's
+    landing (after that swing's start, still inside this one's 1.6 s);
+  * 1 whose target the player's own AREA TICK killed mid-windup: the tick is
+    `damage 10 to agent 10` like any landing, and the server's `target-gone`
+    verdict followed 1.7 ms later (20261008T221440 t=27.53).
+So a swing lands only on a hit that is (1) inside its own window, before the
+next start; (2) before the first drop at or after its start -- the PLAYER's
+`0x009F [3, 1, 0]` or a `swing_verdict`; and (3) the swing's OWN landing: the
+player's `0x009F [1, 1, 0]` within CLOSE_JOIN of it, or a ranged launch (no [1]
+rides a shot, WEAPONS-W2a). On this corpus (2) alone catches the 22 drops and
+only (3) catches the area tick; (1) and (3) together reach the same 23 without
+(2) -- (1) the 6 next-swing landings, (3) the strikes, which close with
+`attack_skill_finished` and no [1], and both for the 5 strikes whose 1.6 s also
+holds the next swing's landing. Each is kept for a case the others miss: (1) a
+silent swing the next swing's landing masks with no drop on the wire at all --
+the ceiling's own blind spot; (2) a strike closed with the SWING's [1], which
+RANGERPRE-S23's arm C does (CONFIRM-2026-10-08 §2) and which would pass (3).
+The two words are read off the frame's bytes, not
+the label: `attack_stopped: agent N's skill S interrupts the swing` names an NPC
+and stops the PLAYER's swing, and `... drops its swing to scatter` names one and
+stops its own. A stop BEFORE the start is the previous swing's -- at
+20260917T232611 t=41.30 a stance's [3] ends the old chain 1.4 ms before the new
+swing starts, and that swing lands. `bound_landed=False` is the known-bad arm.
 
 WHAT THIS CANNOT DO. The printed distances are sampled at the label instants,
 not at the drop tick, so the attribution is by elimination plus a window, not a
@@ -71,6 +96,12 @@ import vaultpath      # noqa: E402
 
 REACH = 144.0          # attack_reach() under --attack-approach
 WINDOW = 0.95          # s after the start to look for the server's own distance
+# s between a hit row and the player's own [1] for the hit to be the swing's
+# landing. MEASURED over the corpus's hit rows, 2026-10-09: 2,210 of 2,363 sit
+# within 1 ms of a [1] and 2,213 within 5 ms; the rest are area ticks and the
+# like, 3 of them under 50 ms. Every landing in the corpus clears it.
+CLOSE_JOIN = 0.005
+_PLAYER = 1            # authsrv's PLAYER_AGENT_ID
 
 _START = "player swings at 10"
 # authsrv's `attack_fails` label, `attack_fail: {attacker} -> {target} {reason}
@@ -98,16 +129,38 @@ def _landed(label):
             or ("in the air (handle" in label and label.startswith("projectile")))
 
 
-def swings(rows, read_fails=True):
+def _player_word(row, prop):
+    """Is this sent row the PLAYER's own `0x009F [prop, 1, 0]`? Off the bytes."""
+    p = row.get("plain") or ""
+    if len(p) < 20 or p[:4] != "9f00":
+        return False
+    try:
+        return (int.from_bytes(bytes.fromhex(p[4:12]), "little") == prop
+                and int.from_bytes(bytes.fromhex(p[12:20]), "little") == _PLAYER)
+    except ValueError:
+        return False
+
+
+def swings(rows, read_fails=True, bound_landed=True):
     """One row per player swing: {t, landed, failed, source, branch, dist}.
 
     `read_fails=False` is the KNOWN-BAD arm: the census as it read before
     2026-10-09, a block or a miss falling through to `unattributed`.
+    `bound_landed=False` is the other one: `landed` as any hit 0-1.6 s out.
     """
     sent = [r for r in rows if r.get("kind") == "sent"]
     lab = lambda r: r.get("label", "")                      # noqa: E731
     starts = sorted(r["t"] for r in sent if _START in lab(r))
-    hits = sorted(r["t"] for r in sent if _landed(lab(r)))
+    hits = sorted((r["t"], lab(r)) for r in sent if _landed(lab(r)))
+    closes = sorted(r["t"] for r in sent if _player_word(r, FINISHED))
+    drops = sorted([r["t"] for r in sent if _player_word(r, STOPPED)]
+                   + [r["t"] for r in rows if r.get("kind") == "swing_verdict"])
+
+    def own_landing(t, label):
+        if label.startswith("projectile"):
+            return True
+        j = bisect.bisect_left(closes, t - CLOSE_JOIN)
+        return j < len(closes) and closes[j] <= t + CLOSE_JOIN
     fails = sorted((r["t"], m.group(1)) for r in sent
                    for m in [_FAIL.match(lab(r))] if m) if read_fails else []
     stops = sorted((r["t"], lab(r)) for r in sent if "attack_stopped" in lab(r))
@@ -127,7 +180,12 @@ def swings(rows, read_fails=True):
     out = []
     for i, st in enumerate(starts):
         nxt = starts[i + 1] if i + 1 < len(starts) else float("inf")
-        landed = any(0 <= h - st <= 1.6 for h in hits)
+        if bound_landed:
+            j = bisect.bisect_left(drops, st)
+            end = min(st + 1.6, nxt, drops[j] if j < len(drops) else nxt)
+            landed = any(own_landing(t, l) for t, l in hits if st <= t < end)
+        else:
+            landed = any(0 <= t - st <= 1.6 for t, _l in hits)
         row = {"t": round(st, 2), "landed": landed, "failed": None,
                "source": None, "branch": None, "dist": None}
         if not landed:
@@ -254,7 +312,7 @@ def retail():
             "npc": dict(by_who["npc"]), **dict(tot)}
 
 
-def census(paths=None, read_fails=True):
+def census(paths=None, read_fails=True, bound_landed=True):
     gs = vaultpath.require_dir("captures", "gamesrv",
                                why="swingcensus reads our own captures")
     paths = paths or [os.path.join(gs, f) for f in sorted(os.listdir(gs))
@@ -266,7 +324,7 @@ def census(paths=None, read_fails=True):
                     if l.strip()]
         except Exception:                                   # noqa: BLE001
             continue
-        sw = swings(rows, read_fails=read_fails)
+        sw = swings(rows, read_fails=read_fails, bound_landed=bound_landed)
         if sw:
             out[os.path.basename(p)] = sw
     return out
@@ -296,8 +354,11 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--no-fails", action="store_true",
                     help="the known-bad arm: read a block or a miss as no outcome")
+    ap.add_argument("--unbounded-landed", action="store_true",
+                    help="the known-bad arm: any hit 0-1.6 s out lands the swing")
     args = ap.parse_args()
-    cen = census(args.cap, read_fails=not args.no_fails)
+    cen = census(args.cap, read_fails=not args.no_fails,
+                 bound_landed=not args.unbounded_landed)
     sc = score(cen)
     if args.json:
         print(json.dumps({"score": sc, "captures": cen}, indent=1))

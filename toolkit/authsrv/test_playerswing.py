@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=312)   # CONFPASS-F3 +9 (13c-a..i: a block or a miss closes the swing, each swing read in its own window; the 224622 tape both arms); DEATHWALK-D4 +11 (26a-k: the target's death holds to the chain's next scheduled event); DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=322)   # CONFPASS-F3b +10 (13d-a..j: a swing lands on its own close -- own window, drop first, the [1] beside the hit; the known-bad arm; two tapes both arms); CONFPASS-F3 +9 (13c-a..i: a block or a miss closes the swing, each swing read in its own window; the 224622 tape both arms); DEATHWALK-D4 +11 (26a-k: the target's death holds to the chain's next scheduled event); DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -4347,9 +4347,11 @@ def main():
     _BLK = "attack_fail: 1 -> 10 block (block)"
 
     def _tape(*evs):
-        # (t, label) is a sent row; (t, {...}) a swing_verdict row
-        return [dict(x, kind="swing_verdict", t=t) if isinstance(x, dict)
-                else {"kind": "sent", "t": t, "label": x} for t, x in evs]
+        # (t, label[, plain]) is a sent row; (t, {...}) a swing_verdict row
+        return [dict(e[1], kind="swing_verdict", t=e[0])
+                if isinstance(e[1], dict)
+                else {"kind": "sent", "t": e[0], "label": e[1],
+                      "plain": e[2] if len(e) > 2 else ""} for e in evs]
 
     sw = swingcensus.swings(_tape((0.0, _S), (0.57, _FIN), (0.57, _BLK)))
     sco = swingcensus.score({"tape": sw})
@@ -4402,6 +4404,80 @@ def main():
           f"0.48 s and its strike is blocked at 1.04 s; that block is the "
           f"strike's")
 
+    # 13d (2026-10-09, the second pass): A SWING LANDS ON ITS OWN CLOSE.
+    # `landed` read any damage row 0-1.6 s out and over-counted by 23: 16
+    # swings a press dropped, credited with the skill's strike; 6 dropped by a
+    # move or a stance, credited with the next swing's landing; 1 whose target
+    # the player's own area tick killed mid-windup. Three conjuncts, and each
+    # of b, c, d is decided by ONE of them alone; `bound_landed=False` is the
+    # known-bad arm.
+    def _w(prop, agent):        # 0x009F [prop, agent, 0] as the capture writes it
+        return "9f00" + "".join(v.to_bytes(4, "little").hex()
+                                for v in (prop, agent, 0))
+
+    def _lands(evs, **kw):
+        sw = swingcensus.swings(_tape(*evs), **kw)
+        return [s["landed"] for s in sw], [s["branch"] for s in sw]
+
+    _HIT = "damage 8 to agent 10"
+    t_land = [(0.0, _S), (0.57, _FIN, _w(1, 1)), (0.5702, _HIT)]
+    t_next = [(0.0, _S), (0.9, _S), (1.28, _FIN, _w(1, 1)), (1.2802, _HIT)]
+    t_strike = [(0.0, _S),
+                (0.07, "attack_stopped: skill 382 ends the swing", _w(3, 1)),
+                (0.0702, {"branch": "cancel:skill press"}),
+                (0.64, _FIN, _w(1, 1)), (0.6402, "damage 2 to agent 10")]
+    t_area = [(0.0, _S), (0.75, "damage 10 to agent 10"),
+              (0.7502, "KILL agent 10"), (0.7517, {"branch": "target-gone"})]
+    got = _lands(t_land)
+    check(got == ([True], [None]),
+          "13d-a CONTROL: a swing with its own [1] beside its hit lands",
+          f"{got} -- the plain landing every other check here departs from")
+    got = _lands(t_next)
+    check(got == ([False, True], ["unattributed", None]),
+          "13d-b OWN WINDOW: the next swing's landing, inside this one's "
+          "1.6 s, is the next swing's",
+          f"{got} -- with no drop on the wire to catch it, a silent swing so "
+          f"masked would never reach the ceiling")
+    got = _lands(t_strike)
+    check(got == ([False], ["cancel:skill press"]),
+          "13d-c DROP FIRST: a strike after the press that dropped the swing "
+          "is the strike's, even closed with the swing's [1]",
+          f"{got} -- 16 of the 23 were strikes; RANGERPRE-S23's arm C closes "
+          f"a strike with the swing's [1], which own-close alone would pass")
+    got = _lands(t_area)
+    check(got == ([False], ["target-gone"]),
+          "13d-d OWN CLOSE: the player's own area tick on the target is not "
+          "the swing landing",
+          f"{got} -- 20261008T221440 t=27.53: the tick killed agent 10 "
+          f"mid-windup, 1.7 ms before the server's target-gone verdict")
+    got = [_lands(t, bound_landed=False)[0]
+           for t in (t_next, t_strike, t_area)]
+    check(got == [[True, True], [True], [True]],
+          "13d-e KNOWN-BAD ARM: bound_landed=False lands all three",
+          f"{got} -- the census as it read before this pass")
+    got = (_lands([(0.0, _S), (0.2, "attack_stopped: agent 11 drops its "
+                                    "swing to scatter", _w(3, 11))]
+                  + t_land[1:])[0],
+           _lands([(0.0, _S), (0.2, "attack_stopped: agent 11's skill 57 "
+                                    "interrupts the swing", _w(3, 1))]
+                  + t_land[1:])[0])
+    check(got == ([True], [False]),
+          "13d-f a stop is the PLAYER's by its agent slot, not its label",
+          f"{got} -- an NPC's scatter is [3, 11] and leaves the swing; an "
+          f"NPC's interrupt of the player is [3, 1] and names the NPC")
+    got = _lands(t_land + [
+        (1.3035, "attack_stopped: skill 346 ends the swing", _w(3, 1)),
+        (1.3049, _S), (1.6627, _FIN, _w(1, 1)), (1.6629, _HIT)])[0]
+    check(got == [True, True],
+          "13d-g a stop BEFORE the start is the previous swing's",
+          f"{got} -- 20260917T232611 t=41.30: a stance's [3] ends the old "
+          f"chain 1.4 ms before the new swing starts, and that swing lands")
+    got = _lands([(0.0, _S), (1.1375, "projectile 5 at agent 10: 0.563 s in "
+                                      "the air (handle 1)")])[0]
+    check(got == [True],
+          "13d-h a RANGED swing lands at its launch, with no [1]",
+          f"{got} -- WEAPONS-W2a: no prop 1 rides a shot")
+
     try:
         cen = swingcensus.census()
         sc = swingcensus.score(cen)
@@ -4424,10 +4500,9 @@ def main():
           f"word {sc['by_fail']} (13c)")
     # 13c-h/i: the tape that reddened the ceiling, both arms. It never grows,
     # so these are exact-tape pins, not corpus floors.
-    _tape224622 = os.path.join(
-        swingcensus.vaultpath.require_dir("captures", "gamesrv",
-                                          why="13c's pinned tape"),
-        "authsrv-20261008T224622-c1.jsonl")
+    _gs = swingcensus.vaultpath.require_dir("captures", "gamesrv",
+                                            why="13c/13d's pinned tapes")
+    _tape224622 = os.path.join(_gs, "authsrv-20261008T224622-c1.jsonl")
     if os.path.exists(_tape224622):
         t_ok = swingcensus.score(swingcensus.census([_tape224622]))
         t_bad = swingcensus.score(swingcensus.census([_tape224622],
@@ -4449,6 +4524,27 @@ def main():
     else:
         LEDGER.skip("13c-h/i the 224622 block fixture",
                     f"not in this vault: {_tape224622}")
+    # 13d-i/j: the over-count on real tapes, both arms -- a press-dropped
+    # swing credited with 382's strike, and the area-tick kill.
+    for tag, cap, t_sw, want in (
+            ("13d-i", "authsrv-20261008T224622-c1.jsonl", 79.17,
+             "cancel:skill press"),
+            ("13d-j", "authsrv-20261008T221440-c1.jsonl", 27.53,
+             "target-gone")):
+        path = os.path.join(_gs, cap)
+        if not os.path.exists(path):
+            LEDGER.skip(f"{tag} {cap}", f"not in this vault: {path}")
+            continue
+        pair = []
+        for bound in (True, False):
+            rows = next(iter(swingcensus.census(
+                [path], bound_landed=bound).values()), [])
+            s = next((x for x in rows if abs(x["t"] - t_sw) < 0.006), None)
+            pair.append(s and (s["landed"], s["branch"]))
+        check(pair == [(False, want), (True, None)],
+              f"{tag} {cap[8:23]} t={t_sw}: {want}, not landed; the known-bad "
+              f"arm lands it",
+              f"(fix, known-bad) = {pair}")
     cancel = sc["by_branch"].get("cancel", 0)
     check(cancel >= 100,
           "and the CANCEL population is still the arc's real divergence",
