@@ -2216,6 +2216,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   NPC half (12.0 -> 23.5 %) unread. Owner's call: port the rules and re-pin 13b by attacker, or leave it.
   Same comparison: `main()` / §13 count only the inferred `cancel`, never the verdict-sourced `cancel:*`.
   21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
+* **S22-C/D's redesigned fixture is built, and the run waits on the owner's go** (`confirm.py --only S22-C,S22-D`, about 8 min;
+  [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): `--enemy-hit 0.008` so the player survives, and 30 presses.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
