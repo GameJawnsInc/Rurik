@@ -16073,7 +16073,7 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   no-ops that declare no skip print "ONLY 142 OF A DECLARED FLOOR OF 147". Floors per
   machine on the vault content DIRECTORY (CD-7): 96 checks bare (FLOOR_BARE 96, 4
   declared skips), 147 with the vault (FLOOR_VAULT 147). ~40 s),
-  `toolkit/authsrv/test_npcaftercast.py` (**2026-10-08, the pass-9 landing: the party loop's source lock RE-AIMED from `skill_cost(skill_id)` to `body_skill_cost(state, agent_id, skill_id)`, the call desk-expertise (SKILLS-EX) moved the energy block onto; the order it guards is unchanged; 52 checks with the vault, 42 bare.** **2026-10-07, DESKWORK-D5 "NPC aftercast proper",
+  `toolkit/authsrv/test_npcaftercast.py` (**2026-10-09, P5 RE-PINNED (studies/skills 65.8, SKILLS-AC8): on `main` at 2ed812b5 §4's "P5 UNDECIDABLE" went red, because live capture 20261008T132845 (origin live, build 38974; Koss, agent 30) brought the corpus's first 19 scoreable hero rows: 281 / 288 / 313 / 1396, E3 − E5 0.732–0.762. So §4 now SCORES P5: P5 FAILS (0 of ≥ 19 at 0.000), its rival E3 = E5 + the table aftercast ±0.05 HOLDS on every scored row, the capture is named, and 322 / 346 / 348 stay at 0.000 (≥ 35). + the rival's KNOWN-BAD arm, our healer rig authsrv-20261001T105141-c1 (origin ours, 64 hero Orisons, 64 at 0.000, 0 at the aftercast). §1 + the rival's shoulder on literal edges (0.70 / 0.80 in, 0.699 / 0.801 / 0.000 out). §2 (d)'s labels moved: the hero's hold is OBSERVED (Koss: 17 completions, min 0.747), and its E3-at-E5 pin is OURS, contradicting retail, owed in PLAN.md §8. 54 checks with the vault, 43 bare, both measured. Two reader mutants proven red: the rival counting every row (§1 + the known-bad arm), a zero shoulder (§1 + the retail check).** **2026-10-08, the pass-9 landing: the party loop's source lock RE-AIMED from `skill_cost(skill_id)` to `body_skill_cost(state, agent_id, skill_id)`, the call desk-expertise (SKILLS-EX) moved the energy block onto; the order it guards is unchanged; 52 checks with the vault, 42 bare.** **2026-10-07, DESKWORK-D5 "NPC aftercast proper",
   studies/skills 65, SKILLS-AC.** A body's COMPLETED cast holds its next action for the
   table's aftercast: `authsrv.NPC_AFTERCAST` (`--no-npc-aftercast` reverts to 642d8957).
   Retail: after the [58] of a table-aftercast-0.75 spell no other agent starts anything
@@ -16089,8 +16089,8 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   next [60] the tick after the [58], every start tick 642d8957's own (`START_642`,
   recorded through a `git archive 642d8957` export, whose 63 sends were byte-identical);
   the stamp on the row only on the default arm; (d) a HERO with 281 and 289 waits the same
-  (RECONSTRUCTION), its known-bad arm 642d8957's `HERO_642`, and its E3 rides its E5 in the
-  same tick, unmoved; (e) the controls -- an interrupted cast stamps nothing (the next spell
+  (OBSERVED since 2026-10-09, Koss), its known-bad arm 642d8957's `HERO_642`, and its E3 rides its E5 in the
+  same tick, unmoved (ours; retail's waits the aftercast, P5); (e) the controls -- an interrupted cast stamps nothing (the next spell
   the very next tick), `npc_aftercast` gives 0 for the stance 1037 (table 0.75), the bow
   attack 397 (table 1.0), the preparation 433 and Flail 10, and 0 for all under the flag;
   397 and 1037 cast and landed through the real tick stamp nothing; an aftercast-0 skill
@@ -16117,12 +16117,12 @@ is there, else a named skip). 176 checks bare, floor 176; 178 with the run direc
   build; the reader over the live corpus -- --json's stdout one JSON document (the SET
   ASIDE line on stderr), P1 (n >= 1,477, min >= 0.70), P2 (>= 527), P3 (>= 95, the five
   control skills), the swings, the one gapped connection set aside by name, P5
-  UNDECIDABLE, P6 refuted by instants STRICTLY inside the window (>= 2, min > 0; the
+  FAILS with its rival held and the healer rig its known-bad arm (UNDECIDABLE until 2026-10-09), P6 refuted by instants STRICTLY inside the window (>= 2, min > 0; the
   [58]'s own-batch one counted apart, >= 1), and P4 (authsrv-20260928T002701-c1 FAILS P1
   inside one tick). §1 also holds `p6_split` on literal gaps. Floors MEASURED and decided
-  on directories: 42 bare (an empty RURIK_VAULT and a nonexistent one), + 1 with
-  vault/content, + 8 with vault/captures/live, + 1 with the P4 capture = 52 (38 / 47
-  before the review pass). PROVEN RED
+  on directories: 43 bare (an empty RURIK_VAULT and a nonexistent one), + 1 with
+  vault/content, + 8 with vault/captures/live, + 1 with the P4 capture, + 1 with the
+  healer-rig capture = 54 (38 / 47 before the review pass, 42 / 52 before 2026-10-09). PROVEN RED
   by 18 scratch mutants, each a copy of one module PRE-LOADED by path (a plain sys.path
   copy is shadowed: agents / content put the tree's authsrv dir first, and the first pass's
   four 'survivors' were never loaded), against a green unmutated control: the stamp

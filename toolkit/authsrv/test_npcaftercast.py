@@ -14,7 +14,7 @@ apart.
   1  the READER's pure half on literal wire (bare machine): a targeted and an
      un-targeted start, a recycled id, a stopped cast that is not a completion, an
      instant inside the window that is not a start, the P1 / P2 / P3 arithmetic at its
-     edges, P6's strict / own-batch split, the E5 -> E3 join.
+     edges, P6's strict / own-batch split, the E5 -> E3 join, P5's rival at its shoulder.
   2  the SERVER on carried rows (both machines -- the rows are the vault's own,
      section 4 holds them to it): (a) a hostile with two ready 0.75-aftercast spells
      (253 then 289): the second [60] announces at or after the first [58] + 0.75, inside
@@ -22,7 +22,8 @@ apart.
      the next start is ONE tick after the [58], and the start ticks equal 642d8957's own
      (the literal below, recorded by driving THIS fixture through a `git archive
      642d8957` export); (d) a hero with two ready spells (281 then 289) waits the same
-     -- and its E3 rides its E5 in the same tick, unmoved; (e) the controls: an
+     -- and its E3 rides its E5 in the same tick, unmoved (OURS: retail's E3 waits the
+     aftercast, section 4's P5, and the placement is owed, PLAN.md 8); (e) the controls: an
      interrupted cast stamps nothing; an instant stance (1037, whose TABLE says 0.75)
      and an attack skill (397, whose table says 1.0) stamp nothing; an aftercast-0
      skill (the preparation 433) gates nothing; an instant goes INSIDE the window, a
@@ -40,7 +41,9 @@ apart.
      stamp once, in land_skill.
   4  the vault (skips only on an absent vault DIRECTORY): the carried rows against the
      vault's own, column for column; the reader over the live corpus -- P1, P2, P3 hold,
-     P4 (our 20260928T002701 capture fails P1), P5 undecidable, P6 refuted.
+     P4 (our 20260928T002701 capture fails P1), P5 FAILS and its rival E3 = E5 + aftercast
+     HOLDS (2026-10-09, 20261008T132845's Koss; it was undecidable until that tape), the
+     rival's known-bad arm our healer rig authsrv-20261001T105141-c1, P6 refuted.
 """
 import ast
 import contextlib
@@ -71,14 +74,23 @@ import vaultpath                                               # noqa: E402
 # OUR capture for P4 = 52, MEASURED with the vault. (38 / 47 until the review pass the
 # same day added P6's split, the hero's instant, the attack-skill hold, the party hold's
 # place ahead of the debit and --json's one-document stdout.)
+# 2026-10-09, P5 re-pinned (20261008T132845 made it decidable): + 1 bare (P5's rival at its
+# shoulder, section 1) = 43; + 1 with OUR healer-rig capture (the rival's known-bad arm) =
+# 54 with the vault, MEASURED both ways.
 OURS_P4 = os.path.join(vaultpath.vault_path("captures"), "gamesrv",
                        "authsrv-20260928T002701-c1.jsonl")
+# The HEROENERGY client run (PLAN-LOG 2026-10-01), our server's healer rig: 64 hero
+# Orisons, each E3 in its E5's own tick -- hero_skill_messages' placement, unchanged since
+# but for a6a3d34b's recharge-0 branch (section 2 (d) pins it on this tree).
+OURS_HERO_E3 = os.path.join(vaultpath.vault_path("captures"), "gamesrv",
+                            "authsrv-20261001T105141-c1.jsonl")
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
-FLOOR_BARE = 42
+FLOOR_BARE = 43
 LEDGER = checks.Ledger("NPC aftercast",
                        floor=FLOOR_BARE + (1 if HAVE_VAULT_CONTENT else 0)
-                       + ((8 + (1 if os.path.isfile(OURS_P4) else 0)) if HAVE_LIVE else 0))
+                       + ((8 + (1 if os.path.isfile(OURS_P4) else 0)
+                           + (1 if os.path.isfile(OURS_HERO_E3) else 0)) if HAVE_LIVE else 0))
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -351,13 +363,22 @@ def section_reader():
     check(e3 == [(30, 281, 0.0), (30, 289, 0.75)],
           "the E5 -> E3 join pairs per (agent, skill), never the observer's",
           f"{e3}")
-    n, z, _by, _all = npcaftercast.score_e3(e3, {281: (1.0, 0.75, 2.0, 5),
-                                                 289: (0.75, 0.75, 2.0, 6)})
-    n0, _z0, _b0, _a0 = npcaftercast.score_e3(e3, {281: (0.0, 0.0, 3.0, 14),
-                                                   289: (0.0, 0.0, 4.0, 3)})
+    n, z, at, _by, _all = npcaftercast.score_e3(e3, {281: (1.0, 0.75, 2.0, 5),
+                                                     289: (0.75, 0.75, 2.0, 6)})
+    n0, _z0, _at0, _b0, _a0 = npcaftercast.score_e3(e3, {281: (0.0, 0.0, 3.0, 14),
+                                                         289: (0.0, 0.0, 4.0, 3)})
     check((n, z, n0) == (2, 1, 0),
           "P5 scores only spell rows with a table aftercast: an attack and a stance (the "
           "survey's 322 / 346 shape) score NOTHING", f"{(n, z, n0)}")
+    # P5's rival, E3 = E5 + the table aftercast, at its shoulder: 0.70 and 0.80 are in,
+    # 0.699 and 0.801 out, and the riding 0.000 (ours, 105141's shape) is the known-bad row
+    tab = {281: (1.0, 0.75, 2.0, 5)}
+    edge = [(30, 281, d) for d in (0.70, 0.80, 0.699, 0.801, 0.0, 0.75)]
+    en, ez, eat, _eb, _ea = npcaftercast.score_e3(edge, tab)
+    check(at == 1 and (en, ez, eat) == (6, 1, 3),
+          "P5's rival scores a spell row's E3 at its table aftercast within 0.05 (0.70 / "
+          "0.75 / 0.80 in; 0.699, 0.801 and the riding 0.000 out)",
+          f"pair at={at}; edges (n, zero, at) = {(en, ez, eat)}")
 
 
 # ---------------------------------------------------------------------------------
@@ -416,7 +437,8 @@ def section_server():
           and ac_ticks <= hg[0][1] - hg[0][0] <= ac_ticks + 2
           and all(n - c >= ac_ticks for c, n, _k in hg),
           "(d) a HERO with 281 and 289 ready (ally_cast_tick): the second [60] waits the "
-          "aftercast too (RECONSTRUCTION: no hero completes an aftercast > 0 spell on tape)",
+          "aftercast too (OBSERVED since 20261008T132845: Koss's 17 completions floor at "
+          "0.747, his 4 back-to-back [60]s each in his E3's batch, [58] + 0.747-0.751)",
           f"starts {hs[:4]} completions {hc[:3]} gaps {hg}")
     check(hg_off and hg_off[0][1] - hg_off[0][0] == 1 and starts(h_off, HERO) == HERO_642,
           "    its known-bad arm chains them a tick apart, every start tick 642d8957's own",
@@ -427,7 +449,9 @@ def section_server():
     check(e5 and e3 == e5 and all(seq[k][0] == E5 and seq[k + 1][0] == E3
                                   for k in range(0, len(seq), 2)),
           "    and its E3 rides its E5, the SAME tick, directly behind it -- the gate holds "
-          "the next action, never the E3 (hero_skill_messages unmoved)",
+          "the next action, never the E3 (hero_skill_messages unmoved). OURS, and NOT "
+          "retail's: Koss's E3 waits the aftercast, 19 of 19 (section 4's P5); owed, "
+          "PLAN.md 8",
           f"E5 {e5} E3 {e3}")
     section_controls()
     # (f) the replay through the reader
@@ -792,7 +816,7 @@ def section_vault():
     try:
         vaultpath.require_dir("captures", "live", why="npcaftercast reads live captures")
     except SystemExit as exc:
-        LEDGER.skip("the reader over the live corpus (9 checks)", str(exc).splitlines()[0])
+        LEDGER.skip("the reader over the live corpus (10 checks)", str(exc).splitlines()[0])
         return
     out, err = io.StringIO(), io.StringIO()
     ours = OURS_P4
@@ -828,10 +852,41 @@ def section_vault():
     check(res["set_aside"] and all(s["capture"] == "20260928T103123" for s in res["set_aside"]),
           "the manifest-declared gapped connection is set aside by name, and only it",
           f"{[(s['capture'], s['connection']) for s in res['set_aside']]}")
-    check(res["p5"] == "UNDECIDABLE" and res["e3_scored"] == 0 and res["e3_rows"] >= 35,
-          "P5 UNDECIDABLE: the survey's 35 hero E5 -> E3 rows are all table-aftercast-0 "
-          "skills, none scoreable", f"{res['p5']} scored {res['e3_scored']} of "
-          f"{res['e3_rows']}: {res['e3_by_skill']}")
+    # P5 was UNDECIDABLE on 2026-10-07 (the survey's 35 rows all aftercast 0) and asserted
+    # so; 20261008T132845 (origin live, build 38974, Koss) brought 19 scoreable rows and
+    # reddened it -- good news, so the check now SCORES P5 instead. Floors, never exact
+    # counts; but a single riding row, or one off the aftercast, is a real contradiction.
+    by = res["e3_by_skill"]
+    zero_class = [by[k] for k in (322, 346, 348) if k in by]
+    check(res["p5"] == "FAILS" and res["p5_rival"] == "HOLDS"
+          and res["e3_scored"] >= 19 and res["e3_zero"] == 0
+          and res["e3_at_aftercast"] == res["e3_scored"]
+          and {281, 288, 313, 1396} <= set(by)
+          and "20261008T132845" in res["e3_captures"]
+          and len(zero_class) == 3 and sum(n for n, _d in zero_class) >= 35
+          and all(d == [0.0] for _n, d in zero_class),
+          "P5 FAILS on retail, its rival HOLDS: a hero's E3 waits its spell's aftercast -- "
+          "Koss's 19 (281 / 288 / 313 / 1396, 20261008T132845) all at E5 + 0.75 +/- 0.05, "
+          "none at 0.000 -- and the 35 aftercast-0 rows (322 / 346 / 348) still at 0.000, "
+          "the same rule's zero class",
+          f"P5 {res['p5']} rival {res['p5_rival']}: scored {res['e3_scored']}, zero "
+          f"{res['e3_zero']}, at {res['e3_at_aftercast']} of {res['e3_rows']} rows; "
+          f"captures {res['e3_captures']}; {by}")
+    if os.path.isfile(OURS_HERO_E3):
+        import origin
+        import rechargeprobe
+        build = origin.build_of(OURS_HERO_E3)[0]
+        with contextlib.redirect_stdout(io.StringIO()):
+            _lbl, _rows, oe3, otab = npcaftercast.ours(OURS_HERO_E3, build,
+                                                       rechargeprobe._exe_tables())
+        on, oz, oat, oby, _oall = npcaftercast.score_e3(oe3, otab)
+        check(origin.origin_of(OURS_HERO_E3)[0] == origin.OURS
+              and on >= 64 and oz == on and oat == 0 and set(oby) == {ORISON},
+              "the rival's KNOWN-BAD arm: our own healer rig (authsrv-20261001T105141-c1, "
+              "origin ours) -- 64 hero Orisons, every E3 at 0.000, none at the aftercast",
+              f"build {build}: scored {on}, zero {oz}, at {oat}; {oby}")
+    else:
+        LEDGER.skip("P5's known-bad arm (1 check)", f"no {OURS_HERO_E3}")
     # Re-aimed after review (EV-3): a [48] in the [58]'s OWN batch (gap 0.000) is no
     # evidence of order -- the same connection carries [48] before [58] in one batch and
     # after it in another -- so P6 scores only instants STRICTLY inside the window and

@@ -281,6 +281,12 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   `[6, T, 23]` in its batch. What would refute the fix: a bleed drawn on a miss or block in A
   or C, or an assert. UNKNOWN going in: whether the hostile's AI casts 380 on itself at all; if
   C shows no "block" in 60 s, record C as unexposed. Not a test of anything retail-side.
+  **2026-10-09, after CONFPASS-F4:** the hostile casts 380 at all only because it charges on its
+  own hits, and at the default `--enemy-hit 0.10` those hits kill the 140-health player about
+  once a stance cycle. So C and D add `--enemy-hit 0.008` (1-point hits), and "about 3 presses
+  in 4" becomes about 37 % blocked: the stance is up about 10 s of every about 20.5 s, with a
+  75 % block. The harness rows and their floors are in
+  [CONFIRM-2026-10-08](../deskwork/CONFIRM-2026-10-08.md) §4.
 - **RANGERPRE-S23 and S24 (2026-10-07): a BODY's attack skill under Blind** — S22's two
   found-in-passing defects, fixed on the desk; the banner at `authsrv.BLIND_MISS_SKILL_CLOSE`.
   **S23, the close.** `land_swing`'s Blind arm closed a body's attack skill with the plain

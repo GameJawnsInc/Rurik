@@ -64,6 +64,59 @@ move back.
   - An NPC dying in its windup gets no close (retail's NPC case UNVERIFIED).
   - `stillwindup.py`'s own classifier is not re-run.
 
+### SKILLS-AC8 -- 2026-10-09 -- **`test_npcaftercast`'s one red was good news: its "P5 UNDECIDABLE" check asserted that no hero E5 -> E3 row on tape could be scored, and the RIDERS / CASTAI-H1 live capture brought 19. P5 is scored now and FAILS: a hero's E3 is NOT in its E5's batch, it is at E5 + the table aftercast, 19 of 19 (0.732-0.762), the player's own rule. The NPC_AFTERCAST gate is CORROBORATED for a hero and does not move. Our hero's E3 still rides its E5, a divergence opened in PLAN §8, server untouched.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8.
+
+- **The symptom.** On a clean detached checkout of `main` at `2ed812b5`, `test_npcaftercast` exited 1 on one check, §4's P5, with "scored 19 of 54". Every other check passed.
+- **Where the rows came from.** All 19 are from `20261008T132845` `:51409`:
+  - origin **live** per `origin.origin_of`, stated and corroborated by the recorded addresses;
+  - build **38974**;
+  - agent 30, Koss, a W/Mo hero (monsterai §18.6), on the Plains of Jarin;
+  - skills 281 ×6, 288 ×6, 313 ×2, 1396 ×5, every one table aftercast 0.75.
+
+  No other tape has a scoreable row. The other 35 rows are the survey's aftercast-0 322 / 346 / 348, still at 0.000.
+- **The prediction, written before the rows were read:** P5 FAILS, at the aftercast. The question as first put, "a hero's next cast waits ~0.75 s", is P1's question. P5 is the SAME cast's E3.
+- **OBSERVED.**
+  - P5 **FAILS**: 0 of 19 at 0.000.
+  - Its rival, "E3 = E5 + the table aftercast" within FLOOR_S's 50 ms shoulder, **HOLDS** 19 of 19 (max deviation 0.018). The registered text had named that rival as P5's alternative.
+  - **Known-bad arm:** our own HEROENERGY healer rig, `authsrv-20261001T105141-c1` (origin ours): 64 hero Orisons, 64 at 0.000, 0 at the aftercast.
+  - `hero_skill_messages` has not moved the E3 since that capture's tree; only a6a3d34b's recharge-0 branch differs.
+- **The gate, on the same tape.**
+  - Koss's 17 completion rows floor at **0.747**.
+  - In his 4 back-to-back pairs (288 then 281), the follow-up's `[60]` rides his E3's own batch at `[58]` + 0.747-0.751. So the hold ends where retail's E3 says the aftercast ends.
+  - The follow-up's E4 opens in the `[58]`'s batch, 4 of 4.
+  - P1 re-run: n = 1,502 (+25: Koss's 17 and 8 hostiles), min 0.704, 0 below. P2 534 = 35.6 %. P3, P4 and P6 unchanged.
+- **What changed.**
+  - `npcaftercast.py`: `e3_scoreable`, `E3_SHOULDER`; `score_e3` returns the at-aftercast count; `p5_rival` and `e3_captures` in `--json`; a RE-RUN block beside "AS RUN".
+  - `test_npcaftercast.py`: §4 scores P5 (FAILS, the rival HOLDS, the capture named, the zero class intact) and adds the healer-rig known-bad arm; §1 holds the rival's shoulder on literal edges.
+  - §2 (d)'s labels: the hero hold is OBSERVED, and the E3-at-E5 pin is OURS, contradicting retail.
+  - Floors 42 / 52 -> **43 bare / 54 with the vault**, both MEASURED (an empty and a nonexistent RURIK_VAULT for the bare one).
+  - Two reader mutants go red: the rival counting every row (§1 and the known-bad arm), and a zero shoulder (§1 and the retail check).
+- **Not done: our hero's E3 at its E5.** Moving it is the server path, and the tapes do not show the NPC_AFTERCAST gate wrong. Opened in `PLAN.md` §8 as SKILLS-AC8. What the client shows for it is UNVERIFIED.
+
+### CONFPASS-F4, the post-fix run -- 2026-10-09 -- **CONFIRMED on our wire: S22-C re-run under the fix (harness `20261009T124123`, capture `authsrv-20261009T124204-c1`) carries 9 `[48, 10, 380]` in 197 s, against 4,004 before. Every cast comes exactly 8 landed Hatcher hits after the one before. All seven pre-registered predictions held. New fixture effect: the Hatcher, now swinging, kills the 140-health player 8 times.**
+
+- **The run.** `confirm.py --only S22-C`, from `main` at `f35a9e35`, with the arguments unchanged: `--party slice --enemy-health 2000 --no-energy --enemy-skills 380`. The capture's flags header reads `HOSTILE_ADRENALINE: true`, `ENERGY: false`. The launcher's mechanical verdict is PASS (map reached, 0 undecodable, no traceback, no client assert). The original pass's `results.json` is kept beside it as `results-pre-CONFPASS-F4.json`.
+- **The predictions, registered in chat before launch (RECONSTRUCTION then), each against the run (OBSERVED now).**
+
+  | | predicted | observed |
+  |---|---|---|
+  | P1 `[48, 10, 380]` on the wire | 5–15; > 50 refutes | **9**, every 20.5 s (8 gaps of 20.5, one of 21.2) |
+  | P2 landed Hatcher hits before the first 380 | ≥ 7 | **8** |
+  | P3 landed hits between consecutive 380s | each ≥ 7 | **8, 8, 8, 8, 8, 8, 8, 8** |
+  | P4 blocks outside a stance episode | 0 | **0** (4 inside) |
+  | P5 the F4 banner in gamesrv.log | 1 | **1** |
+  | P6 adrenaline opcodes naming agent 10 | 0 | **0** (0 adrenaline sends at all) |
+  | P7 report passes, no traceback | yes | **yes** |
+
+  The pre-fix S22-C run (`20261008T224201`) scores 4,004 / 0 / 0 / – / 0 / 0 / yes on the same scorer, so it is the scorer's known-bad control. Each episode runs 10.00–10.05 s, then expires. 28 rate-limited `cannot cast skill 380: needs 200 adrenaline` lines show the gate holding between casts. The exact 8 is the 200-unit price at 25 per hit. The player's hits on a 2,000-health body add less than a strike per cycle.
+- **S22-C's own question, answered more sharply than before.** Of the 10 scripted Sever Artery presses, 6 fired and 4 were dropped because the player was dead.
+  - The 3 that fell outside a stance landed with Bleeding.
+  - The 3 that fell inside one were blocked, with the RANGERPRE-S22 line `the strike blocked -- no condition`.
+  - That is 3 of 3 each way, OBSERVED on ours. Before the fix every press fell inside a stance, so the arm had no unblocked control.
+- **The fixture effect, new and faithful.** Before the fix the per-tick re-cast kept the Hatcher from swinging at all: 0 hostile swings in `…224201`. Now it swings 76 times and lands 75 hits. The 140-health player dies 8 times, about once per stance cycle, and the player starts only 9 swings of its own.
+
+  So "block on ~3 presses in 4" (the launcher's S22-C prediction) and F3's 76 % block share were artefacts of the defect. A re-run that wants many blocked presses needs the presses timed into the 10 s windows, and a player who survives the cycle ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4).
+
 ### CONFPASS-F3b, corrected -- 2026-10-09 -- **The retail figures in CONFPASS-F3b's last bullet were wrong at both ends. Retail's player stopped rate is 3.0 % today, not 1.8 %, and 6.4 % bounded, not 5.9 %. §13b's pooled rate would read 14.9 %, not 13.9 %.**
 
 - **The 1.8 %** was a misread. On today's 1,696 player starts the current classifier reads damage 95.1 %, stopped **3.0 %**, finish-without-damage **1.8 %**. 1z-db's 1.8 % stopped was measured on 903 starts and is stale whatever is decided.
