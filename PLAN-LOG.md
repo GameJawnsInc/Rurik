@@ -28,6 +28,38 @@ move back.
 
 ---
 
+### SKILLS-AC8's client look -- 2026-10-09 -- **Ran on the owner's go. The wire is as shipped in both arms: the default puts a hero Orison's E3 at E5 + 0.751–0.792, 100 of 100, and `--no-hero-e3-aftercast` at 0.000–0.001, 100 of 100. Neither arm logs `Pending skill` or asserts. The hero panel draws NO difference, so the registered prediction "the highlight persists ~0.75 s longer" is REFUTED: the Orison icon's recharge sweep starts at the E5 in both arms, and the aftercast window's frames are indistinguishable. Closed in `PLAN.md` §8.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8, its last paragraph.
+
+- **The rig.**
+  - Rig: `revheal3`, on the slice client (build 38797). Arguments `--map 168 --explorable
+    --party sandbox --area sandbox --spawn-profession 1`, the 2026-10-01 HEROENERGY run's
+    own, with no `--persist`.
+  - Inputs: the server-side `attack:110` on the raider. The arms differ by one flag.
+  - Two passes, both agent-driven and hands off, each A then B:
+    - **The first** (`20261009T170701` A, `20261009T171014` B) asked the owner to watch a
+      panel. No frame shows one open.
+    - **The second** (`20261009T173323` A, `20261009T173545` B) had the harness open hero 1's
+      panel itself: a click on the party window's "1" box at (0.8967, 0.3298), proven by a
+      pilot (`20261009T173153`). It photographed the panel about every 0.78 s.
+- **The wire, by `npcaftercast.score_e3` and a ledger replay (OBSERVED, all four runs).**
+  - Arm A: 62 + 38 hero Orisons, every E3 at E5 + the aftercast, none at 0.000.
+  - Arm B: 62 + 38, every E3 at 0.000 or 0.001.
+  - The ledger closes with 0 misses in all four runs. Each A run leaves one record per hero
+    open, a cast in flight at the close.
+  - B's revert banner is printed once in each B run, A's in none.
+  - No hero died, so the `[57]` + E2 close was not exercised on the client.
+- **The panel (OBSERVED, the frames).**
+  - The grab lag is bounded to (0.166, 0.262) s by the hero's energy readout. Its 9
+    drops each fall between two frames that straddle a wire E4. The frames were placed on
+    the cycle at 0.21.
+  - The Orison icon animates its activation from E4 to E5 in both arms.
+  - In [E5, E5 + 0.75), arm A's 17 frames and arm B's 18 show the same recharge sweep
+    growing from the E5, and nothing lit.
+  - Limits: a mark briefer than about 0.1 s could fall between frames, and only the
+    panel's skill icon was read.
+- **So:** the E3's move is visually neutral on the hero panel. It rests on retail's 19
+  of 19, the wire's fidelity. Nothing else on the panel changed.
+
 ### S22's silent hero -- 2026-10-09 -- **Not a defect: S22 fights in a town (map 148), and SLICE-H2b withholds the party's world bodies in a town, so the slice monk has no row for `ally_cast_tick` to iterate. That is why no S22 run shows a heal, a hold or a refusal from it. `--party-body-in-outpost` is the switch if a fixture wants it to heal.**
 
 - **The prediction, stated before reading.** The hero is never in `ally_cast_tick`'s candidate set, or a distance gate excludes it. What would refute it: the hero in the loop with its heal held for a logged reason. **Held: never in the set.**
