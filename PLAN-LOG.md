@@ -28,6 +28,36 @@ move back.
 
 ---
 
+### SKILLS-AC9's client look -- 2026-10-09 -- **CONFIRMED on our client (owner's go): with the HERO QUEUE a hero's next spell lights on its panel at the previous spell's [58]. In the window between Orison's E5 and the next spell's [60], slot 2 shows its activation animation in 23 of 23 frames on the default arm (its E4 already out), and the plain gold "ready" frame in 23 of 23 on `--no-hero-queue`. The panel draws activation from the E4, not from the [60]. Wire as shipped: 48 of 100 hero E4s at the [58] on the default arm, 0 of 98 on the flag; no `Pending skill` lines and no assert in either arm.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.9, its last paragraph.
+
+- **The rig.** `vault/sandbox/heroqueue-look.toml` (compiled by `sandbox.py`) is
+  `revheal3` with three changes:
+  - the heroes' bars are [281, 1686, 2];
+  - they have energy 300 and health 5,000;
+  - the raider hits for 150–200.
+
+  So a hero always has a hurt target and a second spell ready at its Orison's `[58]`.
+  Launched with revheal3's arguments, no `--persist`. The harness opened hero 1's panel
+  (the party window's "1" box) and photographed it every ~0.76 s, hands off.
+- **The runs, all of them.**
+  - **Bar [281, 288, 2] (Healing Breeze):** `20261009T183832`. A clean run, but only 2
+    queued picks for hero 1: Healing Breeze, a 5 s enchantment, is rarely ready at
+    Orison's `[58]`.
+  - **Bar [281, 1686, 2], normal hero health:** `20261009T184159` (A) and `…184419` (B).
+    The healed hero was full at every `[58]`, and the raider's next hit landed just
+    before the release (its 1.75 s swing in step with the 3.5 s hero cycle). So the picks
+    led their starts by only 0.00–0.05 s, and no window existed.
+  - **The final rig:** `20261009T184837` (A) took no frames after its panel click, because
+    the client lost foreground. It was re-run as `…185542` (A). `…185116` is B.
+- **The scoring.**
+  - `heroqueue.py --ours` on each arm's capture gives the classes.
+  - `hq_window.py` and `hq_all.py` (scratch) place each frame on the wire at the 0.21 s
+    grab lag from the SKILLS-AC8 look, and sheet hero 1's slots 1–3.
+  - Outside the window both arms read alike: gold after 1686's E6, the animation while it
+    casts, the recharge sweep after its E5.
+- **Not exercised:** the swing-queue case on the client (the rig's heroes swing no
+  attack skill), and any drop.
+
 ### SKILLS-AC9, the hero queue -- 2026-10-09 -- **A hero's 0x00E4 now opens at its PICK and its cast starts when the body is free (`HERO_QUEUE`; `--no-hero-queue` reverts). Retail's 69 hero E4s, read by a new `heroqueue.py`: 45 ride their start; 4 wait a spell's aftercast, E4 at the `[58]`; 10 wait the hero's own swing, E4 after the hit; 8 walk in first; 1 is dropped with `[45]` + E2. The `[62]` rides the START, 47 of 47. Ours now commits a pick held by the aftercast or the swing clock with its E4 at once, starts it with no second E4, and closes a pick that dies first with `[45]` + E2. The walk-in and the swing's start time are not modelled; both are opened in `PLAN.md` §8. The client look is owed.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.9.
 
 - **The evidence (OBSERVED; re-derived).** The reader's predictions were written after a

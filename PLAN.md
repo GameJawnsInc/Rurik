@@ -2218,7 +2218,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   through `lifecycle()`. Also: 21 of §13's 26 silent swings start under 1.6 s before their capture ends.
 * **HERO QUEUE residuals** ([skills §65.9](studies/skills/FINDINGS.md); `HERO_QUEUE` shipped 2026-10-09): a queued
   attack skill starts at its swing's start + the full interval on ours, + 0.880-0.909 on retail (sword, 10 of 10);
-  the walk-in pick (8 rows) is unmodelled (CONFPASS-F2's gap). Owed: a client look -- does the next skill light at the [58]?
+  the walk-in pick (8 rows) is unmodelled (CONFPASS-F2's gap). (The client look ran 2026-10-09: the queued skill lights at the [58].)
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

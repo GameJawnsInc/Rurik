@@ -10785,6 +10785,43 @@ aftercast rows each start the skill their E4 named.
 - **`test_npcaftercast` §2 (d)**: the release-tick order check is re-aimed. The E4 has left
   that tick, and the E3 still leads the `[60]`.
 
+**The client look, run the same day on the owner's go: CONFIRMED that the next skill lights
+at the `[58]`. The hero panel draws a skill as activating from its E4, not from its
+`[60]`.** PLAN-LOG "SKILLS-AC9's client look" has the runs.
+- **The rig.** `vault/sandbox/heroqueue-look.toml` is `revheal3` with three changes:
+  - the heroes' bars are [281, 1686, 2], 1686 being a plain 1 s-recharge heal (id only, the
+    name resolved at run time);
+  - the heroes have energy 300 and health 5,000;
+  - the raider hits for 150–200.
+
+  So a hero always has a hurt target and a second spell ready at its Orison's `[58]`.
+  The harness opened hero 1's panel and photographed it about every 0.76 s, hands off.
+- **The wire (OBSERVED).**
+  - Default arm: 48 of 100 hero E4s fall in the aftercast class, each at the `[58]`, with
+    the start 0.77–0.80 s on.
+  - `--no-hero-queue`: 0 of 98; every E4 rides its start.
+  - Both arms: 0 `Pending skill` lines and no assert.
+- **The panel (OBSERVED from the frames).** Frames were placed on the wire's cycle at the
+  0.21 s grab lag measured for the SKILLS-AC8 look.
+  - In the window from Orison's E5 to 1686's `[60]`, slot 2 (1686) shows its
+    **activation animation in 23 of 23 frames on the default arm**. That is the ring, the
+    crosshair and the orb it shows while casting, and its E4 is 0.21–0.32 s old in every
+    one of those frames.
+  - In the same window on **`--no-hero-queue`** (no E4 yet), slot 2 shows the **plain gold
+    "recharged, ready" frame in 23 of 23**.
+  - Outside the window both arms read alike: gold when ready (after 1686's E6), the
+    animation while casting, and the recharge sweep after its E5.
+- **So the queue is visible**, and it puts the panel where retail's E4 timing puts
+  retail's: the queued skill lights at the previous spell's completion. RECONSTRUCTION for
+  retail's own panel, which is not on tape; the E4's timing is OBSERVED, and the client
+  drawing from the E4 is OBSERVED here.
+- **Limits.**
+  - One client build (38797, the slice client).
+  - Frames about 0.76 s apart, so the window is sampled once per cycle, at E5 + 0.21 to
+    0.32.
+  - The swing-queue case was not exercised on the client (the rig's heroes do not swing
+    attack skills).
+
 ## 66. SKILLS-EX — the primary attributes' passive rules: Expertise's discount ROUNDS (6 of 6; floor 1 of 6) and ships on every caster; Divine Favor is its own heal word, rounded, after the spell's own; the ten primaries read against the client's own descriptions (2026-10-07)
 
 DESKWORK-D7 step 2 (studies/deskwork/PLAN.md), the primaries with witnesses. Before
