@@ -6811,6 +6811,108 @@ def hero_e3_aftercast(skill_id):
         return 0.0
     return completion_aftercast(skill_id)
 
+
+# HERO QUEUE (2026-10-09, SKILLS-AC8's E4 decision, studies/skills 65.9): A HERO'S E4 IS
+# ITS PICK, AND ITS [60] / [50] IS ITS START. heroqueue.py over the corpus's 69 hero E4s
+# (Koss, 20260914T005758 :56011 and 20261008T132845 :51409; OBSERVED):
+#   * the pick rides the start (lead 0.000) when the body is free: 45 of the 69 -- 17
+#     spells, 24 instants (an instant never waits, even inside a swing), 4 attack skills;
+#   * a SPELL picked at the previous spell's completion waits its AFTERCAST: E4 in the
+#     [58]'s batch (3 of 4; the 4th 0.020 s later), E3 + [62] + [60] at the release, 0.729
+#     -0.751 s on (4 of 4);
+#   * an ATTACK SKILL picked while the body's SWING is still running waits it out: E4
+#     after that swing's hit (10 of 10), [62] + [50] at the swing's start + 0.880-0.909
+#     (10 of 10); one more waits the previous attack skill's own close the same way
+#     (382, [50] at that [46] + 0.777);
+#   * an attack skill picked out of reach walks in first (322 x7 and 382 x1, leads 1.86-
+#     8.48 s) -- NOT modelled: a party body never walks to cast (CONFPASS-F2's gap);
+#   * a pick that never starts closes with [45, hero, 0] + E2 in one instant (n = 1,
+#     392.729: 385 picked behind a swing, its target 44 dead 0.039 s later) -- the
+#     player's own pre-begin drop (agents.GV_CAST_DROPPED, 4 of 4).
+# So ally_cast_tick, for a HERO, COMMITS the pick its two clock holds would otherwise hold
+# and re-pick every tick: the NPC_AFTERCAST hold, and an attack skill's swing clock once
+# that swing has landed. The commit sends the E4 at once (hero_skill_e4) and keeps the
+# slot and the target; the hold's release STARTS it with no second E4 -- the debit, the
+# face and the [60] / [50] as ever. The landing's own tick picks too (retail: the E4 in
+# the [58]'s batch) but never STARTS a cast there (the cadence stays 642d8957's). Each way
+# a committed pick can die before its start closes it with [45] + E2 (hero_queue_drop):
+# its target dead (or, for a resurrection, risen), its skill suppressed or off the bar
+# (the witness's shape, n = 1), a death, a knock-down, an interrupt (GWW "Interrupt": an
+# interrupt un-queues the queued skill), a transition -- RECONSTRUCTION but the first.
+# A henchman sends no E4 (PENDSKILL), so it keeps the re-pick unchanged; so does every
+# hostile. --no-hero-queue restores the E4 at the start.
+HERO_QUEUE = True          # False (--no-hero-queue): a hero's E4 opens with its start.
+
+
+def hero_queue_on(agent):
+    """True when `agent` commits its held picks: a HERO body (the one whose E4 is on the
+    wire) under HERO_QUEUE."""
+    return (HERO_QUEUE and HERO_CAST_OPENS_E4 and HERO_WIRE_POOLS
+            and hero_body_id(agent) is not None)
+
+
+def hero_queue_commit(send, state, agent_id, agent, slot, skill_id, target, now, why,
+                      conn_id=0):
+    """HERO QUEUE: commit the pick a clock hold holds -- the E4 now, the slot and the
+    target kept until the release starts it. Once per pick (an existing queue stands),
+    never an adrenal skill (a party body casts none) and never one the pool cannot pay
+    (the start would only refuse it). True when it committed."""
+    if not hero_queue_on(agent) or agent.get("queued_cast") is not None:
+        return False
+    if ENERGY:
+        cost, units = body_skill_cost(state, agent_id, skill_id)
+        pool = agent_energy(agent)
+        pool.tick(now)
+        if units > 0 or (cost > 0 and not pool.can_pay(cost)):
+            return False
+    agent["queued_cast"] = {"slot": int(slot), "skill_id": int(skill_id),
+                            "target": target, "at": float(now), "why": why}
+    hero_skill_e4(send, agent_id, agent, skill_id)
+    print(f"[c{conn_id}] hero agent {agent_id} picks skill {skill_id} at {target} and "
+          f"waits ({why}): its E4 now, its start at the release [HERO QUEUE]", flush=True)
+    return True
+
+
+def hero_queue_drop(send, agent_id, row, why):
+    """HERO QUEUE: a committed pick that will never start -- [45, hero, 0] then E2, the
+    pre-begin drop (392.729, n = 1; the player's 4 of 4). Only against an open record,
+    hero_cast_drop's rule. True when a pick was dropped."""
+    q = (row or {}).pop("queued_cast", None)
+    if q is None:
+        return False
+    sid = q["skill_id"]
+    if (row.get("hero_e4_open") or {}).get(int(sid)):
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.GV_CAST_DROPPED, agent_id, 0],
+             f"cast_dropped: hero agent {agent_id}'s queued skill {sid} never began "
+             f"({why}) [HERO QUEUE]")
+        hero_cast_drop(send, agent_id, row, sid, why)
+    return True
+
+
+def hero_queue_check(send, state, agent_id, agent):
+    """HERO QUEUE: the body's committed pick if it can still start, else None -- a pick
+    whose slot changed, whose skill was suppressed, or whose target died (a resurrection's:
+    rose) is dropped here ([45] + E2), and the tick picks afresh."""
+    q = agent.get("queued_cast")
+    if q is None:
+        return None
+    skills = agent.get("skills") or ()
+    slot, sid, tid = q["slot"], q["skill_id"], q["target"]
+    why = None
+    if slot >= len(skills) or int(skills[slot][0]) != sid:
+        why = "its slot changed"
+    elif sid in (agent.get("skill_disabled_ids") or ()):
+        why = "its skill was suppressed"
+    elif skill_resurrects(sid):
+        if not resurrection_target_dead(state, tid):
+            why = "its target already stands"
+    elif tid is not None and tid != agent_id and target_dead(state, tid):
+        why = "its target died"
+    if why is not None:
+        hero_queue_drop(send, agent_id, agent, why)
+        return None
+    return q
+
 # THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
 # never puts the OBSERVER's property 42 immediately ahead of a damage word at
 # the observer: 0 of 401 16/17 words and 0 of 3 armour-ignoring 55 words. The
@@ -25130,6 +25232,9 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
         mode = skill_interrupts(by_skill)
     if mode is None:
         return None
+    # HERO QUEUE: GWW "Interrupt" -- an interrupt un-queues the queued skill; a hero's
+    # committed pick closes [45] + E2 whatever else this interrupt reaches (RECONSTRUCTION).
+    hero_queue_drop(send, agent_id, agent, f"interrupted by agent {by_agent}'s skill {by_skill}")
     now = time.time()
     slot = agent.get("casting")
     skills = agent.get("skills") or ()
@@ -31305,6 +31410,9 @@ def knock_down(send, state, agent_id, conn_id, why, seconds=None):
             # player's knock-down releases its cast with E2 the same way
             # (_mark_cancelled -> release_cancelled_cast). RECONSTRUCTION.
             hero_cast_drop(send, agent_id, row, skills[slot][0], "knocked down mid-cast")
+        # HERO QUEUE: a committed pick is dropped too -- [45] + E2 (RECONSTRUCTION, the
+        # player's knock-down cancels its queued cast the same way, _mark_cancelled).
+        hero_queue_drop(send, agent_id, row, "knocked down before its pick began")
         row["cast_lands_at"] = None
         row["casting"] = None
         if row.get("follow") or row.get("moving"):
@@ -33243,6 +33351,7 @@ def ally_cast_tick(send, state, conn_id):
                                "the body dropped its cast")
             # SKILLS-AC8: and a queued aftercast E3 (the death emptied its own)
             hero_aftercast_drop(send, agent_id, agent, "the body dropped its aftercast")
+            hero_queue_drop(send, agent_id, agent, "the body dropped its pick")   # HERO QUEUE
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
@@ -33253,19 +33362,28 @@ def ally_cast_tick(send, state, conn_id):
         if knocked_down(state, agent_id, now):          # SLICE-H12
             continue
         due = agent.get("cast_lands_at")
+        _landed = False                     # HERO QUEUE: this tick is a completion's
         if due is not None:
-            if now >= due:
-                agent["cast_lands_at"] = None
-                land_skill(send, state, agent_id, agent, conn_id)
-            continue
+            if now < due:
+                continue
+            agent["cast_lands_at"] = None
+            land_skill(send, state, agent_id, agent, conn_id)
+            # HERO QUEUE: a hero picks its next action AT this completion (retail's E4
+            # in the [58]'s batch, 3 of 4) -- the pick below may commit, never start.
+            _landed = True
+            if (not hero_queue_on(agent) or agent.get("dead")
+                    or agent.get("cast_lands_at") is not None):
+                continue
         skills = agent.get("skills") or ()
         if not skills:
             continue
+        # HERO QUEUE: a committed pick that can still start is this turn's pick.
+        _q = hero_queue_check(send, state, agent_id, agent)
         # SLICE-H3: THE DEAD FIRST. A dead ally and a ready resurrection on
         # the bar is the cast, before any heal (retail's monk raised its
         # fallen henchman five times in one fight, F28); a resurrection slot
         # with nobody dead is HELD, not spent -- round robin steps past it.
-        _dead = party_dead_target(state, agent_id)
+        _dead = party_dead_target(state, agent_id) if _q is None else None
         _res = None
         if _dead is not None:
             # DESKWORK-D1 step 6 (the fix pass, ENG-B2): a SUPPRESSED
@@ -33278,7 +33396,9 @@ def ally_cast_tick(send, state, conn_id):
                         and agent["skill_ready"][_i] <= now):
                     _res = _i
                     break
-        if _res is not None:
+        if _q is not None:
+            target, slot = _q["target"], _q["slot"]             # HERO QUEUE
+        elif _res is not None:
             target, slot = _dead, _res
         else:
             # SLICE-H4: a FOE skill (the client's target byte 5) goes at the
@@ -33348,6 +33468,10 @@ def ally_cast_tick(send, state, conn_id):
         # held by its aftercast is never charged for a tick it waits (HEROENERGY's
         # defect class; test_npcaftercast section 3 locks the order).
         if npc_aftercast_holds(agent, skill_id, now):
+            # HERO QUEUE: a hero commits the held pick -- its E4 now, the start at the
+            # release (retail: E4 at the [58], [60] at E3's batch, 4 of 4).
+            hero_queue_commit(send, state, agent_id, agent, slot, skill_id, target, now,
+                              "its aftercast", conn_id)
             continue            # NPC_AFTERCAST: a CLOCK hold, the hostile's gate (RECONSTRUCTION)
         # B2: a signet under Rust (x2); the recharge anchor takes it too.
         activation = signet_activation(state, agent_id, skill_id, activation)
@@ -33364,7 +33488,14 @@ def ally_cast_tick(send, state, conn_id):
         _interval = ((agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
                      * attack_interval_factor(state, agent_id))
         if _atk and now - agent.get("last_swing", 0.0) < _interval:
+            if agent.get("swing_lands_at") is None:
+                # HERO QUEUE: behind a swing that has LANDED (retail: the E4 after the
+                # hit, the [50] at the swing's start + 0.88-0.91) -- committed now.
+                hero_queue_commit(send, state, agent_id, agent, slot, skill_id, target,
+                                  now, "its swing", conn_id)
             continue
+        if _landed:
+            continue            # HERO QUEUE: a completion's tick picks, it never starts
         _debit = None                       # HEROENERGY: (cost, fraction) for [62]
         if ENERGY:
             cost, units = body_skill_cost(state, agent_id, skill_id)   # SKILLS-EX: [62] too
@@ -33413,8 +33544,11 @@ def ally_cast_tick(send, state, conn_id):
                 state, agent_id, activation, _interval)             # CASTAI-ZF16
         else:
             agent["cast_lands_at"] = now + activation
-        # PENDSKILL: the hero's E4 opens the cast, first in its segment (50 of 50).
-        hero_skill_e4(send, agent_id, agent, skill_id)
+        # PENDSKILL: the hero's E4 opens the cast, first in its segment (50 of 50) --
+        # unless the HERO QUEUE opened it at the pick, when the start sends none.
+        _picked = agent.pop("queued_cast", None)
+        if _picked is None or _picked["skill_id"] != int(skill_id):
+            hero_skill_e4(send, agent_id, agent, skill_id)
         if (_debit is not None and HERO_SPEND_WORD and HERO_WIRE_POOLS
                 and hero_body_id(agent) is not None):
             # HEROENERGY: the debit rides behind the E4, retail's [E4, 62, E5]
@@ -34624,6 +34758,9 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
     # shape (CONFPASS-F1b: 20260929T100038 :51090 423.923, n = 1). RECONSTRUCTION
     # for a hero: no hero dies in an aftercast on tape.
     hero_aftercast_drop(send, agent_id, row, "died in its aftercast", death=True)
+    # HERO QUEUE: and a committed pick that never began -- [45] + E2, the pre-begin drop
+    # (RECONSTRUCTION at a death: the player's queued cast at its death takes the form).
+    hero_queue_drop(send, agent_id, row, "died before its pick began")
     hero_pool_clear(send, state, agent_id, row, "died")
     if after != before:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -52227,6 +52364,13 @@ def main():
               "tick, as this server did until 2026-10-09 (retail: E5 + the table's "
               "aftercast, 19 of 19 on Koss, 20261008T132845 -- studies/skills 65.8).",
               flush=True)
+
+    if a.no_hero_queue:
+        global HERO_QUEUE
+        HERO_QUEUE = False
+        print("NO HERO QUEUE: a hero's 0x00E4 opens with its start, as this server did "
+              "until 2026-10-09 (retail opens it at the PICK: at the previous spell's [58], "
+              "behind the running swing -- heroqueue.py, studies/skills 65.9).", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION

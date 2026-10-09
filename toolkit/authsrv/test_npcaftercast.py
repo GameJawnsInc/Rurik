@@ -493,10 +493,15 @@ def section_server():
                     if op == INT_T and v[:2] == [60, HERO]), None)
         order.append((i3, k3, k4, k60))
     nxt = {c: n for c, n, _k in hg}
-    check(order and all(None not in o and o[1] < o[2] < o[3] for o in order)
+    # RE-AIMED the same day (HERO QUEUE): the next cast's E4 left this tick for the [58]'s
+    # (test_heroqueue pins where it went); the E3 still leads the [60], and an E4 still
+    # here (--no-hero-queue) sits between them.
+    check(order and all(None not in (o[1], o[3]) and o[1] < o[3]
+                        and (o[2] is None or o[1] < o[2] < o[3]) for o in order)
           and all(nxt.get(i5) == i3 for (i5, _s5), (i3, _s3) in paired),
           "    on the very tick the NPC_AFTERCAST hold releases the next [60], and ahead "
-          "of that cast's E4 and [60] in it (retail: E3, [62], [60], 4 of 4)",
+          "of that cast's [60] in it (retail: E3, [62], [60], 4 of 4; its E4, if it is "
+          "in this tick at all, between them)",
           f"(tick, E3, E4, [60] positions) {order}; next start by 58 tick {nxt}")
     b5, b3 = _e5_e3(h_e3off)
     bseq = [(op, v[:2]) for _i, _t, op, v in h_e3off if op in (E5, E3) and v[0] == HERO]

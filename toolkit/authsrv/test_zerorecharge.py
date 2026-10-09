@@ -278,6 +278,13 @@ def section_hero():
             first = [(op, v) for op, v in start if HERO in v[:3]][:1]
             fam = [(op, v) for op, v in land if op in (E3, E5, E6) and v[:1] == [HERO]]
             misses, held = _ledger(start + land + after)
+            # RE-AIMED 2026-10-09 (HERO QUEUE, studies/skills 65.9): a recharge-0 attack
+            # skill is ready again at its own landing and, held by its swing clock, is
+            # PICKED there -- its E4 opens the NEXT cast's record. The record this check is
+            # about (the landed cast's) still closes; the queued pick's is set aside by name.
+            _q = row.get("queued_cast")
+            if _q is not None:
+                held = held - collections.Counter({(HERO, _q["skill_id"], 0): 1})
             check(first == [(E4, [HERO, sid, 0])] and fam == [(E3, [HERO, sid, 0])]
                   and after == [] and not misses and not held
                   and not row.get("hero_recharged_due"),

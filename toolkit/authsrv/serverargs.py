@@ -3344,6 +3344,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0.000 (64 of 64 hero Orisons on our "
                          "authsrv-20261001T105141-c1). A hero dying in the window "
                          "closes with [57] + E2 on the default arm only.")
+    ap.add_argument("--no-hero-queue", action="store_true",
+                    help="a hero's 0x00E4 opens with its cast's start, as this server "
+                         "did until 2026-10-09: a pick held by the aftercast or the "
+                         "swing clock is re-picked every tick and sends nothing until "
+                         "it starts. The known-bad arm of the HERO QUEUE: retail's "
+                         "hero opens the E4 at its PICK -- at the previous spell's "
+                         "[58] (4 of 4), after the running swing's hit (10 of 10) -- "
+                         "and starts at the release (heroqueue.py).")
     ap.add_argument("--no-interrupts", action="store_true",
                     help="no skill interrupts anything -- the server as it was "
                          "until 2026-09-23 (castmech P1 / animref D5: 'no "
