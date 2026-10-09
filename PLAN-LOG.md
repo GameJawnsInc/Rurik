@@ -28,6 +28,36 @@ move back.
 
 ---
 
+### CONFPASS-F4 -- 2026-10-09 -- **A hostile's stance on every world tick was `--no-energy` removing the only gate Bonetti's Defense has: 380 is recharge 0 and 8 adrenaline (200 units), and the hostile's whole pay gate, adrenaline included, sat behind `ENERGY`. A hostile's adrenaline book now runs under `--no-energy` too (`HOSTILE_ADRENALINE`; `--no-hostile-adrenaline` reverts). Nothing new on the wire. Mechanism fixed and tested; the post-fix run is owed (PLAN.md §8).**
+
+- **The symptom** (CONFPASS-F3's aside, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3). S22-C and S22-D (`--party slice --enemy-health 2000 --no-energy --enemy-skills 380`; harness `20261008T224201` and `…224553`) carry 4,004 and 3,998 `0x009F [48, 10, 380]` in ~193 s, one per ~50 ms tick. S22-C's log has 4,004 "stands and casts" lines and **no** hostile swing at the player: the Hatcher cast on every tick and so never swung. OBSERVED on ours.
+- **The prediction, written before reading.** Adrenaline: 380 is an adrenal stance with recharge 0, and the NPC loop gates on energy (zeroed by `--no-energy`) and recharge (0). Secondary: no "stance already up" check. What would refute it: a non-zero table recharge, meaning the instant path skips a recharge the server has. **Held.**
+- **The three candidate gates, each read.**
+  - **Recharge: present, and zero.** `enemy_attack_tick` arms `skill_ready = now + recharge + npc_recharge_anchor(activation)` from `--enemy-skills`' `skill_timing` read. The table's 380 is activation 0, aftercast 0, **recharge 0**, energy 0, **adrenaline 8 / 200 units**, type 3. OBSERVED, `vault/content/skills.toml`, build 38974. WIKI (GWW "Bonetti's Defense" infobox, rev 2683360, 2023-02-16): id 380, adrenaline 8, no energy and no recharge field, 5…11 s. **CORROBORATED.** Nothing is missing here; the value is 0.
+  - **Adrenaline: present, and switched off.** The charge gate and the spend in `enemy_attack_tick`, and every hostile gain site (its own hit in `land_swing`; damage taken in `hit_enemy`, `scythe_extra_hit` and `hurt_agent_row`), were all inside `if ENERGY:`. Both runs printed `NO ENERGY: … no adrenaline is tracked or sent` (gamesrv.log line 34). With energy on, the same hostile needs 8 strikes per cast. **This is the gate.**
+  - **"A stance already up": not adopted.** It is not retail's rule for the one AI class with a stance on tape: the JARIN hero re-cast 346 while it was live, 10 of 17 (SKIP_LIVE_EFFECT's banner).
+- **The class, not one skill.** OBSERVED, client table 38974: 72 rows have activation 0 and recharge 0. 71 of them are adrenal and one costs energy (976). Of the 71, 57 are attacks, which SLICE-F24's swing clock spaces to one per swing. The other 14 nothing spaced under `--no-energy`: stances 317 / 319 / 380 / 1404 / 1762, type 16 318 / 387 / 1770, and shouts 906 / 1558 / 1782 / 1954 / 2097 / 2354.
+- **Retail.** OBSERVED (castethogram events, `vault/research/castai-2026-09-27`): AI casts of table-recharge-0 adrenal skills are re-cast 17.4 to 170.9 s apart over 15 intervals, never per tick. Those are hero 30's 382 ×7 and 385 ×5 on `20260914T005758`, and monster 104's 336 / 338 / 340 on `20260916T213125`. **No AI adrenal STANCE is on tape**; every AI stance in the corpus (10, 346, 349, 379, 455) costs energy on a real recharge. So 380's own retail cadence is **UNVERIFIED**, and the gate restored here is the table's price, not a measured AI rule.
+- **The fix** (`authsrv.py`, `serverargs.py`). `body_adrenaline_on(agent)` = `ENERGY or (HOSTILE_ADRENALINE and the body is hostile)`, read at seven sites:
+  - `enemy_attack_tick`'s charge gate and its spend (the energy halves stay `ENERGY`'s);
+  - `land_swing`'s strike gain;
+  - the damage-taken gains in `hit_enemy`, `scythe_extra_hit` and `hurt_agent_row`'s hostile arm;
+  - `kill_agent`'s clear.
+
+  Every wire half stays on `ENERGY`: the player's family, and a hero's JARIN pool messages. A hostile's adrenaline is self-scoped silence on retail (9 of 9), so this changes **when** a hostile casts and nothing it sends.
+
+  A party body is untouched. `ally_cast_tick` refuses every adrenal slot under `ENERGY` ("a party body … never swings", stale since JARIN), and with energy off it has no gate. That is §8's open "a hero's adrenal debit", and it is latent in these runs: the slice bar is `[281, 276, 2]`.
+- **Tests.** `test_pools` §10c, 6 checks, floor 154 → 160, measured:
+  - the known-bad arm (`--no-energy --no-hostile-adrenaline`) casts 380 3 times in 6 ticks;
+  - the default holds the uncharged slot READY;
+  - charged with 8 strikes it casts once and spends the charge;
+  - no adrenaline opcode goes out;
+  - `land_swing` charges 25 under `--no-energy`, and 0 with the flag off;
+  - the flag is wired, AST with its `global`.
+
+  Mutations: swapping in the pre-fix predicate reddens 3 of 6; deleting the `global` reddens the source check. `test_mechanics` §36's B2 source lock was re-pointed, counts unchanged.
+- **What it does to S22-C/D, a RECONSTRUCTION until the run.** An uncharged Hatcher in melee range now swings, charges 25 per landed hit, and opens Bonetti's once per 8 landed hits, 10 s at rank 12. Its first block therefore comes ~8 hostile swings into the fight, not on the first tick. The F3 census's 76 % block share (89 / 125, 100 / 125, an always-up stance) falls, and S22-C's "block on ~3 presses in 4" expectation no longer holds. `--no-hostile-adrenaline` reproduces the old exposure only together with the per-tick defect.
+
 ### CONFPASS-F3 -- 2026-10-09 -- **`test_playerswing` §13's red was the census, not the server: 187 of the 188 new "silent drops" were swings closed by the fail word -- 174 blocks, 13 Blind misses -- which `swingcensus` did not read as an outcome. Fixed in the census, the 3 % ceiling unchanged: 213 of 1,979 (10.8 %) -> 26 (1.3 %).**
 
 - **The red.** On `main` at `972c51cc` and after, §13's silent-drop ceiling read 213 of 1,979. 188 of them come from the CONFIRM-2026-10-08 captures, and 175 from two: `20261008T224622` (91) and `…224230` (84). Before that day the census held ~25 silent swings in ~1,600.

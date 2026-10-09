@@ -3281,7 +3281,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "at 25, the skill icons dark, the enemy casting on "
                          "its recharge alone. Use it to say whether something "
                          "a run saw was THIS channel rather than the cast "
-                         "cycle it rides on.")
+                         "cycle it rides on. Since 2026-10-09 a HOSTILE's "
+                         "adrenaline book (silent on the wire) still gates "
+                         "its adrenal skills -- see --no-hostile-adrenaline.")
+    ap.add_argument("--no-hostile-adrenaline", action="store_true",
+                    help="CONFPASS-F4 REVERT: a hostile's adrenaline book "
+                         "follows --no-energy again, so under it the hostile's "
+                         "adrenal skills are free and ungated, and one whose "
+                         "client-table recharge is 0 (Bonetti's Defense 380, "
+                         "Battle Rage 317, Defy Pain 318 ... 14 non-attack "
+                         "rows) is cast on EVERY world tick -- S22-C/D's "
+                         "~4,000 0x009F [48, 10, 380] a run. By default a "
+                         "hostile charges on its hits and on damage taken and "
+                         "pays the charge whatever --no-energy says; nothing "
+                         "about it goes on the wire either way (retail's "
+                         "adrenaline traffic is self-scoped, 9 of 9). No "
+                         "effect without --no-energy.")
     ap.add_argument("--no-adren-bar-gate", action="store_true",
                     help="send the adrenaline family (0x00CF, the AD4 zero, "
                          "the death's 0x00D0) to a player whose bar "
