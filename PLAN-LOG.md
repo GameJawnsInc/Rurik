@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### CONFPASS-F3b -- 2026-10-09 -- **`swingcensus`'s `landed` over-count fixed: a swing lands only on its OWN close -- inside its own window, before any drop, with the player's `[1]` beside the hit (or a ranged launch). 1,576 -> 1,553 landed; the ceiling untouched at 26. Corrects CONFPASS-F3's "23 = 17 strikes + 6 next-swing hits".**
+
+- **The over-count, re-read swing by swing: 23 of 1,979, OBSERVED.**
+  - **16 strikes.** A press dropped the swing (`attack_stopped: skill N ends the swing`, N = 351, 382, 780, 782), and the attack skill's strike landed ~0.5 s later, inside the swing's 1.6 s.
+  - **6 next-swing landings.** A move or a stance (346) dropped the swing, and the next swing's landing fell after that swing's start but still inside this one's 1.6 s.
+  - **1 area tick.** At `20261008T221440` t=27.53 (AOT-1x), the player's own area tick `damage 10 to agent 10` killed the target mid-windup, 1.7 ms before the server's `target-gone` verdict. `_landed` read the tick as a landing.
+- **The correction to CONFPASS-F3.** That entry said 23 = 17 strike hits + 6 next-swing hits. Its 17 counted a stop up to 0.05 s BEFORE the start as a drop, which takes in `20260917T232611` t=41.30: a stance's `[3]` ends the old chain 1.4 ms before the new swing starts, and that swing lands. So the drops are 22, not 23, and the 23rd is the area tick, which F3's count did not see.
+- **The fix, `swingcensus.py`.** A hit lands the swing only if all three hold:
+  1. It is inside the swing's own window, before the next start.
+  2. It comes before the first drop at or after the start. A drop is the player's `0x009F [3, 1, 0]` or a `swing_verdict`.
+  3. It is the swing's own landing: the player's `0x009F [1, 1, 0]` within `CLOSE_JOIN` = 5 ms of it, or a ranged launch (no `[1]` rides a shot, WEAPONS-W2a). The 5 ms is measured: 2,210 of 2,363 hit rows sit within 1 ms of a `[1]` and 2,213 within 5 ms, and every landing on the corpus clears it.
+
+  The `[3]` and `[1]` are read off the frame's bytes, not the label. `attack_stopped: agent N's skill S interrupts the swing` names an NPC and stops the PLAYER (`[3, 1]`); `… drops its swing to scatter` names one and stops its own (`[3, 11]`, 43 on the corpus). `bound_landed=False` (`--unbounded-landed`) is the known-bad arm.
+- **Each conjunct, left out in turn on the corpus.**
+  - All three: 1,553. Without (1): 1,553. Without (2): 1,553. Without (3): 1,554. None of them: 1,576.
+  - So (3) alone catches the area tick, and (1)+(3) or (2)+(3) reach the same 23.
+  - Each is kept for a case the others miss. (1): a silent swing the next swing's landing masks with no drop on the wire, the ceiling's own blind spot. (2): a strike closed with the swing's `[1]`, which RANGERPRE-S23's arm C does and which would pass (3).
+- **Corpus deltas.**
+
+  | | before | after |
+  |---|---|---|
+  | landed | 1,576 | 1,553 |
+  | `cancel:skill press` | 25 | 46 |
+  | inferred `cancel` | 104 | 105 |
+  | `target-gone` | 3 | 4 |
+  | silent (§13's ceiling) | 26 | 26 |
+
+- **The test, `test_playerswing.py` 13d-a..j, floor 312 -> 322.**
+  - 13d-a is the control. b, c and d are each decided by ONE conjunct alone. e is the known-bad arm over all three. f is the stop read by its agent slot, both label traps. g is a stop before the start (the 232611 shape). h is a ranged launch with no `[1]`.
+  - i/j pin `224622` t=79.17 (`cancel:skill press`) and `221440` t=27.53 (`target-gone`) both ways.
+  - Seven census mutations each redden their own check: no own window → b; no drop-first → c and f; no own close → d; a 0.05 s stop slack → g; no launch exemption → h; a label-only stop, either form → f. The CONFPASS-F3 census fails b, c, d and f, and crashes e (its arm did not exist).
+- **Not done, opened in §8: retail's half has the same over-count.** `retail()` credits a start with any damage up to 3.0 s later, past the attacker's next start, and ranks damage above a stop.
+  - Bounded the same way, retail's PLAYER goes from damage 95.1 % / stopped 1.8 % to 91.4 % / 5.9 % (63 of 1,696 starts move), and its NPCs from 84.7 % to 72.4 % damage.
+  - That moves 1z-db's published "our player cancels 8.3x retail" and would redden §13b's pooled stopped ≤ 12 % pin (13.9 % bounded). It reopens a published finding, so it is the owner's call, not folded in here.
+  - `main()` now prints a bounded ours beside an unbounded retail. Its `cancel_ours` and §13's cancel floor also count only the inferred `cancel` branch, not the verdict-sourced `cancel:*` rows that every capture since 2026-09-09 writes.
+
 ### CONFPASS-F4 -- 2026-10-09 -- **A hostile's stance on every world tick was `--no-energy` removing the only gate Bonetti's Defense has: 380 is recharge 0 and 8 adrenaline (200 units), and the hostile's whole pay gate, adrenaline included, sat behind `ENERGY`. A hostile's adrenaline book now runs under `--no-energy` too (`HOSTILE_ADRENALINE`; `--no-hostile-adrenaline` reverts). Nothing new on the wire. Mechanism fixed and tested; the post-fix run is owed (PLAN.md §8).**
 
 - **The symptom** (CONFPASS-F3's aside, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3). S22-C and S22-D (`--party slice --enemy-health 2000 --no-energy --enemy-skills 380`; harness `20261008T224201` and `…224553`) carry 4,004 and 3,998 `0x009F [48, 10, 380]` in ~193 s, one per ~50 ms tick. S22-C's log has 4,004 "stands and casts" lines and **no** hostile swing at the player: the Hatcher cast on every tick and so never swung. OBSERVED on ours.
