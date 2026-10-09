@@ -23,10 +23,34 @@ THE ELIMINATION, per silent swing:
     FOLLOW labels -- so a silent swing whose window carries a printed distance
     above `attack_reach()` is attributed to `reach`.
 
+A SWING THE TARGET BLOCKS, OR THAT MISSES, IS NOT SILENT (2026-10-09). It
+closes on the wire with the attack-fail word, `0x00A0 [38, target, player,
+reason]` -- authsrv's `attack_fails`, labelled `attack_fail: 1 -> 10 <reason>`
+-- and no damage. Until this day the corpus held next to none (SLICE-H12's
+blocks and SKILLS-BL's Blind misses were rare in it), so `_landed` never asked;
+then CONFIRM-2026-10-08's RANGERPRE fixtures produced 174 blocks and 13 Blind
+misses in four runs and every one read as `unattributed`, 10.8 % against
+test_playerswing 13's 3 % ceiling. Such a swing is `failed`, with the reason --
+retail's `finish_no_damage`, not its `silent`.
+
+EACH SWING'S OUTCOME IS READ INSIDE ITS OWN WINDOW. A fail word or a
+`swing_verdict` row belongs to swing i only before swing i+1 starts: at the
+1.33 s cadence the verdict's 2.0 s reach handed 15 blocked swings the NEXT
+swing's `cancel:skill press`, and the same overlap would hand a genuinely silent
+swing its successor's verdict -- hiding a drop from the ceiling, the wrong way
+for a ceiling to err. Where a verdict and a fail both fall inside, the EARLIER
+names the swing: a press that cancels the swing and then strikes closes the
+swing at the verdict, and the strike's own fail is the strike's.
+(`landed` still reads 0-1.6 s unbounded, and over-counts by 23 cancelled swings
+whose next hit or skill strike landed inside it -- PLAN 8, not fixed here
+because it moves the landed and cancel numbers 1z-da compared to retail.)
+
 WHAT THIS CANNOT DO. The printed distances are sampled at the label instants,
 not at the drop tick, so the attribution is by elimination plus a window, not a
 direct read. Captures written after `_swing_dropped` carry `swing_verdict` rows
-and are read directly instead -- the `source` column says which.
+and are read directly instead -- the `source` column says which. A swing that
+starts under 1.6 s before its capture's last row cannot be judged and still
+reads `unattributed`: 21 of the 26 left on 2026-10-09.
 
 Standard library only. Reads the vault through `vaultpath`.
 """
@@ -49,6 +73,10 @@ REACH = 144.0          # attack_reach() under --attack-approach
 WINDOW = 0.95          # s after the start to look for the server's own distance
 
 _START = "player swings at 10"
+# authsrv's `attack_fails` label, `attack_fail: {attacker} -> {target} {reason}
+# ({why})`: the PLAYER's (PLAYER_AGENT_ID 1) word on _START's own target. Another
+# attacker's fail, or one on another target, says nothing about this swing.
+_FAIL = re.compile(r"^attack_fail: 1 -> 10 (\w+) ")
 _APPROACH = re.compile(r"APPROACH: player -> agent \d+ at \([-\d]+,[-\d]+\), "
                        r"([\d.]+) u out")
 _HALT = re.compile(r"agent \d+ halts at \([-\d]+,[-\d]+\): arrived [\d.]+ s ago, "
@@ -70,12 +98,18 @@ def _landed(label):
             or ("in the air (handle" in label and label.startswith("projectile")))
 
 
-def swings(rows):
-    """One row per player swing: {t, landed, source, branch, dist}."""
+def swings(rows, read_fails=True):
+    """One row per player swing: {t, landed, failed, source, branch, dist}.
+
+    `read_fails=False` is the KNOWN-BAD arm: the census as it read before
+    2026-10-09, a block or a miss falling through to `unattributed`.
+    """
     sent = [r for r in rows if r.get("kind") == "sent"]
     lab = lambda r: r.get("label", "")                      # noqa: E731
     starts = sorted(r["t"] for r in sent if _START in lab(r))
     hits = sorted(r["t"] for r in sent if _landed(lab(r)))
+    fails = sorted((r["t"], m.group(1)) for r in sent
+                   for m in [_FAIL.match(lab(r))] if m) if read_fails else []
     stops = sorted((r["t"], lab(r)) for r in sent if "attack_stopped" in lab(r))
     deaths = sorted(r["t"] for r in sent
                     if "the player is dead" in lab(r).lower()
@@ -91,16 +125,27 @@ def swings(rows):
                 break
     dists.sort()
     out = []
-    for st in starts:
+    for i, st in enumerate(starts):
+        nxt = starts[i + 1] if i + 1 < len(starts) else float("inf")
         landed = any(0 <= h - st <= 1.6 for h in hits)
-        row = {"t": round(st, 2), "landed": landed, "source": None,
-               "branch": None, "dist": None}
+        row = {"t": round(st, 2), "landed": landed, "failed": None,
+               "source": None, "branch": None, "dist": None}
         if not landed:
-            direct = [v for t, v in verdicts if -0.05 <= t - st <= 2.0]
-            if direct:
+            # Its own window: a verdict up to 0.05 s either side of the start
+            # that bounds it, a fail from this start to the next. The earlier
+            # of the two names the swing.
+            direct = [(t, "v", v) for t, v in verdicts
+                      if -0.05 <= t - st <= 2.0 and t < nxt - 0.05]
+            direct += [(t, "f", w) for t, w in fails
+                       if 0 <= t - st <= 1.6 and t < nxt]
+            direct.sort(key=lambda d: d[0])
+            if direct and direct[0][1] == "f":
+                row["source"] = "attack_fail"
+                row["failed"] = direct[0][2]
+            elif direct:
                 row["source"] = "swing_verdict"
-                row["branch"] = direct[0].get("branch")
-                row["dist"] = direct[0].get("dist")
+                row["branch"] = direct[0][2].get("branch")
+                row["dist"] = direct[0][2].get("dist")
             else:
                 row["source"] = "inferred"
                 near = [(t, d) for t, d in dists if -0.05 <= t - st <= WINDOW]
@@ -209,7 +254,7 @@ def retail():
             "npc": dict(by_who["npc"]), **dict(tot)}
 
 
-def census(paths=None):
+def census(paths=None, read_fails=True):
     gs = vaultpath.require_dir("captures", "gamesrv",
                                why="swingcensus reads our own captures")
     paths = paths or [os.path.join(gs, f) for f in sorted(os.listdir(gs))
@@ -221,7 +266,7 @@ def census(paths=None):
                     if l.strip()]
         except Exception:                                   # noqa: BLE001
             continue
-        sw = swings(rows)
+        sw = swings(rows, read_fails=read_fails)
         if sw:
             out[os.path.basename(p)] = sw
     return out
@@ -229,11 +274,14 @@ def census(paths=None):
 
 def score(cen):
     tot = [s for sw in cen.values() for s in sw]
-    silent = [s for s in tot if not s["landed"]]
+    failed = [s for s in tot if not s["landed"] and s.get("failed")]
+    silent = [s for s in tot if not s["landed"] and not s.get("failed")]
     return {
         "captures": len(cen),
         "swings": len(tot),
         "landed": sum(1 for s in tot if s["landed"]),
+        "failed": len(failed),
+        "by_fail": dict(collections.Counter(s["failed"] for s in failed)),
         "silent": len(silent),
         "by_branch": dict(collections.Counter(s["branch"] for s in silent)),
         "by_source": dict(collections.Counter(s["source"] for s in silent)),
@@ -246,14 +294,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--cap", action="append")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-fails", action="store_true",
+                    help="the known-bad arm: read a block or a miss as no outcome")
     args = ap.parse_args()
-    cen = census(args.cap)
+    cen = census(args.cap, read_fails=not args.no_fails)
     sc = score(cen)
     if args.json:
         print(json.dumps({"score": sc, "captures": cen}, indent=1))
         return
     print(f"{sc['captures']} captures with player swings: {sc['swings']} swings, "
-          f"{sc['landed']} landed, {sc['silent']} drew no outcome")
+          f"{sc['landed']} landed, {sc['failed']} closed by an attack-fail word "
+          f"{sc['by_fail']}, {sc['silent']} drew no outcome")
     print(f"  the silent ones by branch: {sc['by_branch']}")
     print(f"  attributed how:            {sc['by_source']}")
     if sc["reach_dists"]:
@@ -279,6 +330,10 @@ def main():
         print("  -> attack_stopped %6d  %5.1f%%   OURS %5.1f%%"
               % (r.get("stopped", 0), 100.0 * r.get("stopped", 0) / n,
                  100.0 * cancel_ours / sw))
+        print("  -> finish, no dmg %6d  %5.1f%%   OURS %5.1f%%   (ours: the fail word)"
+              % (r.get("finish_no_damage", 0),
+                 100.0 * r.get("finish_no_damage", 0) / n,
+                 100.0 * sc["failed"] / sw))
         print("  -> SILENT         %6d  %5.1f%%   OURS %5.1f%%   (at retail's own rate)"
               % (r.get("silent", 0), 100.0 * r.get("silent", 0) / n,
                  100.0 * silent_ours / sw))
@@ -297,7 +352,7 @@ def main():
                   "   <-- vs retail's PLAYER, the like-for-like"
                   % (sw, 100.0 * sc["landed"] / sw, 100.0 * cancel_ours / sw))
     for name, sw in sorted(cen.items()):
-        s = [x for x in sw if not x["landed"]]
+        s = [x for x in sw if not x["landed"] and not x.get("failed")]
         if not s:
             continue
         print(f"  {name}: {len(sw)} swings, {len(s)} silent -- "

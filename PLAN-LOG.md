@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### CONFPASS-F3 -- 2026-10-09 -- **`test_playerswing` §13's red was the census, not the server: 187 of the 188 new "silent drops" were swings closed by the fail word -- 174 blocks, 13 Blind misses -- which `swingcensus` did not read as an outcome. Fixed in the census, the 3 % ceiling unchanged: 213 of 1,979 (10.8 %) -> 26 (1.3 %).**
+
+- **The red.** On `main` at `972c51cc` and after, §13's silent-drop ceiling read 213 of 1,979. 188 of them come from the CONFIRM-2026-10-08 captures, and 175 from two: `20261008T224622` (91) and `…224230` (84). Before that day the census held ~25 silent swings in ~1,600.
+- **The prediction, written before reading the tapes.** The swings resolved, the server sent an outcome `_landed` does not count, and the census put them in `unattributed`. What would refute it: windows with no damage, no fail and no `swing_verdict` before the next start. The 1.33 s spacing of the 91 in `224622`, an auto-attack chain, was the hint.
+- **What the tapes say: OBSERVED, 187 of 187.** Each one is `attack_started` → `melee_attack_finished` → `attack_fail: 1 -> 10 block (block)`, or `… miss (Blind)`.
+  - The 174 blocks are S22-C and S22-D (`--enemy-skills 380`, the hostile's Bonetti's Defense), the fixture working as designed. Of the swings that resolved (landed or failed) on the fixed census, 89 of 125 and 100 of 125 were blocked, 76 % pooled, against Bonetti's 75 %.
+  - The 13 misses are S22's Blind runs (`…223443`, `…223837`).
+  - The 188th starts 0.40 s before its capture's last row.
+  - The server's SLICE-H12 block and SKILLS-BL miss paths (`authsrv.py`, the `blocks()` and `blind_miss()` branches of the hit) close the swing deliberately: `[1]`, then `0x00A0 [38, target, player, reason]`, then no damage. The server is not the defect.
+- **A second census defect in the same windows.** The swing at `224622` t=20.50 was blocked at 21.07. The census credited it with the `cancel:skill press` verdict at 22.31, which belongs to the 21.83 swing: the verdict was read 0-2.0 s out, and swings come every 1.33 s. 15 blocked swings borrowed a successor's verdict that way. The same overlap would hide a genuinely silent swing from the ceiling, which is the wrong way for a ceiling to err.
+- **The fix, `studies/movecode/review/swingcensus.py`.**
+  - The player's own fail word on `_START`'s target, `attack_fail: 1 -> 10 <reason>`, closes the swing as `failed`, with its reason. A failed swing is neither landed nor silent. It maps to retail's `finish_no_damage`, which `main()` now prints beside it.
+  - A fail word or a `swing_verdict` belongs to a swing only before the next swing starts: verdicts in `[st - 0.05, next - 0.05)`, fails in `[st, next)`.
+  - Where both fall inside, the earlier names the swing. At `224622` t=21.83, 382's press cancels the swing at +0.48 s and the strike is blocked at +1.04 s; the block is the strike's.
+  - `read_fails=False` (`--no-fails`) is the known-bad arm.
+  - Corpus deltas, each measured on its own:
+
+    | | before | after |
+    |---|---|---|
+    | silent (reach + unattributed) | 213 | 26 |
+    | failed | 0 | 202 (189 block, 13 miss) |
+    | `cancel:skill press` | 40 | 25 |
+    | `landed` | 1,576 | 1,576 |
+    | inferred `cancel` (§13's floor) | 104 | 104 |
+
+    The known-bad arm over the whole corpus reads 228 (11.5 %), the 213 plus the 15 that can no longer borrow a verdict.
+- **The test, `test_playerswing.py` 13c-a..i, floor 303 → 312, 312 run, green.**
+  - 13c-a..g are synthetic tapes needing no vault: a block, its known-bad arm, a Blind miss, the scope (another attacker's word, another target's), both own-window rules, and earlier-wins.
+  - Four census mutations each redden exactly their own check: any attacker → d, the fail window unbounded → e, the verdict window unbounded → f, fail-first → g. The 2026-10-08 census fails a, c, e and f; b cannot run on it, because its arm did not exist.
+  - 13c-h/i pin the `224622` tape both ways: 0 silent and 100 blocks; without the fail word, 100 unattributed of 134.
+- **Not done here, opened in §8.**
+  - `landed` still reads 0-1.6 s unbounded and over-counts by 23 cancelled swings: 17 credited with a skill strike's hit, 6 with the next swing's. Fixing it moves 1z-da's landed and cancel figures, so it is its own change.
+  - 21 of the 26 still silent cannot be judged, because their capture ends inside the window.
+  - Seen in passing: S22-C/D's hostile re-casts its stance 380 on every world tick, ~4,000 `[48, 10, 380]` per run.
+- Records: [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3 "CONFPASS-F3", the census's docstring, `TESTS.md`.
+
 ### CONFPASS-F1 -- 2026-10-09 -- **A death closes the player's cast in flight: `[59, me, 0]` then E2 `[me, skill, copy]` in the death batch, no E5 then or later (`DEATH_DROPS_CAST`, `--no-death-drops-cast` reverts). Retail 6 of 6 deaths with the observer's cast open. Ours let the corpse complete it: CT-2 / CT-2x's Backfire hexed the hostile after `KILL the player`.**
 
 - **The defect** ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3). `kill_player` dropped the swing, the walk and the leads, but marked no `pending_casts` entry. So `cast_tick` completed the cast after the death batch: `SKILL_RECHARGE(28)`, `[58]`, the hex on agent 10, and the aftercast's hold and E3. That happened 2 of 2 times.
