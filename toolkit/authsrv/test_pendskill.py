@@ -20,7 +20,15 @@ model that retail's own stream breaks proves nothing about ours.
   2  the drops, each closing once: a knock-down mid-cast ([59] then E2), a death
      mid-cast (the status, [59], E2 ahead of the 0x00D0, the flags byte last --
      retail's 609.252 order), an interrupt (its E2, now counted), a transition (the
-     net's E2); a second cast after each opens and closes cleanly.
+     net's E2); a second cast after each opens and closes cleanly -- its E3 at the
+     aftercast's end since SKILLS-AC8 (2026-10-09). (f)-(h), SKILLS-AC8: a spell's E3
+     is QUEUED for the aftercast's end (HERO_E3_AFTERCAST), so the record stays open
+     across it: a DEATH in the window closes it with [57, hero, 0] + E2 and never sends
+     the E3 (the observer's CONFPASS-F1b shape, RECONSTRUCTION for a hero), and
+     --no-hero-e3-aftercast's death finds nothing to close; a KNOCK-DOWN or an
+     INTERRUPT in the window sends nothing and the E3 still closes it on time; a
+     TRANSITION's net sends the E2 alone. Orison's 0.75 is stubbed from the vault's own
+     row (orison_aftercast) so a bare machine takes the same path.
   3  a HENCHMAN (no hero index): no E4, no E-family at all -- 0 of 532 retail
      henchman casts carry any.
   4  the KNOWN-BAD arm (--no-hero-cast-e4): no E4, so the landing's E3 is a MISS on
@@ -57,7 +65,11 @@ import vaultpath                                               # noqa: E402
 # directory): 19 -- sections 1-5; 6 (the captures) and 7 (the slice client) each
 # declare a skip. 26 with the vault. With HERO_CAST_OPENS_E4 = False in the source,
 # 11 of them go red (the pre-fix tree's shape, 2026-09-30).
-LEDGER = checks.Ledger("pending skill", floor=19)
+# 2026-10-09, SKILLS-AC8: + 6, section 2 (f)-(h), the record across the hero's
+# aftercast = 25 bare (MEASURED with RURIK_VAULT at an empty directory and at a
+# nonexistent path), 32 with the vault (MEASURED). Two mutants go red: the aftercast
+# drop made a no-op (3 checks) and a death that sends the queued E3 instead (1).
+LEDGER = checks.Ledger("pending skill", floor=25)
 check = checks.adopt(LEDGER)
 
 E2, E3, E4, E5 = 0x00E2, 0x00E3, 0x00E4, 0x00E5
@@ -141,6 +153,34 @@ def _land(st, wire):
 
 def _naming(sent, aid):
     return [(op, v) for op, v in sent if aid in v[:3]]
+
+
+class orison_aftercast:
+    """SKILLS-AC8: Orison of Healing's table aftercast, 0.75 s -- the vault's own row
+    (281 at build 38974, test_npcaftercast's RECORD) -- for the block on EITHER machine:
+    a bare one reads a rowless 281 as 0 and would queue no E3, so a check about the
+    aftercast window would pass by having no window. Only 281's middle column is
+    stubbed; every other skill reads the real skill_timing."""
+
+    def __enter__(self):
+        self.real = authsrv.skill_timing
+        real = self.real
+        authsrv.skill_timing = (lambda sid, *a, **k: (1.0, 0.75, 2.0) if int(sid) == ORISON
+                                else real(sid, *a, **k))
+        return self
+
+    def __exit__(self, *exc):
+        authsrv.skill_timing = self.real
+        return False
+
+
+def _release(st, wire):
+    """SKILLS-AC8: the hero's queued E3s fall due (their aftercast run out) and the tick
+    sends them. Returns what went out."""
+    row = st["agents"][HERO]
+    row["hero_e3_due"] = [(time.time() - 0.01, sid) for _at, sid in row.get("hero_e3_due", ())]
+    authsrv.ally_cast_tick(wire, st, 1)
+    return wire.take()
 
 
 def section_spell():
@@ -254,13 +294,117 @@ def section_drops():
           "a TRANSITION mid-cast: the tick's drop sends the E2 -- 0 misses, 0 open",
           f"{tr} misses {misses} open {dict(held)}")
 
-    # (e) the next cast after a drop opens and closes cleanly
+    # (e) the next cast after a drop opens and closes cleanly. RE-AIMED 2026-10-09
+    # (SKILLS-AC8): Orison's E3 is no longer in its landing's tick but at the aftercast's
+    # end, so the record closes on the release (_release), not on the landing.
     st["agents"][HERO]["effects"] &= ~agents.EFFECT_TRANSITION
-    again = _cast_orison(st, wire) + _land(st, wire)
+    with orison_aftercast():
+        again = _cast_orison(st, wire) + _land(st, wire)
+        open_at_land = client_ledger(start + tr + again)[1]
+        again += _release(st, wire)
     misses, held = client_ledger(start + tr + again)
-    check(misses == [] and not held and again.count((E4, [HERO, ORISON, 0])) == 1,
-          "and the next cast after it opens with its own E4 and closes: 0 misses, 0 open",
-          f"misses {misses}, open {dict(held)}")
+    check(misses == [] and not held and again.count((E4, [HERO, ORISON, 0])) == 1
+          and again.count((E3, [HERO, ORISON, 0])) == 1
+          and dict(open_at_land) == {(HERO, ORISON, 0): 1},
+          "and the next cast after it opens with its own E4 and closes: 0 misses, 0 open "
+          "-- its record open across the aftercast and closed by the E3 at its end "
+          "(SKILLS-AC8)",
+          f"misses {misses}, open {dict(held)}; open at the landing {dict(open_at_land)}")
+    section_aftercast_drops()
+
+
+def _orison_landed(hero_e3=True):
+    """A fresh world whose hero has just COMPLETED Orison: E4 at the start, E5 at the
+    landing, the E3 queued for the aftercast's end (or, hero_e3=False, the pre-AC8
+    landing). Returns (state, wire, start + landing)."""
+    st, wire = _world(), Wire()
+    saved = authsrv.HERO_E3_AFTERCAST
+    authsrv.HERO_E3_AFTERCAST = hero_e3
+    try:
+        sent = _cast_orison(st, wire) + _land(st, wire)
+    finally:
+        authsrv.HERO_E3_AFTERCAST = saved
+    return st, wire, sent
+
+
+def section_aftercast_drops():
+    print("== 2. (f)-(h) the record across the AFTERCAST (SKILLS-AC8) ==")
+    with orison_aftercast():
+        # (f) a DEATH in the aftercast: the observer's CONFPASS-F1b shape, [57] + E2
+        st, wire, sent = _orison_landed()
+        row = st["agents"][HERO]
+        queued = [sid for _at, sid in row.get("hero_e3_due", ())]
+        check(queued == [ORISON] and (E5, [HERO, ORISON, 0, 2]) in sent
+              and (E3, [HERO, ORISON, 0]) not in sent,
+              "Orison's landing sends its E5 and QUEUES its E3 for the aftercast's end "
+              "(retail's Koss: E3 at E5 + 0.732-0.762, 19 of 19)",
+              f"queued {queued}; landing {_naming(sent, HERO)}")
+        row["health"] = 0.0
+        authsrv.kill_agent(wire, st, HERO, row, 1, time.time(), reward=False)
+        death = wire.take()
+        i_status = next((i for i, (op, v) in enumerate(death) if op == STATUS and v[0] == HERO), None)
+        i_57 = next((i for i, (op, v) in enumerate(death) if op == INT and v == [57, HERO, 0]), None)
+        i_e2 = next((i for i, (op, v) in enumerate(death) if op == E2 and v == [HERO, ORISON, 0]), None)
+        i_flags = next((i for i, (op, v) in enumerate(death) if op == FLAGS and v[:1] == [HERO]), None)
+        check(None not in (i_status, i_57, i_e2, i_flags)
+              and i_status < i_57 < i_e2 < i_flags and i_e2 == i_57 + 1
+              and not [1 for op, v in death if op == E3 or (op == INT and v[:2] == [59, HERO])],
+              "a DEATH in the aftercast: the status, [57, hero, 0], E2 [hero, 281, 0] "
+              "directly behind it, the flags byte last -- and no E3, no [59] (the cast is "
+              "done). The observer's shape, CONFPASS-F1b (n = 1); RECONSTRUCTION for a hero",
+              f"status {i_status} [57] {i_57} E2 {i_e2} flags {i_flags}: {death}")
+        later = _release(st, wire)
+        misses, held = client_ledger(sent + death + later)
+        check(not row.get("hero_e3_due") and not [1 for op, v in later if op in (E2, E3)]
+              and misses == [] and not held,
+              "  and the corpse never sends the E3 when its aftercast would have ended, nor "
+              "a second E2: the ledger closes, 0 misses, 0 open",
+              f"after {later}; misses {misses}, open {dict(held)}")
+        # the pre-AC8 arm: the E3 went out at the landing, so the death finds nothing
+        st, wire, sent = _orison_landed(hero_e3=False)
+        row = st["agents"][HERO]
+        row["health"] = 0.0
+        authsrv.kill_agent(wire, st, HERO, row, 1, time.time(), reward=False)
+        death = wire.take()
+        check((E3, [HERO, ORISON, 0]) in sent
+              and not [1 for op, v in death if op in (E2, E3) or (op == INT and v[:2] == [57, HERO])],
+              "  KNOWN-BAD arm, --no-hero-e3-aftercast: the E3 rode the landing, so a death "
+              "0.75 s later has no record to close -- no [57], no E2 (the pre-AC8 segment)",
+              f"landing {_naming(sent, HERO)}; death {death}")
+
+        # (g) a KNOCK-DOWN and an INTERRUPT in the aftercast touch nothing: the skill is
+        # done, and the E3 still closes the record at the aftercast's end
+        st, wire, sent = _orison_landed()
+        authsrv.knock_down(wire, st, HERO, 1, "the test's knock-down", 2.0)
+        got = authsrv.interrupt_body(wire, st, HERO, st["agents"][HERO], 1, 57, FOE,
+                                     mode="action")
+        kd = wire.take()
+        rel = _release(st, wire)
+        misses, held = client_ledger(sent + kd + rel)
+        check(got is None and not [1 for op, v in kd if op in (E2, E3)
+                                   or (op == INT and v[:2] in ([59, HERO], [57, HERO]))]
+              and rel.count((E3, [HERO, ORISON, 0])) == 1
+              and authsrv.knocked_down(st, HERO, time.time())
+              and misses == [] and not held,
+              "a KNOCK-DOWN and an INTERRUPT in the aftercast send no stop word and no E2 "
+              "(nothing is in flight), and the E3 still goes at the aftercast's end -- "
+              "while the hero is down -- closing the record: 0 misses, 0 open "
+              "(RECONSTRUCTION, the player's rule: _mark_cancelled spares a cast past its E5)",
+              f"interrupt {got}; kd {kd}; release {rel}; misses {misses}, open {dict(held)}")
+
+        # (h) a TRANSITION in the aftercast: the net's E2, no [57]
+        st, wire, sent = _orison_landed()
+        st["agents"][HERO]["effects"] |= agents.EFFECT_TRANSITION
+        authsrv.ally_cast_tick(wire, st, 1)
+        tr = wire.take()
+        later = _release(st, wire)
+        misses, held = client_ledger(sent + tr + later)
+        check(tr.count((E2, [HERO, ORISON, 0])) == 1
+              and not [1 for op, v in tr + later if op == E3 or (op == INT and v[:2] == [57, HERO])]
+              and misses == [] and not held,
+              "a TRANSITION in the aftercast: the tick's net sends the E2 alone and the E3 "
+              "never follows -- 0 misses, 0 open (RECONSTRUCTION, the mid-cast net's form)",
+              f"{tr} then {later}; misses {misses}, open {dict(held)}")
 
 
 def section_henchman():

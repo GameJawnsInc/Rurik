@@ -22,8 +22,12 @@ apart.
      the next start is ONE tick after the [58], and the start ticks equal 642d8957's own
      (the literal below, recorded by driving THIS fixture through a `git archive
      642d8957` export); (d) a hero with two ready spells (281 then 289) waits the same
-     -- and its E3 rides its E5 in the same tick, unmoved (OURS: retail's E3 waits the
-     aftercast, section 4's P5, and the placement is owed, PLAN.md 8); (e) the controls: an
+     -- and its E3 WAITS ITS SPELL'S AFTERCAST (HERO_E3_AFTERCAST, SKILLS-AC8,
+     2026-10-09; retail's Koss 19 of 19, section 4's P5): each at its E5 + 0.75 s, on the
+     tick the hold releases the next [60] and ahead of that cast's E4 and [60]; the
+     KNOWN-BAD arm --no-hero-e3-aftercast puts it back in the E5's tick, directly behind
+     it (until 2026-10-09 this check pinned THAT shape, as OURS), and moves no start
+     tick; (e) the controls: an
      interrupted cast stamps nothing; an instant stance (1037, whose TABLE says 0.75)
      and an attack skill (397, whose table says 1.0) stamp nothing; an aftercast-0
      skill (the preparation 433) gates nothing; an instant goes INSIDE the window, a
@@ -32,13 +36,19 @@ apart.
      swing (ally_attack_tick) waits too; a RESSIG [59] stop stamps nothing (a planted
      row, the real one's aftercast being 0); (f) a harness-free replay of (a)'s and
      (c)'s output through npcaftercast: P1 HOLDS on the default arm and FAILS on the
-     known-bad one.
+     known-bad one; and the hero's E5 -> E3 through score_e3: P5's rival HOLDS on the
+     default arm and FAILS on --no-hero-e3-aftercast.
   3  source checks: the flag in serverargs and flipped in main(), ON at import, the
      parsed attribute; the hold called from the three ticks and never from pick_skill;
      in the hostile loop after the reach gate and before the pay gate (world gates
      before clock gates, RV-1), and ahead of the plain swing's interval gate; in
      ally_cast_tick ahead of the energy block (a held body is never charged); the
-     stamp once, in land_skill.
+     stamp once, in land_skill. (AC8) the same wiring for HERO_E3_AFTERCAST; the hold
+     and the E3 read one completion_aftercast; land_skill stamps and queues from one
+     `_landed`; ally_cast_tick sends the due E3 after the corpse / transition net and
+     ahead of the knock-down skip, the landing and the hold; hero_death_tick's
+     aftercast close sits behind the mid-cast drop and ahead of the 0x00D0. The
+     drops themselves are test_pendskill's (section 2 (f)-(h)).
   4  the vault (skips only on an absent vault DIRECTORY): the carried rows against the
      vault's own, column for column; the reader over the live corpus -- P1, P2, P3 hold,
      P4 (our 20260928T002701 capture fails P1), P5 FAILS and its rival E3 = E5 + aftercast
@@ -77,16 +87,22 @@ import vaultpath                                               # noqa: E402
 # 2026-10-09, P5 re-pinned (20261008T132845 made it decidable): + 1 bare (P5's rival at its
 # shoulder, section 1) = 43; + 1 with OUR healer-rig capture (the rival's known-bad arm) =
 # 54 with the vault, MEASURED both ways.
+# 2026-10-09, SKILLS-AC8 (HERO_E3_AFTERCAST): section 2 (d)'s E3-at-E5 pin became three
+# checks (the E3 at the aftercast, its order in the release tick, the flag's known-bad
+# arm) and (f) gained the score_e3 replay = + 3; section 3 (AC8) + 6 = 52 bare (MEASURED
+# with RURIK_VAULT at an empty directory and at a nonexistent path), 63 with the vault
+# (MEASURED). Three mutants go red here: the flag off at import, the E3 sent at the END
+# of the body's turn (behind the next [60]), and the E3 one tick late.
 OURS_P4 = os.path.join(vaultpath.vault_path("captures"), "gamesrv",
                        "authsrv-20260928T002701-c1.jsonl")
 # The HEROENERGY client run (PLAN-LOG 2026-10-01), our server's healer rig: 64 hero
-# Orisons, each E3 in its E5's own tick -- hero_skill_messages' placement, unchanged since
-# but for a6a3d34b's recharge-0 branch (section 2 (d) pins it on this tree).
+# Orisons, each E3 in its E5's own tick -- hero_skill_messages' placement until SKILLS-AC8
+# (2026-10-09), now the --no-hero-e3-aftercast arm (section 2 (d) pins it there).
 OURS_HERO_E3 = os.path.join(vaultpath.vault_path("captures"), "gamesrv",
                             "authsrv-20261001T105141-c1.jsonl")
 HAVE_VAULT_CONTENT = os.path.isdir(vaultpath.vault_path("content"))
 HAVE_LIVE = os.path.isdir(vaultpath.vault_path("captures", "live"))
-FLOOR_BARE = 43
+FLOOR_BARE = 52
 LEDGER = checks.Ledger("NPC aftercast",
                        floor=FLOOR_BARE + (1 if HAVE_VAULT_CONTENT else 0)
                        + ((8 + (1 if os.path.isfile(OURS_P4) else 0)
@@ -175,7 +191,8 @@ class Clock:
         return getattr(_real, name)
 
 
-FLAGS = ("NPC_AFTERCAST", "ENERGY", "NPC_FOLLOW", "SKIP_LIVE_EFFECT", "INSTANT_ANNOUNCE")
+FLAGS = ("NPC_AFTERCAST", "ENERGY", "NPC_FOLLOW", "SKIP_LIVE_EFFECT", "INSTANT_ANNOUNCE",
+         "HERO_E3_AFTERCAST")
 
 
 @contextlib.contextmanager
@@ -273,8 +290,8 @@ def _hostile_fight(A, aftercast, secs=12.0, bar=((SCOURGE, 1.0, 5.0), (VITAL, 0.
     return sends, log, st
 
 
-def _hero_fight(A, aftercast, secs=6.0):
-    with arm(A, aftercast=aftercast):
+def _hero_fight(A, aftercast, secs=6.0, **flags):
+    with arm(A, aftercast=aftercast, **flags):
         st = world(A, player_health=40.0)
         st["agents"][HERO] = body(A, ((ORISON, 1.0, 2.0), (VITAL, 0.75, 2.0)),
                                   agents.ALLEGIANCE_PLAYER, pos=(50.0, 0.0), hero=3,
@@ -389,6 +406,8 @@ def section_server():
         off, _log_off, _st_off = _hostile_fight(authsrv, False)
         h_on, _hl, hst = _hero_fight(authsrv, True)
         h_off, _hl0, _hst0 = _hero_fight(authsrv, False)
+        # SKILLS-AC8's known-bad arm: the hold on, the E3 back in the E5's tick
+        h_e3off, _hl1, _hst1 = _hero_fight(authsrv, True, HERO_E3_AFTERCAST=False)
 
     # (a) the hostile's chain 253 -> 289
     s_on = starts(on, HOSTILE)
@@ -443,16 +462,52 @@ def section_server():
     check(hg_off and hg_off[0][1] - hg_off[0][0] == 1 and starts(h_off, HERO) == HERO_642,
           "    its known-bad arm chains them a tick apart, every start tick 642d8957's own",
           f"{hg_off[:2]} {starts(h_off, HERO)}")
-    e5 = [(i, v[1]) for i, _t, op, v in h_on if op == E5 and v[0] == HERO]
-    e3 = [(i, v[1]) for i, _t, op, v in h_on if op == E3 and v[0] == HERO]
-    seq = [(op, v[:2]) for _i, _t, op, v in h_on if op in (E5, E3) and v[0] == HERO]
-    check(e5 and e3 == e5 and all(seq[k][0] == E5 and seq[k + 1][0] == E3
-                                  for k in range(0, len(seq), 2)),
-          "    and its E3 rides its E5, the SAME tick, directly behind it -- the gate holds "
-          "the next action, never the E3 (hero_skill_messages unmoved). OURS, and NOT "
-          "retail's: Koss's E3 waits the aftercast, 19 of 19 (section 4's P5); owed, "
-          "PLAN.md 8",
-          f"E5 {e5} E3 {e3}")
+    # RE-PINNED 2026-10-09 (SKILLS-AC8, HERO_E3_AFTERCAST): this check pinned the E3 in
+    # its E5's tick, directly behind it -- OURS, against retail's Koss, whose E3 waits
+    # the aftercast 19 of 19 (section 4's P5). That shape is now the known-bad arm.
+    def _e5_e3(sends):
+        e5 = [(i, v[1]) for i, _t, op, v in sends if op == E5 and v[0] == HERO]
+        e3 = [(i, v[1]) for i, _t, op, v in sends if op == E3 and v[0] == HERO]
+        return e5, e3
+    e5, e3 = _e5_e3(h_on)
+    n_ticks = int(round(6.0 / TICK))
+    late = [sk for i, sk in e5 if i + ac_ticks >= n_ticks]
+    queued = [sk for _at, sk in hst["agents"][HERO].get("hero_e3_due", ())]
+    paired = list(zip([x for x in e5 if x[0] + ac_ticks < n_ticks], e3))
+    check(e5 and len(e3) == len(e5) - len(late) and queued == late
+          and all(s5 == s3 and ac_ticks <= i3 - i5 <= ac_ticks + 1
+                  for (i5, s5), (i3, s3) in paired),
+          "    and its E3 WAITS ITS SPELL'S AFTERCAST: each at its E5 + 0.75 s (inside one "
+          "tick), none in the E5's tick -- retail's Koss, 19 of 19 at 0.732-0.762 "
+          "(section 4's P5 rival); an aftercast that outlasts the fixture is still queued "
+          "on the row",
+          f"E5 {e5} E3 {e3} queued {queued} (0.75 s = {ac_ticks} ticks)")
+    # ... on the tick the hold releases, AHEAD of the next cast's E4 and [60]: retail's
+    # E3, [62], [60] batch (Koss's 4 back-to-back pairs, [58] + 0.747-0.751)
+    order = []
+    for i3, s3 in e3:
+        tick = [(op, v) for i, _t, op, v in h_on if i == i3]
+        k3 = next((k for k, (op, v) in enumerate(tick) if op == E3 and v[:2] == [HERO, s3]), None)
+        k4 = next((k for k, (op, v) in enumerate(tick) if op == 0x00E4 and v[0] == HERO), None)
+        k60 = next((k for k, (op, v) in enumerate(tick)
+                    if op == INT_T and v[:2] == [60, HERO]), None)
+        order.append((i3, k3, k4, k60))
+    nxt = {c: n for c, n, _k in hg}
+    check(order and all(None not in o and o[1] < o[2] < o[3] for o in order)
+          and all(nxt.get(i5) == i3 for (i5, _s5), (i3, _s3) in paired),
+          "    on the very tick the NPC_AFTERCAST hold releases the next [60], and ahead "
+          "of that cast's E4 and [60] in it (retail: E3, [62], [60], 4 of 4)",
+          f"(tick, E3, E4, [60] positions) {order}; next start by 58 tick {nxt}")
+    b5, b3 = _e5_e3(h_e3off)
+    bseq = [(op, v[:2]) for _i, _t, op, v in h_e3off if op in (E5, E3) and v[0] == HERO]
+    check(b5 and b3 == b5 and all(bseq[k][0] == E5 and bseq[k + 1][0] == E3
+                                  for k in range(0, len(bseq), 2))
+          and starts(h_e3off, HERO) == hs,
+          "    its KNOWN-BAD arm, --no-hero-e3-aftercast: the E3 rides its E5, the SAME "
+          "tick, directly behind it (ours until 2026-10-09: 64 of 64 hero Orisons on "
+          "authsrv-20261001T105141-c1) -- and every start tick is the default arm's (the "
+          "E3 moves nothing the gate holds)",
+          f"E5 {b5} E3 {b3}; starts {starts(h_e3off, HERO)}")
     section_controls()
     # (f) the replay through the reader
     tab = table_of()
@@ -464,6 +519,18 @@ def section_server():
           "(f) the fixtures' own wire through npcaftercast: P1 HOLDS on the default arm "
           "and FAILS on --no-npc-aftercast",
           f"on n={sc_on['n']} min={sc_on['min']}; off n={sc_off['n']} min={sc_off['min']}")
+    # SKILLS-AC8: the hero's wire through the SAME reader that scored Koss -- P5's rival
+    # (E3 = E5 + the table aftercast, within 0.05) holds on every scored row of the
+    # default arm and on none of --no-hero-e3-aftercast's, where P5 itself holds
+    e_on = npcaftercast.score_e3(npcaftercast.hero_e3(as_seq(h_on), P), tab)
+    e_off = npcaftercast.score_e3(npcaftercast.hero_e3(as_seq(h_e3off), P), tab)
+    check(e_on[0] >= 3 and e_on[1] == 0 and e_on[2] == e_on[0]
+          and e_off[0] >= 3 and e_off[1] == e_off[0] and e_off[2] == 0,
+          "    and the hero's E5 -> E3 through npcaftercast.score_e3: the rival HOLDS on "
+          "the default arm (every scored row at the aftercast, none at 0.000) and FAILS "
+          "on --no-hero-e3-aftercast (every row at 0.000) -- the reader that scored "
+          "retail's 19 scores ours the same way",
+          f"default (n, zero, at) {e_on[:3]} {e_on[3]}; off {e_off[:3]} {e_off[3]}")
     return on
 
 
@@ -699,6 +766,33 @@ def _flips(main_fn, attr, glob):
     return False
 
 
+def _exec_flip(src, attr, glob):
+    """main()'s `if a.<attr>:` block, lifted out of the source and RUN in authsrv's
+    namespace (the test_agtrack_guard precedent): without its `global` the assignment
+    would bind a local and the flag would parse and never take effect. Returns the
+    module's value after the run (put back afterwards) and the block's offsets."""
+    i_main = src.find("\ndef main():")
+    i_flip = src.find(f"    if a.{attr}:", i_main)
+    i_end = src.find("\n    if a.", i_flip + 1)
+    flipped = None
+    if 0 < i_main < i_flip < i_end:
+        import argparse
+        block = src[i_flip:i_end]
+        body_src = "\n".join(line[4:] if line.startswith("    ") else line
+                             for line in block.splitlines())
+        code = "def _ac_flip(a):\n" + "\n".join("    " + ln for ln in body_src.splitlines())
+        saved = getattr(authsrv, glob)
+        try:
+            exec(compile(code, f"<main:{attr}>", "exec"), authsrv.__dict__)
+            with contextlib.redirect_stdout(io.StringIO()):
+                authsrv.__dict__["_ac_flip"](argparse.Namespace(**{attr: True}))
+            flipped = getattr(authsrv, glob)
+        finally:
+            setattr(authsrv, glob, saved)
+            authsrv.__dict__.pop("_ac_flip", None)
+    return flipped, (i_main, i_flip, i_end)
+
+
 def section_source():
     print("== 3. source checks ==")
     import serverargs
@@ -718,28 +812,9 @@ def section_source():
               getattr(ap.parse_args([]), "no_npc_aftercast", None))
     check(parsed == (True, False),
           "serverargs parses --no-npc-aftercast, default off", f"{parsed}")
-    # main()'s own block, lifted out of the source and RUN in authsrv's namespace (the
-    # test_agtrack_guard precedent): without its `global` the assignment would bind a
-    # local and the flag would parse and never take effect.
-    i_main = src.find("\ndef main():")
-    i_flip = src.find("    if a.no_npc_aftercast:", i_main)
-    i_end = src.find("\n    if a.", i_flip + 1)
-    flipped = None
-    if 0 < i_main < i_flip < i_end:
-        import argparse
-        block = src[i_flip:i_end]
-        body_src = "\n".join(line[4:] if line.startswith("    ") else line
-                             for line in block.splitlines())
-        code = "def _ac_flip(a):\n" + "\n".join("    " + ln for ln in body_src.splitlines())
-        saved = authsrv.NPC_AFTERCAST
-        try:
-            exec(compile(code, "<main:no_npc_aftercast>", "exec"), authsrv.__dict__)
-            with contextlib.redirect_stdout(io.StringIO()):
-                authsrv.__dict__["_ac_flip"](argparse.Namespace(no_npc_aftercast=True))
-            flipped = authsrv.NPC_AFTERCAST
-        finally:
-            authsrv.NPC_AFTERCAST = saved
-            authsrv.__dict__.pop("_ac_flip", None)
+    # main()'s own block, RUN (_exec_flip): without its `global` the flag would parse
+    # and never take effect.
+    flipped, (i_main, i_flip, i_end) = _exec_flip(src, "no_npc_aftercast", "NPC_AFTERCAST")
     check(flipped is False,
           "main()'s --no-npc-aftercast block, EXECUTED, sets the MODULE's NPC_AFTERCAST to "
           "False", f"main {i_main} flip {i_flip} end {i_end} -> {flipped}")
@@ -788,6 +863,63 @@ def section_source():
           "in ally_cast_tick the hold sits after the slot unpacks and AHEAD of the energy "
           "block (body_skill_cost .. pool.spend): a body held by its aftercast pays nothing",
           f"unpack {i_unpack} hold {i_hold} cost {i_cost} spend {i_spend}")
+    section_source_ac8(src, tree, main_fn, ap)
+
+
+def section_source_ac8(src, tree, main_fn, ap):
+    print("== 3. (AC8) source checks: HERO_E3_AFTERCAST ==")
+    globs = [n for n in ast.walk(main_fn) if isinstance(n, ast.Global)
+             and "HERO_E3_AFTERCAST" in n.names]
+    parsed = (getattr(ap.parse_known_args(["--no-hero-e3-aftercast"])[0],
+                      "no_hero_e3_aftercast", None),
+              getattr(ap.parse_args([]), "no_hero_e3_aftercast", None))
+    flipped, where = _exec_flip(src, "no_hero_e3_aftercast", "HERO_E3_AFTERCAST")
+    check(_flips(main_fn, "no_hero_e3_aftercast", "HERO_E3_AFTERCAST") and globs
+          and parsed == (True, False) and flipped is False,
+          "--no-hero-e3-aftercast parses (default off) and main()'s block, EXECUTED, sets "
+          "the MODULE's HERO_E3_AFTERCAST to False through a `global`",
+          f"parsed {parsed}; block {where} -> {flipped}")
+    check(authsrv.HERO_E3_AFTERCAST is True
+          and authsrv.capture_flags().get("HERO_E3_AFTERCAST") is True
+          and any(isinstance(n, ast.Assign) and n.col_offset == 0
+                  and getattr(n.targets[0], "id", None) == "HERO_E3_AFTERCAST"
+                  and isinstance(n.value, ast.Constant) and n.value.value is True
+                  for n in tree.body),
+          "HERO_E3_AFTERCAST is a column-0 module bool, ON at import, and the capture "
+          "header records it")
+    # the release and the E3 read ONE aftercast, so they cannot drift apart
+    check(len(_calls(_func(tree, "npc_aftercast"), "completion_aftercast")) == 1
+          and len(_calls(_func(tree, "hero_e3_aftercast"), "completion_aftercast")) == 1
+          and len(_calls(_func(tree, "hero_skill_messages"), "hero_e3_aftercast")) == 1,
+          "npc_aftercast and hero_e3_aftercast both read completion_aftercast, and "
+          "hero_skill_messages queues by hero_e3_aftercast")
+    seg = ast.get_source_segment(src, _func(tree, "land_skill"))
+    check('agent["aftercast_until"] = _landed + _aftercast' in seg
+          and "_landed, e3=not _inst)" in seg
+          and seg.find("_landed = time.time()") < seg.find("npc_aftercast(skill_id)"),
+          "land_skill stamps the hold and queues the hero's E3 from ONE landing instant "
+          "(`_landed`), so with both switches on the E3 falls due on the hold's tick")
+    # ally_cast_tick: the corpse / transition net drops the queue; the due E3 goes out
+    # AFTER that net and AHEAD of the knock-down skip, the landing and the hold
+    seg = ast.get_source_segment(src, _func(tree, "ally_cast_tick"))
+    i_net = seg.find('hero_aftercast_drop(send, agent_id, agent, "the body dropped its aftercast")')
+    i_due = seg.find("hero_e3_due_tick(send, agent_id, agent, now)")
+    i_kd = seg.find("if knocked_down(state, agent_id, now):")
+    i_land = seg.find("land_skill(send, state, agent_id, agent, conn_id)")
+    i_hold = seg.find("npc_aftercast_holds(agent, skill_id, now)")
+    check(0 <= i_net < i_due < i_kd < i_land < i_hold,
+          "in ally_cast_tick the queued E3 goes out after the corpse / transition net and "
+          "AHEAD of the knock-down skip, the landing and the NPC_AFTERCAST hold, on the "
+          "same `now`", f"net {i_net} due {i_due} kd {i_kd} land {i_land} hold {i_hold}")
+    seg = ast.get_source_segment(src, _func(tree, "hero_death_tick"))
+    i_mid = seg.find('"died mid-cast"')
+    i_ac = seg.find('hero_aftercast_drop(send, agent_id, row, "died in its aftercast", '
+                    'death=True)')
+    i_clear = seg.find('hero_pool_clear(send, state, agent_id, row, "died")')
+    check(0 <= i_mid < i_ac < i_clear,
+          "hero_death_tick closes a queued aftercast ([57] + E2) right behind the mid-cast "
+          "drop and ahead of the 0x00D0 (the observer's CONFPASS-F1b slot)",
+          f"mid {i_mid} aftercast {i_ac} clear {i_clear}")
 
 
 # ---------------------------------------------------------------------------------

@@ -183,6 +183,36 @@ def _land(agent_id, slot, target=None, kill=None):
     return list(sent)
 
 
+def _spell42(hero_e3=True):
+    """A hero's SPELL 42 landing on the player. Returns (sends, queued E3 skills, 42's
+    E3 aftercast). SKILLS-AC8 (2026-10-09): its E3 is QUEUED for the aftercast's end
+    where 42's row reads one (the vault's), so the landing carries no E3 there; a
+    rowless 42 (a bare machine) reads 0 and keeps the E3 beside the E5, as does
+    hero_e3=False (--no-hero-e3-aftercast, b50da5c8's bytes)."""
+    saved = authsrv.HERO_E3_AFTERCAST
+    authsrv.HERO_E3_AFTERCAST = hero_e3
+    try:
+        sent, send, st = _fake()
+        ag = st["agents"][HERO]
+        ag["casting"] = 2
+        ag["cast_target"] = P
+        authsrv.land_skill(send, st, HERO, ag, 0)
+        return (list(sent), [sid for _at, sid in ag.get("hero_e3_due", ())],
+                authsrv.hero_e3_aftercast(42))
+    finally:
+        authsrv.HERO_E3_AFTERCAST = saved
+
+
+def _spell42_shape(out, queued, after):
+    """The control's verdict: E5 first, no [48]; the E3 queued (an aftercast) or beside
+    the E5 (none)."""
+    if after > 0.0:
+        return (out[:1] == [(E5, [HERO, 42, 0, 20])] and queued == [42]
+                and not [1 for o, _v in out if o == E3] and not _props(out, 48))
+    return (out[:2] == [(E5, [HERO, 42, 0, 20]), (E3, [HERO, 42, 0])] and queued == []
+            and not _props(out, 48))
+
+
 def _npc(agent_id, bar, allegiance, health, pos):
     st = {"agents": {}, "pos": (0.0, 0.0), "player_health": 100.0, "player_dead": False}
     authsrv.effect_table(st)
@@ -441,10 +471,15 @@ def section_hero():
               "the hero's Charge! whose cast_target died: E5, [48], E3 -- the E3 is kept on "
               "the early exit (b50da5c8 sent E5, E3, [58] there), nothing lands",
               f"{_fmt(out)}")
-        out = _land(HERO, 2, target=P)
-        check(out[:2] == [(E5, [HERO, 42, 0, 20]), (E3, [HERO, 42, 0])] and not _props(out, 48),
-              "control: a hero's SPELL (42) through land_skill keeps its E3 beside the E5 and "
-              "no [48]", f"{_fmt(out)}")
+        # RE-AIMED 2026-10-09 (SKILLS-AC8): the spell's E3 used to ride beside its E5;
+        # it waits 42's aftercast now (HERO_E3_AFTERCAST), so the control asks that it is
+        # NOT this batch's -- the instant's E3-last shape above is the instant's alone.
+        out, queued, after = _spell42()
+        check(_spell42_shape(out, queued, after),
+              "control: a hero's SPELL (42) through land_skill: E5 first and no [48] -- its "
+              "E3 is not the instant batch's: queued for its aftercast's end (SKILLS-AC8), "
+              "or beside the E5 where the row reads aftercast 0",
+              f"aftercast {after}, queued {queued}: {_fmt(out)}")
     finally:
         _restore(saved)
 
@@ -810,18 +845,26 @@ def section_unchanged():
           "")
     # A HERO'S SPELL through land_skill: the same under both arms (needs the 42 row for
     # its type; the bare machine sees no row, which _is_instant_skill answers False).
-    outs = {}
+    # RE-AIMED 2026-10-09 (SKILLS-AC8): b50da5c8's bytes -- E5, E3 beside it, then the
+    # 58 batch -- are now the --no-hero-e3-aftercast arm's; the default queues the E3
+    # for 42's aftercast. Both INSTANT_ANNOUNCE arms still agree under each.
+    outs, old = {}, {}
     for arm in (True, False):
         saved = _arm(INSTANT_ANNOUNCE=arm)
         try:
-            outs[arm] = _land(HERO, 2, target=P)
+            outs[arm] = _spell42()
+            old[arm] = _spell42(hero_e3=False)[0]
         finally:
             _restore(saved)
-    check(outs[True] == outs[False] and outs[True][:2] == [(E5, [HERO, 42, 0, 20]),
-                                                            (E3, [HERO, 42, 0])]
-          and not _props(outs[True], 48),
-          "a hero's spell (42) through land_skill: E5, E3 beside it, then the 58 batch -- "
-          "the same bytes under both arms, no [48]", f"{_fmt(outs[True])}")
+    check(outs[True] == outs[False] and _spell42_shape(*outs[True])
+          and old[True] == old[False]
+          and old[True][:2] == [(E5, [HERO, 42, 0, 20]), (E3, [HERO, 42, 0])]
+          and not _props(old[True], 48),
+          "a hero's spell (42) through land_skill: the same bytes under both arms, no "
+          "[48] -- E5 and the 58 batch with its E3 queued for the aftercast (SKILLS-AC8), "
+          "and b50da5c8's E5, E3 beside it, under --no-hero-e3-aftercast",
+          f"default {_fmt(outs[True][0])} queued {outs[True][1]}; "
+          f"--no-hero-e3-aftercast {_fmt(old[True])}")
 
 
 def section_corpus():

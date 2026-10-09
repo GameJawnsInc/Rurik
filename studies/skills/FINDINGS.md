@@ -10296,7 +10296,7 @@ before the run, its "AS RUN" block beside them). The server change is `authsrv.N
 | SKILLS-AC5 | the server: a completed cast stamps `aftercast_until`, and the three body ticks hold the next cast or swing | the rule CORROBORATED; the pieces labelled below |
 | SKILLS-AC6 | what this lane did not do, one line each | open |
 | SKILLS-AC7 | the D5 line's other clauses, re-checked before the re-stamp | per clause |
-| SKILLS-AC8 | (2026-10-09) the first scoreable tape: a hero's E3 waits its spell's aftercast, its next `[60]` rides that E3, and our hero's E3 still rides its E5 | OBSERVED, n = 19, one hero, one capture; the server placement owed |
+| SKILLS-AC8 | (2026-10-09) the first scoreable tape: a hero's E3 waits its spell's aftercast, its next `[60]` rides that E3, and our hero's E3 still rides its E5 | OBSERVED, n = 19, one hero, one capture; **the server placement SHIPPED the same day** (`HERO_E3_AFTERCAST`, §65.8's last part); the next pick's E4 decided NOT moved there; the client look owed |
 
 ### 65.1 SKILLS-AC1 — the instrument and the floor
 
@@ -10586,6 +10586,93 @@ henchman is not on tape. Neither is a Monk-primary hero.
 Floors 43 bare and 54 with the vault, both MEASURED. Two reader mutants go red where they
 should: the rival counting every row reddens §1 and the known-bad arm; a zero shoulder
 reddens §1 and the retail check.
+
+**SHIPPED, the same day: `HERO_E3_AFTERCAST` (`--no-hero-e3-aftercast` reverts).** The
+first "owed" bullet above is done; the second is decided below and not done.
+- **The schedule.** `land_skill` takes ONE landing instant for the `NPC_AFTERCAST` stamp
+  and the hero's completion. `hero_skill_messages` sends the E5 there as before and QUEUES
+  the E3 on the row (`hero_e3_due`) at that instant + `hero_e3_aftercast`. Both the hold and
+  the E3 read `completion_aftercast`, so they cannot drift apart. `ally_cast_tick` sends a
+  due E3 at the top of the body's turn, on the `now` the hold reads. With both switches on,
+  the E3 therefore goes out on exactly the tick the hold releases, ahead of that turn's
+  E4, `[62]` and `[60]`.
+  - Ours now: E5 in the `[58]`'s tick; E3, E4, `[62]`, `[60]` on the release tick.
+  - Retail: E3, `[62]`, `[60]` on the release, and the E4 earlier (below).
+- **The classes** are `completion_aftercast`'s. An attack skill and an instant are 0, an
+  instant keeps `land_skill`'s instant batch (`e3=False`), and the aftercast-0 skills are
+  unchanged (the 35 rows of 322 / 346 / 348).
+- **RECONSTRUCTION, each said at its site:**
+  - a recharge-0 SPELL (no E5, SLICE-F52 52.8) queues its E3 from the `[58]` the same way.
+    The 12 retail recharge-0 hero completions are attack skills, aftercast 0;
+  - a knock-down or an interrupt in the window sends nothing, and the E3 still closes the
+    record on time, a knocked-down hero included. That is the player's rule:
+    `_mark_cancelled` spares a cast whose E5 went out;
+  - **a DEATH in the window** closes the record in the death batch with `[57, hero, 0]`
+    then E2, and never the E3. That is the observer's in-aftercast death, CONFPASS-F1b,
+    n = 1. No hero dies in an aftercast on tape: the corpus's 54 non-observer E5s are every
+    one closed by its E3, none by an E2 (scratch census, 2026-10-09);
+  - a transition's net closes it with the E2 alone.
+- **Tests.**
+  - `test_npcaftercast` §2 (d) re-pinned: the E3 at E5 + 0.75 s, on the hold's release tick,
+    ahead of the next E4 and `[60]`. The flag is the known-bad arm, the old pin verbatim.
+  - §2 (f): the fixture's hero wire through `score_e3`. The rival holds 3 of 3 on the
+    default arm and fails 4 of 4 on the flag.
+  - §3: six source checks. 52 checks bare, 63 with the vault.
+  - `test_pendskill` §2 (f)-(h): the death, knock-down, interrupt and transition closes in
+    the window. 25 bare, 32 with the vault.
+
+**The next pick's E4 is NOT moved to the `[58]`, decided on the tape.** Koss's 19 casts on
+`:51409`, read in wire order (`deepwoundjoin.sequence`, OBSERVED):
+- **15 casts with no completion in the 0.75 s before:** E4, `[62]` and `[60]` in one
+  batch, 15 of 15. The E4's lead is 0.000.
+- **The 4 back-to-back follow-ups** (281 after 288): the E4 opens at the `[58]`, 0.729 to
+  0.751 s before its `[60]`. Three are in the `[58]`'s batch and the fourth is 0.020 s after
+  it (531.552 then 531.572). So this section's "the follow-up's E4 opens in the `[58]`'s
+  batch (4 of 4)" is 3 of 4 strictly and 4 of 4 within FLOOR_S's shoulder.
+- **The `[62]` does not ride those 4 E4s.** It rides the `[60]`, in the E3's batch, 4 of 4.
+  That is §65.7's reading of 322 (the `[62]` with its `[50]`, 11 of 11) from the other
+  side: the debit is the START word. HEROENERGY's "the `[62]` right behind its E4" is the
+  same batch only when the E4 and the start share one, which is 15 of these 19.
+- **322 (§65.7):** its E4 leads its `[50]` by 0.393 to 8.479 s in 10 of 11, with the hero
+  walking in between in 6.
+
+**So a hero's E4 is its PICK, and its `[60]` / `[50]` is its START** once the body is free
+and in reach. That is the player's queue law (castmech §6, and §3's † rows: an E4
+accepted in the previous aftercast, the cast beginning at its end), carried out by the AI.
+The lead belongs to the queue, not to the aftercast: it is 0.75 s here because the
+aftercast was the only wait, and up to 8.5 s for 322 because the walk was. RECONSTRUCTION:
+two waits on one hero.
+
+Three reasons this change does not move it:
+- **It would special-case one wait of a general mechanism.**
+- **It needs a COMMITTED pick across the window.** The slot and the target would have to
+  be kept, where `NPC_AFTERCAST`'s hold re-picks every tick and may hand the turn to
+  another slot (§65.5).
+- **Each way a queued pick can die in the window needs its own close:** its target dies
+  or is topped up, a knock-down, a death. GWW's "Interrupt" un-queues the player's. The
+  tape shows none of these (n = 4, no queue invalidated).
+
+Ours keeps the E4 in the start tick. That matches retail on 15 of the 19 casts and is
+0.75 s late on the other 4. The client holds at most one hero record open at a time,
+where retail holds two for 0.75 s. The hero queue is opened in `PLAN.md` §8 with 322's
+walk-in, which is the same question.
+
+**Property 57, seen in passing (OBSERVED; the server uses it only at the death above).**
+The corpus carries 497 `[57, agent, 0]` on agents other than the observer: 98 on
+`20260817T231139`, 160 on `20260928T103123`, 220 on `20260929T100038`, and the rest PvE.
+Timed from the same agent's last `[58]`:
+- 82 of 490 fall within [0.70, 0.80), 217 sooner and 191 later (7 have no `[58]` before
+  them);
+- 309 of the 1,782 non-observer `[58]`s are followed by one;
+- on the PvE agents read (15, 54, 85, 117) it sits at the `[58]` + 0.733 to 0.759, after
+  skills 229 / 222 / 842, and once in the batch of the next `[60]` (agent 85, 543.911);
+- Koss's 19 completions carry none.
+
+So it is not a body's general "aftercast over" word. Its meaning is NOT FOUND.
+
+**Owed: the client look**, on the owner's go-ahead. The E4's record now stays open 0.75 s
+longer. Does the hero panel's skill highlight persist through the aftercast? The runsheet
+is in `PLAN-LOG.md`, "SKILLS-AC8 shipped".
 
 ## 66. SKILLS-EX — the primary attributes' passive rules: Expertise's discount ROUNDS (6 of 6; floor 1 of 6) and ships on every caster; Divine Favor is its own heal word, rounded, after the spell's own; the ten primaries read against the client's own descriptions (2026-10-07)
 
