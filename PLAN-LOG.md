@@ -28,6 +28,30 @@ move back.
 
 ---
 
+### CONFPASS-F4, the post-fix run -- 2026-10-09 -- **CONFIRMED on our wire: S22-C re-run under the fix (harness `20261009T124123`, capture `authsrv-20261009T124204-c1`) carries 9 `[48, 10, 380]` in 197 s, against 4,004 before. Every cast comes exactly 8 landed Hatcher hits after the one before. All seven pre-registered predictions held. New fixture effect: the Hatcher, now swinging, kills the 140-health player 8 times.**
+
+- **The run.** `confirm.py --only S22-C`, from `main` at `f35a9e35`, with the arguments unchanged: `--party slice --enemy-health 2000 --no-energy --enemy-skills 380`. The capture's flags header reads `HOSTILE_ADRENALINE: true`, `ENERGY: false`. The launcher's mechanical verdict is PASS (map reached, 0 undecodable, no traceback, no client assert). The original pass's `results.json` is kept beside it as `results-pre-CONFPASS-F4.json`.
+- **The predictions, registered in chat before launch (RECONSTRUCTION then), each against the run (OBSERVED now).**
+
+  | | predicted | observed |
+  |---|---|---|
+  | P1 `[48, 10, 380]` on the wire | 5–15; > 50 refutes | **9**, every 20.5 s (8 gaps of 20.5, one of 21.2) |
+  | P2 landed Hatcher hits before the first 380 | ≥ 7 | **8** |
+  | P3 landed hits between consecutive 380s | each ≥ 7 | **8, 8, 8, 8, 8, 8, 8, 8** |
+  | P4 blocks outside a stance episode | 0 | **0** (4 inside) |
+  | P5 the F4 banner in gamesrv.log | 1 | **1** |
+  | P6 adrenaline opcodes naming agent 10 | 0 | **0** (0 adrenaline sends at all) |
+  | P7 report passes, no traceback | yes | **yes** |
+
+  The pre-fix S22-C run (`20261008T224201`) scores 4,004 / 0 / 0 / – / 0 / 0 / yes on the same scorer, so it is the scorer's known-bad control. Each episode runs 10.00–10.05 s, then expires. 28 rate-limited `cannot cast skill 380: needs 200 adrenaline` lines show the gate holding between casts. The exact 8 is the 200-unit price at 25 per hit. The player's hits on a 2,000-health body add less than a strike per cycle.
+- **S22-C's own question, answered more sharply than before.** Of the 10 scripted Sever Artery presses, 6 fired and 4 were dropped because the player was dead.
+  - The 3 that fell outside a stance landed with Bleeding.
+  - The 3 that fell inside one were blocked, with the RANGERPRE-S22 line `the strike blocked -- no condition`.
+  - That is 3 of 3 each way, OBSERVED on ours. Before the fix every press fell inside a stance, so the arm had no unblocked control.
+- **The fixture effect, new and faithful.** Before the fix the per-tick re-cast kept the Hatcher from swinging at all: 0 hostile swings in `…224201`. Now it swings 76 times and lands 75 hits. The 140-health player dies 8 times, about once per stance cycle, and the player starts only 9 swings of its own.
+
+  So "block on ~3 presses in 4" (the launcher's S22-C prediction) and F3's 76 % block share were artefacts of the defect. A re-run that wants many blocked presses needs the presses timed into the 10 s windows, and a player who survives the cycle ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4).
+
 ### CONFPASS-F3b, corrected -- 2026-10-09 -- **The retail figures in CONFPASS-F3b's last bullet were wrong at both ends. Retail's player stopped rate is 3.0 % today, not 1.8 %, and 6.4 % bounded, not 5.9 %. §13b's pooled rate would read 14.9 %, not 13.9 %.**
 
 - **The 1.8 %** was a misread. On today's 1,696 player starts the current classifier reads damage 95.1 %, stopped **3.0 %**, finish-without-damage **1.8 %**. 1z-db's 1.8 % stopped was measured on 903 starts and is stale whatever is decided.
