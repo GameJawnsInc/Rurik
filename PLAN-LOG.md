@@ -28,6 +28,19 @@ move back.
 
 ---
 
+### CONFIRM-2026-10-08, the loopback confirmation pass -- 2026-10-09 -- **One batch launcher ran PLAN §8's drivable items on our own server, 39 harness runs over 2026-10-08/09 from `main` at `84f935dd`, every verdict read off the run's `gamesrv.log` rather than the launcher's first-pass checks. CONFIRMED and out of §8: SKILLS-AC's NPC aftercast (min 0.775 s against 0.04 s, n = 17 each), SLICE-F52 52.8 (no E5 / E6 at a recharge-0 completion, 2 of 2 against 2 of 2) and RANGERLOOP-F9's RUN-T re-run (Q1-Q7 held on three runs). CONFIRMED on the wire with a §8 line re-pointed: CASTAI-RM, CHAN55, WEAPONS-C11's areas over time, RANGERPRE-S22 / S23 / S24, SKILLS-CT's 180 on a hostile, and RIDERS R1 / R3 / R4 on our client. Not exposed, fixtures owed: SKILLS-RG's ramp, `[32]` and 446, SKILLS-CT's Backfire and hero arms. SLICE-F48b partial. Two findings opened: CONFPASS-F1, a corpse completes its cast; CONFPASS-F2, a touch-only caster never closes.** Record: [studies/deskwork/CONFIRM-2026-10-08.md](studies/deskwork/CONFIRM-2026-10-08.md).
+
+- **CASTAI-RM**: gate ON, 16 of 34 Bleeding cures land at ≥ 90 % health (to 0.964), 0 at a clean player; the revert, 0 of 22 at ≥ 90 %, and 276 at a clean player 10 times where the gate held it 16 times. Health read back from each heal's landing; the hit lines read high under a Bleeding.
+- **SKILLS-CT**: 180 on a hostile, 26 payoffs on 26 finishes against 0 on 26. Backfire never overlapped a finish (the Mind Burn fixture kills the player every cast) and the hero was never hurt (CONFPASS-F2), so neither arm tested anything.
+- **SKILLS-RG**: Bleeding's −3 pips held. The fixture killed the player 7 times in 75 s, so no quiet 5 s came, and the 446 press landed on a corpse in both arms.
+- **CONFPASS-F1**: Backfire begun alive completed after `KILL the player (bled out)` and hexed the hostile, 2 of 2. `kill_player` marks no pending cast; the cancel helper's three callers are movement, the cancel action and a knockdown. Opened, not fixed: retail's batch for a cast cut short by death is NOT FOUND.
+- **The pass's own mistakes**, recorded so the next launcher does not repeat them:
+  - It collided with the owner's group 1 (fixed with a lock, a port check, an early abort and a merged `results.json`).
+  - It ran three fixtures in a TOWN, where there is no hero body and the player's casts are refused.
+  - It held a touch skill at 300 u.
+  - It grepped for a line the server never prints.
+  - It gave S24's three arms one expectation.
+
 ### RIDERS-R5, corrected -- 2026-10-08 -- **The entry below ("RIDERS / CASTAI-H1") misread the weapon-set step: it took the tape's `0x0032 [1]` / `[0]` pair for the energy-weapon switch and wrote that "R5 saw no `0x0032` for the held-set and empty-set presses and no 41 / 43 on the switch". The owner then said there was no staff to switch to, and the load's own `0x0147 [90, n, 0, 0]` shows sets 1-3 empty: the `[1]` WAS the empty-set press.** Corrected reading ([studies/livekey/RIDERS.md](studies/livekey/RIDERS.md) R5):
 
 - **Same-set press**: no `0x0032` leaves retail's client (the owner confirms the press). Nothing to model.
