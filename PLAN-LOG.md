@@ -28,6 +28,17 @@ move back.
 
 ---
 
+### S22's silent hero -- 2026-10-09 -- **Not a defect: S22 fights in a town (map 148), and SLICE-H2b withholds the party's world bodies in a town, so the slice monk has no row for `ally_cast_tick` to iterate. That is why no S22 run shows a heal, a hold or a refusal from it. `--party-body-in-outpost` is the switch if a fixture wants it to heal.**
+
+- **The prediction, stated before reading.** The hero is never in `ally_cast_tick`'s candidate set, or a distance gate excludes it. What would refute it: the hero in the loop with its heal held for a logged reason. **Held: never in the set.**
+- **What gates it (read).**
+  - `ally_cast_tick` iterates `state["agents"]` rows with `ALLEGIANCE_PLAYER`.
+  - `HERO_HEAL_AT` is 0.9, and the player sat far below that in every run, so the threshold is not it.
+  - The bodies come from `hero_body_create`, behind `party_bodies_here(state)`: `PARTY_BODY_IN_OUTPOST`, else not `OUTPOST`, else `EXPLORABLE` or `map_explorable(map_id)`.
+- **OBSERVED, every S22 run** (e.g. `20261009T164643`): `PARTY: map 148 is a town -- the hero bodies are withheld (stock shows a hero's model in a field only); roster, activation, level and vitals still go out [SLICE-H2b]`. Agent 200's traffic is the JARIN rig's roster, bar and vitals, and `AGENT_SET_PROFESSION … no body in a town`. No create burst, and not one `party agent` line.
+- **The server's own predicate:** `map_explorable(148)` False, `party_bodies_here({map_id: 148})` False; with `PARTY_BODY_IN_OUTPOST` True, True.
+- **The rule is the owner's ruling of 2026-09-12** ("in the outpost her model should be hidden"; stock shows a hero's model in a field only). Nothing here changes it. A fixture that wants the hero to act passes `--party-body-in-outpost`, the SLICE-H2b revert, which creates bodies without flipping 0x0199's explorable byte. `--explorable` also flips the byte the client reads.
+
 ### S22-C/D at wait:3.45 -- 2026-10-09 -- **CONFIRMED: the presses no longer beat against the stance cycle. Their phases spread evenly, and only 2 of 16 fell outside the stance in each arm (was up to 6). Both arms pass with the player alive: C 9 of 9 blocked strikes inflict nothing, D 8 of 8 bleed. The predicted press block share (~0.67) was refuted: it omitted the press that always precedes the first Bonetti's. With that press, ~0.61 is expected; observed 0.56 / 0.50, within noise.**
 
 - **The runs.** `confirm.py --only S22-C,S22-D`, from `main` at `8a7a4479`: harness `20261009T164643` (C) and `…165000` (D). Both used `--enemy-hit 0.008` and 16 presses at `wait:3.45`, with a 20 s hold. Launcher verdict **PASS / PASS**.
