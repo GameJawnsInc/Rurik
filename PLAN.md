@@ -2216,9 +2216,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   nothing: sampled, the attacker died mid-windup and no `[3]` followed. Retail's NPC case is UNVERIFIED (silent 0.2 %).
 * **`stillwindup.py`** (1z-db.2's moved/still split) keeps its own unbounded classifier; it has not been re-run
   through `lifecycle()`. Also: 21 of §13's 26 silent swings start under 1.6 s before their capture ends.
-* **The hero QUEUE** ([skills §65.8](studies/skills/FINDINGS.md), its E4 decision; §65.7's 322): retail's hero E4
-  is its PICK (at the `[58]` when the aftercast is the wait, 4 of 4; up to 8.5 s ahead when the walk is) and its
-  `[60]`/`[50]` the START; ours opens the E4 at the start. Needs a committed pick and its closes; n = 4 + 10.
+* **HERO QUEUE residuals** ([skills §65.9](studies/skills/FINDINGS.md); `HERO_QUEUE` shipped 2026-10-09): a queued
+  attack skill starts at its swing's start + the full interval on ours, + 0.880-0.909 on retail (sword, 10 of 10);
+  the walk-in pick (8 rows) is unmodelled (CONFPASS-F2's gap). Owed: a client look -- does the next skill light at the [58]?
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

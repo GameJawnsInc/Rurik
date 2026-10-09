@@ -28,6 +28,47 @@ move back.
 
 ---
 
+### SKILLS-AC9, the hero queue -- 2026-10-09 -- **A hero's 0x00E4 now opens at its PICK and its cast starts when the body is free (`HERO_QUEUE`; `--no-hero-queue` reverts). Retail's 69 hero E4s, read by a new `heroqueue.py`: 45 ride their start; 4 wait a spell's aftercast, E4 at the `[58]`; 10 wait the hero's own swing, E4 after the hit; 8 walk in first; 1 is dropped with `[45]` + E2. The `[62]` rides the START, 47 of 47. Ours now commits a pick held by the aftercast or the swing clock with its E4 at once, starts it with no second E4, and closes a pick that dies first with `[45]` + E2. The walk-in and the swing's start time are not modelled; both are opened in `PLAN.md` §8. The client look is owed.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.9.
+
+- **The evidence (OBSERVED; re-derived).** The reader's predictions were written after a
+  scratch census of the same 69 rows, and its docstring says so.
+  - with-start 45: 17 spells, 24 instants, 4 attack skills.
+  - aftercast 4: E4 at the `[58]` (0.000 ×3, 0.020), the start at `[58]` + 0.749–0.751.
+  - swing 10: E4 0.078–0.303 s after the swing's hit, `[50]` at the swing's start +
+    0.880–0.909.
+  - walk 8: leads 1.86–8.48 s.
+  - dropped 1: 392.729, 385, E4 + `[45]` + E2 in one instant, its fight target dead on the
+    wire 0.039 s later.
+  - other 1: an attack skill behind the previous attack skill's `[46]`.
+- **Shipped.**
+  - `hero_queue_commit` runs at the NPC_AFTERCAST hold, and at the swing clock once the
+    swing has landed. It sends the E4 now and keeps the slot and the target.
+    `hero_queue_check` re-validates the pick each tick. `hero_queue_drop` closes it with
+    `[45, hero, 0]` + E2, the player's pre-begin form (`agents.GV_CAST_DROPPED`).
+  - The drop is wired into the target's death (or a resurrection target's rise), a
+    suppressed or changed slot, the hero's death (after the aftercast's `[57]` + E2), a
+    knock-down, an interrupt (GWW: an interrupt un-queues the queued skill) and the
+    transition net. All RECONSTRUCTION but the target's death.
+  - A completion's own tick picks, so the E4 lands behind the `[58]` (retail 3 of 4), but
+    it never starts a cast there.
+  - Heroes only: a henchman sends no E4 and keeps the per-tick re-pick, as does every
+    hostile.
+- **One behaviour change, said plainly.** A committed pick is not re-chosen during the
+  hold. Before, a slot that came ready earlier in the round robin's scan could take the
+  turn. Retail's 4 aftercast rows each start the skill their E4 named.
+- **Not modelled, opened in `PLAN.md` §8.**
+  - The walk-in (CONFPASS-F2's gap: a party body never walks to cast).
+  - The queued attack skill's start: retail's `[50]` comes at the swing's start +
+    0.880–0.909 (the sword, about 0.67 of its 1.33 s interval), ours at + the full interval.
+    The E4 is right and the `[50]` 0.43 s late.
+- **Tests.**
+  - `test_heroqueue.py` (new): 24 bare / 27 with the vault, MEASURED. Four source mutants
+    go red.
+  - `test_npcaftercast` §2 (d)'s release-tick order check is re-aimed (the E4 left that
+    tick). Counts unchanged.
+  - TESTS.md updated.
+  - **Run:** the 45 tests that reach the changed paths (every `test_*.py` naming the cast / landing / death / knock-down / interrupt / E-family paths, plus castcycle, `test_checks` and srclint), and the five lints. The first pass was 44 green with `test_zerorecharge` red on 2: a recharge-0 attack skill is now re-picked at its own landing. Its ledger check was re-aimed to set the queued pick aside by name, and it is green. This was not the full suite.
+
 ### SKILLS-AC8's client look -- 2026-10-09 -- **Ran on the owner's go. The wire is as shipped in both arms: the default puts a hero Orison's E3 at E5 + 0.751–0.792, 100 of 100, and `--no-hero-e3-aftercast` at 0.000–0.001, 100 of 100. Neither arm logs `Pending skill` or asserts. The hero panel draws NO difference, so the registered prediction "the highlight persists ~0.75 s longer" is REFUTED: the Orison icon's recharge sweep starts at the E5 in both arms, and the aftercast window's frames are indistinguishable. Closed in `PLAN.md` §8.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8, its last paragraph.
 
 - **The rig.**

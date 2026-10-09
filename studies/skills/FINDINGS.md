@@ -10297,6 +10297,7 @@ before the run, its "AS RUN" block beside them). The server change is `authsrv.N
 | SKILLS-AC6 | what this lane did not do, one line each | open |
 | SKILLS-AC7 | the D5 line's other clauses, re-checked before the re-stamp | per clause |
 | SKILLS-AC8 | (2026-10-09) the first scoreable tape: a hero's E3 waits its spell's aftercast, its next `[60]` rides that E3, and our hero's E3 still rides its E5 | OBSERVED, n = 19, one hero, one capture; **the server placement SHIPPED the same day** (`HERO_E3_AFTERCAST`, §65.8's last part); the next pick's E4 decided NOT moved there; the client look RAN: no difference on the hero panel |
+| SKILLS-AC9 | (2026-10-09) the hero queue: a hero's E4 is its PICK (at the `[58]`, after a swing's hit, before a walk), its `[60]` / `[50]` its START; a dropped pick is `[45]` + E2 | OBSERVED over 69 hero E4s (re-derived, the predictions written after a scratch census); SHIPPED (`HERO_QUEUE`); the walk-in and the swing's start time not modelled |
 
 ### 65.1 SKILLS-AC1 — the instrument and the floor
 
@@ -10697,6 +10698,92 @@ Two limits on that reading:
   hero's body were not.
 
 The change rests on the wire, retail's 19 of 19, and is visually neutral on that panel.
+
+### 65.9 SKILLS-AC9 — the hero queue: a hero's E4 is its PICK, and its `[60]` / `[50]` is its START (2026-10-09)
+
+**The reader:** `toolkit/authsrv/heroqueue.py`, over every non-observer 0x00E4 on the live
+corpus. Henchmen send none, so these are the heroes'. The corpus holds 69: Koss on
+`20260914T005758` `:56011` (50) and on `20261008T132845` `:51409` (19). Each E4 is joined
+to its agent's next start (`[60]`, `[50]` or `[48]`), its record's close, and what came
+before and between.
+
+**The predictions were written after a scratch census of the same 69 rows.** So this is
+a re-derivation by a reader of its own, not a blind test, and the reader's docstring says
+so.
+
+**OBSERVED, by class:**
+
+| class | n | what the wire shows |
+|---|---|---|
+| with-start | 45 | E4, `[62]`, start in one instant, lead 0.000: 17 spells, 24 instants, 4 attack skills. An instant never waits, even inside a swing (346 0.218 s after a swing start, lead 0) |
+| aftercast | 4 | the spell picked AT the previous spell's `[58]` (0.000 ×3, 0.020); the start at that `[58]` + 0.749–0.751, in the agent's own E3 batch |
+| swing | 10 | an attack skill picked behind the agent's own running swing: the E4 after that swing's hit, 10 of 10; the `[50]` at the swing's start + 0.880–0.909 |
+| walk | 8 | an attack skill picked out of reach: the agent walks (`0x002A` 1–17 times), then starts, 1.858–8.479 s on (322 ×7, 382 ×1) |
+| dropped | 1 | 385 at 392.729: E4, `[45, 30, 0]`, E2 in one instant. Its fight target 44 dies on the wire 0.039 s later (status `[44, 16]` at 392.768), so "its target died" is the reading, RECONSTRUCTION |
+| other | 1 | 382 picked 0.542 s after the previous attack skill's `[46]`, started 0.777 s after it: the same queue, behind the previous attack skill's close |
+
+- **The `[62]` debit rides the START** on every paid row, 47 of 47, never an E4 that
+  leads it. HEROENERGY's "`[62]` right behind its E4" holds only where the E4 and the
+  start share a batch.
+- **The drop's `[45]`** is the player's pre-begin drop word (`agents.GV_CAST_DROPPED`, 4
+  of 4 on the observer). So the hero's form is the player's.
+
+**The reading.** A hero's E4 is its PICK. Its `[60]` / `[50]` is its START once the body is
+free (the aftercast over, the swing done) and in reach. That is the player's queue law
+(castmech §6), carried out by the AI. The pick itself comes at the previous action's end:
+the `[58]`, or the swing's hit (0.078–0.303 s after it, 10 of 10).
+
+**Shipped: `HERO_QUEUE` (`--no-hero-queue` reverts).**
+- **The commit.** `ally_cast_tick`, for a HERO body, COMMITS a pick that one of its two
+  clock holds holds. The holds are NPC_AFTERCAST's, and an attack skill's swing clock
+  once the running swing has landed (`swing_lands_at` cleared). Committing sends the E4
+  now and keeps the slot and the target.
+- **The start.** The release starts the committed pick with no second E4. The debit, the
+  face and the `[60]` / `[50]` go out as before, so ours is now E3, `[62]`, `[60]` at an
+  aftercast's release, retail's order.
+- **The completion's tick** picks too, so the E4 lands in the `[58]`'s tick, behind it,
+  as retail's 3 of 4 do. It never STARTS a cast there, which keeps 642d8957's cadence.
+- **The drops.** Every way a committed pick can die before its start closes it with
+  `[45, hero, 0]` + E2 (`hero_queue_drop`), only against an open record:
+  - its target dies, or for a resurrection rises (the witness's shape);
+  - its skill is suppressed or leaves the bar;
+  - a death, after the aftercast's `[57]` + E2;
+  - a knock-down;
+  - an interrupt (GWW "Interrupt": an interrupt un-queues the queued skill; the AI may
+    pick again at once);
+  - a transition.
+
+  RECONSTRUCTION, each said at its site, except the target's death, which has the n = 1
+  witness.
+- **Not touched:** a henchman sends no E4, so it keeps the per-tick re-pick, and so does
+  every hostile.
+
+**What changed in behaviour, said plainly.** A committed pick is no longer re-chosen
+during the hold. Before, a slot that came ready earlier in the round robin's scan could
+take the turn; now the slot picked at the `[58]` starts at the release. Retail's 4
+aftercast rows each start the skill their E4 named.
+
+**Not modelled, and why each waits:**
+- **The walk-in class** (8 rows). A party body never walks to cast; this is
+  CONFPASS-F2's gap. So an attack skill out of reach is not picked at all, and its E4 rides
+  its start when the fight brings it in.
+- **The swing's start time.** Retail starts a queued attack skill at the swing's start +
+  0.880–0.909 (Koss's sword, a 1.33 s interval, so about 0.67 of it). Ours starts it at the
+  swing's start + the full interval: the E4 is in the right place, the `[50]` 0.43 s late.
+  That is a cadence divergence, OBSERVED here, opened in `PLAN.md` §8, not this change.
+
+**Tests.**
+- **`test_heroqueue.py`** (new): 24 bare, 27 with the vault, both MEASURED.
+  - §1: the reader on literal wire.
+  - §2: the server on carried rows. The aftercast queue (the E4 behind the `[58]`, the
+    release E3 then `[60]` with no E4, start ticks equal to the flag's, the ledger closed);
+    the debit at the start; a completion's tick never starting; the swing queue (the E4
+    after the hit); the six drops; a henchman; the fixture's wire through the reader.
+  - §3: the wiring.
+  - §4: the corpus's classes and Q1–Q6.
+  - Four source mutants go red.
+- **`test_npcaftercast` §2 (d)**: the release-tick order check is re-aimed. The E4 has left
+  that tick, and the E3 still leads the `[60]`.
 
 ## 66. SKILLS-EX — the primary attributes' passive rules: Expertise's discount ROUNDS (6 of 6; floor 1 of 6) and ships on every caster; Divine Favor is its own heal word, rounded, after the spell's own; the ten primaries read against the client's own descriptions (2026-10-07)
 
