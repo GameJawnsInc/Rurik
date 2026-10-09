@@ -3527,6 +3527,27 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   on one handler and E4 on another, the log string and its push, the add's call. Proved
   red: `HERO_CAST_OPENS_E4 = False` in the source reddens 11. Floor 19 from the bare green
   run (the vault adds 7: 26). No socket, no client. ~17 s vaulted),
+  `toolkit/authsrv/test_deathcast.py` (**2026-10-09, CONFPASS-F1: a death closes the
+  player's cast in flight in the death batch -- `[59, me, 0]` then E2 `[me, skill, copy]`,
+  no E5 then or later (`DEATH_DROPS_CAST`, `--no-death-drops-cast` reverts).** The defect:
+  CT-2 / CT-2x's Backfire 28 completed after the KILL batch (E5, `[58]`, the hex on the
+  hostile, the aftercast). Retail, `deathcastjoin.py`: 29 observer deaths, 6 with the
+  observer's cast open, 6 of 6 closing it that way, behind the status and the morale pair,
+  ahead of the `0x00D0` / strips / `0x002D`, no `[8, me, *]` in the batch. §1 a death
+  mid-cast through the real press, `kill_player` and `cast_tick`: the stop and the E2
+  adjacent after the status, no hold word (the cast's hold already holds the corpse), the
+  busy window rolled back, and nothing from the tick ever after. §2 the slot on a charging
+  map: status, `0x009C`, `0x00EE`, `[59]`, E2, then the Bleeding's strip. §3 the KNOWN-BAD
+  arm: nothing in the batch, then E5 `[me, 42, 7, 8]` and `[58]` on the corpse. §4 a queued
+  cast drops with `[45]` + E2 and never begins; §5 a begun attack skill with `[49]` + E2 --
+  both RECONSTRUCTION at a death. §6 CONTROL: a cast whose E5 is out is left alone (retail's
+  one aftercast death is CONFPASS-F1b, open). §7 a knock-down's mark not yet released closes
+  in the death batch, no `[8, me, 0]` to the corpse. §8 (vault) retail's census, P1-P4 every
+  one, at least 6. §9 the wiring: ships on and in `capture_flags()`, the revert parses, and
+  main()'s block EXECUTED flips the module's flag (red without its `global`), kill_player
+  calls the helper. Proved red in-process: the helper stubbed out reddens 13, a hold release
+  added 3, the predicate widened to a completed cast 6a. Floor 21 from the bare green run
+  (the vault adds 5: 26). No socket, no client. ~17 s vaulted),
   `toolkit/authsrv/test_ressig.py` (**2026-10-07, SLICE-F52 52.8 (ZERO_RECHARGE_SKIPS_E5): §5 re-aimed, not weakened -- the pre-fix segment's E5 [hero, 2, 0, 0] was hero_skill_messages' zero-recharge E5, which the shipped server no longer sends, so `--no-resurrection-single-use` alone now closes with the E3 ahead of the `[58]` and no E5 / E7 (the loop unchanged), and the pre-fix bytes are asserted under both reverts (+1). 21 bare, 23 vaulted, both MEASURED; floor 20 -> 21.** **2026-09-30, RESSIG: Resurrection Signet is single-use,
   refreshed by a morale boost or a zone change.** The table's recharge 0 let two heroes raise
   each other 66 times on `20260930T202753`; `[skill_effect.2]` now says `recharge_on =

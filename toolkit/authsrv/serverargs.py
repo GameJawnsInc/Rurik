@@ -902,6 +902,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "flight sends no GV_ATTACK_STOPPED; the swing drops silently. By "
                          "default the death batch carries [3, me, 0] after the KILL status "
                          "(retail 30 of 30 open-windup deaths, 0 of 155 without).")
+    ap.add_argument("--no-death-drops-cast", action="store_true",
+                    help="THE REVERT ARM for CONFPASS-F1: a player death mid-cast leaves the "
+                         "cast in flight, and the corpse completes it (E5, the effect, the "
+                         "aftercast). By default the death batch closes it with [59, me, 0] "
+                         "then E2, no E5 (retail 6 of 6 deaths with the observer's cast open).")
     ap.add_argument("--target-death-releases-now", action="store_true",
                     help="THE REVERT ARM for DEATHWALK-D4: the attack target's death releases "
                          "the hold on the next tick and drops the swing in flight with no "

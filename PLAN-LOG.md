@@ -28,6 +28,36 @@ move back.
 
 ---
 
+### CONFPASS-F1 -- 2026-10-09 -- **A death closes the player's cast in flight: `[59, me, 0]` then E2 `[me, skill, copy]` in the death batch, no E5 then or later (`DEATH_DROPS_CAST`, `--no-death-drops-cast` reverts). Retail 6 of 6 deaths with the observer's cast open. Ours let the corpse complete it: CT-2 / CT-2x's Backfire hexed the hostile after `KILL the player`.**
+
+- **The defect** ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3). `kill_player` dropped the swing, the walk and the leads, but marked no `pending_casts` entry. So `cast_tick` completed the cast after the death batch: `SKILL_RECHARGE(28)`, `[58]`, the hex on agent 10, and the aftercast's hold and E3. That happened 2 of 2 times.
+- **Retail, read first** (the house rule).
+  - **The tool.** `toolkit/authsrv/deathcastjoin.py` finds every observer death on the live corpus and the casts the observer had open at it. Its prediction was written before the first run.
+  - **The counts.** It found 29 deaths, 6 of them with the observer's own cast open: skills 1 x3 and 153 x3, 0.20-1.88 s into the cast. Three captures carry them: `20260914T180058` :56301, `20260928T103123` :58544, and four connections of `20260929T100038`.
+  - **The result: P1-P4 held 6 of 6.**
+    - The batch sends `[59, me, 0]` then E2, adjacent.
+    - They sit behind the status, and behind `0x009C` / `0x00EE` on the 4 deaths that charged.
+    - They sit ahead of the `0x00D0`, the strips and the `0x002D`.
+    - No `[8, me, *]` rides the batch.
+    - No E5 or E3 follows for the skill.
+- **The fix.**
+  - **What it sends.** `death_drops_casts` runs first inside `kill_player`'s morale-batch slot (`_hold_and_strip`), so the order is retail's. It sends the stop, then the E2, and marks the entry `released`; the tick removes it and sends nothing.
+  - **The hold.** It sends no hold word. `action_hold` is transition-only, and the cast's own `[8, me, 1]` already holds the corpse.
+  - **Two RECONSTRUCTIONs.** A begun attack skill drops with `[49]`, and a queued cast that never began drops with `[45]`. Both are the cancel family's forms; no death witnesses either.
+  - **The knock-down edge.** A cast a knock-down marked, but the tick had not yet released, now closes in the death batch. Before, the tick's release would have sent `[8, me, 0]` to a corpse a tick later.
+  - **What it leaves alone.** A completed cast (E5 out) is untouched, and so is an instant skill's one-tick window, by `_mark_cancelled`'s rule.
+- **The test: `test_deathcast.py`, nine sections.**
+  - **Counts.** It runs 21 checks bare (the floor) and 26 with the vault; §8 re-runs retail's census as the positive control.
+  - **The known-bad arm** is E5 `[me, 42, 7, 8]` and `[58]` on the corpse.
+  - **Mutations.** Stubbing the helper out reddens 13 checks. Adding a hold release reddens 3. Widening the predicate to a completed cast reddens 6a. Dropping main()'s `global` reddens 9c.
+  - **Neighbours: 40 affected files run, 39 green.** These are every test that drives `kill_player`, `pending_casts` or the cancel family, plus the doc and lint tripwires. It was not the full suite.
+    - **The one red** is `test_playerswing`'s swing-lifecycle census in §13: 213 of 1,979 silent drops against a 3 % ceiling.
+    - **Not this change.** It is identically red on unchanged `main` at `972c51cc`, because it reads existing `gamesrv.log`s. 188 of the 213 come from the confirmation pass's own 2026-10-08 captures, and 175 from two of them (`20261008T224230`, `…224622`). Not triaged here.
+- **Found in passing, opened in §8, not shipped.**
+  - **CONFPASS-F1b.** Retail closes a death in the AFTERCAST with `[57, me, 0]` + E2 and no E3 (n = 1).
+  - **The `0x00D0`'s slot.** Retail sends it ahead of the `0x002D` on 16 of 16 deaths; ours sends it after.
+- **No client was launched for this.** The loopback re-run of CT-2 with the fix is owed, at the owner's go-ahead.
+
 ### CONFIRM-2026-10-08, the loopback confirmation pass -- 2026-10-09 -- **One batch launcher ran PLAN §8's drivable items on our own server, 39 harness runs over 2026-10-08/09 from `main` at `84f935dd`, every verdict read off the run's `gamesrv.log` rather than the launcher's first-pass checks. CONFIRMED and out of §8: SKILLS-AC's NPC aftercast (min 0.775 s against 0.04 s, n = 17 each), SLICE-F52 52.8 (no E5 / E6 at a recharge-0 completion, 2 of 2 against 2 of 2) and RANGERLOOP-F9's RUN-T re-run (Q1-Q7 held on three runs). CONFIRMED on the wire with a §8 line re-pointed: CASTAI-RM, CHAN55, WEAPONS-C11's areas over time, RANGERPRE-S22 / S23 / S24, SKILLS-CT's 180 on a hostile, and RIDERS R1 / R3 / R4 on our client. Not exposed, fixtures owed: SKILLS-RG's ramp, `[32]` and 446, SKILLS-CT's Backfire and hero arms. SLICE-F48b partial. Two findings opened: CONFPASS-F1, a corpse completes its cast; CONFPASS-F2, a touch-only caster never closes.** Record: [studies/deskwork/CONFIRM-2026-10-08.md](studies/deskwork/CONFIRM-2026-10-08.md).
 
 - **CASTAI-RM**: gate ON, 16 of 34 Bleeding cures land at ≥ 90 % health (to 0.964), 0 at a clean player; the revert, 0 of 22 at ≥ 90 %, and 276 at a clean player 10 times where the gate held it 16 times. Health read back from each heal's landing; the hit lines read high under a Bleeding.
