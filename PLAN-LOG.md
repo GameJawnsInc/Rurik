@@ -28,6 +28,21 @@ move back.
 
 ---
 
+### S22-A/B re-spaced walk -- 2026-10-09 -- **CONFIRMED: S22-A has 5 landed controls (floor 2, was 1). 16 presses at `wait:2` put 4 in the unblinded window and all 4 landed; 1 more beat Blind's 90 % miss. A: 11 of 11 Blind misses inflict nothing. B: 10 of 10 bleed. 0 deaths, the player's lowest health 22 of 140. All four S22 arms now meet every runsheet floor.**
+
+- **The runs.** `confirm.py --only S22-A,S22-B`, from `main` at `a91b2e0a`: harness `20261009T160718` (A) and `…161104` (B). Both use `--enemy-hit 0.008`, a shared walk of 16 presses at `wait:2`, and the 75 s hold. Launcher verdict **PASS / PASS**, including A's new check of at least 2 Bleedings from 382 (found 5).
+- **Against the registered predictions** ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4; OBSERVED):
+  - 0 deaths in both;
+  - 118 Hatcher hits in both (115–120), lowest health 22 (~20);
+  - 16 of 16 presses fired in both.
+  - **A:** 11 missed (11–12), each with the S22 refusal and none bleeding. 5 landed (4–5, at least 2), and its 5 Bleedings match them exactly.
+  - **B:** 10 missed and all 10 bled; 6 landed.
+- **The spacing model holds (OBSERVED, each press joined to its own batch's miss word).**
+  - The Blind period read 8.77 / 8.78 s, as measured on `…154625`.
+  - **A:** 4 presses fell in the unblinded window (model: mean 3.2, at least 2) and all 4 landed. Of 12 blinded presses, 1 landed (model ~1.3 at BLIND_MISS_CHANCE 0.90).
+  - **B:** 3 unblinded, all landed; of 13 blinded, 3 landed.
+  - The first cut of this join counted any Blind miss within 1.5 s as the press's own and read A as 0 landed. Plain-swing misses fall inside that window; the press's own miss word rides its `SKILL_ACTIVATED` batch.
+
 ### S22-A/B with --enemy-hit 0.008 -- 2026-10-09 -- **CONFIRMED: the player survives both, and both arms pass. A: 9 of 9 Blind-missed Sever Artery strikes inflict nothing. B (known-bad): 9 of 9 bleed. 0 deaths, 123 Hatcher hits, the player's lowest health 17 of 140. All four S22 arms now run with the player alive. A's landed control is still short (1, floor 2): that is a press-count limit, not the deaths.**
 
 - **The runs.** `confirm.py --only S22-A,S22-B`, from `main` at `62191d0b`: harness `20261009T154625` (A) and `…155025` (B). Both used C/D's `--enemy-hit 0.008` and no-death check, with the walk (10 presses `wait:6`) and the 75 s hold unchanged. Launcher verdict **PASS / PASS**.
