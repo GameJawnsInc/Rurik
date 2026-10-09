@@ -57,6 +57,44 @@ move back.
   - Two reader mutants go red: the rival counting every row (§1 and the known-bad arm), and a zero shoulder (§1 and the retail check).
 - **Not done: our hero's E3 at its E5.** Moving it is the server path, and the tapes do not show the NPC_AFTERCAST gate wrong. Opened in `PLAN.md` §8 as SKILLS-AC8. What the client shows for it is UNVERIFIED.
 
+### CONFPASS-F4, the post-fix run -- 2026-10-09 -- **CONFIRMED on our wire: S22-C re-run under the fix (harness `20261009T124123`, capture `authsrv-20261009T124204-c1`) carries 9 `[48, 10, 380]` in 197 s, against 4,004 before. Every cast comes exactly 8 landed Hatcher hits after the one before. All seven pre-registered predictions held. New fixture effect: the Hatcher, now swinging, kills the 140-health player 8 times.**
+
+- **The run.** `confirm.py --only S22-C`, from `main` at `f35a9e35`, with the arguments unchanged: `--party slice --enemy-health 2000 --no-energy --enemy-skills 380`. The capture's flags header reads `HOSTILE_ADRENALINE: true`, `ENERGY: false`. The launcher's mechanical verdict is PASS (map reached, 0 undecodable, no traceback, no client assert). The original pass's `results.json` is kept beside it as `results-pre-CONFPASS-F4.json`.
+- **The predictions, registered in chat before launch (RECONSTRUCTION then), each against the run (OBSERVED now).**
+
+  | | predicted | observed |
+  |---|---|---|
+  | P1 `[48, 10, 380]` on the wire | 5–15; > 50 refutes | **9**, every 20.5 s (8 gaps of 20.5, one of 21.2) |
+  | P2 landed Hatcher hits before the first 380 | ≥ 7 | **8** |
+  | P3 landed hits between consecutive 380s | each ≥ 7 | **8, 8, 8, 8, 8, 8, 8, 8** |
+  | P4 blocks outside a stance episode | 0 | **0** (4 inside) |
+  | P5 the F4 banner in gamesrv.log | 1 | **1** |
+  | P6 adrenaline opcodes naming agent 10 | 0 | **0** (0 adrenaline sends at all) |
+  | P7 report passes, no traceback | yes | **yes** |
+
+  The pre-fix S22-C run (`20261008T224201`) scores 4,004 / 0 / 0 / – / 0 / 0 / yes on the same scorer, so it is the scorer's known-bad control. Each episode runs 10.00–10.05 s, then expires. 28 rate-limited `cannot cast skill 380: needs 200 adrenaline` lines show the gate holding between casts. The exact 8 is the 200-unit price at 25 per hit. The player's hits on a 2,000-health body add less than a strike per cycle.
+- **S22-C's own question, answered more sharply than before.** Of the 10 scripted Sever Artery presses, 6 fired and 4 were dropped because the player was dead.
+  - The 3 that fell outside a stance landed with Bleeding.
+  - The 3 that fell inside one were blocked, with the RANGERPRE-S22 line `the strike blocked -- no condition`.
+  - That is 3 of 3 each way, OBSERVED on ours. Before the fix every press fell inside a stance, so the arm had no unblocked control.
+- **The fixture effect, new and faithful.** Before the fix the per-tick re-cast kept the Hatcher from swinging at all: 0 hostile swings in `…224201`. Now it swings 76 times and lands 75 hits. The 140-health player dies 8 times, about once per stance cycle, and the player starts only 9 swings of its own.
+
+  So "block on ~3 presses in 4" (the launcher's S22-C prediction) and F3's 76 % block share were artefacts of the defect. A re-run that wants many blocked presses needs the presses timed into the 10 s windows, and a player who survives the cycle ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4).
+
+### CONFPASS-F3b, corrected -- 2026-10-09 -- **The retail figures in CONFPASS-F3b's last bullet were wrong at both ends. Retail's player stopped rate is 3.0 % today, not 1.8 %, and 6.4 % bounded, not 5.9 %. §13b's pooled rate would read 14.9 %, not 13.9 %.**
+
+- **The 1.8 %** was a misread. On today's 1,696 player starts the current classifier reads damage 95.1 %, stopped **3.0 %**, finish-without-damage **1.8 %**. 1z-db's 1.8 % stopped was measured on 903 starts and is stale whatever is decided.
+- **The 5.9 % was a time-sorted run.** Retail stamps per packet, so a stop that ends one start often shares the next start's instant (6 of the player's, 19 of the NPCs'), and a sort by `(t, kind)` put it after that start. A second run in wire order went wrong the other way: retail sends the `[1]` ahead of its damage word in the same packet, so "first close wins" read 80.7 % of landings as damageless.
+- **Read as a batch**, a `[1]` or `[3]` together with this attacker's damage within 5 ms, the bounded figures are: player damage 91.4 %, stopped **6.4 %** (108), finish 2.2 %, one launch with no damage seen. NPCs: damage 72.2 %, stopped 23.5 %. Pooled stopped is **14.9 %**.
+- **The player's 63 moved starts were read on the wire**, a sample from each kind:
+  - a stop, then an attack skill's damage ~0.5 s later;
+  - a stop, then a bow skill's own launch and arrival;
+  - a damageless `[1]`, then the next start's damage;
+  - the six same-instant re-presses;
+  - one arrow that arrived with no damage.
+
+  All are over-counts by the current classifier. The NPC half is NOT read.
+
 ### CONFPASS-F3b -- 2026-10-09 -- **`swingcensus`'s `landed` over-count fixed: a swing lands only on its OWN close -- inside its own window, before any drop, with the player's `[1]` beside the hit (or a ranged launch). 1,576 -> 1,553 landed; the ceiling untouched at 26. Corrects CONFPASS-F3's "23 = 17 strikes + 6 next-swing hits".**
 
 - **The over-count, re-read swing by swing: 23 of 1,979, OBSERVED.**

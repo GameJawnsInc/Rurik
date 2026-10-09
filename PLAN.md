@@ -2209,13 +2209,13 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   + E2 and no E3 (n = 1, 20260929T100038 :51090 423.923); ours sends the E3 on the corpse's clock.
   And the death batch's `0x00D0` rides ahead of the `0x002D` on retail (16 of 16), after it on ours.
   Both found by `deathcastjoin.py` ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); F1 itself shipped 2026-10-09 (PLAN-LOG).
-* **`swingcensus.retail()` has the over-count ours had** (CONFPASS-F3b, PLAN-LOG). It reads 3.0 s past the
-  attacker's next start and ranks damage over a stop. Bounded, retail's player goes from stopped 1.8 % to
-  5.9 %, which moves 1z-db's "8.3x" and would redden §13b's stopped ≤ 12 % (13.9 %). That is the owner's call.
+* **`swingcensus.retail()` has the over-count ours had** (CONFPASS-F3b, PLAN-LOG). Read on the wire: the player's
+  63 moved starts are a stop or a damageless close, then a strike or the next swing's damage. Bounded in WIRE order
+  (retail stamps per packet: 6 stops share the next start's instant), a close read with its damage, retail's
+  player stopped goes 3.0 % -> 6.4 % (1z-db's 1.8 % was 903 starts), and §13b's pooled ≤ 12 % reads 14.9 %.
+  NPC half (12.0 -> 23.5 %) unread. Owner's call: port the rules and re-pin 13b by attacker, or leave it.
   Same comparison: `main()` / §13 count only the inferred `cancel`, never the verdict-sourced `cancel:*`.
   21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
-* **CONFPASS-F4's post-fix run** (fixed in code 2026-10-09, PLAN-LOG): re-run S22-C under the fix. Predicted: the Hatcher
-  swings, and casts 380 once per 8 landed hits -- tens of `[48, 10, 380]` a run, not ~4,000 -- and blocks fall below F3's 76 %.
 * **SKILLS-AC8**: our hero's E3 rides its E5. Retail's waits the aftercast: E5 + 0.75, 19 of 19
   on `20261008T132845`, and the next pick's E4 opens at the `[58]`, 4 of 4. Owed: `hero_skill_messages`'
   E3 on the aftercast's schedule, behind a flag, then a client look ([skills §65.8](studies/skills/FINDINGS.md)).
