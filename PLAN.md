@@ -2221,6 +2221,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **The hero QUEUE** ([skills §65.8](studies/skills/FINDINGS.md), its E4 decision; §65.7's 322): retail's hero E4
   is its PICK (at the `[58]` when the aftercast is the wait, 4 of 4; up to 8.5 s ahead when the walk is) and its
   `[60]`/`[50]` the START; ours opens the E4 at the start. Needs a committed pick and its closes; n = 4 + 10.
+* **S22-A/B's re-spaced walk is built, and the run waits on the owner's go** (`confirm.py --only S22-A,S22-B`, about 6 min;
+  [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): 16 presses at `wait:2` give A at least 2 landed controls.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
