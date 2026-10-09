@@ -2214,8 +2214,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   5.9 %, which moves 1z-db's "8.3x" and would redden §13b's stopped ≤ 12 % (13.9 %). That is the owner's call.
   Same comparison: `main()` / §13 count only the inferred `cancel`, never the verdict-sourced `cancel:*`.
   21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
-* **A hostile re-casts its stance every world tick** (CONFPASS-F3's aside, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3):
-  S22-C/D's Bonetti 380, ~4,000 `[48, 10, 380]` per run. The gate (recharge, adrenaline, stance up) is unread.
+* **CONFPASS-F4's post-fix run** (fixed in code 2026-10-09, PLAN-LOG): re-run S22-C under the fix. Predicted: the Hatcher
+  swings, and casts 380 once per 8 landed hits -- tens of `[48, 10, 380]` a run, not ~4,000 -- and blocks fall below F3's 76 %.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

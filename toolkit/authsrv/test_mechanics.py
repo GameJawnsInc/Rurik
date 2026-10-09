@@ -3462,14 +3462,14 @@ try:
     check(_lock(src.count("adrenaline_blocked(state, ") == 7
           and _idx(src, "if adrenaline_blocked(state, PLAYER_AGENT_ID):", i_pg)
           < _idx(src, "if ADREN_BAR_GATE and not bar_holds_adrenal():", i_pg)
-          and src.count("if ENERGY and not adrenaline_blocked(state, aid):") == 1
-          and src.count("if ENERGY and not adrenaline_blocked(state, target_id):") == 1
+          and src.count("if body_adrenaline_on(foe) and not adrenaline_blocked(state, aid):") == 1
+          and src.count("if body_adrenaline_on(agent) and not adrenaline_blocked(state, target_id):") == 1
           and src.count("\n        if ENERGY and not adrenaline_blocked(state, tid):") == 1
-          and src.count("\n    elif ENERGY and not adrenaline_blocked(state, tid):") == 1
+          and src.count("\n    elif body_adrenaline_on(row) and not adrenaline_blocked(state, tid):") == 1
           and src.count("if not adrenaline_blocked(state, agent_id):") == 1
           and all(_idx(src, site) > _idx(src, "def " + fn + "(")
-              for site, fn in (("if ENERGY and not adrenaline_blocked(state, aid):", "scythe_extra_hit"),
-                               ("if ENERGY and not adrenaline_blocked(state, target_id):", "hit_enemy"),
+              for site, fn in (("if body_adrenaline_on(foe) and not adrenaline_blocked(state, aid):", "scythe_extra_hit"),
+                               ("if body_adrenaline_on(agent) and not adrenaline_blocked(state, target_id):", "hit_enemy"),
                                ("if ENERGY and not adrenaline_blocked(state, tid):", "hurt_agent_row"),
                                ("if not adrenaline_blocked(state, agent_id):", "land_swing")))
           and "ADRENALINE_BLOCK = False" in src[_idx(src, "    if a.no_adrenaline_block:", _idx(src, "\ndef main():")):
@@ -3477,7 +3477,8 @@ try:
           "the source: the gate reads at the player's sender (ahead of the bar gate) and at the "
           "five body sites -- scythe_extra_hit, hit_enemy, hurt_agent_row's two arms, land_swing's "
           "hit landed (the hero's 0x00CF inside the gated block) -- 7 reads with the def; main() "
-          "flips ADRENALINE_BLOCK = False under --no-adrenaline-block (M10)")
+          "flips ADRENALINE_BLOCK = False under --no-adrenaline-block (M10); a hostile's three "
+          "sites read body_adrenaline_on since CONFPASS-F4 (2026-10-09, test_pools 10c)")
 finally:
     authsrv.ADRENALINE_BLOCK, authsrv.ENERGY, authsrv.ADREN_BAR_GATE = saved
 

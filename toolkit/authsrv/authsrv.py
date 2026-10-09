@@ -5091,7 +5091,7 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
                            f"the scythe's extra hit ({label})")],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} to agent {aid} "
          f"(the scythe's extra target)")
-    if ENERGY and not adrenaline_blocked(state, aid):           # B2: Soothing Images
+    if body_adrenaline_on(foe) and not adrenaline_blocked(state, aid):  # B2; CONFPASS-F4
         agent_adrenaline(foe).on_damage_taken(dealt / float(foe["max_health"]), now)
     if foe["health"] <= 0.0:
         kill_agent(send, state, aid, foe, conn_id, now)
@@ -6501,8 +6501,41 @@ GLYPH_SPELL_CHARGES = 2
 # default, because a cost that only exists behind a flag is a cost nobody pays:
 # with --no-energy this server behaves exactly as it did before 2026-08-20 --
 # no gate, no debit, no regeneration, no adrenaline -- which makes it a real
-# control for anything a run sees on the orb or the skill icons.
+# control for anything a run sees on the orb or the skill icons. (Except a
+# HOSTILE's adrenaline since 2026-10-09: HOSTILE_ADRENALINE just below.)
 ENERGY = True
+
+# CONFPASS-F4 (2026-10-09; studies/deskwork/CONFIRM-2026-10-08.md sec.3): A HOSTILE'S
+# ADRENALINE OUTLIVES --no-energy. Its book (gain on its hits and on damage taken, the
+# charge gate and the spend in enemy_attack_tick, the clear at its death) runs whatever
+# ENERGY says; --no-energy still frees the player, a party body and every energy cost.
+# The defect it closes: an adrenal skill's charge is often its ONLY gate -- OBSERVED,
+# the client table (38974): 72 rows have activation 0 and recharge 0, 71 of them
+# adrenal (57 attacks, which SLICE-F24's swing clock at least spaces; 14 stances,
+# shouts and type 16 -- Battle Rage 317, Defy Pain 318, Bonetti's Defense 380 ... --
+# which nothing else spaces) -- so under --no-energy the round robin cast them on
+# EVERY world tick: S22-C/D's Hatcher, 380 (200 units = 8 strikes, recharge 0), 4,004
+# and 3,998 `0x009F [48, 10, 380]` in ~193 s. OBSERVED, retail (castethogram, the
+# castai-2026-09-27 events): AI casts of table-recharge-0 adrenal skills (382, 385
+# by a hero, 336 / 338 / 340 by a monster) re-cast 17.4 to 170.9 s apart over 15
+# intervals, never per tick; no AI adrenal STANCE is on tape, so 380's own retail
+# cadence is UNVERIFIED and the charge is the table's cost, not a measured AI rule.
+# NOTHING NEW ON THE WIRE: a hostile's adrenaline is self-scoped silence on retail
+# (9 of 9 -- agent_adrenaline's note), so this changes WHEN a hostile casts and
+# nothing it sends. NOT "skip a stance already up": retail heroes re-cast a live
+# stance (JARIN 346, 10 of 17; SKIP_LIVE_EFFECT's banner). A party body's adrenal
+# gate is untouched (ally_cast_tick refuses adrenal slots under ENERGY; PLAN.md
+# sec.8's "a hero's adrenal debit"). --no-hostile-adrenaline reverts: under
+# --no-energy a hostile's adrenal skill is free and ungated again, as before.
+HOSTILE_ADRENALINE = True
+
+
+def body_adrenaline_on(agent):
+    """True when this body's adrenaline book runs: ENERGY, or a HOSTILE under
+    HOSTILE_ADRENALINE (CONFPASS-F4). The book only -- every wire half (the
+    player's family, a hero's JARIN pool messages) stays on ENERGY alone."""
+    return ENERGY or (HOSTILE_ADRENALINE and agent is not None
+                      and agent.get("allegiance") == agents.ALLEGIANCE_HOSTILE)
 
 # THE BAR GATE ON THE ADRENALINE FAMILY (SKILLS-B1's gate half, shipped
 # 2026-09-22 as DESKWORK-D5 step 1; studies/skills/FINDINGS.md 34.11). Retail
@@ -23606,7 +23639,7 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # rather than zeroed: the revive path refills it, and no capture shows
     # what happens to an NPC's energy at death because no capture shows an
     # NPC's energy at all.
-    if ENERGY:
+    if body_adrenaline_on(agent):                                # CONFPASS-F4
         agent_adrenaline(agent).clear()
     # DAGGERS-B5: and the attacker's chain icon comes down with it -- retail
     # clears 0x005C in the dead bit's own instant, 6 of 6 (daggers F6).
@@ -24504,7 +24537,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # measured rather than tidy: every one of the 9 corpus connections carrying
     # a 0x00CF names exactly ONE agent, its own. `player_gains_adrenaline`
     # carries the rest.
-    if ENERGY and not adrenaline_blocked(state, target_id):      # B2: Soothing Images
+    if body_adrenaline_on(agent) and not adrenaline_blocked(state, target_id):  # B2; CONFPASS-F4
         # The player's strike went out ABOVE, in retail's own batch position.
         # THIS half is SILENT, and a later session must not "fix" the
         # asymmetry: retail is 9 of 9 self-scoped, so a 0x00CF naming an enemy
@@ -32817,15 +32850,21 @@ def enemy_attack_tick(send, state, conn_id):
             # It runs AFTER the world gates (the loop's rule above), so what
             # it refuses is a slot the agent could cast from here if it could
             # pay -- never a heal nobody needs or a touch skill at 300 u.
-            if ENERGY:
+            #
+            # CONFPASS-F4: the ADRENALINE half runs under --no-energy too
+            # (HOSTILE_ADRENALINE's banner) -- for 71 adrenal rows with recharge
+            # 0 it is the only thing between the round robin and a cast on
+            # every tick. The energy half stays ENERGY's.
+            if body_adrenaline_on(agent):
                 _cost, _units = body_skill_cost(state, agent_id, _sid)     # SKILLS-EX
-                _pool = agent_energy(agent)
-                _pool.tick(now)
+                if ENERGY:
+                    _pool = agent_energy(agent)
+                    _pool.tick(now)
                 _short = None
                 if _units > 0 and not agent_adrenaline(agent).charged(_sid):
                     _short = (f"{_units} adrenaline, has "
                               f"{agent_adrenaline(agent).units.get(_sid, 0)}")
-                elif _cost > 0 and not _pool.can_pay(_cost):
+                elif ENERGY and _cost > 0 and not _pool.can_pay(_cost):
                     _short = f"{_cost} energy, has {_pool.current:.2f}"
                 if _short is not None:
                     slot = None
@@ -32875,11 +32914,12 @@ def enemy_attack_tick(send, state, conn_id):
             # book and sends nothing. (A HERO is the exception the hero tape
             # added later -- Koss's [62] behind his E4, 17 of 17 -- and it is
             # sent from ally_cast_tick, HEROENERGY; a hostile never is one.)
-            if ENERGY:
+            if body_adrenaline_on(agent):                       # CONFPASS-F4
                 _cost, _units = body_skill_cost(state, agent_id, skill_id)  # SKILLS-EX
                 if _units > 0:
                     agent_adrenaline(agent).use(skill_id)
-                agent_energy(agent).spend(_cost)
+                if ENERGY:
+                    agent_energy(agent).spend(_cost)
             # DESKWORK-D5 step 4: the recharge runs from the cast's COMPLETION
             # (start + activation), not its start -- armed here at the start, so
             # an interrupted or aborted cast still holds the slot on recharge:
@@ -33868,7 +33908,7 @@ def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what,
             agent_adrenaline(row).on_damage_taken(_frac, now)
             hero_pool_gain(send, state, tid, row, pools.damage_units(_frac),
                            "hit taken")
-    elif ENERGY and not adrenaline_blocked(state, tid):          # B2: Soothing Images
+    elif body_adrenaline_on(row) and not adrenaline_blocked(state, tid):  # B2; CONFPASS-F4
         # SILENT, as hit_enemy's own half is: retail's adrenaline traffic is
         # self-scoped 9 of 9 -- for a HOSTILE. A hero's is not (JARIN).
         agent_adrenaline(row).on_damage_taken(
@@ -40000,12 +40040,14 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # This site reproduces retail's batch EXACTLY -- MELEE_ATTACK_FINISHED
     # above, the gain here, the damage below -- because it already sent the
     # finished marker first.
-    if ENERGY:
-        _now = time.time()
-        if not adrenaline_blocked(state, agent_id):            # B2: Soothing Images
+    _now = time.time()
+    if not adrenaline_blocked(state, agent_id):                # B2: Soothing Images
+        if body_adrenaline_on(agent):    # CONFPASS-F4: a hostile's book under --no-energy too
             agent_adrenaline(agent).on_hit_landed(_now)   # SILENT for a hostile: self-scoped, 9/9
+        if ENERGY:
             hero_pool_gain(send, state, agent_id, agent, pools.STRIKE_UNITS,
                            "hit landed")                     # a HERO's is on the wire (JARIN)
+    if ENERGY:
         # The gain reads the damage that LANDS -- WIKI puts the one-unit-per-1%
         # rule on health lost -- as a fraction of the CURRENT maximum, the
         # same number the damage word below divides by (SKILLS-AD2: 11 of 11
@@ -51926,7 +51968,17 @@ def main():
         ENERGY = False
         print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
               "goes out, and no adrenaline is tracked or sent (0x00CF, 0x00D0 "
-              "and 0x00D2 all stay off the wire).")
+              "and 0x00D2 all stay off the wire)"
+              + (" -- except a HOSTILE's silent adrenaline book, which still "
+                 "gates its adrenal skills (CONFPASS-F4; --no-hostile-adrenaline "
+                 "frees them too)." if not a.no_hostile_adrenaline else "."))
+    if a.no_hostile_adrenaline:
+        global HOSTILE_ADRENALINE
+        HOSTILE_ADRENALINE = False
+        print("NO HOSTILE ADRENALINE: a hostile's adrenaline book follows ENERGY "
+              "again -- under --no-energy its adrenal skills are free and "
+              "ungated, and one with recharge 0 is cast on every world tick "
+              "(--no-hostile-adrenaline, CONFPASS-F4's known-bad arm).", flush=True)
 
     if a.no_skill_damage_word:
         global SKILL_DAMAGE_WORD
