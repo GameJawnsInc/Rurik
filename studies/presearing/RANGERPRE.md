@@ -283,7 +283,8 @@ QUESTFLOW-H2 (superseded by S7), H5, H6; the +5% on by default (needs the Reforg
   C shows no "block" in 60 s, record C as unexposed. Not a test of anything retail-side.
   **2026-10-09, after CONFPASS-F4:** the hostile casts 380 at all only because it charges on its
   own hits, and at the default `--enemy-hit 0.10` those hits kill the 140-health player about
-  once a stance cycle. So C and D add `--enemy-hit 0.008` (1-point hits). With the player up,
+  once a stance cycle. So C and D add `--enemy-hit 0.008` (1-point hits), and so do A and B,
+  whose Blind-casting Hatcher killed the player 8 times per run too. With the player up,
   the Hatcher's 1.33 s swing re-opens Bonetti's every 11.2 s, so the stance is up about 89 % of
   the time. With a 75 % block that puts about 67 % of presses blocked, close to the "about 3
   presses in 4" above (MEASURED on v1, `20261009T135431`: 20 of 29). The harness rows, their
