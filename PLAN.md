@@ -2216,6 +2216,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
 * **CONFPASS-F4's post-fix run** (fixed in code 2026-10-09, PLAN-LOG): re-run S22-C under the fix. Predicted: the Hatcher
   swings, and casts 380 once per 8 landed hits -- tens of `[48, 10, 380]` a run, not ~4,000 -- and blocks fall below F3's 76 %.
+* **SKILLS-AC8**: our hero's E3 rides its E5. Retail's waits the aftercast: E5 + 0.75, 19 of 19
+  on `20261008T132845`, and the next pick's E4 opens at the `[58]`, 4 of 4. Owed: `hero_skill_messages`'
+  E3 on the aftercast's schedule, behind a flag, then a client look ([skills §65.8](studies/skills/FINDINGS.md)).
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

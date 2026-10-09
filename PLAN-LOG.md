@@ -28,6 +28,35 @@ move back.
 
 ---
 
+### SKILLS-AC8 -- 2026-10-09 -- **`test_npcaftercast`'s one red was good news: its "P5 UNDECIDABLE" check asserted that no hero E5 -> E3 row on tape could be scored, and the RIDERS / CASTAI-H1 live capture brought 19. P5 is scored now and FAILS: a hero's E3 is NOT in its E5's batch, it is at E5 + the table aftercast, 19 of 19 (0.732-0.762), the player's own rule. The NPC_AFTERCAST gate is CORROBORATED for a hero and does not move. Our hero's E3 still rides its E5, a divergence opened in PLAN §8, server untouched.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8.
+
+- **The symptom.** On a clean detached checkout of `main` at `2ed812b5`, `test_npcaftercast` exited 1 on one check, §4's P5, with "scored 19 of 54". Every other check passed.
+- **Where the rows came from.** All 19 are from `20261008T132845` `:51409`:
+  - origin **live** per `origin.origin_of`, stated and corroborated by the recorded addresses;
+  - build **38974**;
+  - agent 30, Koss, a W/Mo hero (monsterai §18.6), on the Plains of Jarin;
+  - skills 281 ×6, 288 ×6, 313 ×2, 1396 ×5, every one table aftercast 0.75.
+
+  No other tape has a scoreable row. The other 35 rows are the survey's aftercast-0 322 / 346 / 348, still at 0.000.
+- **The prediction, written before the rows were read:** P5 FAILS, at the aftercast. The question as first put, "a hero's next cast waits ~0.75 s", is P1's question. P5 is the SAME cast's E3.
+- **OBSERVED.**
+  - P5 **FAILS**: 0 of 19 at 0.000.
+  - Its rival, "E3 = E5 + the table aftercast" within FLOOR_S's 50 ms shoulder, **HOLDS** 19 of 19 (max deviation 0.018). The registered text had named that rival as P5's alternative.
+  - **Known-bad arm:** our own HEROENERGY healer rig, `authsrv-20261001T105141-c1` (origin ours): 64 hero Orisons, 64 at 0.000, 0 at the aftercast.
+  - `hero_skill_messages` has not moved the E3 since that capture's tree; only a6a3d34b's recharge-0 branch differs.
+- **The gate, on the same tape.**
+  - Koss's 17 completion rows floor at **0.747**.
+  - In his 4 back-to-back pairs (288 then 281), the follow-up's `[60]` rides his E3's own batch at `[58]` + 0.747-0.751. So the hold ends where retail's E3 says the aftercast ends.
+  - The follow-up's E4 opens in the `[58]`'s batch, 4 of 4.
+  - P1 re-run: n = 1,502 (+25: Koss's 17 and 8 hostiles), min 0.704, 0 below. P2 534 = 35.6 %. P3, P4 and P6 unchanged.
+- **What changed.**
+  - `npcaftercast.py`: `e3_scoreable`, `E3_SHOULDER`; `score_e3` returns the at-aftercast count; `p5_rival` and `e3_captures` in `--json`; a RE-RUN block beside "AS RUN".
+  - `test_npcaftercast.py`: §4 scores P5 (FAILS, the rival HOLDS, the capture named, the zero class intact) and adds the healer-rig known-bad arm; §1 holds the rival's shoulder on literal edges.
+  - §2 (d)'s labels: the hero hold is OBSERVED, and the E3-at-E5 pin is OURS, contradicting retail.
+  - Floors 42 / 52 -> **43 bare / 54 with the vault**, both MEASURED (an empty and a nonexistent RURIK_VAULT for the bare one).
+  - Two reader mutants go red: the rival counting every row (§1 and the known-bad arm), and a zero shoulder (§1 and the retail check).
+- **Not done: our hero's E3 at its E5.** Moving it is the server path, and the tapes do not show the NPC_AFTERCAST gate wrong. Opened in `PLAN.md` §8 as SKILLS-AC8. What the client shows for it is UNVERIFIED.
+
 ### CONFPASS-F3b -- 2026-10-09 -- **`swingcensus`'s `landed` over-count fixed: a swing lands only on its OWN close -- inside its own window, before any drop, with the player's `[1]` beside the hit (or a ranged launch). 1,576 -> 1,553 landed; the ceiling untouched at 26. Corrects CONFPASS-F3's "23 = 17 strikes + 6 next-swing hits".**
 
 - **The over-count, re-read swing by swing: 23 of 1,979, OBSERVED.**
