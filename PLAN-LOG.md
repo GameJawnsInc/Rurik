@@ -108,6 +108,42 @@ move back.
   - **Refuted by:** a client assert or a new `Gw.log` class on the default arm, or a hero
     record left open (a `Pending skill` line, or a highlight that never clears).
 
+### CONFPASS-F3c -- 2026-10-09 -- **One lifecycle on both wires: `swingcensus.lifecycle()` reads a start's outcome off the words both servers send, and replaces `retail()`'s classifier. Like for like, retail's player stops 6.4 % and ours 9.5 %: 1.5x, not 1z-db's 8.3x. The wires part at the NPCs instead: retail's stop 23.4 % of their swings and ours almost never. Corrects movecode §1z-db.1 (§1z-dt).**
+
+- **Read before it was changed (OBSERVED).** Bounding retail's starts to their own window moves 63 of the player's 1,696 and 204 of the NPCs' 1,669. The moved starts were read on the tapes:
+  - **Player.** A stop then the skill's damage (33 announce the skill in the stop's instant). A damageless `[1]` then the next start's hit. A target change (c2s `0x00C1` → `[8, me, 0]` `[3, me, 0]`). Six re-presses sharing the next start's instant. One arrow that arrived damageless.
+  - **NPCs.** 124 of 192 stop-first starts announce a skill (`[50]` attack, `[60]` spell) in the stop's instant, and 16 retarget there.
+  - **No normal shot among them.** 703 NPC starts resolve start → launch → arrival.
+- **Two traps, each caught by a first cut that fell into it.**
+  - Retail stamps per packet: 6 player and 19 NPC stops share the next start's instant, so the read must be in wire order, never sorted.
+  - The `[1]` rides AHEAD of its damage in a packet: event by event, 80.7 % of landings read damageless, so a close is a 5 ms batch.
+- **The classifier, `swingcensus.py`.**
+  - `_wire_events()` reads `0x00A0 [4]`, `0x009F [1 | 3]`, `0x00A3 [16 | 17]`, `0x00A0 [38]`, and `0x00A4` / `0x00A7` by handle. Ours come off the capture's bytes (`_ours_merged`), retail's through livewire.
+  - `lifecycle()` gives a start its events up to the attacker's next start. The first close names it, a shot resolves at its own arrival, and a close is a batch.
+  - `retail()` and the new `ours()` both run it, split by attacker and never pooled. `bounded=False` (`--unbounded-lifecycle`) is the known-bad arm. `main()` prints the four rows side by side, in place of census-beside-retail.
+- **Like for like (`lifecycle()`, bounded).**
+
+  | | starts | damage | closed, no damage | stopped | silent |
+  |---|---|---|---|---|---|
+  | retail player | 1,696 | 91.4 % | 2.2 % | 6.4 % | 0.0 % |
+  | ours player | 7,980 | 86.7 % | 2.6 % | 9.5 % | 1.2 % |
+  | retail NPC | 1,669 | 72.4 % | 3.9 % | 23.4 % | 0.2 % |
+  | ours NPC | 26,102 | 94.3 % | 0.8 % | 0.0 % (4) | 4.8 % |
+
+  The known-bad arm reads retail's player 3.0 % and its NPCs 12.0 %.
+  - **Player: our stop rate is 1.5x retail's.** "Our player's profile is retail's NPC profile" does not survive.
+  - **NPCs: ours do not drop a swing for a skill, and 4.8 % close with nothing.** Sampled, the attacker died mid-windup with no `[3]`.
+  - §1z-db.2-.5 stand. The shipped still-report rule rests on its own evidence, not on the ratio.
+- **The test, `test_playerswing.py`, floor 322 -> 333, 333 run, green.**
+  - **13e-a..i** are synthetic tapes, one per shape read, with no vault: the batch, a stop then a strike, a damageless close then the next start's hit, the same-instant tie through `_wire_events`, a shot arriving after the next start, the handle match, the fail word / `launched` / `silent`, our own bytes decoded, and the known-bad arm.
+  - **Mutations.** Eight lifecycle mutations each redden their own: no batch → a, c, d; a sort → d; an arrival bounded by the next start → e, f; the handle ignored → f; the fail word not a close → g; the handle at the wrong byte → h; no unbounded arm → i; the launch ignored → e, f, g.
+  - **13b is re-pinned by attacker.** Retail's player stops 4-12 % and its NPCs 15-35 %, each with silent under 3 %. The floors sit above the known-bad arm's 3.0 % / 12.0 %, and 13b-d pins that arm's 63 over-credited starts.
+  - **The census cancel floor** now counts every `cancel:*` family (185), not only the inferred `cancel`.
+- **Opened in §8:**
+  - Our NPCs never drop a swing for a skill.
+  - An NPC dying in its windup gets no close (retail's NPC case UNVERIFIED).
+  - `stillwindup.py`'s own classifier is not re-run.
+
 ### SKILLS-AC8 -- 2026-10-09 -- **`test_npcaftercast`'s one red was good news: its "P5 UNDECIDABLE" check asserted that no hero E5 -> E3 row on tape could be scored, and the RIDERS / CASTAI-H1 live capture brought 19. P5 is scored now and FAILS: a hero's E3 is NOT in its E5's batch, it is at E5 + the table aftercast, 19 of 19 (0.732-0.762), the player's own rule. The NPC_AFTERCAST gate is CORROBORATED for a hero and does not move. Our hero's E3 still rides its E5, a divergence opened in PLAN §8, server untouched.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8.
 
 - **The symptom.** On a clean detached checkout of `main` at `2ed812b5`, `test_npcaftercast` exited 1 on one check, §4's P5, with "scored 19 of 54". Every other check passed.

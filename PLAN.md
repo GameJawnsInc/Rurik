@@ -2210,13 +2210,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   (A HERO's in-aftercast death takes retail's shape since SKILLS-AC8, RECONSTRUCTION; the player's is this line.)
   And the death batch's `0x00D0` rides ahead of the `0x002D` on retail (16 of 16), after it on ours.
   Both found by `deathcastjoin.py` ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); F1 itself shipped 2026-10-09 (PLAN-LOG).
-* **`swingcensus.retail()` has the over-count ours had** (CONFPASS-F3b, PLAN-LOG). Read on the wire: the player's
-  63 moved starts are a stop or a damageless close, then a strike or the next swing's damage. Bounded in WIRE order
-  (retail stamps per packet: 6 stops share the next start's instant), a close read with its damage, retail's
-  player stopped goes 3.0 % -> 6.4 % (1z-db's 1.8 % was 903 starts), and §13b's pooled ≤ 12 % reads 14.9 %.
-  NPC half (12.0 -> 23.5 %) unread. Owner's call: port the rules and re-pin 13b by attacker, or leave it.
-  Same comparison: `main()` / §13 count only the inferred `cancel`, never the verdict-sourced `cancel:*`.
-  21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
+* **Our NPCs never drop a swing for a skill, and one that dies in its windup gets no close** (CONFPASS-F3c,
+  [movecode §1z-dt](studies/movecode/FINDINGS.md)). Retail's NPCs stop 23.4 % of their starts, 124 of the 192
+  read announcing the skill (`[50]`/`[60]`) in the stop's instant; ours stop 4 of 26,102. 4.8 % of ours close with
+  nothing: sampled, the attacker died mid-windup and no `[3]` followed. Retail's NPC case is UNVERIFIED (silent 0.2 %).
+* **`stillwindup.py`** (1z-db.2's moved/still split) keeps its own unbounded classifier; it has not been re-run
+  through `lifecycle()`. Also: 21 of §13's 26 silent swings start under 1.6 s before their capture ends.
 * **S22-C/D's redesigned fixture is built, and the run waits on the owner's go** (`confirm.py --only S22-C,S22-D`, about 8 min;
   [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): `--enemy-hit 0.008` so the player survives, and 30 presses.
 * **SKILLS-AC8's client look** waits on the owner's go: the hero E3 at the aftercast shipped 2026-10-09
