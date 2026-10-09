@@ -21577,6 +21577,64 @@ def release_cancelled_cast(send, state, cast, reason, conn_id):
           f"{stop_name}, E2 -- no recharge", flush=True)
 
 
+# CONFPASS-F1 (2026-10-09): A DEATH CLOSES THE CORPSE'S CAST IN FLIGHT, in the death batch:
+# [59, me, 0] then E2 [me, skill, copy], behind the status (and behind the morale pair
+# 0x009C / 0x00EE where the map charges), ahead of the hold, the 0x00D0 and the strips. No
+# E5 then or later, so no recharge starts and nothing lands. Retail, OBSERVED 6 of 6: every
+# observing-player death on the live corpus with the observer's own cast open (an E4, no
+# E5 / E3 / E2) closes it this way and no other -- skills 1 and 153, 0.2-1.9 s into the
+# cast, on 20260914T180058 :56301, 20260928T103123 :58544 and four connections of
+# 20260929T100038 (deathcastjoin.py; prediction first). None of the six carries [8, me, *]:
+# the cast's own hold already holds the corpse (action_hold is transition-only, so ours
+# sends none either). Ours marked nothing (CONFIRM-2026-10-08 §3, CT-2 and CT-2x): Backfire
+# 28 completed after the death batch -- E5, [58], the hex on the hostile, the aftercast.
+DEATH_DROPS_CAST = True   # False (--no-death-drops-cast): the corpse's cast completes.
+
+
+def death_drops_casts(send, state, conn_id, why):
+    """CONFPASS-F1: close every cast the dying player still has in flight. Returns the count.
+
+    The stop word follows release_cancelled_cast's three-way split: [59] for a begun spell
+    (retail's six, OBSERVED), [49] for a begun attack skill and [45] for a cast that never
+    began -- queued behind a clock, or still walking in. Those two are RECONSTRUCTION at a
+    death: both witnesses' skills were a signet and a spell. What the cancel burst carries
+    and this does not is the hold release [8, me, 0] -- the corpse is HELD (SLICE-F24).
+    A cast a door already marked (a knock-down, closed by the tick) closes here instead, so
+    no release reaches the corpse a tick later. Untouched: a cast whose E5 is out -- the
+    aftercast; retail closed one with [57] + E2 (n = 1, CONFPASS-F1b, open) -- and an
+    instant skill's one-tick window (SKILLS-IA: no window, _mark_cancelled's rule). The
+    tick removes each entry (`released`) and sends nothing for it.
+    """
+    if not DEATH_DROPS_CAST:
+        return 0
+    dropped = 0
+    for cast in list(state.get("pending_casts") or ()):
+        if cast["e5_sent"] or cast.get("released"):
+            continue
+        if not cast.get("cancelled") and _instant_cast_open(cast):
+            continue
+        cast["cancelled"] = cast.get("cancelled") or "death"
+        if not cast.get("begun", True):
+            _stop = agents.GV_CAST_DROPPED
+        elif cast.get("attack"):
+            _stop = agents.GV_ATTACK_SKILL_STOPPED
+        else:
+            _stop = agents.GV_SKILL_STOPPED
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [_stop, PLAYER_AGENT_ID, 0],
+             f"the player died mid-cast of skill {cast['skill_id']} ({why}): stop "
+             f"[{_stop}] [CONFPASS-F1]")
+        send(GAME_SMSG_SKILL_REFUSED, [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+             f"E2 closes skill {cast['skill_id']}: the player died mid-cast, no recharge "
+             f"[CONFPASS-F1]")
+        cast["released"] = True
+        dropped += 1
+        print(f"[c{conn_id}] the death drops skill {cast['skill_id']}: [{_stop}], E2 -- no "
+              f"E5, no recharge, nothing lands [CONFPASS-F1]", flush=True)
+    if dropped:
+        state["cast_busy_until"] = time.time()
+    return dropped
+
+
 def _mark_cancelled(state, reason, now, spare_mid_attack):
     """Mark every cancellable pending cast; the tick releases them with E2.
 
@@ -30069,6 +30127,10 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
 
     def _hold_and_strip():
         _done["between"] = True
+        # CONFPASS-F1: the cast in flight closes FIRST in this slot -- [59] + E2 behind
+        # the status and the morale pair, ahead of the hold, the 0x00D0 and the strips
+        # (retail 6 of 6; DEATH_DROPS_CAST).
+        death_drops_casts(send, state, conn_id, why)
         action_hold(send, state, 1, f"the player died ({why})")
         strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
         if HEALTH_REGEN:
@@ -49646,6 +49708,12 @@ def main():
         DEATH_STOPS_WINDUP = False
         print("[map] --death-keeps-windup: a death mid-windup sends no GV_ATTACK_STOPPED; the "
               "swing drops silently (every build before MOVECODE-1z-ds.27)", flush=True)
+    if a.no_death_drops_cast:
+        global DEATH_DROPS_CAST
+        DEATH_DROPS_CAST = False
+        print("[map] --no-death-drops-cast: a death mid-cast leaves the cast in flight and "
+              "the corpse completes it -- E5, the effect, the aftercast (every build before "
+              "CONFPASS-F1)", flush=True)
     if a.target_death_releases_now:
         global TARGET_DEATH_HOLDS
         TARGET_DEATH_HOLDS = False

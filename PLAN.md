@@ -2205,9 +2205,13 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   game_mode that can contradict a manifest; S22's and S23 / S24's client looks (§5; their wire CONFIRMED 2026-10-08/09, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md)).
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
 * **SKILLS-CT** (skills §69, 180 / 28 on-cast payoffs): 180 on a hostile CONFIRMED 2026-10-09; Backfire and the hero's 180 UNEXPOSED, fixtures owed ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4). Open, §69.8: Deep Wound cut 36 (retail 37); a hostile drops its cast when its fight target dies.
-* **CONFPASS-F1**: a corpse completes its cast -- `kill_player` marks no pending cast, so a Backfire
-  begun alive landed its hex after the death batch (2 of 2, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); retail's
-  batch for a cast cut short by death is NOT FOUND, a corpus question before the fix.
+* **CONFPASS-F1b**: a death in the AFTERCAST (E5 out, no E3) closes on retail with `[57, me, 0]`
+  + E2 and no E3 (n = 1, 20260929T100038 :51090 423.923); ours sends the E3 on the corpse's clock.
+  And the death batch's `0x00D0` rides ahead of the `0x002D` on retail (16 of 16), after it on ours.
+  Both found by `deathcastjoin.py` ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); F1 itself shipped 2026-10-09 (PLAN-LOG).
+* **`test_playerswing` §13 is red on `main`** since the CONFIRM pass's captures: 213 of 1,979 swings are silent
+  drops, against a 3 % ceiling. 175 of them come from `20261008T224230` / `…224622`. Not yet known whether
+  the server ends those swings without a row or `swingcensus` misreads the fixture.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
