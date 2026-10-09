@@ -10296,7 +10296,7 @@ before the run, its "AS RUN" block beside them). The server change is `authsrv.N
 | SKILLS-AC5 | the server: a completed cast stamps `aftercast_until`, and the three body ticks hold the next cast or swing | the rule CORROBORATED; the pieces labelled below |
 | SKILLS-AC6 | what this lane did not do, one line each | open |
 | SKILLS-AC7 | the D5 line's other clauses, re-checked before the re-stamp | per clause |
-| SKILLS-AC8 | (2026-10-09) the first scoreable tape: a hero's E3 waits its spell's aftercast, its next `[60]` rides that E3, and our hero's E3 still rides its E5 | OBSERVED, n = 19, one hero, one capture; **the server placement SHIPPED the same day** (`HERO_E3_AFTERCAST`, §65.8's last part); the next pick's E4 decided NOT moved there; the client look owed |
+| SKILLS-AC8 | (2026-10-09) the first scoreable tape: a hero's E3 waits its spell's aftercast, its next `[60]` rides that E3, and our hero's E3 still rides its E5 | OBSERVED, n = 19, one hero, one capture; **the server placement SHIPPED the same day** (`HERO_E3_AFTERCAST`, §65.8's last part); the next pick's E4 decided NOT moved there; the client look RAN: no difference on the hero panel |
 
 ### 65.1 SKILLS-AC1 — the instrument and the floor
 
@@ -10673,6 +10673,30 @@ So it is not a body's general "aftercast over" word. Its meaning is NOT FOUND.
 **Owed: the client look**, on the owner's go-ahead. The E4's record now stays open 0.75 s
 longer. Does the hero panel's skill highlight persist through the aftercast? The runsheet
 is in `PLAN-LOG.md`, "SKILLS-AC8 shipped".
+
+**The client look ran the same day (owner's go; PLAN-LOG "SKILLS-AC8's client look"). The
+panel draws no difference, so the prediction is REFUTED.** The rig was `revheal3`, on our
+slice client (build 38797), with both arms run twice. The second pair had the harness open
+hero 1's panel itself and photograph it about every 0.78 s.
+- **The wire** (OBSERVED, all four runs):
+  - default arm: every hero Orison's E3 at E5 + 0.751 to 0.792, 100 of 100;
+  - `--no-hero-e3-aftercast`: every one at 0.000 to 0.001, 100 of 100;
+  - 0 `Pending skill` lines and no assert in either arm.
+- **The panel** (OBSERVED from the frames). Each frame was placed on the wire's cycle at
+  a grab lag of 0.21 s. The energy readout's 9 drops bound that lag to (0.166, 0.262).
+  - The Orison icon animates its activation from the E4 to the E5. Its recharge sweep
+    starts at the E5. Both arms are the same.
+  - In the aftercast window, [E5, E5 + 0.75), arm A's 17 frames and arm B's 18 are
+    indistinguishable: the same sweep growing from the E5, and nothing lit.
+  - So the record's extra 0.75 s is not drawn on the hero panel's skill icon.
+
+Two limits on that reading:
+- **Frame spacing.** At one frame per 0.78 s, a mark shorter than about 0.1 s could fall
+  between frames. The window holds 17 to 18 frames per arm, spread across its whole width.
+- **One surface.** Only the panel's skill icon was read. The party window's row and the
+  hero's body were not.
+
+The change rests on the wire, retail's 19 of 19, and is visually neutral on that panel.
 
 ## 66. SKILLS-EX — the primary attributes' passive rules: Expertise's discount ROUNDS (6 of 6; floor 1 of 6) and ships on every caster; Divine Favor is its own heal word, rounded, after the spell's own; the ten primaries read against the client's own descriptions (2026-10-07)
 
