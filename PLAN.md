@@ -2207,6 +2207,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **SKILLS-CT** (skills §69, 180 / 28 on-cast payoffs): 180 on a hostile CONFIRMED 2026-10-09; Backfire and the hero's 180 UNEXPOSED, fixtures owed ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4). Open, §69.8: Deep Wound cut 36 (retail 37); a hostile drops its cast when its fight target dies.
 * **CONFPASS-F1b**: a death in the AFTERCAST (E5 out, no E3) closes on retail with `[57, me, 0]`
   + E2 and no E3 (n = 1, 20260929T100038 :51090 423.923); ours sends the E3 on the corpse's clock.
+  (A HERO's in-aftercast death takes retail's shape since SKILLS-AC8, RECONSTRUCTION; the player's is this line.)
   And the death batch's `0x00D0` rides ahead of the `0x002D` on retail (16 of 16), after it on ours.
   Both found by `deathcastjoin.py` ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); F1 itself shipped 2026-10-09 (PLAN-LOG).
 * **Our NPCs never drop a swing for a skill, and one that dies in its windup gets no close** (CONFPASS-F3c,
@@ -2217,9 +2218,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   through `lifecycle()`. Also: 21 of §13's 26 silent swings start under 1.6 s before their capture ends.
 * **S22-C/D's redesigned fixture is built, and the run waits on the owner's go** (`confirm.py --only S22-C,S22-D`, about 8 min;
   [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): `--enemy-hit 0.008` so the player survives, and 30 presses.
-* **SKILLS-AC8**: our hero's E3 rides its E5. Retail's waits the aftercast: E5 + 0.75, 19 of 19
-  on `20261008T132845`, and the next pick's E4 opens at the `[58]`, 4 of 4. Owed: `hero_skill_messages`'
-  E3 on the aftercast's schedule, behind a flag, then a client look ([skills §65.8](studies/skills/FINDINGS.md)).
+* **SKILLS-AC8's client look** waits on the owner's go: the hero E3 at the aftercast shipped 2026-10-09
+  (`HERO_E3_AFTERCAST`); does the hero panel's highlight now persist through it? Runsheet: PLAN-LOG "SKILLS-AC8 shipped".
+* **The hero QUEUE** ([skills §65.8](studies/skills/FINDINGS.md), its E4 decision; §65.7's 322): retail's hero E4
+  is its PICK (at the `[58]` when the aftercast is the wait, 4 of 4; up to 8.5 s ahead when the walk is) and its
+  `[60]`/`[50]` the START; ours opens the E4 at the start. Needs a committed pick and its closes; n = 4 + 10.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

@@ -3335,6 +3335,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "npcaftercast.py), and this arm chains two ready spells "
                          "~0.03 s apart (our own capture "
                          "authsrv-20260928T002701-c1, min 0.025 s).")
+    ap.add_argument("--no-hero-e3-aftercast", action="store_true",
+                    help="a hero's 0x00E3 rides its 0x00E5 in the landing's tick -- "
+                         "the server as it was until 2026-10-09. The known-bad arm of "
+                         "SKILLS-AC8: retail's hero sends a spell's E3 at the E5 + the "
+                         "table's aftercast (Koss, 19 of 19 at 0.732-0.762 s, live "
+                         "20261008T132845), the player's own rule; this arm sends it at "
+                         "0.000 (64 of 64 hero Orisons on our "
+                         "authsrv-20261001T105141-c1). A hero dying in the window "
+                         "closes with [57] + E2 on the default arm only.")
     ap.add_argument("--no-interrupts", action="store_true",
                     help="no skill interrupts anything -- the server as it was "
                          "until 2026-09-23 (castmech P1 / animref D5: 'no "

@@ -28,6 +28,86 @@ move back.
 
 ---
 
+### SKILLS-AC8 shipped -- 2026-10-09 -- **A hero's spell E3 now goes out at its E5 + the table's aftercast (`HERO_E3_AFTERCAST`; `--no-hero-e3-aftercast` reverts), on the tick the NPC_AFTERCAST hold releases and ahead of the next cast's E4 and `[60]`. That is retail's Koss, 19 of 19, and the player's own rule. A hero dying in the window closes with `[57]` + E2 and no E3. The next pick's E4 stays at its start, decided on the tape. The client look is owed on the owner's go-ahead.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8, its last part.
+
+- **The rule.** OBSERVED on live `20261008T132845` `:51409` (origin live, build 38974,
+  agent 30). For every completion of a table-aftercast-0.75 spell (281 ×6, 288 ×6, 313 ×2,
+  1396 ×5), the E5 rides the `[58]` batch and the E3 follows at E5 + 0.732–0.762. The
+  aftercast-0 skills keep 0.000 (322 / 346 / 348, 35 rows).
+- **Ours before.** `hero_skill_messages` sent the E3 directly behind the E5. OBSERVED on
+  `authsrv-20261001T105141-c1`: 64 of 64 hero Orisons at 0.000.
+- **What shipped.**
+  - `land_skill` takes one landing instant (`_landed`) for both the stamp and the hero's
+    completion.
+  - `hero_skill_messages` queues a spell's E3 (`hero_e3_due`) at that instant +
+    `hero_e3_aftercast`.
+  - `completion_aftercast` is the one read under both `npc_aftercast` and
+    `hero_e3_aftercast`.
+  - `ally_cast_tick` sends a due E3 (`hero_e3_due_tick`) at the top of the body's turn,
+    after the corpse / transition net and ahead of the knock-down skip, the landing and
+    the hold, on the hold's own `now`.
+  - Ours on the release tick: E3, E4, `[62]`, `[60]`. Retail's: E3, `[62]`, `[60]`.
+  - Instants keep their batch (`e3=False`). Attack skills and aftercast-0 skills are
+    unchanged.
+- **RECONSTRUCTION, each said at its site.**
+  - A recharge-0 spell queues its E3 from the `[58]`.
+  - A knock-down or an interrupt in the window sends nothing, and the E3 still goes out on
+    time (the player's rule: `_mark_cancelled` spares a cast past its E5).
+  - **A death in the window:** `[57, hero, 0]` then E2 in the death batch, behind the
+    mid-cast drop's slot and ahead of the `0x00D0`, and never the E3. That is the
+    observer's CONFPASS-F1b shape (n = 1). No hero dies in an aftercast on tape: the
+    corpus's 54 non-observer E5s are all closed by their E3 (scratch census).
+  - A transition's net sends the E2 alone.
+- **The next pick's E4 is NOT moved, decided on the tape** (FINDINGS §65.8).
+  - Koss's 15 casts with no completion just before open E4, `[62]` and `[60]` in one
+    batch, 15 of 15.
+  - His 4 back-to-back follow-ups open the E4 at the `[58]`. The `[62]` rides their
+    `[60]`, 4 of 4, not the E4.
+  - With 322's 0.39–8.48 s leads (§65.7), the E4 is the hero's PICK and the `[60]` its
+    START: the player's queue law, carried out by the AI. Moving the E4 for the aftercast
+    alone would special-case one wait of that queue. It would also need a committed pick
+    across the window, with a close for each way the pick can die, and n = 4 shows none.
+  - Opened in `PLAN.md` §8 as the hero queue.
+- **Corrections to the SKILLS-AC8 entry below.**
+  - "The follow-up's E4 opens in the `[58]`'s batch, 4 of 4" is 3 of 4 strictly. The
+    fourth is 0.020 s after it (531.552 then 531.572), so 4 of 4 holds only within FLOOR_S's
+    shoulder.
+  - Property 57 is not a body's aftercast word in general. The corpus carries 497 on other
+    agents, 82 of 490 within [0.70, 0.80) of their `[58]`. Its meaning is NOT FOUND.
+- **Tests.**
+  - `test_npcaftercast`: §2 (d)'s "its E3 rides its E5, the SAME tick" (pinned as OURS) is
+    re-pinned to the new schedule, with the old pin as the flag's known-bad arm. §2 (f)
+    replays the hero's wire through `score_e3`: the rival holds 3 of 3 on the default arm
+    and fails 4 of 4 on the flag. §3 adds six source checks. 52 bare / 63 with the vault,
+    both MEASURED; floor 43 -> 52. Mutants red: the flag off, the E3 behind the next
+    `[60]`, the E3 a tick late.
+  - `test_pendskill`: §2 (e) re-aimed (the record closes at the aftercast's end). §2 (f)–(h)
+    are new: the death, the knock-down and interrupt, and the transition in the window.
+    25 bare / 32 with the vault, floor 19 -> 25. Mutants red: the drop as a no-op, a death
+    sending the E3.
+  - `test_instantannounce`: the two hero-spell 42 controls re-aimed, with b50da5c8's bytes
+    as the flag's arm. Counts unchanged (68 / 7).
+  - **Run:** the 41 tests that reach the changed paths (every `test_*.py` naming
+    `ally_cast_tick`, `land_skill`, `hero_skill_messages`, `hero_death_tick`, `kill_agent`,
+    `npc_aftercast` or `capture_flags`, plus castcycle, `test_checks` and srclint), and
+    the citelint, identlint, provlint, derivlint and seclint lints. The first pass was 40
+    green and `test_instantannounce` red on the two 42 controls above; it is green after
+    the re-aim. This was not the full suite.
+- **The client look, registered, not run (the owner's go-ahead).**
+  - **The rig:** `revheal3` (two level-20 Monk heroes, bar [281, 2]; `vault/sandbox/revheal3`),
+    launched as HEROENERGY's run `20261001T105103` was. The A/B arm appends
+    `--no-hero-e3-aftercast` inside `--game-args`.
+  - **Q1, the wire:** `python toolkit/authsrv/npcaftercast.py --ours <its authsrv-*-c1.jsonl>`.
+    Its `ours_e3` rival holds on every hero Orison (E3 at E5 + 0.75 ±0.05, none at 0.000).
+    The flag arm is all at 0.000.
+  - **Q2, the client log:** 0 `Pending skill` lines in both arms. The record is still
+    closed once, only later.
+  - **Q3, the owner's eye:** the hero panel's highlight on a cast skill now persists about
+    0.75 s longer after the heal lands, and nothing else on the panel changes. Not
+    predicted either way: whether the difference is visible at all.
+  - **Refuted by:** a client assert or a new `Gw.log` class on the default arm, or a hero
+    record left open (a `Pending skill` line, or a highlight that never clears).
+
 ### CONFPASS-F3c -- 2026-10-09 -- **One lifecycle on both wires: `swingcensus.lifecycle()` reads a start's outcome off the words both servers send, and replaces `retail()`'s classifier. Like for like, retail's player stops 6.4 % and ours 9.5 %: 1.5x, not 1z-db's 8.3x. The wires part at the NPCs instead: retail's stop 23.4 % of their swings and ours almost never. Corrects movecode §1z-db.1 (§1z-dt).**
 
 - **Read before it was changed (OBSERVED).** Bounding retail's starts to their own window moves 63 of the player's 1,696 and 204 of the NPCs' 1,669. The moved starts were read on the tapes:

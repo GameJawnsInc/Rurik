@@ -6734,22 +6734,29 @@ def npc_recharge_anchor(activation):
 # cancel, a scatter cancel and a RESSIG stop are not completions and stamp nothing; an
 # attack skill and an instant stamp nothing (the wiki's two classes; the 17 ranged
 # attack rows at 0.6-1.5 are CONTESTED, castmech 9). The hero's E3 does NOT move
-# (hero_skill_messages, untouched). --no-npc-aftercast is 642d8957's arm: the next
-# action on the very next tick.
+# (hero_skill_messages, untouched). [2026-10-09: it does now -- HERO_E3_AFTERCAST
+# below, SKILLS-AC8; this gate is unchanged by it.] --no-npc-aftercast is 642d8957's
+# arm: the next action on the very next tick.
 NPC_AFTERCAST = True
 
 
-def npc_aftercast(skill_id):
-    """Seconds a body's COMPLETED cast of `skill_id` holds its next action: the
-    table's aftercast (skill_timing's middle value) -- 0 for an attack skill, an
-    instant skill, a rowless id (the bare machine's zeros) and under
-    --no-npc-aftercast. One place, beside the recharge anchor, so the stamp and
-    the three holds cannot drift."""
-    if not NPC_AFTERCAST or not skill_id:
-        return 0.0
-    if _is_attack_skill(skill_id) or _is_instant_skill(skill_id):
+def completion_aftercast(skill_id):
+    """The table's aftercast (skill_timing's middle value) for a COMPLETED cast of
+    `skill_id` -- 0 for an attack skill, an instant skill and a rowless id (the bare
+    machine's zeros). The one read under both switches: npc_aftercast's hold and
+    hero_e3_aftercast's E3 (SKILLS-AC8), so the release and the E3 cannot drift."""
+    if not skill_id or _is_attack_skill(skill_id) or _is_instant_skill(skill_id):
         return 0.0
     return float(skill_timing(skill_id)[1])
+
+
+def npc_aftercast(skill_id):
+    """Seconds a body's COMPLETED cast of `skill_id` holds its next action:
+    completion_aftercast, and 0 under --no-npc-aftercast. One place, beside the
+    recharge anchor, so the stamp and the three holds cannot drift."""
+    if not NPC_AFTERCAST:
+        return 0.0
+    return completion_aftercast(skill_id)
 
 
 def npc_aftercast_holds(agent, skill_id, now):
@@ -6761,6 +6768,48 @@ def npc_aftercast_holds(agent, skill_id, now):
     if not NPC_AFTERCAST or now >= agent.get("aftercast_until", 0.0):
         return False
     return not (skill_id and _is_instant_skill(skill_id))
+
+
+# SKILLS-AC8 (2026-10-09): A HERO'S E3 IS THE END OF ITS AFTERCAST -- the player's own
+# rule (castmech 3: E3 = E5 + the table's +0x40). OBSERVED on live 20261008T132845
+# :51409 (origin live, build 38974; Koss, agent 30): every completion of a table-
+# aftercast-0.75 spell -- 281 x6, 288 x6, 313 x2, 1396 x5 -- has its E5 in the [58]'s
+# batch and its E3 0.732-0.762 s later, 19 of 19, none at 0.000 (npcaftercast.py's P5
+# rival; studies/skills 65.8). The aftercast-0 skills keep 0.000 (322 / 346 / 348 on
+# 20260914T005758, 35 rows): the same rule's zero class. hero_skill_messages sent the
+# E3 behind the E5 in the same tick (OURS: 64 of 64 hero Orisons on
+# authsrv-20261001T105141-c1). Now a spell's E3 is QUEUED on the row (`hero_e3_due`)
+# at the landing + hero_e3_aftercast, and ally_cast_tick sends it at the top of the
+# body's turn on the tick it falls due -- ahead of that turn's next pick, so it shares
+# the tick NPC_AFTERCAST releases the next [60] in, in retail's order (OBSERVED 4 of 4
+# back-to-back pairs: E3, [62], [60] at the [58] + 0.747-0.751). The classes are
+# completion_aftercast's, so with both switches on the E3 falls due on the very tick
+# the hold releases; an instant keeps land_skill's instant batch (e3=False).
+# RECONSTRUCTION, each said at its site: a recharge-0 spell (no E5, SLICE-F52 52.8)
+# queues its E3 from the [58] the same way (no such hero completion on tape); a
+# knock-down or an interrupt in the window touches nothing, because the skill is done
+# (the player's rule: _mark_cancelled spares a cast whose E5 went out); a DEATH in the
+# window closes the record with [57, hero, 0] + E2 and never the E3 -- the OBSERVER's
+# shape, CONFPASS-F1b, n = 1 (20260929T100038 :51090 423.923), since no hero dies in
+# an aftercast on tape (54 non-observer E5s on the corpus, every one closed by its
+# E3); a transition's net closes it with the E2 alone. NOT moved here: the next pick's
+# E4, which retail opens at the [58] (studies/skills 65.8 has why it waits).
+# --no-hero-e3-aftercast is the pre-AC8 arm: the E3 directly behind the E5.
+HERO_E3_AFTERCAST = True   # False (--no-hero-e3-aftercast): the E3 rides the E5's tick.
+# Property 57 on an agent, its meaning NOT FOUND (deathcastjoin: "57 (unnamed)"). It is
+# here only as the word ahead of the observer's in-aftercast death E2 (CONFPASS-F1b).
+# On other agents it is common and not that word: 497 on the live corpus, 82 of 490
+# within [0.70, 0.80) of the agent's last [58], 217 sooner, 191 later (SKILLS-AC8).
+AFTERCAST_DEATH_WORD = 57
+
+
+def hero_e3_aftercast(skill_id):
+    """Seconds after a hero's completion that its 0x00E3 goes out (SKILLS-AC8):
+    completion_aftercast, and 0 under --no-hero-e3-aftercast (the E3 in the E5's
+    tick)."""
+    if not HERO_E3_AFTERCAST:
+        return 0.0
+    return completion_aftercast(skill_id)
 
 # THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
 # never puts the OBSERVER's property 42 immediately ahead of a damage word at
@@ -33192,9 +33241,15 @@ def ally_cast_tick(send, state, conn_id):
             if _slot is not None and _slot < len(_sk):
                 hero_cast_drop(send, agent_id, agent, _sk[_slot][0],
                                "the body dropped its cast")
+            # SKILLS-AC8: and a queued aftercast E3 (the death emptied its own)
+            hero_aftercast_drop(send, agent_id, agent, "the body dropped its aftercast")
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        # SKILLS-AC8: a finished cast's E3 at its aftercast's end, AHEAD of the
+        # knock-down's skip (the skill is done) and of this turn's next pick, on the
+        # `now` the NPC_AFTERCAST hold below reads -- retail's E3, [62], [60].
+        hero_e3_due_tick(send, agent_id, agent, now)
         if knocked_down(state, agent_id, now):          # SLICE-H12
             continue
         due = agent.get("cast_lands_at")
@@ -34442,10 +34497,18 @@ def hero_skill_messages(send, state, agent_id, row, skill_id, recharge, now,
     its recharge from these; a henchman has no panel and gets none. `e3=False`
     leaves the E3 to the caller (land_skill's instant batch, SKILLS-IA).
 
+    A SPELL'S E3 WAITS ITS AFTERCAST (SKILLS-AC8, HERO_E3_AFTERCAST): queued on
+    the row at `now` + hero_e3_aftercast and sent by hero_e3_due_tick -- retail's
+    Koss, 19 of 19 at E5 + 0.732-0.762. An attack skill's, an aftercast-0 skill's
+    and every one under --no-hero-e3-aftercast still go out here, behind the E5
+    (the 35 rows of 322 / 346 / 348 at 0.000).
+
     A 0-RECHARGE SKILL SENDS NO E5 (SLICE-F52 52.8, ZERO_RECHARGE_SKIPS_E5):
     retail's hero closes 382 x7 and 385 x5 with the E3 alone, 12 of 12, while
     its 35 E5s all ride a recharge (322, 346, 348). The E3 -- and with it the
-    E4's close (PENDSKILL) -- is unchanged, and no E6 was ever owed."""
+    E4's close (PENDSKILL) -- is unchanged, and no E6 was ever owed. (A
+    recharge-0 SPELL's E3 waits the aftercast from the [58] like any other:
+    RECONSTRUCTION, the 12 are attack skills, aftercast 0.)"""
     if not HERO_WIRE_POOLS or hero_body_id(row) is None or not skill_id:
         return
     if completion_sends_e5(recharge):
@@ -34456,10 +34519,57 @@ def hero_skill_messages(send, state, agent_id, row, skill_id, recharge, now,
         print(f"[body] hero agent {agent_id} skill {skill_id}: recharge 0 -- no E5 "
               f"[SLICE-F52 52.8]", flush=True)
     if e3:
-        hero_skill_e3(send, agent_id, row, skill_id)
+        _after = hero_e3_aftercast(skill_id)
+        if _after > 0.0:
+            # SKILLS-AC8: the release is the aftercast's end (hero_e3_due_tick sends it)
+            row.setdefault("hero_e3_due", []).append((float(now) + _after, int(skill_id)))
+        else:
+            hero_skill_e3(send, agent_id, row, skill_id)
     if float(recharge) > 0.0:
         row.setdefault("hero_recharged_due", {})[int(skill_id)] = (
             float(now) + float(recharge))
+
+
+def hero_e3_due_tick(send, agent_id, row, now):
+    """SKILLS-AC8: each queued hero E3 whose aftercast has run out, oldest first.
+    ally_cast_tick calls it at the top of the body's turn with the tick's own `now`,
+    the clock its NPC_AFTERCAST hold reads, so the E3 goes out on the tick the hold
+    releases and AHEAD of that turn's E4, [62] and [60] (retail: E3, [62], [60], 4 of
+    4). A knock-down or an interrupt in the window does not stop it: the skill is done
+    (RECONSTRUCTION, the player's rule -- _mark_cancelled spares a cast past its E5)."""
+    due = row.get("hero_e3_due")
+    if not due:
+        return
+    keep = []
+    for at, sid in due:
+        if now >= at:
+            hero_skill_e3(send, agent_id, row, sid)
+        else:
+            keep.append((at, sid))
+    if keep:
+        row["hero_e3_due"] = keep
+    else:
+        row.pop("hero_e3_due", None)
+
+
+def hero_aftercast_drop(send, agent_id, row, why, death=False):
+    """SKILLS-AC8: a hero whose aftercast is cut short never sends the queued E3; the
+    client's record closes with E2 -- behind [57, hero, 0] for a DEATH, the observer's
+    in-aftercast death shape (CONFPASS-F1b, n = 1; RECONSTRUCTION for a hero, none on
+    tape), and alone for a transition (the net's form). Only against an open record,
+    hero_cast_drop's rule (an E2 drops a reference like the E3). Returns how many it
+    closed; the queue is emptied either way."""
+    due = row.pop("hero_e3_due", None) or ()
+    closed = 0
+    for _at, sid in due:
+        if not (row.get("hero_e4_open") or {}).get(int(sid)):
+            continue
+        if death:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [AFTERCAST_DEATH_WORD, agent_id, 0],
+                 f"[57] on hero agent {agent_id}: skill {sid}'s aftercast ends ({why}) "
+                 f"[SKILLS-AC8]")
+        closed += hero_cast_drop(send, agent_id, row, sid, why)
+    return closed
 
 
 def hero_recharged_tick(send, state, conn_id):
@@ -34509,6 +34619,11 @@ def hero_death_tick(send, state, agent_id, row, conn_id):
                           attack=_atk):
             row["cast_lands_at"] = None
             row["casting"] = None
+    # SKILLS-AC8: A DEATH IN THE AFTERCAST (E5 out, E3 queued) closes the record in
+    # the same slot with [57, hero, 0] + E2, and the E3 never goes -- the observer's
+    # shape (CONFPASS-F1b: 20260929T100038 :51090 423.923, n = 1). RECONSTRUCTION
+    # for a hero: no hero dies in an aftercast on tape.
+    hero_aftercast_drop(send, agent_id, row, "died in its aftercast", death=True)
     hero_pool_clear(send, state, agent_id, row, "died")
     if after != before:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -40227,6 +40342,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # applies, and for a HERO the E3 AFTER the applies (24 of 24 hero instant
     # casts on 20260914T005758: E4, the debit, E5, [48], [21], 0x00A5, 0x0042,
     # 0x0042, E3), where a spell's E3 rides beside its E5 (hero_skill_messages).
+    # [2026-10-09, SKILLS-AC8: a spell's E3 waits its aftercast now, 19 of 19 on
+    # retail; an instant's is this batch's, unchanged.]
     _inst = INSTANT_ANNOUNCE and bool(skill_id) and _is_instant_skill(skill_id)
     # RESSIG: a morale-boost resurrection writes its own completion below -- E7 + E3
     # behind the [58] on a raise, the stop's E2 on a standing target -- and no E5.
@@ -40236,17 +40353,21 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # when cast_lands_at falls due), so the body's NEXT action waits the table's
     # aftercast from here. npc_aftercast gives 0 for an attack or instant skill; a
     # RESSIG stop below takes the stamp back.
+    # SKILLS-AC8: ONE landing instant for the stamp and the hero's queued E3, so with
+    # both switches on the E3 falls due on exactly the tick the hold releases.
+    _landed = time.time()
     _aftercast = npc_aftercast(skill_id)
     if _aftercast > 0.0:
-        agent["aftercast_until"] = time.time() + _aftercast
+        agent["aftercast_until"] = _landed + _aftercast
     if slot is not None and slot < len(skills) and _boost:
         agent.pop("cast_recharge", None)
     elif slot is not None and slot < len(skills):
-        # JARIN: a hero's completion rides the skill family (0x00E5, 0x00E3).
+        # JARIN: a hero's completion rides the skill family (0x00E5, and the 0x00E3
+        # at the aftercast's end -- SKILLS-AC8).
         hero_skill_messages(send, state, agent_id, agent, skill_id,
                             agent.pop("cast_recharge",          # WEAPONS-W5b
                                       skills[slot][2] if len(skills[slot]) > 2 else 0),
-                            time.time(), e3=not _inst)
+                            _landed, e3=not _inst)
     # SLICE-H3: a RESURRECTION lands -- the finish, then the target stands
     # (retail: [60] -> 3.0 s -> [id, 0], F28). Nothing else of a cast applies.
     if skill_resurrects(skill_id):
@@ -52098,6 +52219,14 @@ def main():
               "its spell lands, as this server did until 2026-10-07 (retail: never sooner "
               "than 0.704 s after the [58] of a 0.75-aftercast spell, 1,477 of 1,477 -- "
               "npcaftercast.py; this arm chains them ~0.03 s apart).", flush=True)
+
+    if a.no_hero_e3_aftercast:
+        global HERO_E3_AFTERCAST
+        HERO_E3_AFTERCAST = False
+        print("NO HERO E3 AFTERCAST: a hero's 0x00E3 rides its 0x00E5 in the landing's "
+              "tick, as this server did until 2026-10-09 (retail: E5 + the table's "
+              "aftercast, 19 of 19 on Koss, 20261008T132845 -- studies/skills 65.8).",
+              flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION
