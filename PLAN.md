@@ -2009,7 +2009,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body
   or hero as interrupt VICTIM (RECONSTRUCTION, final-confirmation-needs-run) and the
   windup-swing drop (UNOBSERVED); a hero's adrenal debit; the attack-skill recharge
-  anchor (n = 2); NPC aftercast SHIPPED 2026-10-07, its client A/B owed (skills §65).
+  anchor (n = 2).
 * **DESKWORK-D4**: skill coverage in bulk. Steps 1–4 and residue passes 1–3 LANDED (skills
   §54–§55, §59, §60, §67; PLAN-LOG): **116 label rows on 38797, 115 on 38974** (plain 56 / 55 +
   SKILLS-LW's 60 hit-gated, the 60 all marked), `--no-skill-labels` reverting; passes 1–2
@@ -2033,7 +2033,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)
 
-* **SLICE-F48b**: SHIPPED ON, UNRUN (runsheets slice §48.7.1); under-cap snare × boost, Crippled over it: untaped.
+* **SLICE-F48b**: SHIPPED ON, run 2026-10-08 PARTIAL (L1-L2 held, L3 one branch, L4's legs cut short; a redesign owed, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §2); under-cap snare × boost, Crippled over it: untaped.
 * **SLICE-F48b**: wiki owed: flat-66 129/210/212/213 (census-blind), "Icy Ground".
 * **SKILLS-WK, heroes and bodies.** Weakness's −1 reaches a hero's or a body's rank
   arithmetic and never the wire; no tape weakens one, a live run's question (skills §51.3).
@@ -2052,8 +2052,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   25 s combat clock; whether retail's clear counts from a zero `0x00CF` is NOT OBSERVED
   (every zero on RB sits inside a run of other gains). A hero's zero gain is still not
   sent (`hero_pool_gain`), unread on JARIN's tape either way.
-* **SKILLS-RG** (skills §64): regen, the natural ramp and [32] shipped ON, unrun -- runsheet in PLAN-LOG; next in §64.7.
-* **SKILLS-EX** (skills §66): Expertise and Divine Favor shipped ON, unrun -- runsheet in PLAN-LOG; open in §66.6.
+* **SKILLS-RG** (skills §64): regen, the natural ramp and [32] shipped ON; run 2026-10-09: Bleeding's −3 held, the ramp, [32] and 446 UNEXPOSED (the player died) -- fixtures owed ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4); next in §64.7.
+* **SKILLS-EX** (skills §66): Expertise and Divine Favor shipped ON; Divine Favor fires on the wire ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md)), its two drawn numbers unread; Expertise unrun -- runsheet in PLAN-LOG; open in §66.6.
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
@@ -2110,11 +2110,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Areas over time and scatter** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §41–§45, [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §16
 
 * **D6 steps 3-5's residue** (weapons 43.2, skills 61.4 / 62.4-62.5): the wire ORDER of an area hex with damage and the per-foe `[20]` (unwitnessed); Panic's trigger instant and its 'nearby' set; the slowed chase unphotographed; a caster's death firing 179 early (n = 1); Mind Burn on a hostile against the invented 30 energy.
-* **Six areas over time stay inert** (77, 196, 215, 844, 1083, 1372; WEAPONS-C12); no ground-visual id for 192 / 167 / the new five; wiki pages owed; a caster killed in play is unwitnessed (WEAPONS-C11); the client run owed (runsheet: weapons §45's last block).
+* **Six areas over time stay inert** (77, 196, 215, 844, 1083, 1372; WEAPONS-C12); no ground-visual id for 192 / 167 / the new five; wiki pages owed; a caster killed in play is unwitnessed (WEAPONS-C11); the client run CONFIRMED 2026-10-08 but its Q6, unexposed ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md)).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
 * **CASTAI's residue** (monsterai §17-18.5; §7 Q19): which READY skill a normal-mode monster fires (round robin stays; three Zaishen bars are not round robin, Z1.P6); the AI TIER (CASTAI-W2); heal thresholds on another ally; area-hex wearers ungated (CASTAI-R3); upkeep enchantments (289, 290) open no episode; Smite Hex 302 and Drain Enchantment 68 unmodelled (CASTAI-RM6).
-* **CASTAI-RM** (monsterai §18.5): the removal gate and Remove Hex 301 shipped ON, unrun -- runsheet in PLAN-LOG.
-* **The Zaishen tapes' server residue** (monsterai §18.2, §18.4): ZF16's open halves, a body's busy window and next swing (PLAN-LOG); Deep Wound re-applied stacks (ZF18); Zealot's Fire's payoff and Balthazar's Aura's tick unmodelled (ZF30); CHAN55's runsheet, steal cap and [42, me] (skills §68.4); a hit after the killing blow keeps its adrenaline gain (ZF34); naming c2s `0x0042` is the owner's (ZF35).
+* **CASTAI-RM** (monsterai §18.5): the removal gate CONFIRMED on the wire 2026-10-09 (16 of 34 cures at ≥ 90 % health against 0 of 22 under the revert, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md)); Remove Hex 301 unrun.
+* **The Zaishen tapes' server residue** (monsterai §18.2, §18.4): ZF16's open halves, a body's busy window and next swing (PLAN-LOG); Deep Wound re-applied stacks (ZF18); Zealot's Fire's payoff and Balthazar's Aura's tick unmodelled (ZF30); CHAN55's runsheet CONFIRMED on the wire 2026-10-09, its look owed ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md)); the steal cap and [42, me] (skills §68.4); a hit after the killing blow keeps its adrenaline gain (ZF34); naming c2s `0x0042` is the owner's (ZF35).
 * **Builds 38888/38974** (crossbuild §10-11): `item_modifiers` stays 38797's until `itemmods.py` reads 38888's text sites; hero `bar_to_store` write-back untested; serving a 38974 client is refused (not built).
 * **Typed creature armour: witnesses past the Warrior** (the Ranger's bonus typed "+30 vs. elemental", its untyped +10 withdrawn -- PLAN-LOG 2026-09-27, Ranger; the Assassin / Dervish / Paragon columns withdrawn whole, 3 x level on every hit -- PLAN-LOG 2026-09-27, the three columns; no witness separates the readings for any of the four, and no hostile of the last three is on tape at all): a creature Warrior's +20 now meets physical damage only (WIKI + the owner's Daggers on def 3113, one definition; PLAN-LOG 2026-09-27). A non-physical weapon hit skips it too (a wand's chaos, a staff's holy; PLAN-LOG 2026-09-27, later) -- with NO weapon witness: 355 non-physical weapon shots on tape, none on a hostile Warrior; a single-weapon capture on one would settle it. A preparation's own damage too (Kindle / Ignite Arrows' fire; PLAN-LOG 2026-09-27, latest), also with no witness (the corpus's only preparation words hit a level-1 Mesmer). Also open: a witness for the Ranger and for the three columns (a fight with a Factions or Nightfall Paragon settles its 20 cheaply). The PLAYER's side is typed too (a hostile's Kindle Arrows word meets the pieces' elemental 25; PLAN-LOG 2026-09-27, last), and none of the preparation or weapon halves has a retail witness yet.
 
@@ -2202,13 +2202,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 * **RANGERPRE-S19** (a dialog button grants the secondary) is not built: it waits on the
   owner's `0x00B6` ruling. Also open there: serving the Reforged effect 3434; a wire-derived
-  game_mode that can contradict a manifest; S22's and S23 / S24's client looks (§5; S23 / S24
-  shipped 2026-10-07, PLAN-LOG).
+  game_mode that can contradict a manifest; S22's and S23 / S24's client looks (§5; their wire CONFIRMED 2026-10-08/09, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md)).
 * **DEATHWALK** ([studies/movecode/RUN-DEATHWALK.md](studies/movecode/RUN-DEATHWALK.md); desk D0-D4 done 2026-10-06, PLAN-LOG): open -- client runs E1-E3 (E1/E2 scorers built; E4 and E5 CLOSED 10-06: D1 and D4 confirmed); the C2 / C3 same-tick leftovers.
-* **SLICE-F52 52.8** (no E5 / E6 at a recharge-0 completion): SHIPPED ON, UNRUN -- runsheet in studies/slice 52.10.
-* **SKILLS-CT** (skills §69, 180 / 28 on-cast payoffs): SHIPPED ON, UNRUN -- runsheet §69.9. Open, §69.8: Deep Wound cut 36 (retail 37); a hostile drops its cast when its fight target dies.
-* **RANGERLOOP-F9:** fixed on the desk 2026-10-07 (PLAN-LOG); owed, the RUN-T re-run
-  (CONFIRM-2026-09-30 §12.3).
+* **SKILLS-CT** (skills §69, 180 / 28 on-cast payoffs): 180 on a hostile CONFIRMED 2026-10-09; Backfire and the hero's 180 UNEXPOSED, fixtures owed ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4). Open, §69.8: Deep Wound cut 36 (retail 37); a hostile drops its cast when its fight target dies.
+* **CONFPASS-F1**: a corpse completes its cast -- `kill_player` marks no pending cast, so a Backfire
+  begun alive landed its hex after the death batch (2 of 2, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3); retail's
+  batch for a cast cut short by death is NOT FOUND, a corpus question before the fix.
+* **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
+  312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
   arrival lets the body walk on. Retail's order UNVERIFIED (CONFIRM §12.2).
 * **SLICE-F25's `0x002D` half** never reaches `_note_wire_move` (CONFIRM §12.4).
@@ -2252,6 +2253,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **296 map rows are limited by information, not effort**: one live capture on a
   known-named zone yields one exact `(map id, file id)` pair
   ([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md)).
+* **The owner's eyes, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4**: SKILLS-EX's two numbers, CHAN55's number
+  against a swing's, S24-C's hostile after a missed strike, the RIDERS swap's second leg.
 * **The owner's eyes, RANGERPRE**: S13's body visual and S8's quest-complete visual, both
   UNREAD ([CONFIRM](studies/presearing/CONFIRM-2026-09-30.md) §11).
 
