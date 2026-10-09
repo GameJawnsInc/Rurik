@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=322)   # CONFPASS-F3b +10 (13d-a..j: a swing lands on its own close -- own window, drop first, the [1] beside the hit; the known-bad arm; two tapes both arms); CONFPASS-F3 +9 (13c-a..i: a block or a miss closes the swing, each swing read in its own window; the 224622 tape both arms); DEATHWALK-D4 +11 (26a-k: the target's death holds to the chain's next scheduled event); DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=333)   # CONFPASS-F3c +11 (13e-a..i: one lifecycle on both wires, its known-bad arm; 13b re-pinned by attacker, a..d); CONFPASS-F3b +10 (13d-a..j: a swing lands on its own close -- own window, drop first, the [1] beside the hit; the known-bad arm; two tapes both arms); CONFPASS-F3 +9 (13c-a..i: a block or a miss closes the swing, each swing read in its own window; the 224622 tape both arms); DEATHWALK-D4 +11 (26a-k: the target's death holds to the chain's next scheduled event); DEATHWALK-D1 +5 (25a-e: a follow inside its stop disc is arrived on the re-path tick); MOVECODE-1z-ds.40 +8 (24a-h: the snap guard reads both world-0 models); MOVECODE-1z-ds.36 +5 (23a-e: the follow's own tick opens no swing); MOVECODE-1z-ds.33 +7 (19k, 21l-n, 20k-l, 10p: the review's fixes); MOVECODE-1z-ds.31 +12 (21a-k and section 6's shipped arm: every start holds to the next input); MOVECODE-1z-ds.30 +4 (20g-j: a new follow's leg starts at the body estimate); MOVECODE-1z-ds.29 +5 (10k-o: a press on our own follow's target is spared, arrived or not); MOVECODE-1z-ds.28 +6 (22a-f: no follow inside our windup, the re-approach rides the landing); MOVECODE-1z-ds.27 +4 (19g-j: a death mid-windup carries [3]); MOVECODE-1z-ds.21 +4 (17b-k..n: the landed race, the follow_swing closes); MOVECODE-1z-ds.20 +6 (20a-f, the placement frame and the click dest); MOVECODE-1z-ds.19 +2 (17b-i/j, the follow_swing row); MOVECODE-1z-ds.13 +1 (17b-h, the walk-in variant); MOVECODE-1z-ds.15 +7 (19, the dead press: begin_attack, the real arm, the dead tick); MOVECODE-1z-ds.13 +7 (17b-a..g, a cancelled windup holds no clock); MOVECODE-1z-ds.9 +2 (the 136 u press, both arms); MOVECODE-1z-ds.7 +3 (9l-g..i); MOVECODE-1z-ds.6 +6 (9l-a..f); MOVECODE-1z-dr +4 (9k, the keyboard snap guard), +3 round 2; SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -4478,6 +4478,96 @@ def main():
           "13d-h a RANGED swing lands at its launch, with no [1]",
           f"{got} -- WEAPONS-W2a: no prop 1 rides a shot")
 
+    # 13e (CONFPASS-F3c, 2026-10-09): ONE LIFECYCLE ON BOTH WIRES. The
+    # comparison against retail was ours-by-census beside retail()'s own
+    # classifier, which credited a start with ANY damage within 3.0 s, past the
+    # attacker's next start: 63 of retail's 1,696 player starts and 204 of its
+    # 1,669 NPC starts, read on the wire. Each shape found there is a tape.
+    lc = swingcensus.lifecycle
+
+    def _ev(*xs):                 # (t, kind[, key]) -> lifecycle's events
+        return [(x[0], x[1], x[2] if len(x) > 2 else None) for x in xs]
+    t_batch = _ev((0.0, "start"), (0.5650, "finish"), (0.5651, "damage"))
+    t_strk = _ev((0.0, "start"), (0.386, "stop"), (0.944, "damage"))
+    t_dmgless = _ev((0.0, "start"), (0.565, "finish"), (1.329, "start"),
+                    (1.9160, "finish"), (1.9161, "damage"))
+    got = lc(t_batch)
+    check(got == ["damage"],
+          "13e-a a [1] AHEAD of its damage word in one packet is a landing",
+          f"{got} -- retail's order; read event by event, 80.7 % of its "
+          f"landings came out damageless")
+    got = lc(t_strk)
+    check(got == ["stopped"],
+          "13e-b a stop, then a skill's damage, is a STOP",
+          f"{got} -- 124 of the NPCs' 192 such stops announce the skill "
+          f"([50] / [60]) in the stop's own instant")
+    got = lc(t_dmgless)
+    check(got == ["finish_no_damage", "damage"],
+          "13e-c a damageless close keeps its own outcome; the next start's "
+          "hit is the next start's",
+          f"{got} -- retail 20260916T213125 t=224.284")
+    # Through _wire_events, so a SORT anywhere in the path reddens it: the
+    # stop and the re-press share a packet's instant, stop first on the wire.
+    tie = swingcensus._wire_events([
+        (0.0, "s2c", 0xA0, [0xA0, 4, 7, 10, 0]),
+        (0.021, "s2c", 0x9F, [0x9F, 3, 7, 0]),
+        (0.021, "s2c", 0xA0, [0xA0, 4, 7, 11, 0]),
+        (0.597, "s2c", 0x9F, [0x9F, 1, 7, 0]),
+        (0.5971, "s2c", 0xA3, [0xA3, 16, 11, 7, 0])])
+    got = lc(tie.get(7, []))
+    check(got == ["stopped", "damage"],
+          "13e-d WIRE ORDER: a stop sharing the re-press's instant is the "
+          "first start's",
+          f"{got} -- retail stamps per packet; sorted by (t, kind) the stop "
+          f"falls after the new start and the first reads silent (6 player "
+          f"starts, 19 NPC)")
+    got = lc(_ev((0.0, "start"), (0.487, "launch", 1), (1.174, "start"),
+                 (1.682, "launch", 2), (1.70, "arrive", 1), (1.7001, "damage"),
+                 (2.047, "arrive", 2), (2.0471, "damage")))
+    check(got == ["damage", "damage"],
+          "13e-e a shot resolves at its OWN arrival, even after the next start",
+          f"{got} -- the bound ends the search for a close, not for a flight")
+    got = lc(_ev((0.0, "start"), (0.4, "launch", 1), (0.9, "start"),
+                 (1.0, "launch", 2), (1.2, "arrive", 2), (1.2001, "damage"),
+                 (1.5, "arrive", 1)))
+    check(got == ["finish_no_damage", "damage"],
+          "13e-f an arrival is matched by its HANDLE; one that hurt nothing "
+          "closes without damage",
+          f"{got} -- retail 20260928T103123 t=462.559's first shot arrived "
+          f"damageless and the old classifier gave it the next one's hit")
+    got = (lc(_ev((0.0, "start"), (0.57, "finish"), (0.5701, "fail"))),
+           lc(_ev((0.0, "start"), (0.57, "fail"))),
+           lc(_ev((0.0, "start"), (0.5, "launch", 3))),
+           lc(_ev((0.0, "start"), (1.0, "start"))))
+    check(got == (["finish_no_damage"], ["finish_no_damage"], ["launched"],
+                  ["silent", "silent"]),
+          "13e-g a fail word closes without damage; a shot with no arrival "
+          "is `launched`; nothing is `silent`",
+          f"{got}")
+
+    def _u(*vs):
+        return "".join(int(v).to_bytes(4, "little").hex() for v in vs)
+    ours_rows = [{"kind": "sent", "t": t, "plain": p} for t, p in (
+        (0.0, "a000" + _u(4, 1, 10, 0)),
+        (1.1375, "a40001000000006c2d4600a0d44500006a9a6e3f8f0000000100000001"),
+        (1.70, "a700" + _u(1, 1, 1)),
+        (1.7001, "a300100000000a00000001000000ae47e1bd"),
+        (2.0, "a000" + _u(4, 1, 10, 0)),
+        (2.57, "9f00" + _u(1, 1, 0)),
+        (2.5701, "a000260000000a0000000100000000000000"))]
+    ev1 = swingcensus._wire_events(swingcensus._ours_merged(ours_rows))
+    got = (sorted(ev1), lc(ev1.get(1, [])))
+    check(got == ([1], ["damage", "finish_no_damage"]),
+          "13e-h OUR bytes decode to the same words: a shot by handle, a block "
+          "by its [1] and fail word",
+          f"{got} -- our server's own frames (the launch's handle at byte 24)")
+    got = ([lc(t, bounded=False) for t in (t_strk, t_dmgless)],
+           lc(tie.get(7, []), bounded=False))
+    check(got == ([["damage"], ["damage", "damage"]], ["damage", "damage"]),
+          "13e-i KNOWN-BAD ARM: bounded=False gives each start a later "
+          "attack's damage",
+          f"{got} -- retail()'s classifier until 2026-10-09, 1z-db's")
+
     try:
         cen = swingcensus.census()
         sc = swingcensus.score(cen)
@@ -4545,29 +4635,52 @@ def main():
               f"{tag} {cap[8:23]} t={t_sw}: {want}, not landed; the known-bad "
               f"arm lands it",
               f"(fix, known-bad) = {pair}")
-    cancel = sc["by_branch"].get("cancel", 0)
+    cancel = sum(v for k, v in sc["by_branch"].items()
+                 if k == "cancel" or k.startswith("cancel:"))
     check(cancel >= 100,
-          "and the CANCEL population is still the arc's real divergence",
-          f"{cancel} of {sc['swings']} = {100.0*cancel/sc['swings']:.1f} % "
-          f"against retail's 6.1 % -- 2.4x. A floor, so this reddens if the "
-          f"census stops seeing them, never if the gap widens")
+          "and the census still sees our CANCELS, every family",
+          f"{cancel} of {sc['swings']} -- the inferred `cancel` AND the "
+          f"verdict rows' `cancel:*` every capture since 2026-09-09 writes "
+          f"(this counted the first alone until CONFPASS-F3c). A floor, so it "
+          f"reddens if the census stops seeing them; the like-for-like rate "
+          f"against retail is 13b's, one classifier on both wires")
+    # 13b (CONFPASS-F3c, 2026-10-09): retail through `lifecycle()`, the
+    # classifier 13e pins, BY ATTACKER (1z-db: never pooled). The bands'
+    # floors sit above what the known-bad arm reads, so a regression to the
+    # unbounded classifier reddens 13b-b and 13b-c, not just 13b-d.
     try:
         r = swingcensus.retail()
+        r_bad = swingcensus.retail(bounded=False)
     except Exception as exc:                                  # noqa: BLE001
         LEDGER.skip("13b. retail's half", f"no live corpus: {exc!r}")
         return LEDGER.verdict()
-    n = r.get("started", 0)
-    check(n >= 1332 and r.get("damage", 0) >= 1235,
-          "retail's own lifecycle is still on the wire: >= 1,332 starts, "
-          ">= 1,235 landing damage",
-          f"{r.get('damage')} of {n} = {100.0*r.get('damage',0)/n:.1f} %")
-    check(r.get("silent", 0) <= 0.03 * n and r.get("stopped", 0) <= 0.12 * n,
-          "and its silent and stopped rates are the numbers 1z-da compared to",
-          f"silent {r.get('silent')} ({100.0*r.get('silent',0)/n:.1f} %), "
-          f"stopped {r.get('stopped')} ({100.0*r.get('stopped',0)/n:.1f} %). "
-          f"The attacker slot is MEASURED: 0x00A0 is [prop, attacker, target], "
-          f"876 to 28 -- reading it victim-first turns 92.7 % into 0.8 %, and "
-          f"that was 1z-da's first cut")
+    pl, npc = r.get("player", {}), r.get("npc", {})
+    pn, nn = pl.get("started", 0), npc.get("started", 0)
+    check(pn >= 1696 and pl.get("damage", 0) >= 1550
+          and nn >= 1669 and npc.get("damage", 0) >= 1209,
+          "13b-a retail's own lifecycle is still on the wire, both attackers",
+          f"player {pl.get('damage')} damage of {pn}, NPC {npc.get('damage')} "
+          f"of {nn} (floors 1,550 / 1,696 and 1,209 / 1,669). The attacker "
+          f"slot is MEASURED: 0x00A0 is [prop, attacker, target], 876 to 28")
+    pstop = pl.get("stopped", 0) / pn if pn else 0.0
+    check(0.04 <= pstop <= 0.12 and pl.get("silent", 0) <= 0.03 * pn,
+          "13b-b retail's PLAYER stops 4-12 % of its starts, silent under 3 %",
+          f"stopped {pl.get('stopped', 0)} ({100.0*pstop:.1f} %), silent "
+          f"{pl.get('silent', 0)} -- the rate ours is compared to like for like")
+    nstop = npc.get("stopped", 0) / nn if nn else 0.0
+    check(0.15 <= nstop <= 0.35 and npc.get("silent", 0) <= 0.03 * nn,
+          "13b-c retail's NPCs stop 15-35 % of theirs, silent under 3 %",
+          f"stopped {npc.get('stopped', 0)} ({100.0*nstop:.1f} %), silent "
+          f"{npc.get('silent', 0)} -- a swing dropped for a skill, which ours "
+          f"never does (1z-dt)")
+    bp = r_bad.get("player", {})
+    over = bp.get("damage", 0) - pl.get("damage", 0)
+    bstop = bp.get("stopped", 0) / max(1, bp.get("started", 0))
+    check(over >= 50 and bstop < 0.04,
+          "13b-d KNOWN-BAD ARM: bounded=False credits >= 50 player starts with "
+          "another attack's damage, and reads under 13b-b's band",
+          f"{over} starts; stopped {100.0*bstop:.1f} % -- 1z-db's classifier, "
+          f"whose 1.8 % on 903 starts made the 8.3x")
 
     print("\n14. a report that moved NOTHING does not cancel the chain "
           "(MOVECODE-1z-db)")

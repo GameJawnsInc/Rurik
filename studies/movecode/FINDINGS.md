@@ -18853,6 +18853,11 @@ Shipped: `MOVE_CANCEL_NEEDS_DISPLACEMENT` (`--no-move-cancel-displacement` rever
 
 ### 1z-db.1 ★ A CORRECTION TO §1z-da, FOUND BY THE FIRST CONTROL THIS SECTION RAN
 
+> **CORRECTED by §1z-dt (2026-10-09).** The table's two rows came from two instruments,
+> and retail's credited a start with a later attack's damage. Through one classifier
+> (`swingcensus.lifecycle()`) retail's player stops 6.4 % and ours 9.5 %: **1.5×, not 8.3×**,
+> and "our PLAYER's swing profile is retail's NPC profile" does not survive. §1z-db.2-.5 stand.
+
 §1z-da published "we abandon a started swing **2.4×** as often as retail" from retail's
 pooled 6.1 % against our 14.9 %. **Retail's pool is a MIX and ours is not** — §1z-da said so
 in its own caveat and then quoted the number anyway. Split by attacker:
@@ -23273,3 +23278,78 @@ whose selftest reproduces TRAILPIN's 7 / 10 off real pre-D1 tapes.
 
 **Limits:** one pair, n = 5 vs 0; the fixed arm's exposure is the identical plan's, not
 counted; retail inside its stop disc is UNVERIFIED; C2 / C3 were unexercised and remain open.
+
+## 1z-dt. ONE LIFECYCLE ON BOTH WIRES — a correction to §1z-db.1: retail's player stops 6.4 % of its swings and ours 9.5 %; the "8.3×" was two instruments, and the wires part at the NPCs (2026-10-09, CONFPASS-F3c)
+
+### 1z-dt.1 What §1z-db.1 compared, and with what
+
+§1z-db.1's table put two instruments side by side: ours from `swingcensus.swings()`, and retail's from `retail()`.
+
+- `retail()` credited a start with ANY damage of its attacker within 3.0 s, even past the attacker's next start. It also ranked damage over a `[1]` over a `[3]`.
+- From CONFPASS-F3b on, our census bounded each swing to its own window.
+
+So the comparison was unlike with like twice over: two classifiers, and the same over-count present on only one side.
+
+### 1z-dt.2 The over-count, read on retail's wire — OBSERVED
+
+Bounding retail's starts to their own window moves **63 of the player's 1,696 starts and 204 of the NPCs' 1,669**. They were read on the tapes before anything was changed:
+
+- **The player's 63.**
+  - A stop, then the skill's damage. 33 of these announce the skill (`0x00A0 [50|60, me, target, skill]`) in the stop's own instant.
+  - A damageless `[1]`, then the next start's damage (7).
+  - A target change: c2s `0x00C1`, answered by `[8, me, 0]` `[3, me, 0]`, then the re-press's hit.
+  - Six re-presses whose stop shares the next start's instant.
+  - One arrow that arrived with no damage.
+- **The NPCs' 192 stop-first starts.**
+  - 124 announce the skill in the stop's instant: `[50]` an attack skill, `[60]` a spell.
+  - 16 retarget in that instant, and 8 announce the skill within 1 s.
+  - The others, sampled, are a stop then a later start's landing, or the skill announced on `0x009F [60, agent, skill]`.
+- **No normal shot is among them.** A retail ranged swing is `[4]`, then `0x00A4` launch ~0.77 s later, then the `0x00A7` arrival with the same handle and the damage. 703 NPC starts resolve that way.
+
+**Two traps, found by reading. A first cut fell into each.**
+
+- **Retail stamps per PACKET.** A stop that ends one start shares the next start's instant: 6 player starts, 19 NPC. Sorted by `(t, kind)`, the stop falls after the new start, and the first start reads silent. Read in wire order only.
+- **Retail sends the `[1]` AHEAD of its damage word in the same packet.** Read event by event, "first close wins" made 80.7 % of the player's landings damageless. A close is read as a batch: everything the attacker sends within `CLOSE_JOIN`, 5 ms.
+
+### 1z-dt.3 The classifier — `swingcensus.lifecycle()`, one function for both wires
+
+- **`_wire_events()` reads the words both servers send**, and our frames carry retail's layouts (OBSERVED; `test_playerswing` 13e-h decodes our own bytes):
+  - `0x00A0 [4, attacker, target]`, the start;
+  - `0x009F [1 | 3, agent]`, a close or a stop;
+  - `0x00A3 [16 | 17, target, cause]`, damage;
+  - `0x00A0 [38, target, attacker, reason]`, the fail word;
+  - `0x00A4 [shooter, …, handle]` and `0x00A7 [shooter, handle]`, a launch and its arrival.
+
+  Ours come off the capture's bytes (`_ours_merged`) and retail's through livewire.
+- **`lifecycle()` reads one attacker's events.** A start owns its events up to that attacker's next start, and at most 3.0 s. Its first close names it:
+  - A launch resolves at its own arrival, matched by handle and read past the bound. Damage there is `damage`, an arrival that hurt nothing is `finish_no_damage`, and no arrival on the tape is `launched`.
+  - A `[1]`, a `[3]`, a fail word or a damage word is read as a batch. Damage in the batch is `damage`; otherwise a `[1]` or fail word is `finish_no_damage`; otherwise `stopped`.
+  - Nothing before the next start is `silent`.
+- **`bounded=False` is the known-bad arm**, `retail()` as it read before this section.
+
+### 1z-dt.4 The comparison, like for like — OBSERVED
+
+| `lifecycle()`, bounded | starts | damage | closed, no damage | **stopped** | silent |
+|---|---|---|---|---|---|
+| retail PLAYER | 1,696 | 91.4 % | 2.2 % | **6.4 %** | 0.0 % |
+| **ours PLAYER** | 7,980 | 86.7 % | 2.6 % | **9.5 %** | 1.2 % |
+| retail NPC | 1,669 | 72.4 % | 3.9 % | **23.4 %** | 0.2 % |
+| **ours NPC** | 26,102 | 94.3 % | 0.8 % | **0.0 %** (4) | **4.8 %** |
+
+Under the known-bad arm, retail's player stops 3.0 %, ours 5.1 %, and retail's NPCs 12.0 %.
+
+- **Our player stops 1.5× as often as retail's (9.5 / 6.4), not 8.3×.** §1z-db.1's 8.3× was 14.9 % (our census's cancel families) over 1.8 % (`retail()`'s unbounded classifier, on 903 starts). On today's corpus that classifier already reads 3.0 %. Ours is still above retail, so the divergence is real, but it is smaller.
+- **"Our PLAYER's swing profile is retail's NPC profile" (§1z-db.1) does not survive.** Retail's NPCs stop 23.4 %; our player stops 9.5 %.
+- **The wires part at the NPCs.**
+  - Retail's NPCs drop a swing for a skill 23.4 % of the time. Ours did it 4 times in 26,102.
+  - 4.8 % of our NPC starts close with nothing. Sampled, the attacker died in its own windup and no `[3]` followed. Retail closes the PLAYER's open windup at death with `[3]` (§1z-ds.27, 30 of 30). Whether it does the same for an NPC is UNVERIFIED; retail's NPC silent rate is 0.2 %.
+- **The populations differ, and that is stated, not corrected.** Ours counts 7,980 player starts across every target and every harness run, mostly scripted; the census counts 1,988 at agent 10. The NPC side pools foes and heroes on both wires.
+
+### 1z-dt.5 What this changes, and what it does not
+
+- **§1z-db.2-.5 stand.** The rule 1z-db shipped, that a report which moved nothing does not cancel, rests on its own evidence and not on the ratio: the wiki's direction, the empty gap under 1 u (§1z-db.4), and 0 of 903 retail windups carrying a still report. §1z-db.2's moved/still split came from `stillwindup.py`, whose classifier is its own (the first close within 3 s, time-sorted, unbounded by the next start). It has **not** been re-run through `lifecycle()`.
+- **`test_playerswing` 13b is re-pinned on `lifecycle()`, by attacker.** Retail's player stops 4-12 % and its NPCs 15-35 %, each with silent under 3 %. The bands' floors sit above the known-bad arm's 3.0 % and 12.0 %, so a regression to the old classifier reddens them. 13e pins the classifier on a tape of every shape above, and 13b-d pins the known-bad arm on the corpus (63 player starts).
+- **Open, PLAN §8:**
+  - Our NPCs never drop a swing for a skill.
+  - An NPC that dies in its windup gets no close from our server.
+  - `stillwindup.py`'s split has not been re-run.

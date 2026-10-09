@@ -246,15 +246,127 @@ def _player_of(merged):
     return cnt.most_common(1)[0][0] if cnt else None
 
 
-def retail():
-    """What follows an `attack_started` on ArenaNet's own wire.
+# ------------------------------------------- the lifecycle, on either wire
+#
+# ONE CLASSIFIER FOR BOTH WIRES (CONFPASS-F3c, 2026-10-09). Until this day the
+# comparison was ours-by-census against retail-by-`retail()`: two instruments,
+# and from CONFPASS-F3b on, one bounded and one not. Now `lifecycle()` reads a
+# start's outcome off the words both servers send -- the same opcodes, the same
+# slots, ours decoded from the capture's bytes and retail's by livewire -- so
+# the two columns are one instrument read twice.
 
-    SPLIT BY ATTACKER, and that split is the whole finding (1z-db): pooled,
-    retail cancels 6.1% of its swings -- but its PLAYER cancels 1.8% and its
-    NPCs 15.2%, so a pooled figure compared against our player-only corpus
-    understated the gap by 3.4x. 1z-da published the pooled 2.4x; the real
-    number is 8.3x, and this function now refuses to report the pooled one
-    alone.
+FAIL_PROP = 38                       # 0x00A0 [38, target, attacker, reason]
+LAUNCH_OP, ARRIVE_OP = 0xA4, 0xA7    # [shooter, aim, u16, flight, k, handle, u8]; [shooter, handle, k]
+DAMAGE_PROPS = (16, 17)              # 0x00A3 [prop, target, cause, value]
+LIFE_REACH = 3.0                     # s after a start to look for its close
+OUTCOMES = ("damage", "finish_no_damage", "stopped", "launched", "silent")
+
+
+def _wire_events(merged):
+    """{attacker: [(t, kind, key), ...]} in WIRE ORDER from (t, dr, op, v).
+
+    v[0] is the opcode, livewire's layout. Wire order, never a sort: retail
+    stamps per packet, so a stop that ends one start shares the next start's
+    instant (6 of the player's starts, 19 of the NPCs'), and a sort by
+    (t, kind) put it after that start.
+    """
+    ev = collections.defaultdict(list)
+    for (t, dr, op, v) in merged:
+        if dr != "s2c" or len(v) < 3:
+            continue
+        if op == 0xA0 and v[1] == STARTED and len(v) >= 4:
+            ev[v[2]].append((t, "start", None))
+        elif op == 0xA0 and v[1] == FAIL_PROP and len(v) >= 4:
+            ev[v[3]].append((t, "fail", None))
+        elif op == 0x9F and v[1] == FINISHED:
+            ev[v[2]].append((t, "finish", None))
+        elif op == 0x9F and v[1] == STOPPED:
+            ev[v[2]].append((t, "stop", None))
+        elif op == 0xA3 and v[1] in DAMAGE_PROPS and len(v) >= 5:
+            ev[v[3]].append((t, "damage", None))
+        elif op == LAUNCH_OP and len(v) >= 7:
+            ev[v[1]].append((t, "launch", v[6]))
+        elif op == ARRIVE_OP:
+            ev[v[1]].append((t, "arrive", v[2]))
+    return ev
+
+
+def lifecycle(evs, bounded=True):
+    """Each start's outcome, from one attacker's wire-ordered events.
+
+    BOUNDED (the default): a start owns its events up to the attacker's next
+    start and LIFE_REACH, and its FIRST close names it --
+      * a launch: the shot resolved; `damage` if this attacker's damage rides
+        the arrival with the launch's handle (within CLOSE_JOIN), else
+        `finish_no_damage` (it arrived and hurt nothing: a dodge, a block), or
+        `launched` if no arrival is on the tape. A shot's arrival may follow
+        the next start, so it is read past the bound.
+      * a [1], a fail word, a damage word or a [3]: read as a BATCH with
+        whatever this attacker sends within CLOSE_JOIN of it -- retail sends the
+        [1] AHEAD of its damage word in the same packet, and "first close wins"
+        without the batch read 80.7 % of landings as damageless. Damage in the
+        batch is `damage`; else a [1] or a fail word is `finish_no_damage`;
+        else `stopped`.
+      * nothing before the next start: `silent`.
+    `bounded=False` is the KNOWN-BAD arm, `retail()` as it read until
+    2026-10-09: any damage within 3.0 s, past the next start, ranked over a
+    [1] over a [3]. On retail's player it credited 63 of 1,696 starts with
+    another attack's damage -- a strike after the press that dropped the
+    swing, the next start's hit after a damageless close, a re-press.
+    """
+    out = []
+    for i, (t, k, _key) in enumerate(evs):
+        if k != "start":
+            continue
+        if not bounded:
+            later = [k2 for t2, k2, _ in evs[i + 1:] if 0 < t2 - t <= LIFE_REACH]
+            out.append("damage" if "damage" in later
+                       else "finish_no_damage" if "finish" in later
+                       else "stopped" if "stop" in later else "silent")
+            continue
+        res = "silent"
+        for m in range(i + 1, len(evs)):
+            t2, k2, key = evs[m]
+            if k2 == "start" or t2 - t > LIFE_REACH:
+                break
+            if k2 == "launch":
+                arr = next((t3 for t3, k3, key3 in evs[m + 1:]
+                            if k3 == "arrive" and key3 == key
+                            and t3 - t2 <= LIFE_REACH), None)
+                if arr is None:
+                    res = "launched"
+                else:
+                    near = {k3 for t3, k3, _ in evs if abs(t3 - arr) <= CLOSE_JOIN}
+                    res = "damage" if "damage" in near else "finish_no_damage"
+                break
+            if k2 in ("finish", "fail", "damage", "stop"):
+                batch = {k3 for t3, k3, _ in evs[m:] if t3 - t2 <= CLOSE_JOIN}
+                res = ("damage" if "damage" in batch
+                       else "finish_no_damage" if batch & {"finish", "fail"}
+                       else "stopped")
+                break
+        out.append(res)
+    return out
+
+
+def _tally(per_attacker, who_of, bounded):
+    by_who = {"player": collections.Counter(), "npc": collections.Counter()}
+    for a, evs in per_attacker.items():
+        c = by_who[who_of(a)]
+        for res in lifecycle(evs, bounded=bounded):
+            c["started"] += 1
+            c[res] += 1
+    return by_who
+
+
+def retail(bounded=True):
+    """`lifecycle()` over ArenaNet's own wire, SPLIT BY ATTACKER.
+
+    The split is 1z-db's finding and stands: retail's player and its NPCs
+    differ, so a pooled figure compared against our player is a mix, and this
+    function never reports one. What 1z-db published on 903 starts -- player
+    98.2 % damage / 1.8 % stopped, "8.3x" -- was this function's unbounded
+    classifier (`bounded=False`), corrected 2026-10-09 (studies/movecode 1z-dt).
 
     THE SLOT IS MEASURED, NOT ASSUMED: `0x00A0 [prop, attacker, target]` for
     GV_ATTACK_STARTED, against `0x00A3 [prop, target, cause]` for the damage --
@@ -263,8 +375,7 @@ def retail():
     92.7% into 0.8% and was the first cut of this function.)
     """
     import livewire
-    tot = collections.Counter()
-    by_who = {"player": collections.Counter(), "npc": collections.Counter()}
+    tot = {"player": collections.Counter(), "npc": collections.Counter()}
     conns = 0
     for capdir, cf in livewire.live_connections():
         try:
@@ -275,41 +386,62 @@ def retail():
             continue
         conns += 1
         pid = _player_of(merged)
-        ev = collections.defaultdict(list)
-        for (t, dr, op, v) in merged:
-            if dr != "s2c":
-                continue
-            if op == 0xA0 and len(v) >= 4 and v[1] == STARTED:
-                ev[v[2]].append((t, "start"))
-            elif op == 0x9F and len(v) >= 3 and v[1] == FINISHED:
-                ev[v[2]].append((t, "finish"))
-            elif op == 0x9F and len(v) >= 3 and v[1] == STOPPED:
-                ev[v[2]].append((t, "stop"))
-            elif op == 0xA3 and len(v) >= 5 and v[1] in (16, 17):
-                ev[v[3]].append((t, "damage"))
-        for _a, rws in ev.items():
-            who = "player" if (pid is not None and _a == pid) else "npc"
-            rws.sort()
-            for i, (t, k) in enumerate(rws):
-                if k != "start":
-                    continue
-                tot["started"] += 1
-                by_who[who]["started"] += 1
-                later = [k2 for t2, k2 in rws[i + 1:] if 0 < t2 - t <= 3.0]
-                if "damage" in later:
-                    tot["damage"] += 1
-                    by_who[who]["damage"] += 1
-                elif "finish" in later:
-                    tot["finish_no_damage"] += 1
-                    by_who[who]["finish_no_damage"] += 1
-                elif "stop" in later:
-                    tot["stopped"] += 1
-                    by_who[who]["stopped"] += 1
-                else:
-                    tot["silent"] += 1
-                    by_who[who]["silent"] += 1
-    return {"connections": conns, "player": dict(by_who["player"]),
-            "npc": dict(by_who["npc"]), **dict(tot)}
+        got = _tally(_wire_events(merged),
+                     lambda a: "player" if (pid is not None and a == pid) else "npc",
+                     bounded)
+        for w in tot:
+            tot[w].update(got[w])
+    return {"connections": conns, "player": dict(tot["player"]),
+            "npc": dict(tot["npc"])}
+
+
+def _ours_merged(rows):
+    """Our sent rows as livewire-shaped (t, "s2c", op, v), off the bytes."""
+    out = []
+    for r in rows:
+        p = r.get("plain") or ""
+        if r.get("kind") != "sent" or len(p) < 4:
+            continue
+        try:
+            b = bytes.fromhex(p)
+        except ValueError:
+            continue
+        op = int.from_bytes(b[0:2], "little")
+
+        def u32(o):
+            return int.from_bytes(b[o:o + 4], "little")
+        if op in (0xA0, 0x9F, 0xA3, ARRIVE_OP):
+            v = [op] + [u32(o) for o in range(2, len(b) - 3, 4)]
+        elif op == LAUNCH_OP and len(b) >= 29:
+            v = [op, u32(2), (u32(6), u32(10)), int.from_bytes(b[14:16], "little"),
+                 u32(16), u32(20), u32(24), b[28]]
+        else:
+            continue
+        out.append((r["t"], "s2c", op, v))
+    return out
+
+
+def ours(paths=None, bounded=True):
+    """`lifecycle()` over OUR captures, split the same way: agent 1 is the player."""
+    gs = vaultpath.require_dir("captures", "gamesrv",
+                               why="swingcensus reads our own captures")
+    paths = paths or [os.path.join(gs, f) for f in sorted(os.listdir(gs))
+                      if f.endswith(".jsonl")]
+    tot = {"player": collections.Counter(), "npc": collections.Counter()}
+    caps = 0
+    for p in paths:
+        try:
+            rows = [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
+        except Exception:                                   # noqa: BLE001
+            continue
+        got = _tally(_wire_events(_ours_merged(rows)),
+                     lambda a: "player" if a == _PLAYER else "npc", bounded)
+        if got["player"]["started"] or got["npc"]["started"]:
+            caps += 1
+        for w in tot:
+            tot[w].update(got[w])
+    return {"captures": caps, "player": dict(tot["player"]),
+            "npc": dict(tot["npc"])}
 
 
 def census(paths=None, read_fails=True, bound_landed=True):
@@ -356,6 +488,8 @@ def main():
                     help="the known-bad arm: read a block or a miss as no outcome")
     ap.add_argument("--unbounded-landed", action="store_true",
                     help="the known-bad arm: any hit 0-1.6 s out lands the swing")
+    ap.add_argument("--unbounded-lifecycle", action="store_true",
+                    help="the known-bad arm: retail()'s classifier until 2026-10-09")
     args = ap.parse_args()
     cen = census(args.cap, read_fails=not args.no_fails,
                  bound_landed=not args.unbounded_landed)
@@ -371,47 +505,31 @@ def main():
     if sc["reach_dists"]:
         print(f"  `reach` drops, server-believed distance (reach {REACH:.0f}): "
               f"{sc['reach_dists']}")
+    # THE LIFECYCLE, one classifier on both wires (CONFPASS-F3c). The census
+    # above attributes OUR drops; it is not the comparison, because retail has
+    # no verdict rows and no labels. What the client sees on both wires is.
+    bounded = not args.unbounded_lifecycle
     try:
-        r = retail()
-        n = r.get("started", 0)
+        r = retail(bounded=bounded)
     except Exception as exc:                                # noqa: BLE001
         print("\n(retail half unavailable: %r)" % (exc,))
-        n = 0
-    if n:
-        silent_ours = (sc["by_branch"].get("reach", 0)
-                       + sc["by_branch"].get("unattributed", 0))
-        cancel_ours = sc["by_branch"].get("cancel", 0)
-        sw = sc["swings"]
-        print("")
-        print("RETAIL, the same lifecycle on ArenaNet's wire "
-              "(%d connections, %d attack_started):" % (r["connections"], n))
-        print("  -> damage         %6d  %5.1f%%   OURS %5.1f%%"
-              % (r.get("damage", 0), 100.0 * r.get("damage", 0) / n,
-                 100.0 * sc["landed"] / sw))
-        print("  -> attack_stopped %6d  %5.1f%%   OURS %5.1f%%"
-              % (r.get("stopped", 0), 100.0 * r.get("stopped", 0) / n,
-                 100.0 * cancel_ours / sw))
-        print("  -> finish, no dmg %6d  %5.1f%%   OURS %5.1f%%   (ours: the fail word)"
-              % (r.get("finish_no_damage", 0),
-                 100.0 * r.get("finish_no_damage", 0) / n,
-                 100.0 * sc["failed"] / sw))
-        print("  -> SILENT         %6d  %5.1f%%   OURS %5.1f%%   (at retail's own rate)"
-              % (r.get("silent", 0), 100.0 * r.get("silent", 0) / n,
-                 100.0 * silent_ours / sw))
-        pl, npc = r.get("player", {}), r.get("npc", {})
-        pn, nn = pl.get("started", 0), npc.get("started", 0)
-        if pn and nn:
-            print("  SPLIT BY ATTACKER -- the pooled row above is a MIX and "
-                  "understates the gap 3.4x (1z-db):")
-            print("    retail PLAYER %5d starts: damage %5.1f%%  stopped %5.1f%%"
-                  % (pn, 100.0 * pl.get("damage", 0) / pn,
-                     100.0 * pl.get("stopped", 0) / pn))
-            print("    retail NPC    %5d starts: damage %5.1f%%  stopped %5.1f%%"
-                  % (nn, 100.0 * npc.get("damage", 0) / nn,
-                     100.0 * npc.get("stopped", 0) / nn))
-            print("    OURS (player) %5d swings: damage %5.1f%%  stopped %5.1f%%"
-                  "   <-- vs retail's PLAYER, the like-for-like"
-                  % (sw, 100.0 * sc["landed"] / sw, 100.0 * cancel_ours / sw))
+        r = None
+    o = ours(args.cap, bounded=bounded)
+    print("")
+    print("THE LIFECYCLE ON BOTH WIRES -- `lifecycle()`, %s, by attacker "
+          "(never pooled, 1z-db):" % ("bounded" if bounded
+                                      else "UNBOUNDED, the known-bad arm"))
+    print("  %-14s %6s  " % ("", "starts")
+          + "  ".join("%16s" % k for k in OUTCOMES))
+    for label, d in (("retail PLAYER", r and r["player"]), ("OURS   PLAYER", o["player"]),
+                     ("retail NPC", r and r["npc"]), ("OURS   NPC", o["npc"])):
+        n = (d or {}).get("started", 0)
+        if not n:
+            print("  %-14s %6s" % (label, "-"))
+            continue
+        print("  %-14s %6d  " % (label, n)
+              + "  ".join("%9d %5.1f%%" % (d.get(k, 0), 100.0 * d.get(k, 0) / n)
+                          for k in OUTCOMES))
     for name, sw in sorted(cen.items()):
         s = [x for x in sw if not x["landed"] and not x.get("failed")]
         if not s:
