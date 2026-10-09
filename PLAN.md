@@ -2213,8 +2213,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   so 17 swings a skill press cancelled read as landed on the strike's own hit, and 6 others on the next
   swing's. All 23 are cancels, so §13's ceiling is untouched, but 1z-da's landed and cancel figures both move.
   Also: 21 of the 26 still silent start under 1.6 s before their capture ends, so they cannot be judged.
-* **A hostile re-casts its stance every world tick** (CONFPASS-F3's aside, [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3):
-  S22-C/D's Bonetti 380, ~4,000 `[48, 10, 380]` per run. The gate (recharge, adrenaline, stance up) is unread.
+* **CONFPASS-F4's post-fix run** (fixed in code 2026-10-09, PLAN-LOG): re-run S22-C under the fix. Predicted: the Hatcher
+  swings, and casts 380 once per 8 landed hits -- tens of `[48, 10, 380]` a run, not ~4,000 -- and blocks fall below F3's 76 %.
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the
