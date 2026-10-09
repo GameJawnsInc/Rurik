@@ -28,6 +28,20 @@ move back.
 
 ---
 
+### S22-C/D at wait:3.45 -- 2026-10-09 -- **CONFIRMED: the presses no longer beat against the stance cycle. Their phases spread evenly, and only 2 of 16 fell outside the stance in each arm (was up to 6). Both arms pass with the player alive: C 9 of 9 blocked strikes inflict nothing, D 8 of 8 bleed. The predicted press block share (~0.67) was refuted: it omitted the press that always precedes the first Bonetti's. With that press, ~0.61 is expected; observed 0.56 / 0.50, within noise.**
+
+- **The runs.** `confirm.py --only S22-C,S22-D`, from `main` at `8a7a4479`: harness `20261009T164643` (C) and `…165000` (D). Both used `--enemy-hit 0.008` and 16 presses at `wait:3.45`, with a 20 s hold. Launcher verdict **PASS / PASS**.
+- **Against the registered predictions** ([CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4; OBSERVED):
+  - 0 deaths, lowest health 44 / 40 of 140;
+  - 96 / 100 Hatcher hits (95–100);
+  - 12 casts of 380 at 11.2–11.3 s.
+  - **Presses outside the stance: 2 and 2** (at most 3). C's in-cycle phases were 0.29, 0.90, 0.50, 0.07, 0.65, 0.22, 0.80, 0.37, 0.95, 0.52, 0.10, 0.67, 0.25, 0.82, 0.39, where `wait:4` gave three repeating phases (…0.33, 0.00, 0.66…).
+  - **C:** 9 blocked strikes, all with the refusal and none bleeding; 7 Bleedings.
+  - **D:** 8 blocked, all bled.
+- **The press block share missed: 0.56 and 0.50 against a predicted ~0.67.** In all six C/D runs the first press (~22.7 s) comes before the first Bonetti's (~26 s, after 8 Hatcher hits), so it can never be blocked. That is the same pre-stance term the block-share entry below found for plain swings, and this prediction left it out again.
+  - With it, the expected share is 13/16 × 0.75 ≈ 0.61. Observed 9 and 8 of 13 in-stance presses (expected 9.75) are about 1 sd under it at this n.
+  - The overall in-stance block rate is 0.718 / 0.706 (n = 85 each), within about 1 sd of the 0.75 rule.
+
 ### S22-C/D block share -- 2026-10-09 -- **Not a server defect: the 75 % rule holds (0.742 over 457 outcomes with the stance up), and the real share is about 62 %, not 58 %. Corrects the "about 58 %" in "S22-C/D fixture v2" below: that ratio put landed Sever Artery strikes in the denominator without their blocks in the numerator. The rest of the gap from the modelled 67 % is the ~7 unblockable swings before the first Bonetti's, plus a beat in the presses.**
 
 - **The prediction, stated before reading.** A sampling or counting effect, not a wrong rule: the press train's phase beat and a denominator that holds more than plain swings. What would refute it: a block rate under 75 % *inside* the stance. **Half right.** The denominator was the error, but it was my own ratio: every damage word on agent 10 is the player's (75 blocks, 43 damage on `…142815`; no hero hits). The beat is real, for the presses only.
