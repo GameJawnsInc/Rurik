@@ -28,6 +28,23 @@ move back.
 
 ---
 
+### S22-C/D fixture v1 -- 2026-10-09 -- **Both arms answered decisively under CONFPASS-F4. C: 20 of 20 blocked Sever Artery strikes inflict nothing, and the S22 refusal fires on each. D (known-bad): 14 of 14 blocked strikes bleed. Survival failed once per arm, at hit 140, because v1's cycle model was wrong. v2 is built and owed (PLAN.md §8).**
+
+- **The runs.** `confirm.py --only S22-C,S22-D`, from `main` at `6f13a74b`: harness `20261009T135431` (C) and `…135943` (D). Both used `--enemy-hit 0.008` (1-point hits) and 30 presses `wait:4`, with a 20 s hold. The launcher's verdict is FAIL on both, on the one check `the player dies (found 1)`. Every other check passed:
+  - **C:** 174 Hatcher hits, 21 casts of 380, 20 refusals, 9 Bleedings.
+  - **D:** 14 blocked strikes and no refusal.
+- **The arms (OBSERVED, `f4_score2`-style pairing, each block line with its next four).**
+  - **C:** 20 of 20 blocked strikes are followed by `the strike blocked -- no condition`, and 0 of 20 by a Bleeding.
+  - **D:** 14 of 14 are followed by a Bleeding, and 0 of 14 by a refusal.
+  - **The control:** the same pairing on the pre-fix D tape (`20261008T224553`) reads 9 of 9 bled.
+  - **Block shares:** 20 of 29 presses blocked in C and 14 of 29 in D. D sits about 2 sd under the ~67 % expected; read as a roll, not a mechanism, because plain-swing blocks are 81 and 82.
+- **What v1 had wrong, MEASURED on its own captures.**
+  - **The Hatcher swings every 1.33 s** (median, 174 swings; the same on `124123`). With the player up, the 380 cycle is **11.2 s**: 8 hits plus the swing the cast costs ("a cast is not a free swing"). The stance is then up about 89 % of the time. `124123`'s 20.5 s gaps were 8 hits plus a death, not "8 hits at about 2.56 s"; that was CONFIRM §4's v1 reading, corrected in place.
+  - **A `skill:382,10 wait:4` press takes about 7.5 s** (median spacing), so 30 presses ran 215 s.
+  - **The death lands exactly on the arithmetic.** At 1 point a hit the player dies on hit 140, at 16.4 + 140 × 1.33 × 11.2 / 10.64 ≈ 212 s; both deaths fell at t = 211.7.
+  - v1's predictions (about 6–7 casts, about 55–65 hits, 49 % uptime) are refuted.
+- **v2** (vault `confirm.py`, v1 kept as `confirm-S22CD-v1.py`) is 16 presses, otherwise unchanged. The fight ends near hit 100 of 140. PREDICTED in [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4: about 10 blocked and about 5 landed, and 0 deaths.
+
 ### SKILLS-AC8 shipped -- 2026-10-09 -- **A hero's spell E3 now goes out at its E5 + the table's aftercast (`HERO_E3_AFTERCAST`; `--no-hero-e3-aftercast` reverts), on the tick the NPC_AFTERCAST hold releases and ahead of the next cast's E4 and `[60]`. That is retail's Koss, 19 of 19, and the player's own rule. A hero dying in the window closes with `[57]` + E2 and no E3. The next pick's E4 stays at its start, decided on the tape. The client look is owed on the owner's go-ahead.** Record: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §65.8, its last part.
 
 - **The rule.** OBSERVED on live `20261008T132845` `:51409` (origin live, build 38974,

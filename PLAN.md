@@ -2216,8 +2216,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   nothing: sampled, the attacker died mid-windup and no `[3]` followed. Retail's NPC case is UNVERIFIED (silent 0.2 %).
 * **`stillwindup.py`** (1z-db.2's moved/still split) keeps its own unbounded classifier; it has not been re-run
   through `lifecycle()`. Also: 21 of §13's 26 silent swings start under 1.6 s before their capture ends.
-* **S22-C/D's redesigned fixture is built, and the run waits on the owner's go** (`confirm.py --only S22-C,S22-D`, about 8 min;
-  [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): `--enemy-hit 0.008` so the player survives, and 30 presses.
+* **S22-C/D fixture v2 is built, and the run waits on the owner's go** (`confirm.py --only S22-C,S22-D`, about 6 min;
+  [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): v1 died once per arm at hit 140, so v2 cuts to 16 presses.
 * **SKILLS-AC8's client look** waits on the owner's go: the hero E3 at the aftercast shipped 2026-10-09
   (`HERO_E3_AFTERCAST`); does the hero panel's highlight now persist through it? Runsheet: PLAN-LOG "SKILLS-AC8 shipped".
 * **The hero QUEUE** ([skills §65.8](studies/skills/FINDINGS.md), its E4 decision; §65.7's 322): retail's hero E4
