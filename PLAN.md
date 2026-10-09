@@ -2218,6 +2218,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   21 of §13's 26 silent swings start under 1.6 s before their capture ends, so they cannot be judged.
 * **S22-C/D's redesigned fixture is built, and the run waits on the owner's go** (`confirm.py --only S22-C,S22-D`, about 8 min;
   [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §4): `--enemy-hit 0.008` so the player survives, and 30 presses.
+* **SKILLS-AC8**: our hero's E3 rides its E5. Retail's waits the aftercast: E5 + 0.75, 19 of 19
+  on `20261008T132845`, and the next pick's E4 opens at the `[58]`, 4 of 4. Owed: `hero_skill_messages`'
+  E3 on the aftercast's schedule, behind a flag, then a client look ([skills §65.8](studies/skills/FINDINGS.md)).
 * **CONFPASS-F2**: a caster whose only ready skill is a touch skill never closes -- EV-1 holds
   312 at 300 u and nothing walks it in (DESKWORK-D8; [CONFIRM-2026-10-08](studies/deskwork/CONFIRM-2026-10-08.md) §3).
 * **RANGERLOOP-F11:** a ranged halt rides its start; a start the clock holds past the

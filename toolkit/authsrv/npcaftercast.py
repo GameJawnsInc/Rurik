@@ -90,6 +90,22 @@ and 38974 with no live connection; :65009 set aside by name):
      same day; it had been counted, "3 of 7"). n = 2, one stance, one body: OBSERVED and
      CONTESTED with the wiki's wording; shouts and type 16 are not witnessed.
 
+RE-RUN, 2026-10-09 (129 connections; the new one is 20261008T132845, origin live, build
+38974, the owner's RIDERS / CASTAI-H1 session -- its :51409 is the Plains of Jarin with
+Koss, agent 30, a Warrior hero with a Monk secondary). The prediction, written before
+the rows were read: P5 FAILS, the rows sitting at the aftercast.
+  P1 HOLDS -- n = 1,502 (+25), min 0.704 unchanged; P2 534 = 35.6 %; P3, P4, P6 unchanged.
+  P5 FAILS -- 0 of 19 at 0.000. Every one of Koss's 19 spell completions (281 x 6,
+     288 x 6, 313 x 2, 1396 x 5, all table aftercast 0.75) has its E3 at E5 + 0.732-0.762,
+     inside E3_SHOULDER of the table's +0x40. So a body's E3 IS the aftercast's end, the
+     player's rule (castmech 3). The rival scored beside P5 ("the E3 waits the aftercast",
+     named as the alternative in P5's registered text; the tolerance is FLOOR_S's 50 ms
+     shoulder) HOLDS 19 of 19, and the aftercast-0 rows (322 / 346 / 348, n = 35) still sit
+     at 0.000, the same rule's zero class. Known-bad arm: our own recorder capture
+     authsrv-20261001T105141-c1 (the HEROENERGY healer rig, origin ours), 64 hero
+     Orisons, 64 of 64 at 0.000 and 0 at the aftercast.
+     One body, one capture, one build: OBSERVED, n = 19.
+
 What this cannot separate: an aftercast from the AI's own wait (the floor bounds
 both -- which is why P2 and P3 exist); the 0.75 class from any other non-zero value
 (the table holds 0.25, 1.0, 1.5 and others on playable rows; none is on tape, printed
@@ -144,6 +160,7 @@ FLOOR_S = 0.70              # AFTERCAST less the corpus's 50 ms batch shoulder
 MASS_LO, MASS_HI = 0.70, 0.80
 MASS_SHARE = 0.30
 CONTROL_SHARE = 0.25
+E3_SHOULDER = 0.05          # P5's rival: |E3 - E5 - aftercast| within FLOOR_S's batch shoulder
 INSTANT_TYPES = (3, 15, 16)     # authsrv.INSTANT_TYPE_CODES: Stance, Shout, type 16
 ATTACK_TYPE = 14                # authsrv.ATTACK_TYPE_CODE
 NEXT_KIND = {"S60": "cast", "S50": "attack skill", "S4": "swing"}
@@ -307,23 +324,32 @@ def p6_split(instant_gaps):
             sum(1 for g in instant_gaps if g == 0.0))
 
 
+def e3_scoreable(row):
+    """A table row P5 can score: a SPELL with a table aftercast > 0 (not an instant or
+    attack type), the only kind whose E3 tells "rides the E5" from "waits the aftercast"."""
+    return (row is not None and float(row[1]) > 0 and int(row[3]) not in INSTANT_TYPES
+            and int(row[3]) != ATTACK_TYPE)
+
+
 def score_e3(e3_rows, table=None):
-    """P5 over the SPELL rows (table aftercast > 0, not an instant or attack type):
-    every E3 - E5 is 0.000. `e3_rows` are (agent, skill, dt) or (agent, skill, dt,
-    table) -- the fourth the row's own build table. Returns (n_scored, n_zero,
-    by_skill {skill: (n, [dts])}, all_rows_n)."""
+    """P5 over the SPELL rows (`e3_scoreable`): every E3 - E5 is 0.000; and its rival,
+    every E3 - E5 is the row's table aftercast within E3_SHOULDER. `e3_rows` are (agent,
+    skill, dt) or (agent, skill, dt, table) -- the fourth the row's own build table.
+    Returns (n_scored, n_zero, n_at_aftercast, by_skill {skill: (n, [dts])},
+    all_rows_n)."""
     by = collections.defaultdict(list)
-    n = z = 0
+    n = z = at = 0
     for e in e3_rows:
         _a, sk, dt = e[:3]
         row = _lookup(e[3] if len(e) > 3 else table)(sk)
         by[sk].append(dt)
-        if row is None or float(row[1]) <= 0 or int(row[3]) in INSTANT_TYPES \
-                or int(row[3]) == ATTACK_TYPE:
+        if not e3_scoreable(row):
             continue
         n += 1
         z += dt == 0.0
-    return n, z, {k: (len(v), sorted(set(v))[:6]) for k, v in sorted(by.items())}, len(e3_rows)
+        at += round(abs(dt - float(row[1])), 3) <= E3_SHOULDER
+    return (n, z, at, {k: (len(v), sorted(set(v))[:6]) for k, v in sorted(by.items())},
+            len(e3_rows))
 
 
 # ---- the vault half ------------------------------------------------------------------
@@ -427,16 +453,26 @@ def main(argv=None):
           else contextlib.nullcontext()):
         c = census()
         sc = score(pooled(c["conns"]))
-        e3n, e3z, e3by, e3all = score_e3([(a, sk, dt, cc["table"]) for cc in c["conns"]
-                                          for a, sk, dt in cc["e3"]])
+        e3n, e3z, e3at, e3by, e3all = score_e3([(a, sk, dt, cc["table"])
+                                                for cc in c["conns"]
+                                                for a, sk, dt in cc["e3"]])
         p5 = ("UNDECIDABLE" if e3n == 0 else "HOLDS" if e3z == e3n else "FAILS")
+        p5_rival = ("UNDECIDABLE" if e3n == 0 else "HOLDS" if e3at == e3n else "FAILS")
+        # which captures the scored rows come from (the "counts redden on good news" class:
+        # a new tape moves P5, and the test names the tape)
+        e3_caps = collections.Counter()
+        for cc in c["conns"]:
+            e3_caps[cc["capture"]] += sum(1 for _a, sk, _dt in cc["e3"]
+                                          if e3_scoreable(cc["table"].get(sk)))
         inst_in, inst_co = p6_split(sc["instant_gaps"])
         res = {"retail": sc, "connections": len(c["conns"]), "excluded": c["excluded"],
                "set_aside": c["set_aside"], "tables": c["exe_builds"],
                "builds": dict(sorted(collections.Counter(
                    cc["build"] for cc in c["conns"]).items())),
-               "p5": p5, "p6_refuted_by": inst_in, "p6_cobatched": inst_co,
-               "e3_scored": e3n, "e3_zero": e3z, "e3_by_skill": e3by, "e3_rows": e3all}
+               "p5": p5, "p5_rival": p5_rival, "p6_refuted_by": inst_in,
+               "p6_cobatched": inst_co, "e3_scored": e3n, "e3_zero": e3z,
+               "e3_at_aftercast": e3at, "e3_by_skill": e3by, "e3_rows": e3all,
+               "e3_captures": {k: v for k, v in sorted(e3_caps.items()) if v}}
         if args.ours:
             import rechargeprobe    # noqa: E402
             exe_by_build = rechargeprobe._exe_tables()
@@ -466,6 +502,8 @@ def main(argv=None):
     print(f"   other aftercast classes (n, min; printed, not scored): {sc['other_classes']}")
     print(f"P5 E3 RIDES E5 (non-observer spell rows, table aftercast > 0): {e3z} of {e3n} at "
           f"0.000 -> {p5}; every E5/E3 pair by skill (n, dts): {e3by}")
+    print(f"   its rival, E3 = E5 + the table aftercast (within {E3_SHOULDER}): {e3at} of "
+          f"{e3n} -> {p5_rival}; the scored rows by capture: {res['e3_captures']}")
     print(f"P6 NO INSTANT INSIDE THE WINDOW: {len(inst_in)} of {sc['instants'][0]} strictly "
           f"inside (0, {FLOOR_S}) {inst_in}; {inst_co} in the [58]'s own batch (printed, "
           f"not scored) -> {'REFUTED' if inst_in else 'HOLDS'}")
@@ -476,7 +514,9 @@ def main(argv=None):
               f"authsrv-20260928T002701-c1)")
         print(f"   by next start (n, min): {o['by_next']}; skills: control "
               f"{o['control_skills']}, other classes {o['other_classes']}")
-        print(f"   E3 rows {res['ours_e3']}")
+        on, oz, oat, oby, oall = res["ours_e3"]
+        print(f"   E3 (scored, at 0.000, at the aftercast): {on}, {oz}, {oat} of {oall} "
+              f"rows {oby}")
     return res
 
 
