@@ -10292,10 +10292,11 @@ before the run, its "AS RUN" block beside them). The server change is `authsrv.N
 | SKILLS-AC1 | the floor: no next start under 0.70 s after a 0.75 completion (P1), the mass at the end (P2), the aftercast-0 control (P3) | OBSERVED |
 | SKILLS-AC2 | the survey's n = 872 reproduced exactly, then corrected to 1,477 (the un-targeted `[60]`) | OBSERVED |
 | SKILLS-AC3 | an instant skill is NOT held: 2 of 7 instants after a 0.75 completion fall strictly inside the window, a third in the `[58]`'s own batch | OBSERVED for a stance, n = 2; CONTESTED with WIKI; shouts and type 16 RECONSTRUCTION |
-| SKILLS-AC4 | a body's E3 against its E5 for an aftercast spell (P5) | UNDECIDABLE on the corpus; the survey's witness refuted as evidence |
+| SKILLS-AC4 | a body's E3 against its E5 for an aftercast spell (P5) | **P5 FAILS since 2026-10-09** (§65.8): a hero's E3 is at E5 + the aftercast, OBSERVED 19 of 19 on one hero; UNDECIDABLE on the corpus until that tape; the survey's witness refuted as evidence |
 | SKILLS-AC5 | the server: a completed cast stamps `aftercast_until`, and the three body ticks hold the next cast or swing | the rule CORROBORATED; the pieces labelled below |
 | SKILLS-AC6 | what this lane did not do, one line each | open |
 | SKILLS-AC7 | the D5 line's other clauses, re-checked before the re-stamp | per clause |
+| SKILLS-AC8 | (2026-10-09) the first scoreable tape: a hero's E3 waits its spell's aftercast, its next `[60]` rides that E3, and our hero's E3 still rides its E5 | OBSERVED, n = 19, one hero, one capture; the server placement owed |
 
 ### 65.1 SKILLS-AC1 — the instrument and the floor
 
@@ -10393,6 +10394,12 @@ is **UNDECIDABLE**. The server does not move the hero's E3 (`hero_skill_messages
 untouched, and the test pins it at the E5's own tick). That placement is **UNVERIFIED** for
 a spell, not OBSERVED.
 
+**REVISED 2026-10-09: P5 FAILS, and the placement above is now CONTRADICTED, not
+unverified.** The first scoreable rows arrived with live capture `20261008T132845`
+(build 38974): 19 of 19 at E5 + 0.75, none at 0.000. §65.8 has the record. The two
+paragraphs above are left as written on 2026-10-07; they were right about the corpus they
+read.
+
 ### 65.5 SKILLS-AC5 — the server
 
 **The mechanism (CORROBORATED: the §65.1 floor plus the table column):**
@@ -10426,7 +10433,8 @@ a spell, not OBSERVED.
 **RECONSTRUCTION, each said at its site:**
 
 - A party body takes the hostile's rule. The tapes' 1,477 are "other agents", not split by
-  allegiance.
+  allegiance. *(2026-10-09: OBSERVED for one HERO since `20261008T132845`. §65.8 has the
+  numbers. A henchman is still this bullet's RECONSTRUCTION.)*
 - An interrupt, a cancel, a scatter cancel and a RESSIG `[59]` stop are not completions
   and stamp nothing.
 - An attack skill and an instant stamp nothing. That is the wiki's two classes; the table's
@@ -10509,6 +10517,75 @@ a spell, not OBSERVED.
   three groups, so this is not to be quoted as a large OBSERVED. (The same run shows Flare
   194, table recharge 0, re-cast at a minimum of 0.741 s after its completion: §65.1's
   floor from the other side.)
+
+### 65.8 SKILLS-AC8 — a hero's E3 waits its spell's aftercast: P5 FAILS (2026-10-09)
+
+**What moved.** On a clean checkout of `main` at `2ed812b5`, `test_npcaftercast` §4 went
+red on its "P5 UNDECIDABLE" check: 19 of 54 E5 → E3 rows were scoreable. Those rows came
+from one capture, the owner's RIDERS / CASTAI-H1 session `20261008T132845`:
+- origin **live** per `toolkit/origin.py` (stated in the file's own record and
+  corroborated by its recorded addresses), build **38974**;
+- its `:51409`, the Plains of Jarin;
+- agent 30, **Koss**, a Warrior hero with a Monk secondary
+  ([studies/monsterai/FINDINGS.md](../monsterai/FINDINGS.md) §18.6).
+
+No other tape has a scoreable row. This is the "counts redden on good news" class: the
+premise of the check moved, not the server.
+
+**The prediction, written before the rows were read:** P5 FAILS, with the rows sitting at
+the aftercast. The question as first put ("does a hero's next cast wait ~0.75 s?") mixed
+up two things. P5 is about the E3 of the SAME cast. The next cast is P1's question, and
+it is answered separately below.
+
+**OBSERVED, `npcaftercast.py` re-run (129 connections):**
+
+| | n | E3 − E5 | verdict |
+|---|---|---|---|
+| Koss's spells, table aftercast 0.75: 281 ×6, 288 ×6, 313 ×2, 1396 ×5 | 19 | **0.732–0.762**, none at 0.000 | P5 **FAILS**; its rival "E3 = E5 + the table aftercast" (±0.05) **HOLDS 19 of 19** |
+| the survey's aftercast-0 rows: 322 (attack), 346 (stance), 348 (shout), `20260914T005758` | 35 | 0.000 | the same rule's zero class |
+| **known-bad arm:** OURS, `authsrv-20261001T105141-c1` (the HEROENERGY healer rig) | 64 Orisons | 0.000, 64 of 64 | the rival FAILS on ours |
+
+So a body's E3 is the end of its aftercast, the same rule as the player's (castmech §3).
+The rival was named as P5's alternative in the reader's registered text ("the E3 waits
+the aftercast"). Its ±0.05 tolerance is FLOOR_S's 50 ms batch shoulder, and the largest
+deviation on tape is 0.018.
+
+**The gate is right; the E3 is not.** On the same tape, Koss's next start after each
+completion (P1's question):
+- 17 completion rows, min **0.747**;
+- in the 4 back-to-back pairs (288 then 281, at 374.5, 415.6, 531.6 and 557.7 s), the
+  follow-up's `[60]` rides **in his E3's own batch**, `[58]` + 0.747–0.751. This is the
+  instant at which `NPC_AFTERCAST` releases the body;
+- the follow-up's **E4 opens in the `[58]`'s batch**, 0.75 s before its `[60]` (4 of 4).
+  The E5 rides the `[58]` 19 of 19.
+
+The NPC_AFTERCAST gate is therefore OBSERVED for a hero, and it moves nothing.
+
+What diverges is `hero_skill_messages`, which sends a spell's E3 directly behind its E5
+in the same tick. That is section 2 (d) of the test, pinned there as OURS, and the 64 of
+64 above.
+
+**What that costs on the client is UNVERIFIED.** The E4 → E3 pair is the hero's pending
+skill (PENDSKILL), so ours plausibly closes the hero panel's activation 0.75 s early.
+Nobody has looked.
+
+**Owed, not done here** (the server path is out of this lane's remit; `PLAN.md` §8):
+- move a hero's E3 to E5 + `skill_timing`'s aftercast, the player's schedule;
+- possibly open the next pick's E4 at the `[58]`. That is the same "where does a hero's
+  E4 open" question §65.7 leaves open for 322.
+
+**Limits.** One hero, one capture, one build, n = 19, and only the 0.75 class. A
+henchman is not on tape. Neither is a Monk-primary hero.
+
+**Test.** `test_npcaftercast` §4 now scores P5 instead of asserting undecidability:
+- P5 FAILS, the rival HOLDS (floors: scored ≥ 19, zero 0, all at the aftercast), the
+  capture named, and the zero class unchanged;
+- the known-bad arm on the healer rig;
+- §1 holds the rival's shoulder on literal edges.
+
+Floors 43 bare and 54 with the vault, both MEASURED. Two reader mutants go red where they
+should: the rival counting every row reddens §1 and the known-bad arm; a zero shoulder
+reddens §1 and the retail check.
 
 ## 66. SKILLS-EX — the primary attributes' passive rules: Expertise's discount ROUNDS (6 of 6; floor 1 of 6) and ships on every caster; Divine Favor is its own heal word, rounded, after the spell's own; the ten primaries read against the client's own descriptions (2026-10-07)
 
