@@ -28,6 +28,22 @@ move back.
 
 ---
 
+### S22-C/D block share -- 2026-10-09 -- **Not a server defect: the 75 % rule holds (0.742 over 457 outcomes with the stance up), and the real share is about 62 %, not 58 %. Corrects the "about 58 %" in "S22-C/D fixture v2" below: that ratio put landed Sever Artery strikes in the denominator without their blocks in the numerator. The rest of the gap from the modelled 67 % is the ~7 unblockable swings before the first Bonetti's, plus a beat in the presses.**
+
+- **The prediction, stated before reading.** A sampling or counting effect, not a wrong rule: the press train's phase beat and a denominator that holds more than plain swings. What would refute it: a block rate under 75 % *inside* the stance. **Half right.** The denominator was the error, but it was my own ratio: every damage word on agent 10 is the player's (75 blocks, 43 damage on `…142815`; no hero hits). The beat is real, for the presses only.
+- **The rule (`authsrv.blocks`, read).** One roll per strike at `hit_enemy`, at `block_chance` = 1 − Π(1 − pct) over the taker's live episodes. That is 0.75 for Bonetti's alone, rolled only for `swing and exact is None` and after the Blind check.
+- **The decomposition, OBSERVED over the four C/D captures** (`…135507`, `…140014`, `…142815`, `…143136`). Each player outcome on agent 10 (`attack_fail … block` or a damage word) is timed against the stance episodes, `[48, 10, 380]` + 10.0 s.
+  - **With the stance up:** the block rate is **0.742** pooled (0.720 / 0.748 / 0.758 / 0.747).
+  - **Share of outcomes with the stance up:** 0.856–0.888, against 0.852–0.893 by time.
+  - **Before the first stance:** **7 outcomes in every run,** unblockable, because the Hatcher needs 8 hits (~10.6 s) to charge 380.
+  - **Overall:** **0.600–0.636**. The model with both terms: (1 − 7/118) × 0.87 × 0.742 ≈ 0.61.
+  - 5 blocks fell 0.001–0.038 s after an `[48]`. The episode is live from the `[48]` batch (SKILLS-IA), and the analysis window began 0.05 s late; an edge effect, not an anomaly.
+- **The presses' own 57 % (51 of 90) is a beat (OBSERVED).**
+  - At `wait:4` a press takes 7.47 s, which is 0.667 of the 11.2 s cycle. The press phases repeat in threes (…0.34, 0.01, 0.68…) and drift only ~0.01 a round.
+  - In three of the four runs one of the three phases sat at 0.96–1.0, in the 1.2 s gap, for much of the run. So 22 of 90 presses (24 %) fell outside the stance, against 11 % by time.
+  - With the stance up, presses were blocked at 0.691 (n = 68, ~1 sd under 0.75).
+  - Harmless to C/D's floors. A spacing near the golden fraction of 11.2 s (`wait` ≈ 3.45) would sample the cycle evenly, as S22-A's `wait:2` does for Blind's 8.77 s. Not applied.
+
 ### S22-A/B re-spaced walk -- 2026-10-09 -- **CONFIRMED: S22-A has 5 landed controls (floor 2, was 1). 16 presses at `wait:2` put 4 in the unblinded window and all 4 landed; 1 more beat Blind's 90 % miss. A: 11 of 11 Blind misses inflict nothing. B: 10 of 10 bleed. 0 deaths, the player's lowest health 22 of 140. All four S22 arms now meet every runsheet floor.**
 
 - **The runs.** `confirm.py --only S22-A,S22-B`, from `main` at `a91b2e0a`: harness `20261009T160718` (A) and `…161104` (B). Both use `--enemy-hit 0.008`, a shared walk of 16 presses at `wait:2`, and the 75 s hold. Launcher verdict **PASS / PASS**, including A's new check of at least 2 Bleedings from 382 (found 5).
